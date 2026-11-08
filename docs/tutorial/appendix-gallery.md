@@ -6,19 +6,23 @@ Gallery contains finished short films, not one comparison panel per API. Observe
 
 ```sh
 cargo run -p motion-gallery --bin motion-gallery -- list
-cargo run -p motion-gallery --bin motion-gallery -- still chromatic-tide --time 4 --font tests/fixtures/fonts/NotoSans-Regular.ttf --output tide.png
+cargo run -p motion-gallery --bin motion-gallery -- still type-in-motion --time 4 --font tests/fixtures/fonts/NotoSans-Regular.ttf --output type.png
 cargo run --release -p motion-gallery --features studio,gpu --bin motion-gallery -- studio --demo type-in-motion --font tests/fixtures/fonts/NotoSans-Regular.ttf
 ```
 
 `list` initializes no fonts, formulas, audio or GPU. Other commands accept an explicit `--font`. Without it, Gallery discovers system fonts once at application startup, not implicitly within core frame callbacks.
 
-Six films are available by default, seven with `formula`; disabled optional entries are absent from the catalog. Films default to eight seconds, a 960x540 design canvas and exact 30 fps. `--params` accepts `seconds` from 1–60, a fixed seed and `count` from 4–128.
+Ten films are available by default, eleven with `formula`; disabled optional entries are absent from the catalog. Films default to eight seconds, a 960x540 design canvas and exact 30 fps. `--params` accepts `seconds` from 1–60, a fixed seed and `count` from 4–128.
 
 ## Choose by Learning Goal
 
 | Film ID / Title | Key Chapters | What to Observe First |
 | --- | --- | --- |
-| `chromatic-tide` / Chromatic Tide | [04 Scenes](04-scenes-and-timeline.md), [05 Drawing](05-drawing.md) | Shared three-act filter stack and additive light/color |
+| `data-story` / The Harbor Line | [03 Animation](03-animation.md), [06 Content](06-content.md) | Diagram scales and charts, `Keyframes` counters, `Row`/`Column` cards and a caption track |
+| `puppet-show` / Pip Takes a Bow | [03 Animation](03-animation.md), [04 Scenes](04-scenes-and-timeline.md) | `Skeleton` forward kinematics with SVG limbs, `Keyframes<Pose>` and built-in transitions |
+| `logo-sting` / Solstice | [16 Declarative](16-declarative.md), [06 Content](06-content.md) | A JSON document composited with vector morphs, trim paths and springs |
+| `cinematic-look` / Last Order | [15 Cinematic](15-cinematic.md), [09 Rendering](09-rendering.md) | Tone map, bloom/halation, depth of field, atmosphere and a LUT grade |
+| `particle-garden` / Particle Garden | [07 Particles](07-particles.md) | Sub-emitters, colliders, boids, flow fields and paint-aware emitters |
 | `type-in-motion` / Room to Move | [03 Animation](03-animation.md), [06 Content](06-content.md) | Glyphs, paragraphs, whitespace, page transitions |
 | `ink-journey` / The Long Way Home | [06 Content](06-content.md), [09 Rendering](09-rendering.md) | Continuous strokes, materials, camera drift, film damage |
 | `signal-garden` / Signal Garden | [07 Particles](07-particles.md), [10 Audio](10-audio.md) | Five FFT bands organizing the spectrum and HUD |
@@ -26,12 +30,18 @@ Six films are available by default, seven with `formula`; disabled optional entr
 | `quiet-hours` / Quiet Hours | [04 Scenes](04-scenes-and-timeline.md), [05 Drawing](05-drawing.md) | Four dissolved shots built from layered gradients, silhouettes, wind-swayed grass and additive light |
 | `harmonics` / Harmonics | [08 Formulas](08-formula-typst.md), [03 Animation](03-animation.md) | Semantic matching and coordinated waveform changes |
 
-## Chromatic Tide
+## The Harbor Line
 
-[The source](../../gallery/src/demos/chromatic_tide.rs) divides the night into three acts: sliced sun/grid, interfering light ribbons, then rain and a seeded skyline.
-The key is not merely neon. Gradients, masks, Plus, bloom, chromatic fringing and glitch slices form one visual hierarchy, with a shared filter stack retained across act transitions.
+[The source](../../gallery/src/demos/data_story.rs) explains a fictional harbour ferry: a scale-mapped bar chart grows year by year, a line chart traces falling commute times, keyframed counters tick up in a row of stat cards and a timed caption track narrates underneath.
+Study how diagram scales map data to geometry, how `Row`/`Column` measure the cards, and how one caption track shares the film clock with the charts.
 
-Read timeline and act organization first, shared layers and filters next, then frame seeds, grain and scanlines. To reuse the style, establish subjects, act relationships and brightness hierarchy before applying the same filter stack to every layer.
+## Pip Takes a Bow
+
+[The source](../../gallery/src/demos/puppet_show.rs) rigs a paper-cutout puppet on a 12-bone `Skeleton` with inline SVG limbs. Pip walks with a procedural gait, waves through `Keyframes<Pose>` blends on a stage backed by a photographic `Image`, then jumps under confetti. Built-in `Iris` and `Push` transitions join the three shots; their overlaps are subtracted so the film keeps its exact duration.
+
+## Solstice
+
+[The source](../../gallery/src/demos/logo_sting.rs) is a brand ident. A `motion::declarative` JSON document ([solstice-ident.json](../../gallery/assets/solstice-ident.json)) draws the construction grid, burst and wordmark lockup; Rust springs three primitives on screen, morphs them into the [SVG mark](../../gallery/assets/solstice-mark.svg) and sweeps a trimmed orbit around it. Read it to see where declarative documents end and code-built motion begins.
 
 ## Room to Move
 
@@ -59,7 +69,7 @@ Fixed seeds preserve replay, while frame-derived seeds vary film damage over tim
 
 ## Signal Garden
 
-[The source](../../gallery/src/demos/signal_garden.rs) synthesizes a PCM soundtrack. Five FFT bands drive the radial spectrum, core and meters; Plexus, radar sweeps, shutter sampling and blurred discs create depth.
+[The source](../../gallery/src/demos/signal_garden.rs) synthesizes kick, hats, bass and lead, routes them through audio buses with sidechain ducking, delay/reverb, pan/width and a limiting master, then reads the mix back. FFT bands drive the radial spectrum and Plexus constellations, the measured duck gain makes the garden pump with the kick, and bus meters drive the HUD; radar sweeps, shutter sampling and blurred discs create depth.
 
 Find audio preparation and analysis, then trace frame sampling of `AudioSignal`. Do not put FFT work into draw callbacks.
 Studio plays against audible samples when audio is present; export still mixes timeline occurrences. Mute does not change the film's audio track, which PNG/GIF cannot carry.

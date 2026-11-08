@@ -220,7 +220,8 @@ mod tests {
         let report = export(&timeline, &request, &NoProgress)?;
         assert_eq!(report.frames, 3);
         let media = motion_ffmpeg::inspect::media(&path)?;
-        assert!(media.h264 && media.aac && media.bt709_limited);
+        assert!(media.h264 && media.aac && media.bt709_primaries_matrix_limited);
+        assert_eq!(media.color_transfer, 13);
         assert_eq!(motion_ffmpeg::inspect::video_frames(&path, 3)?, 3);
         let decoded = PcmBuffer::open(&path)?;
         let mut samples = vec![0.0; 9600];
@@ -270,14 +271,16 @@ mod tests {
             );
         }
         for required in [
-            "chromatic-tide",
             "type-in-motion",
             "ink-journey",
             "signal-garden",
             "quiet-hours",
             "chidori",
-            "particle-recipes",
-            "audio-brush",
+            "particle-garden",
+            "cinematic-look",
+            "data-story",
+            "puppet-show",
+            "logo-sting",
         ] {
             assert!(ids.contains(required), "missing film: {required}");
         }
@@ -288,7 +291,7 @@ mod tests {
                 .count(),
             usize::from(cfg!(feature = "formula"))
         );
-        assert_eq!(entries.len(), 11 + usize::from(cfg!(feature = "formula")));
+        assert_eq!(entries.len(), 10 + usize::from(cfg!(feature = "formula")));
         let project = project(RenderOptions::default())?;
         let registered = project
             .list()

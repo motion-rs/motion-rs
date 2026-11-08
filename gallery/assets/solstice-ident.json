@@ -1,0 +1,272 @@
+{
+  "version": 1,
+  "name": "Solstice ident: construction layer and lockup",
+  "size": [960, 540],
+  "fps": 30,
+  "background": "#1e3bff",
+  "duration": { "$param": "total" },
+  "params": {
+    "k": 1,
+    "total": 8,
+    "chrome_at": 0.2,
+    "chrome_d": 0.6,
+    "burst_at": 4.0,
+    "burst_peak": 4.06,
+    "burst_end": 4.9,
+    "burst_d": 0.9,
+    "rule_at": 5.3,
+    "rule_d": 0.7,
+    "word_at": 5.0,
+    "word_d": 0.7,
+    "word_fade": 0.3,
+    "stagger": 0.06,
+    "tag_at": 5.8,
+    "tag_d": 0.6
+  },
+  "tracks": [
+    {
+      "name": "construction",
+      "items": [
+        {
+          "scene": {
+            "name": "ident",
+            "duration": { "$param": "total" },
+            "content": {
+              "children": [
+                {
+                  "rect": { "bounds": [0, 0, 960, 540] },
+                  "fill": {
+                    "radial": {
+                      "center": [0.5, 0.46],
+                      "radius": 0.75,
+                      "stops": [
+                        { "offset": 0, "color": "#2a48ff" },
+                        { "offset": 1, "color": "#1426c4" }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "id": "grid",
+                  "opacity": { "expr": "1 - smoothstep(5.6 * $k, 6.6 * $k, t)" },
+                  "children": [
+                    {
+                      "line": { "from": [160, 0], "to": [160, 540] },
+                      "stroke": { "width": 1, "paint": "rgb(244 241 234 / 16%)" },
+                      "trim": { "end": { "expr": "smoothstep(0, 0.9 * $k, t)" } }
+                    },
+                    {
+                      "line": { "from": [480, 540], "to": [480, 0] },
+                      "stroke": { "width": 1, "paint": "rgb(244 241 234 / 16%)" },
+                      "trim": { "end": { "expr": "smoothstep(0.1 * $k, 1.0 * $k, t)" } }
+                    },
+                    {
+                      "line": { "from": [800, 0], "to": [800, 540] },
+                      "stroke": { "width": 1, "paint": "rgb(244 241 234 / 16%)" },
+                      "trim": { "end": { "expr": "smoothstep(0.2 * $k, 1.1 * $k, t)" } }
+                    },
+                    {
+                      "line": { "from": [0, 90], "to": [960, 90] },
+                      "stroke": { "width": 1, "paint": "rgb(244 241 234 / 16%)" },
+                      "trim": { "end": { "expr": "smoothstep(0.05 * $k, 0.95 * $k, t)" } }
+                    },
+                    {
+                      "line": { "from": [960, 250], "to": [0, 250] },
+                      "stroke": { "width": 1, "paint": "rgb(244 241 234 / 16%)" },
+                      "trim": { "end": { "expr": "smoothstep(0.15 * $k, 1.05 * $k, t)" } }
+                    },
+                    {
+                      "line": { "from": [0, 450], "to": [960, 450] },
+                      "stroke": { "width": 1, "paint": "rgb(244 241 234 / 16%)" },
+                      "trim": { "end": { "expr": "smoothstep(0.25 * $k, 1.15 * $k, t)" } }
+                    },
+                    {
+                      "circle": { "center": [480, 250], "radius": 160 },
+                      "stroke": { "width": 1, "paint": "rgb(244 241 234 / 22%)", "dash": [4, 6] },
+                      "trim": { "end": { "expr": "smoothstep(0.3 * $k, 1.6 * $k, t)" } }
+                    }
+                  ]
+                },
+                {
+                  "id": "chrome",
+                  "opacity": {
+                    "tween": {
+                      "from": 0,
+                      "to": 1,
+                      "delay": { "$param": "chrome_at" },
+                      "duration": { "$param": "chrome_d" },
+                      "easing": "sine_out"
+                    }
+                  },
+                  "children": [
+                    {
+                      "polyline": { "points": [[28, 50], [28, 28], [50, 28]] },
+                      "stroke": { "width": 2, "paint": "#f4f1ea", "cap": "square" }
+                    },
+                    {
+                      "polyline": { "points": [[910, 28], [932, 28], [932, 50]] },
+                      "stroke": { "width": 2, "paint": "#f4f1ea", "cap": "square" }
+                    },
+                    {
+                      "polyline": { "points": [[28, 490], [28, 512], [50, 512]] },
+                      "stroke": { "width": 2, "paint": "#f4f1ea", "cap": "square" }
+                    },
+                    {
+                      "polyline": { "points": [[910, 512], [932, 512], [932, 490]] },
+                      "stroke": { "width": 2, "paint": "#f4f1ea", "cap": "square" }
+                    },
+                    {
+                      "text": {
+                        "content": "SOLSTICE / BRAND IDENT",
+                        
+                        "size": 11,
+                        "weight": 700,
+                        "letter_spacing": 3
+                      },
+                      "fill": "rgb(244 241 234 / 75%)",
+                      "position": [166, 44]
+                    },
+                    {
+                      "text": {
+                        "content": "N\u00ba 01",
+                        
+                        "size": 11,
+                        "weight": 700,
+                        "letter_spacing": 3
+                      },
+                      "fill": "#d7ff3c",
+                      "position": [880, 44]
+                    },
+                    {
+                      "text": {
+                        "content": "LIGHT \u00b7 FORM \u00b7 MOTION",
+                        
+                        "size": 11,
+                        "weight": 700,
+                        "letter_spacing": 3
+                      },
+                      "fill": "rgb(244 241 234 / 75%)",
+                      "position": [160, 498]
+                    },
+                    {
+                      "text": {
+                        "content": "MMXXVI",
+                        
+                        "size": 11,
+                        "weight": 700,
+                        "letter_spacing": 3
+                      },
+                      "fill": "rgb(244 241 234 / 75%)",
+                      "position": [872, 498]
+                    }
+                  ]
+                },
+                {
+                  "id": "burst",
+                  "circle": { "center": [0, 0], "radius": 130 },
+                  "stroke": { "width": 3, "paint": "#d7ff3c" },
+                  "position": [480, 250],
+                  "scale": {
+                    "tween": {
+                      "from": 1,
+                      "to": 2.6,
+                      "delay": { "$param": "burst_at" },
+                      "duration": { "$param": "burst_d" },
+                      "easing": "exponential_out"
+                    }
+                  },
+                  "opacity": {
+                    "keyframes": {
+                      "keys": [
+                        { "time": 0, "value": 0 },
+                        { "time": { "$param": "burst_at" }, "value": 0 },
+                        { "time": { "$param": "burst_peak" }, "value": 1 },
+                        { "time": { "$param": "burst_end" }, "value": 0, "easing": "quadratic_out" }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "id": "wordmark",
+                  "text": {
+                    "content": "SOLSTICE",
+                    
+                    "size": 64,
+                    "weight": 800,
+                    "letter_spacing": 16,
+                    "split": "characters",
+                    "parts": {
+                      "delay": { "$param": "stagger" },
+                      "offset": {
+                        "tween": {
+                          "from": [0, 34],
+                          "to": [0, 0],
+                          "delay": { "$param": "word_at" },
+                          "duration": { "$param": "word_d" },
+                          "easing": { "back_out": { "overshoot": 1.6 } }
+                        }
+                      },
+                      "opacity": {
+                        "tween": {
+                          "from": 0,
+                          "to": 1,
+                          "delay": { "$param": "word_at" },
+                          "duration": { "$param": "word_fade" }
+                        }
+                      }
+                    }
+                  },
+                  "fill": "#f4f1ea",
+                  "position": [488, 340]
+                },
+                {
+                  "id": "rule",
+                  "rect": { "bounds": [0, 0, 96, 4] },
+                  "fill": "#d7ff3c",
+                  "position": [480, 384],
+                  "scale_xy": {
+                    "tween": {
+                      "from": [0, 1],
+                      "to": [1, 1],
+                      "delay": { "$param": "rule_at" },
+                      "duration": { "$param": "rule_d" },
+                      "easing": "exponential_out"
+                    }
+                  }
+                },
+                {
+                  "id": "tagline",
+                  "text": {
+                    "content": "STUDIO FOR LIGHT & FORM",
+                    
+                    "size": 15,
+                    "weight": 600,
+                    "letter_spacing": 6
+                  },
+                  "fill": "#f4f1ea",
+                  "position": {
+                    "tween": {
+                      "from": [483, 424],
+                      "to": [483, 414],
+                      "delay": { "$param": "tag_at" },
+                      "duration": { "$param": "tag_d" },
+                      "easing": "cubic_out"
+                    }
+                  },
+                  "opacity": {
+                    "tween": {
+                      "from": 0,
+                      "to": 1,
+                      "delay": { "$param": "tag_at" },
+                      "duration": { "$param": "tag_d" }
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

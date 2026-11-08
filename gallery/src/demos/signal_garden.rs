@@ -1,17 +1,32 @@
-//! Sci-fi instrument study: audio-reactive radial spectrum, Plexus particle
-//! constellations, a motion-blurred radar sweep and live HUD readouts, lit with
-//! bloom, depth-of-field bokeh and a hairline grid.
+//! Sci-fi instrument study wired to a live mix: a synthesized kick, hat, bass and
+//! lead program is routed through audio buses with sidechain ducking, delay and
+//! reverb, panning and stereo width and a limiting master, then read back offline.
+//! FFT bands drive a radial spectrum and Plexus particle constellations, the
+//! measured duck gain makes the whole garden pump with the kick, and a
+//! motion-blurred radar sweep and HUD meters are lit with bloom and bokeh.
 
 use crate::{DemoMetadata, DemoParameters};
-use motion::encode::{AudioAnalysis, AudioSignal, PcmBuffer};
+use motion::audio::pcm::BusMeter;
+use motion::audio::{AudioAnalysis, AudioSignal, MixedAudio};
 use motion::particles::{Orbit, ParticleStyle, ParticleTrajectory};
 use motion::prelude::*;
+use soundtrack::{audio_timeline, duck_db, meter, rms_db, soundtrack};
 use std::{
     f64::consts::{FRAC_PI_2, TAU},
     sync::Arc,
 };
 
+mod soundtrack;
+
 const RATE: u32 = 48_000;
+
+const BPM: f64 = 120.0;
+
+/// Pentatonic pluck cycle, one note per eighth.
+const NOTES: [f64; 6] = [220.0, 277.18, 329.63, 415.3, 440.0, 554.37];
+
+/// Gain reduction the kick applies to the bass bus.
+const KICK_DEPTH_DB: f64 = 14.0;
 
 const CENTER: Point = Point::new(480.0, 270.0);
 
@@ -30,22 +45,28 @@ const AMBER: u32 = 0xffb347;
 const MONO: &str = "Menlo";
 
 const BANDS: [(f64, f64); 5] = [
-    (60.0, 180.0),
-    (180.0, 360.0),
+    (40.0, 120.0),
+    (120.0, 360.0),
     (360.0, 720.0),
-    (720.0, 1200.0),
-    (1200.0, 2400.0),
+    (720.0, 1400.0),
+    (1400.0, 4000.0),
 ];
+
+const BUSES: [&str; 4] = ["kick", "hats", "bass", "lead"];
 
 pub(super) const METADATA: DemoMetadata = DemoMetadata::new(
     "signal-garden",
     "Signal Garden",
     "Sci-Fi",
     &[
-        "particle-trajectories",
-        "plexus-particles",
-        "pcm-audio",
+        "synthesis",
+        "audio-buses",
+        "sidechain-ducking",
+        "audio-effects",
+        "pan-and-width",
+        "master-limiter",
         "fft-analysis",
+        "plexus-particles",
         "motion-blur",
         "filters",
     ],
@@ -54,31 +75,41 @@ pub(super) const METADATA: DemoMetadata = DemoMetadata::new(
 struct Rig {
     bands: Vec<AudioSignal>,
     systems: Vec<ParticleTrajectory>,
+    meters: Vec<BusMeter>,
+    bass: BusMeter,
+    bass_dry: BusMeter,
+    lufs: f64,
+}
+
+impl Rig {
+    /// Sidechain depth in 0..1: how far the kick currently pushes the bass bus down.
+    fn pump(&self, time: f64) -> f64 {
+        (-duck_db(&self.bass, &self.bass_dry, time) / KICK_DEPTH_DB).clamp(0.0, 1.0)
+    }
 }
 
 pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
     let duration = i64::from(parameters.seconds).seconds();
-    let notes = [220.0, 277.2, 329.6, 415.3, 440.0, 554.4];
-    let samples = (0..parameters.seconds * RATE)
-        .map(|index| {
-            let time = f64::from(index) / f64::from(RATE);
-            let beat = math::exp(-(time * 2.0).fract() * 9.0);
-            let step = (time * 4.0).floor();
-            let pluck = math::exp(-(time * 4.0).fract() * 7.0);
-            let note = notes[(step as usize) % notes.len()];
-            let bass = math::sin(TAU * 110.0 * time) * (0.1 + beat * 0.18);
-            let lead = math::sin(TAU * note * time) * pluck * 0.07;
-            let air = math::sin(TAU * 1320.0 * time) * (0.015 + 0.015 * math::sin(time * 1.3));
-            let fade =
-                (time * 12.0).min(1.0) * ((duration.as_seconds() - time) * 10.0).clamp(0.0, 1.0);
-            ((bass + lead + air) * fade) as f32
-        })
-        .collect();
-    let pcm = Arc::new(PcmBuffer::new(RATE, 1, samples)?);
-    let analysis = AudioAnalysis::from_pcm(pcm.clone());
+    let seed = parameters.seed as u32;
+    let output = audio_timeline(&soundtrack(duration, true, seed)?, duration);
+    let mix = MixedAudio::from_timeline(&output, RATE)?;
+    let dry = MixedAudio::from_timeline(
+        &audio_timeline(&soundtrack(duration, false, seed)?, duration),
+        RATE,
+    )?;
+    let analysis = AudioAnalysis::from_source(&mix, duration)?;
     let bands = BANDS
         .iter()
-        .map(|(low, high)| analysis.band(*low, *high))
+        .map(|(low, high)| {
+            analysis
+                .band(*low, *high)?
+                .normalize(0.95)?
+                .attack_release(5.milliseconds(), 160.milliseconds())
+        })
+        .collect::<motion::Result<Vec<_>>>()?;
+    let meters = BUSES
+        .iter()
+        .map(|name| meter(&mix, name))
         .collect::<motion::Result<Vec<_>>>()?;
     let systems = (0..3)
         .map(|index| {
@@ -98,61 +129,69 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
             })
         })
         .collect::<Vec<_>>();
-    let rig = Arc::new(Rig { bands, systems });
-    Ok(Timeline::new(Size::new(960.0, 540.0), 30)
-        .audio(
-            AudioClip::source(pcm)
-                .duration(duration)
-                .volume(0.65)
-                .pan(-0.15),
-        )
-        .track(|track| track.scene(duration, move |context| frame(context, &rig))))
+    let rig = Arc::new(Rig {
+        bands,
+        systems,
+        bass: meter(&mix, "bass")?,
+        bass_dry: meter(&dry, "bass")?,
+        meters,
+        lufs: mix.loudness_report()?.integrated_lufs.unwrap_or(-70.0),
+    });
+    Ok(output.track(|track| track.scene(duration, move |context| frame(context, &rig))))
 }
 
 fn color(hex: u32) -> Color {
     Color::from_hex(hex)
 }
 
+/// Maps a dBFS level to 0..1 over a 60 dB window.
+fn meter_level(db: f64) -> f64 {
+    ((db + 60.0) / 60.0).clamp(0.0, 1.0)
+}
+
 fn frame(context: &SceneContext<'_>, rig: &Rig) -> Node {
     let levels: Vec<f64> = rig
         .bands
         .iter()
-        .map(|band| (context.sample(band) * 3.2).clamp(0.0, 1.5))
+        .map(|band| context.sample(band) * 1.15)
         .collect();
     let bass = levels[0];
     let seconds = context.seconds();
+    let pump = rig.pump(seconds);
     let intro = math::smoothstep(0.0, 0.12, context.progress());
 
     let mut layers = vec![
         backdrop(context),
         bokeh(context),
         grid(context),
-        rings(context, bass),
-        spectrum(&levels, seconds),
+        shockwave(seconds, rig),
+        rings(context, bass, pump),
+        spectrum(&levels, seconds, pump),
         radar(context),
     ];
+    // The constellations inhale while the sidechain holds the bass down.
     for (index, system) in rig.systems.iter().enumerate() {
         layers.push(
             system
                 .render(context)
                 .pivot(Pivot::Point(CENTER))
-                .scale(1.0 + bass * (0.14 + index as f64 * 0.08))
+                .scale(1.0 + bass * (0.08 + index as f64 * 0.05) - pump * 0.06)
                 .opacity(intro),
         );
     }
-    layers.push(core(context, bass));
+    layers.push(core(context, bass, pump));
     layers.push(foreground(context));
-    layers.extend(hud(context, &levels, intro));
+    layers.extend(hud(context, rig, &levels, pump, intro));
     Node::group(layers)
         .clip_with(context.bounds(), ClipMode::Geometric)
         .filter(Filter::Glow {
             threshold: 0.35,
             sigma: 8.0,
-            intensity: 0.9,
+            intensity: 0.8 + pump * 0.4,
         })
         .filter(Filter::Optics(motion::Optics::Lens {
             distortion: 0.0,
-            chromatic: 0.0022,
+            chromatic: 0.0018 + pump * 0.0016,
             auto_fit: false,
             center: None,
         }))
@@ -216,7 +255,7 @@ fn bokeh(context: &SceneContext<'_>) -> Node {
     Node::group(discs.collect::<Vec<_>>()).filter(Filter::Blur { sigma: 5.0 })
 }
 
-fn rings(context: &SceneContext<'_>, bass: f64) -> Node {
+fn rings(context: &SceneContext<'_>, bass: f64, pump: f64) -> Node {
     let spin = context.seconds() * 0.12;
     let ticks = |radius: f64, count: usize, length: f64, offset: f64| {
         let mut path = Path2D::new();
@@ -235,7 +274,10 @@ fn rings(context: &SceneContext<'_>, bass: f64) -> Node {
         path
     };
     Node::group([
-        Node::from(Circle::new(CENTER, 222.0).stroke(0.8, color(CYAN).with_alpha(0.35))),
+        Node::from(
+            Circle::new(CENTER, 222.0)
+                .stroke(0.8 + pump * 1.6, color(CYAN).with_alpha(0.35 + pump * 0.4)),
+        ),
         Node::from(ticks(226.0, 90, 4.0, spin).stroke(1.0, color(CYAN).with_alpha(0.6))),
         Node::from(ticks(112.0, 60, 3.0, -spin * 2.0).stroke(1.0, color(ICE).with_alpha(0.55))),
         Node::from(
@@ -244,15 +286,31 @@ fn rings(context: &SceneContext<'_>, bass: f64) -> Node {
                 .fill(color(CYAN)),
         ),
         Node::from(
-            Ring::new(CENTER, 150.0, 151.0)
-                .sweep(-spin * 3.0 + 1.2, TAU * 0.3)
+            Ring::new(CENTER, 150.0, 151.0 + pump * 3.0)
+                .sweep(-spin * 3.0 + 1.2, TAU * (0.3 + pump * 0.12))
                 .fill(color(AMBER)),
         ),
     ])
 }
 
-/// One bar per angle; heights blend the five analysis bands around the circle.
-fn spectrum(levels: &[f64], seconds: f64) -> Node {
+/// Expanding ring launched on every kick, its strength read from the kick bus meter.
+fn shockwave(seconds: f64, rig: &Rig) -> Node {
+    let period = 60.0 / BPM;
+    let age = seconds.rem_euclid(period) / period;
+    let hit = meter_level(rms_db(&rig.meters[0], seconds - age * period + 0.03) + 12.0);
+    let radius = 70.0 + math::smoothstep(0.0, 1.0, math::sqrt(age)) * 190.0;
+    let alpha = (1.0 - age) * (1.0 - age) * 0.7 * hit;
+    Node::from(
+        Ring::new(CENTER, radius, radius + 2.0 + 10.0 * (1.0 - age))
+            .fill(color(CYAN).with_alpha(alpha)),
+    )
+    .blend_mode(BlendMode::Plus)
+}
+
+/// One bar per angle; heights blend the five analysis bands around the circle and
+/// the base radius kicks outward with the sidechain.
+fn spectrum(levels: &[f64], seconds: f64, pump: f64) -> Node {
+    let base = 134.0 + pump * 8.0;
     let count = 60;
     let mut path = Path2D::new();
     for bar in 0..count {
@@ -265,12 +323,12 @@ fn spectrum(levels: &[f64], seconds: f64) -> Node {
         let wobble = 0.5 + 0.5 * math::sin(angle * 5.0 + seconds * 3.0);
         let length = 5.0 + math::pow(level, 0.7) * (56.0 + wobble * 34.0);
         path.move_to(Point::new(
-            CENTER.x + math::cos(angle) * 134.0,
-            CENTER.y + math::sin(angle) * 134.0,
+            CENTER.x + math::cos(angle) * base,
+            CENTER.y + math::sin(angle) * base,
         ))
         .line_to(Point::new(
-            CENTER.x + math::cos(angle) * (134.0 + length),
-            CENTER.y + math::sin(angle) * (134.0 + length),
+            CENTER.x + math::cos(angle) * (base + length),
+            CENTER.y + math::sin(angle) * (base + length),
         ));
     }
     Node::from(
@@ -307,10 +365,11 @@ fn radar(context: &SceneContext<'_>) -> Node {
     })
 }
 
-fn core(context: &SceneContext<'_>, bass: f64) -> Node {
+fn core(context: &SceneContext<'_>, bass: f64, pump: f64) -> Node {
     let breath = 0.5 + 0.5 * math::sin(context.seconds() * 2.0);
-    let glow = Circle::new(CENTER, 46.0 + bass * 26.0).fill(
-        RadialGradient::new(CENTER, 60.0 + bass * 26.0)
+    let swell = bass * 14.0 + pump * 18.0;
+    let glow = Circle::new(CENTER, 46.0 + swell).fill(
+        RadialGradient::new(CENTER, 60.0 + swell)
             .stop(0.0, Color::WHITE)
             .stop(0.35, color(CYAN))
             .stop(1.0, color(BLUE).with_alpha(0.0))
@@ -355,7 +414,30 @@ fn bracket(left: f64, top: f64, dx: f64, dy: f64) -> Node {
     path.stroke(1.4, color(CYAN).with_alpha(0.85)).into()
 }
 
-fn hud(context: &SceneContext<'_>, levels: &[f64], intro: f64) -> Vec<Node> {
+/// Gain-reduction history of the bass bus over the last two seconds.
+fn duck_trace(rig: &Rig, seconds: f64) -> Node {
+    let (left, top, width, height) = (720.0, 410.0, 212.0, 46.0);
+    let mut path = Path2D::new();
+    for step in 0..=60 {
+        let fraction = f64::from(step) / 60.0;
+        let time = seconds - 2.0 * (1.0 - fraction);
+        let depth = if time < 0.0 { 0.0 } else { rig.pump(time) };
+        let point = Point::new(left + fraction * width, top + 3.0 + depth * (height - 6.0));
+        if step == 0 {
+            path.move_to(point);
+        } else {
+            path.line_to(point);
+        }
+    }
+    Node::group([
+        Node::from(
+            Rect::new(left, top, left + width, top + height).fill(color(CYAN).with_alpha(0.06)),
+        ),
+        Node::from(path.stroke(1.4, color(AMBER))),
+    ])
+}
+
+fn hud(context: &SceneContext<'_>, rig: &Rig, levels: &[f64], pump: f64, intro: f64) -> Vec<Node> {
     let seconds = context.seconds();
     let dim = color(CYAN).with_alpha(0.75);
     let mut nodes = vec![
@@ -364,10 +446,25 @@ fn hud(context: &SceneContext<'_>, levels: &[f64], intro: f64) -> Vec<Node> {
         bracket(28.0, 512.0, 1.0, -1.0),
         bracket(932.0, 512.0, -1.0, -1.0),
         readout("SIGNAL GARDEN", 15.0, color(ICE)).translate(48.0, 40.0),
-        readout("LIVE SPECTRUM // CH-01", 10.5, dim).translate(48.0, 62.0),
+        readout("LIVE MIX // 4 BUS + SIDECHAIN", 10.5, dim).translate(48.0, 62.0),
         readout(&format!("T+{seconds:05.2}s"), 12.0, color(ICE)).translate(790.0, 40.0),
-        readout("MODE  RADIAL", 10.5, dim).translate(790.0, 62.0),
+        readout(&format!("BPM {BPM:.0}  RADIAL"), 10.5, dim).translate(790.0, 62.0),
     ];
+    for (index, name) in BUSES.iter().enumerate() {
+        let top = 84.0 + index as f64 * 18.0;
+        let level = meter_level(rms_db(&rig.meters[index], seconds) + 6.0);
+        nodes.push(readout(&name.to_uppercase(), 9.5, dim).translate(790.0, top));
+        nodes.push(
+            Rect::new(840.0, top + 2.0, 932.0, top + 9.0)
+                .fill(color(CYAN).with_alpha(0.14))
+                .into(),
+        );
+        nodes.push(
+            Rect::new(840.0, top + 2.0, 840.0 + 92.0 * level, top + 9.0)
+                .fill(color(CYAN))
+                .into(),
+        );
+    }
     for (index, (low, high)) in BANDS.iter().enumerate() {
         let top = 392.0 + index as f64 * 22.0;
         let level = levels[index].clamp(0.0, 1.0);
@@ -387,8 +484,16 @@ fn hud(context: &SceneContext<'_>, levels: &[f64], intro: f64) -> Vec<Node> {
                 .into(),
         );
     }
+    nodes.push(readout("SIDECHAIN // KICK > BASS", 10.0, dim).translate(720.0, 392.0));
+    nodes.push(duck_trace(rig, seconds));
     nodes.push(
-        readout(&format!("LEVEL {:.2}", levels[0]), 12.0, color(ICE)).translate(790.0, 490.0),
+        readout(
+            &format!("GR {:+05.1} dB", duck_db(&rig.bass, &rig.bass_dry, seconds)),
+            12.0,
+            if pump > 0.5 { color(AMBER) } else { color(ICE) },
+        )
+        .translate(720.0, 472.0),
     );
+    nodes.push(readout(&format!("{:.1} LUFS", rig.lufs), 10.0, dim).translate(850.0, 474.0));
     nodes.into_iter().map(|node| node.opacity(intro)).collect()
 }

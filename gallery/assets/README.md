@@ -6,5 +6,9 @@
 - `ring.png`: generated RGBA8 ring, 256x256, with transparent pixels and a soft
   alpha edge. Created for this repository using FFmpeg's `geq` filter.
 
-Both files are bundled so Gallery, benchmarks and render tests work offline.
-They are decoded once before frame evaluation, not on every frame.
+- `solstice-ident.json`: `motion::declarative` document for the Solstice logo sting's
+  grid, burst and wordmark lockup. Created for this repository.
+- `solstice-mark.svg`: Solstice sun-on-horizon logo mark. Created for this repository.
+
+All files are bundled so Gallery, benchmarks and render tests work offline.
+The Solstice files are embedded with `include_str!`; the images are decoded once before frame evaluation, not on every frame.

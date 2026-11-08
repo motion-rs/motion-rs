@@ -135,4 +135,4 @@ Learn time composition here. [06 Content](06-content.md) places content-level Mo
 
 Next chapter: [04 Scenes and Timeline](04-scenes-and-timeline.md).
 Contracts: [animation guide](../design/core.md#stateless-animation), [Spring implementation](../../crates/motion-core/src/animation/spring.rs).
-Film example: [Chromatic Tide](../../gallery/src/demos/chromatic_tide.rs).
+Film example: [Room to Move](../../gallery/src/demos/type_in_motion.rs), whose cover graphemes settle on springs.

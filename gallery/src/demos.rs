@@ -3,17 +3,17 @@
 use crate::{DemoMetadata, DemoParameters};
 use motion::prelude::*;
 
-mod audio_brush;
 mod chidori;
-mod chromatic_tide;
 mod cinematic_look;
+mod data_story;
 #[cfg(feature = "formula")]
 mod harmonics;
 mod ink_journey;
+mod logo_sting;
 mod particle_garden;
 pub(crate) mod particle_recipes;
+mod puppet_show;
 mod quiet_hours;
-mod sidechain_pulse;
 mod signal_garden;
 mod type_in_motion;
 
@@ -47,20 +47,20 @@ struct Film {
 
 const PROGRAM: &[Film] = &[
     Film {
-        metadata: audio_brush::METADATA,
-        build: audio_brush::timeline,
-    },
-    Film {
-        metadata: particle_recipes::METADATA,
-        build: particle_recipes::timeline,
-    },
-    Film {
         metadata: particle_garden::METADATA,
         build: particle_garden::timeline,
     },
     Film {
-        metadata: chromatic_tide::METADATA,
-        build: chromatic_tide::timeline,
+        metadata: data_story::METADATA,
+        build: data_story::timeline,
+    },
+    Film {
+        metadata: puppet_show::METADATA,
+        build: puppet_show::timeline,
+    },
+    Film {
+        metadata: logo_sting::METADATA,
+        build: logo_sting::timeline,
     },
     Film {
         metadata: cinematic_look::METADATA,
@@ -77,10 +77,6 @@ const PROGRAM: &[Film] = &[
     Film {
         metadata: signal_garden::METADATA,
         build: signal_garden::timeline,
-    },
-    Film {
-        metadata: sidechain_pulse::METADATA,
-        build: sidechain_pulse::timeline,
     },
     Film {
         metadata: chidori::METADATA,

@@ -14,7 +14,7 @@ formula = ["typst", "motion/formula"]
 ffmpeg = ["motion/ffmpeg", "dep:motion-ffmpeg"]
 
 [dependencies]
-motion = { package = "motion-rs", path = "../crates/motion", default-features = false, features = ["image", "svg", "text", "particles", "audio", "ink", "diagram", "captions"] }
+motion = { package = "motion-rs", path = "../crates/motion", default-features = false, features = ["image", "svg", "text", "particles", "audio", "ink", "diagram", "captions", "declarative"] }
 motion-ffmpeg = { path = "../crates/motion-ffmpeg", optional = true }
 clap = { version = "4", features = ["derive"] }
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "webp", "gif"] }

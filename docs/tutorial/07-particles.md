@@ -191,7 +191,7 @@ let customized = sparks.modifier(motion::particles::Drag::new(0.3));
 # Ok::<(), motion::Error>(())
 ```
 
-Preset::ALL includes Sparks, Embers, Dust, Motes, Snow, Rain, Smoke, Fire, Confetti, Fireworks, Fireflies, LogoDissolve and LogoAssemble. Every recipe returns a lazy ParticleSimulation builder; logo recipes require options.logo. Studio's studio-gated particle_presets registers the same recipes for preview/export. Gallery particle-recipes compares Bloom; this generator writes every Bloom off/on x tone-map None/AgX combination without benchmarking:
+Preset::ALL includes Sparks, Embers, Dust, Motes, Snow, Rain, Smoke, Fire, Confetti, Fireworks, Fireflies, LogoDissolve and LogoAssemble. Every recipe returns a lazy ParticleSimulation builder; logo recipes require options.logo. Studio's studio-gated particle_presets registers the same recipes for preview/export. The gallery `particle_comparisons` generator writes every Bloom off/on x tone-map None/AgX combination without benchmarking:
 
 ```sh
 cargo run -p motion-gallery --bin particle_comparisons -- /tmp/motion-particle-comparisons

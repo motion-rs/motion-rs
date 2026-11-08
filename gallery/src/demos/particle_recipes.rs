@@ -1,27 +1,12 @@
-//! Recipe showcase; each time slot selects one preset with a Bloom comparison.
+//! Particle preset comparison frames: Bloom off/on against tone-map off/AgX for every recipe.
 
-use crate::{DemoMetadata, DemoParameters};
 use motion::particles::presets::{Preset, PresetOptions};
 use motion::prelude::*;
 use motion::vector::{VectorGroup, VectorItem, VectorPath, VectorTree};
 use std::sync::Arc;
 
-pub(super) const METADATA: DemoMetadata = DemoMetadata::new(
-    "particle-recipes",
-    "Particle Recipes",
-    "Particles",
-    &[
-        "particles",
-        "bokeh",
-        "sprites",
-        "collision",
-        "sub-emitters",
-        "bloom",
-    ],
-);
-
 /// Shared outline source used by the two colored logo recipes.
-pub(super) fn logo(bounds: Rect) -> motion::Result<Arc<VectorTree>> {
+fn logo(bounds: Rect) -> motion::Result<Arc<VectorTree>> {
     Ok(Arc::new(VectorTree::new(
         bounds,
         VectorGroup {
@@ -39,48 +24,6 @@ pub(super) fn logo(bounds: Rect) -> motion::Result<Arc<VectorTree>> {
             ..Default::default()
         },
     )?))
-}
-
-pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
-    let duration = parameters.seconds.seconds();
-    let bounds = Rect::new(0.0, 0.0, 480.0, 540.0);
-    let source = logo(bounds)?;
-    let mut simulations = Vec::new();
-    for preset in Preset::ALL {
-        let mut options = PresetOptions::new(parameters.seed, 3.seconds(), bounds);
-        options.logo = Some(source.clone());
-        simulations.push(preset.simulation(options)?);
-    }
-    Ok(Timeline::new(Size::new(960.0, 540.0), 30).track(|track| {
-        track.scene(duration, move |context| {
-            let index = ((context.progress() * Preset::ALL.len() as f64) as usize)
-                .min(Preset::ALL.len() - 1);
-            let simulation = &simulations[index];
-            let slot = duration.as_seconds() / Preset::ALL.len() as f64;
-            let local = (context.seconds() / slot).fract() * 2.9;
-            let plain = context.during(context.time() - local.seconds(), 3.seconds(), |inner| {
-                simulation.render(inner)
-            });
-            let bloom = plain
-                .clone()
-                .filter(Filter::Bloom {
-                    threshold: 0.4,
-                    knee: 0.2,
-                    radius: 12.0,
-                    intensity: 0.8,
-                    levels: 3,
-                    falloff: 0.6,
-                    tint: Color::WHITE,
-                })
-                .translate(480.0, 0.0);
-            Node::group([
-                context.bounds().fill(Color::from_hex(0x101418)).into(),
-                plain,
-                bloom,
-            ])
-            .clip_with(context.bounds(), ClipMode::Geometric)
-        })
-    }))
 }
 
 /// Writes Bloom off/on x output tone-map off/AgX frames for every recipe.

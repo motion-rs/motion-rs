@@ -122,7 +122,7 @@ Export protects existing destinations by default. Check the current CLI's `--hel
 
 ```sh
 cargo run -p motion-gallery --bin motion-gallery -- list
-cargo run --release -p motion-gallery --features studio,gpu --bin motion-gallery -- studio --demo chromatic-tide
+cargo run --release -p motion-gallery --features studio,gpu --bin motion-gallery -- studio --demo type-in-motion
 ```
 
 Gallery is a separate package with its own feature selection. `--features studio` does not mean every scene has selected GPU rendering.

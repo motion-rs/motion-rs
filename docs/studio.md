@@ -8,7 +8,7 @@ declarative document is the exception: see [hot reload](#hot-reload).
 
 ```sh
 cargo run --release --features studio --example studio
-cargo run --release -p motion-gallery --features studio,gpu --bin motion-gallery -- studio --demo chromatic-tide
+cargo run --release -p motion-gallery --features studio,gpu --bin motion-gallery -- studio --demo type-in-motion
 ```
 
 ## Preview and Playback

@@ -232,8 +232,8 @@ fn main() -> motion::Result {
     let mut artwork = std::collections::BTreeMap::new();
     for (name, bytes) in [
         (
-            "chromatic_tide",
-            include_bytes!("../../../gallery/src/demos/chromatic_tide.rs").as_slice(),
+            "data_story",
+            include_bytes!("../../../gallery/src/demos/data_story.rs").as_slice(),
         ),
         (
             "type_in_motion",

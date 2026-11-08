@@ -43,7 +43,7 @@ cargo run --features ffmpeg --example motion -- export motion --output motion.mp
 cargo run -p motion-cli -- still examples/documents/intro.json --time 1
 cargo run -p motion-cli -- validate examples/documents/intro.json
 cargo run -p motion-gallery --bin motion-gallery -- list
-cargo run -p motion-gallery --features studio,gpu --bin motion-gallery -- studio --demo chromatic-tide
+cargo run -p motion-gallery --features studio,gpu --bin motion-gallery -- studio --demo type-in-motion
 ```
 
 The independent [Gallery](gallery/README.md) contains short films combining
