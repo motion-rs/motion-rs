@@ -1,0 +1,16 @@
+# Platform libm results can differ in the last bit; scenes use motion::math so frames replay exactly.
+disallowed-methods = [
+    { path = "f64::sin", reason = "use motion::math::sin" },
+    { path = "f64::cos", reason = "use motion::math::cos" },
+    { path = "f64::tan", reason = "use motion::math::tan" },
+    { path = "f64::exp", reason = "use motion::math::exp" },
+    { path = "f64::powf", reason = "use motion::math::pow" },
+    { path = "f64::sqrt", reason = "use motion::math::sqrt" },
+    { path = "f64::hypot", reason = "use motion::math::hypot" },
+    { path = "f64::atan2", reason = "use motion::math::atan2" },
+    { path = "f32::sin", reason = "use motion::math::sinf" },
+    { path = "f32::cos", reason = "use motion::math::cosf" },
+    { path = "f32::exp", reason = "use motion::math::expf" },
+    { path = "f32::sqrt", reason = "use motion::math::sqrtf" },
+    { path = "f32::hypot", reason = "use motion::math::hypotf" },
+]

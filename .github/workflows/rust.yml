@@ -1,0 +1,73 @@
+name: Rust
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: '0'
+  CARGO_BUILD_JOBS: '2'
+  CARGO_PROFILE_DEV_DEBUG: '0'
+  CARGO_PROFILE_TEST_DEBUG: '0'
+
+jobs:
+  workspace:
+    name: Lint, tests and Rustdoc (all features)
+    runs-on: macos-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Install native FFmpeg dependencies
+        run: |
+          brew install ffmpeg pkg-config llvm
+          echo "LIBCLANG_PATH=$(brew --prefix llvm)/lib" >> "$GITHUB_ENV"
+      - name: Clippy
+        run: cargo clippy --locked --workspace --all-features --all-targets -- -D warnings
+      - name: Unit, integration and example tests
+        run: cargo test --locked --workspace --all-features --lib --bins --tests --examples
+      - name: Rustdoc tests, including the compiled tutorial
+        run: cargo test --locked --workspace --all-features --doc
+      - name: Rustdoc links
+        env:
+          RUSTDOCFLAGS: -D rustdoc::broken_intra_doc_links -D rustdoc::private_intra_doc_links
+        run: cargo doc --locked --workspace --all-features --no-deps
+
+  minimal:
+    name: Tutorial doctests (no default features)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --locked -p motion-rs --no-default-features --doc tutorial
+
+  content:
+    name: Content tests (${{ matrix.features || 'minimal' }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        features: ['', image, particles, ink]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.features || 'minimal' }}
+      - run: cargo test --locked -p motion-content --no-default-features --features '${{ matrix.features }}' --lib

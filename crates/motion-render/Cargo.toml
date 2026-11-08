@@ -1,0 +1,29 @@
+[package]
+name = "motion-render"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Shared bounded raster preparation and CPU/GPU rendering"
+
+[features]
+default = []
+gpu = ["dep:bytemuck", "dep:pollster", "dep:wgpu"]
+
+[dependencies]
+motion-core = { path = "../motion-core" }
+libm = "0.2"
+half = "2"
+tempfile = "3"
+image = { version = "0.25.10", default-features = false, features = ["png"] }
+kurbo = "0.13"
+rayon = "1.12"
+bytemuck = { version = "1", optional = true, features = ["derive"] }
+pollster = { version = "0.4", optional = true }
+wgpu = { version = "24.0.5", default-features = false, features = ["dx12", "metal", "wgsl"], optional = true }
+
+[dev-dependencies]
+motion-content = { path = "../motion-content", default-features = false, features = ["image"] }
+proptest = { version = "1", default-features = false, features = ["std"] }
+
+[lints]
+workspace = true

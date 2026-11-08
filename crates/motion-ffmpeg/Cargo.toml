@@ -1,0 +1,15 @@
+[package]
+name = "motion-ffmpeg"
+version = "0.1.0"
+edition = "2024"
+links = "motion_ffmpeg"
+build = "build.rs"
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[build-dependencies]
+bindgen = { version = "0.72", default-features = false, features = ["runtime"] }
+[lints]
+workspace = true

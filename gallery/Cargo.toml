@@ -1,0 +1,26 @@
+[package]
+name = "motion-gallery"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Feature gallery and artwork for motion-rs"
+
+[features]
+default = []
+studio = ["ffmpeg", "motion/studio"]
+gpu = ["motion/gpu"]
+typst = ["motion/typst"]
+formula = ["typst", "motion/formula"]
+ffmpeg = ["motion/ffmpeg", "dep:motion-ffmpeg"]
+
+[dependencies]
+motion = { package = "motion-rs", path = "../crates/motion", default-features = false, features = ["image", "svg", "text", "particles", "audio", "ink", "diagram", "captions"] }
+motion-ffmpeg = { path = "../crates/motion-ffmpeg", optional = true }
+clap = { version = "4", features = ["derive"] }
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "webp", "gif"] }
+tempfile = "3"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["float_roundtrip"] }
+
+[lints]
+workspace = true

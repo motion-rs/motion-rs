@@ -1,0 +1,38 @@
+name: Structure
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  structure:
+    name: Layout, formatting and docs
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Tool self-tests
+        run: |
+          node tools/rust-format.cjs --self-test
+          node tools/check-features.cjs --self-test
+          node tools/check-docs.cjs --self-test
+      - run: node tools/check-structure.cjs
+      - run: node tools/check-expects.cjs
+      - run: node tools/check-docs.cjs
+      - run: cargo fmt --all -- --check
+      - run: node tools/rust-format.cjs --check

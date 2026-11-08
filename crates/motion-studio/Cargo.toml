@@ -1,0 +1,35 @@
+[package]
+name = "motion-studio"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Native desktop preview, playback and export workbench"
+
+[features]
+default = []
+studio = ["dep:motion-content"]
+ffmpeg = []
+gpu = ["motion-render/gpu", "motion-encode/gpu"]
+
+[dependencies]
+motion-core = { path = "../motion-core" }
+motion-content = { path = "../motion-content", default-features = false, optional = true }
+motion-render = { path = "../motion-render", default-features = false }
+motion-encode = { path = "../motion-encode", default-features = false, features = ["ffmpeg"] }
+motion-ffmpeg = { path = "../motion-ffmpeg" }
+cpal = { version = "0.16", default-features = false }
+rtrb = "0.3"
+eframe = { version = "0.31.1", default-features = false, features = ["default_fonts", "wgpu", "wayland", "x11"] }
+egui-phosphor = "0.9"
+rfd = "0.15"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["float_roundtrip"] }
+tempfile = "3"
+wgpu = { version = "24.0.5", default-features = false, features = ["dx12", "metal", "wgsl"] }
+
+[dev-dependencies]
+motion-content = { path = "../motion-content", features = ["text"] }
+image = { version = "0.25.10", default-features = false, features = ["png"] }
+libm = "0.2"
+[lints]
+workspace = true

@@ -1,0 +1,16 @@
+[package]
+name = "motion-cli"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Command-line program that loads, validates, renders and previews declarative JSON documents"
+
+[[bin]]
+name = "motion"
+path = "src/main.rs"
+
+[dependencies]
+motion = { package = "motion-rs", path = "../motion", features = ["declarative"] }
+
+[lints]
+workspace = true

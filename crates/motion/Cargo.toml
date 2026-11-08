@@ -1,0 +1,77 @@
+[package]
+name = "motion-rs"
+version = "0.1.0"
+edition = "2024"
+description = "Frame-based motion graphics and programmable video rendering in Rust"
+autobenches = false
+
+[lib]
+name = "motion"
+
+[features]
+default = ["gpu", "image", "svg", "text", "particles", "ffmpeg", "studio", "ink", "diagram", "captions", "declarative"]
+vector = ["dep:motion-content", "motion-scene?/vector"]
+image = ["vector", "motion-content/image", "motion-scene?/image"]
+svg = ["image", "text", "motion-content/svg", "motion-scene?/svg"]
+text = ["image", "motion-content/text", "motion-scene?/text"]
+particles = ["image", "motion-content/particles", "motion-scene?/particles"]
+ink = ["image", "motion-content/ink"]
+diagram = ["text", "motion-content/diagram", "motion-scene?/diagram"]
+captions = ["text", "motion-content/captions", "motion-scene?/captions"]
+audio = ["motion-encode/audio", "motion-scene?/audio"]
+ffmpeg = ["audio", "motion-encode/ffmpeg", "dep:motion-ffmpeg"]
+gpu = ["motion-render/gpu", "motion-encode/gpu", "motion-content?/gpu", "motion-formula?/gpu", "motion-studio?/gpu"]
+typst = ["dep:motion-formula", "motion-formula/typst"]
+formula = ["typst", "motion-formula/formula", "motion-scene?/formula"]
+studio = ["ffmpeg", "dep:motion-studio"]
+declarative = ["dep:motion-scene"]
+
+[dependencies]
+motion-core = { path = "../motion-core" }
+motion-render = { path = "../motion-render", default-features = false }
+motion-content = { path = "../motion-content", default-features = false, optional = true }
+motion-formula = { path = "../motion-formula", default-features = false, optional = true }
+motion-encode = { path = "../motion-encode", default-features = false }
+motion-scene = { path = "../motion-scene", optional = true }
+motion-studio = { path = "../motion-studio", default-features = false, optional = true }
+motion-ffmpeg = { path = "../motion-ffmpeg", optional = true }
+clap = { version = "4", features = ["derive", "string"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["float_roundtrip"] }
+
+[dev-dependencies]
+png = "0.18"
+tempfile = "3"
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "webp", "gif"] }
+kurbo = "0.13"
+
+[[example]]
+name = "audio_export"
+path = "../../examples/audio_export.rs"
+
+[[example]]
+name = "cinematic"
+path = "../../examples/cinematic.rs"
+required-features = ["ffmpeg"]
+
+[[example]]
+name = "quality_metrics"
+path = "../../examples/quality_metrics.rs"
+required-features = ["text"]
+
+[[example]]
+name = "motion"
+path = "../../examples/motion.rs"
+
+[[example]]
+name = "studio"
+path = "../../examples/studio.rs"
+required-features = ["studio"]
+
+[[example]]
+name = "typst_formula"
+path = "../../examples/typst_formula.rs"
+required-features = ["formula"]
+
+[lints]
+workspace = true

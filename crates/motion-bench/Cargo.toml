@@ -1,0 +1,61 @@
+[package]
+name = "motion-bench"
+version = "0.1.0"
+edition = "2024"
+publish = false
+autobenches = false
+description = "Workspace-only performance and film benchmarks"
+
+[features]
+default = ["image", "text", "svg", "particles", "audio", "ink", "diagram"]
+films = []
+image = ["motion/image"]
+text = ["motion/text"]
+svg = ["motion/svg"]
+particles = ["motion/particles"]
+audio = ["motion/audio"]
+ink = ["motion/ink"]
+diagram = ["motion/diagram"]
+gpu = ["motion/gpu", "motion-gallery/gpu", "dep:wgpu"]
+ffmpeg = ["motion/ffmpeg", "motion-gallery/ffmpeg"]
+formula = ["motion/formula", "motion-gallery/formula"]
+typst = ["motion/typst", "motion-gallery/typst"]
+
+[dependencies]
+motion = { package = "motion-rs", path = "../motion", default-features = false }
+motion-gallery = { path = "../../gallery" }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["float_roundtrip"] }
+libm = "0.2"
+tempfile = "3"
+wgpu = { version = "24.0.5", default-features = false, features = ["dx12", "metal", "wgsl"], optional = true }
+
+[dev-dependencies]
+criterion = { version = "0.8", default-features = false }
+
+[[bench]]
+name = "performance"
+harness = false
+required-features = ["image", "text", "svg", "particles", "audio"]
+
+[[bench]]
+name = "films"
+harness = false
+required-features = ["films"]
+
+[[bench]]
+name = "criterion_frames"
+harness = false
+required-features = ["text", "particles"]
+
+[[bench]]
+name = "breadth"
+harness = false
+required-features = ["text", "particles", "audio", "diagram"]
+
+[[test]]
+name = "breadth_cases"
+required-features = ["text", "particles", "audio", "diagram"]
+
+[lints]
+workspace = true

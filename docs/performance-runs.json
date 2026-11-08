@@ -1,0 +1,139 @@
+{
+  "schema": "motion-performance-history-v1",
+  "measurement": {
+    "source_commit": "9cb8a9b1e5e3c4f72e817cbd259a5aaf47ef070c",
+    "targets": ["performance"],
+    "excluded_targets": ["breadth", "criterion_frames", "films"],
+    "elapsed_seconds": 473.22,
+    "source_verification": "target/performance/non-films-1793845901725/source-verification.json",
+    "sampling": "The full-suite initial baseline has one invocation, with CPU and GPU in the same process: two warmups, 101 warm-frame samples and one iteration per sample; playback and seek each use 90 frames. Warm-frame P95 is eligible, sequences and five batch-mean microbenchmarks are not. Separately, R3-8 has six fresh alternating AB/BA pairs for Empty/Shapes/Blur/Shadow/Bloom at 640x360, both backends, with CPU stages enabled and sequences/micro/video/cold disabled. A separate six-pair small-kernel follow-up compares the new candidate against the same original pre-R3-8 control; the two cohorts are not pooled. These focused pairs provide per-case uncertainty estimates, not a full-suite speedup claim.",
+    "scope": "Apple M3 (Metal GPU), macOS, aarch64, release, 640x360 Final, bundled Noto Sans, 72 particles, 1 GiB/20-billion-work benchmark policy. All 29 cases, both backends, playback/seek and five microbenchmarks were measured; cold sessions, stages and video export were disabled. GPU and FFmpeg were enabled in the frozen build, but films was not. Runtime/workload sources match the captured revision; post-build changes are reporting/archival-only edits to benches/report.cjs and benches/baseline.cjs, plus the scheduling-only films gate in crates/motion-bench/Cargo.toml. Breadth has incomplete artifacts and is deferred with Criterion; neither is registered. This is not Studio FPS, process RSS, full-film acceptance, cross-device evidence or improvement over deleted history. Verification details: target/performance/non-films-1793845901725/source-verification.json."
+  },
+  "series": [
+    {
+      "id": "current-engine-640x360-m3",
+      "title": "Engine / 640x360 / Apple M3",
+      "steps": [
+        {
+          "label": "00 current baseline",
+          "runs": ["target/performance/non-films-1793845901725/performance"],
+          "change": "Initial performance-only measurement after the benchmark refactor; no renderer optimization.",
+          "verification": "Validated raw quantiles, checksums, frame schedules, frozen executable, 233 reference artifacts, all 254 captured source files and complete 29-case CPU/GPU phase coverage (179 records). Only reporting/archival scripts and the films target gate changed after compilation; source verification is retained in target/performance/non-films-1793845901725/source-verification.json.",
+          "notes": "One independent invocation. Preserve CPU/GPU and all case/phase results separately; no average speedup or causal improvement claim. Sequence P95 is insufficient with 90 samples. Breadth and Criterion are deferred, films excluded, and partial breadth artifacts retained but not registered."
+        }
+      ]
+    },
+    {
+      "id": "r3-8-rolling-blur-640x360-m3",
+      "title": "R3-8 focused / 640x360 / Apple M3",
+      "steps": [
+        {
+          "label": "00 focused control",
+          "runs": ["target/performance/r3-8-1793849842040/probe-control"],
+          "change": "Focused pre-R3-8 control from frozen executable a9d222d5a79c37ce, using Empty/Shapes/Blur/Shadow/Bloom and CPU stages; separate workload from the full-suite baseline.",
+          "verification": "Raw samples, reference pixels, checksums, configuration and frozen executable verified by benches/report.cjs. Probe source/comparison checks are retained in target/performance/r3-8-1793849842040/run-state.json.",
+          "notes": "One probe invocation is an initial descriptive baseline only; causal changes below use six fresh control/candidate pairs, not this probe's timing. Earlier disk-full failure and interrupted post-cleanup run are preserved and excluded from valid pairs."
+        },
+        {
+          "label": "01 R3-8 rolling blur",
+          "change": "CPU uniform box blur uses fixed six-part compensated f64 rolling sums instead of per-tap sampling; fractional small-sigma path retained. Candidate executable 4d96bd533c2ea163. Runtime source difference is cpu/filter.rs; gpu.rs differs only in tests, other differences are reporting/archival scripts and the films target gate.",
+          "verification": "Six alternating AB/BA pairs, 12 independent process invocations, all 50 records each: exact reference pixels/checksums, frozen executable hashes, matched configuration/settings/environment/adapter and nonoverlapping intervals validated by benches/pair.cjs and benches/report.cjs. Candidate captured sources match current files; proof: target/performance/r3-8-1793849842040/verification-before-resume.json. No rebuild, films, breadth or complete-suite rerun. All per-case statistics: target/performance/r3-8-1793849842040/comparison.json.",
+          "notes": "Performance acceptance is incomplete: CPU Bloom warm-frame P50 83.408 -> 46.990 ms, paired improvement 42.88% [41.05,45.79]; Blur 13.228 -> 27.372 ms, paired -106.70% [-116.20,-100.56]; Shadow 17.301 -> 28.136 ms, paired -64.78% [-65.86,-58.27]. Stage-linear confirms the same directions. CPU Empty/Shapes and GPU warm-frame P50 are uncertain. GPU Empty P95 has a small borderline regression: -1.12% [-1.56,-0.01], retained rather than dismissed. All other positive, negative and uncertain observations remain in detailed tables; no cross-case aggregate, film/Studio FPS, RSS or general speedup claim. Small uniform kernels need separate optimization/acceptance. Disk-full and incomplete attempts remain preserved, not pooled with completed pairs.",
+          "pairs": [
+            {
+              "order": "control-first",
+              "control": "target/performance/r3-8-1793849842040/pairs-resumed-1793852451447/01-control",
+              "candidate": "target/performance/r3-8-1793849842040/pairs-resumed-1793852451447/01-candidate"
+            },
+            {
+              "order": "candidate-first",
+              "control": "target/performance/r3-8-1793849842040/pairs-resumed-1793852451447/02-control",
+              "candidate": "target/performance/r3-8-1793849842040/pairs-resumed-1793852451447/02-candidate"
+            },
+            {
+              "order": "control-first",
+              "control": "target/performance/r3-8-1793849842040/pairs-resumed-1793852451447/03-control",
+              "candidate": "target/performance/r3-8-1793849842040/pairs-resumed-1793852451447/03-candidate"
+            },
+            {
+              "order": "candidate-first",
+              "control": "target/performance/r3-8-1793849842040/pairs-resumed-1793852451447/04-control",
+              "candidate": "target/performance/r3-8-1793849842040/pairs-resumed-1793852451447/04-candidate"
+            },
+            {
+              "order": "control-first",
+              "control": "target/performance/r3-8-1793849842040/pairs-resumed-1793852451447/05-control",
+              "candidate": "target/performance/r3-8-1793849842040/pairs-resumed-1793852451447/05-candidate"
+            },
+            {
+              "order": "candidate-first",
+              "control": "target/performance/r3-8-1793849842040/pairs-resumed-1793852451447/06-control",
+              "candidate": "target/performance/r3-8-1793849842040/pairs-resumed-1793852451447/06-candidate"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "r3-8-small-kernels-640x360-m3",
+      "title": "R3-8 small kernels / 640x360 / Apple M3",
+      "steps": [
+        {
+          "label": "00 focused original control",
+          "runs": ["target/performance/r3-8-1793849842040/probe-control"],
+          "change": "Reuse the original pre-R3-8 frozen control a9d222d5a79c37ce as the descriptive initial probe for this separate series.",
+          "verification": "Raw samples, exact references/checksums and executable verified by benches/report.cjs; fresh causal controls are the six paired invocations below.",
+          "notes": "The initial probe is descriptive only. This series does not pair against the previous all-rolling candidate or pool its earlier regressions with the new cohort. Both previous series remain unchanged."
+        },
+        {
+          "label": "01 R3-8 small-kernel direct taps",
+          "change": "CPU uniform boxes use direct integer weighted taps for radii 1/2 and retain six-part compensated rolling sums for larger radii. Candidate 5f2bf78b8f99caa5 is compared against original pre-R3-8 control a9d222d5a79c37ce, not incrementally against the all-rolling candidate. Only cpu/filter.rs differs from that previous candidate.",
+          "verification": "27 CPU filter tests passed with GPU and default features; GPU-feature production library check passed. Authorized native Apple M3/Metal parity passed 53 cases/1696 pixels: max linear difference 1.1920929e-7, max RGBA difference 0, replay/overflow recovery pass. Six fresh alternating AB/BA pairs, 12 independent invocations and 50 records each passed raw quantile, exact reference/checksum, frozen executable, configuration/settings/environment/adapter and nonoverlapping interval checks. Source bytes matched at probe; subsequent edits only update module documentation and existing tests, including direct/rolling HDR coverage. Evidence: target/performance/r3-8-small-kernel-1793853335012/run-state.json, comparison.json and source-verification.json.",
+          "notes": "CPU warm-frame P50 Blur 13.138 -> 5.520 ms, paired improvement 57.97% [57.26,58.41]; Shadow 16.949 -> 7.477 ms, 55.89% [55.59,56.24]; Bloom 81.626 -> 46.645 ms, 42.91% [42.76,43.35]. All three P95 and stage-linear estimates improve. CPU Empty/Shapes warm-frame and all GPU warm-frame P50/P95 estimates are uncertain. Preserve the off-target Software/shapes/stage-compile-hot-node P50 borderline regression -1.39% [-4.58,-0.01], not attributed to filter logic. All 50 records and both quantiles remain in comparison.json/details.md. This is a separate original-control cohort; previous small-kernel regressions, GPU Empty P95 result and disk/incomplete attempts are retained, not pooled or erased. No films/breadth/full suite, larger-sigma/resolution, Studio FPS, RSS, cross-device or regression-free overall acceptance claim.",
+          "pairs": [
+            {
+              "order": "control-first",
+              "control": "target/performance/r3-8-small-kernel-1793853335012/pairs/01-control",
+              "candidate": "target/performance/r3-8-small-kernel-1793853335012/pairs/01-candidate"
+            },
+            {
+              "order": "candidate-first",
+              "candidate": "target/performance/r3-8-small-kernel-1793853335012/pairs/02-candidate",
+              "control": "target/performance/r3-8-small-kernel-1793853335012/pairs/02-control"
+            },
+            {
+              "order": "control-first",
+              "control": "target/performance/r3-8-small-kernel-1793853335012/pairs/03-control",
+              "candidate": "target/performance/r3-8-small-kernel-1793853335012/pairs/03-candidate"
+            },
+            {
+              "order": "candidate-first",
+              "candidate": "target/performance/r3-8-small-kernel-1793853335012/pairs/04-candidate",
+              "control": "target/performance/r3-8-small-kernel-1793853335012/pairs/04-control"
+            },
+            {
+              "order": "control-first",
+              "control": "target/performance/r3-8-small-kernel-1793853335012/pairs/05-control",
+              "candidate": "target/performance/r3-8-small-kernel-1793853335012/pairs/05-candidate"
+            },
+            {
+              "order": "candidate-first",
+              "candidate": "target/performance/r3-8-small-kernel-1793853335012/pairs/06-candidate",
+              "control": "target/performance/r3-8-small-kernel-1793853335012/pairs/06-control"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "reset": {
+    "source_commit": "9cb8a9b1e5e3c4f72e817cbd259a5aaf47ef070c",
+    "previous_manifest_sha256": "8a33beabc9013f248a326cb0ea8ad786f91694b9901d0101c9d9a03fdfb28d8f",
+    "previous_series": 14,
+    "cleared_directories": [
+      "target/performance",
+      "crates/motion/target/performance"
+    ],
+    "interpretation": "Historical measurements and plan archives removed from the active baseline. Tracked history remains recoverable from Git; ignored raw artifacts have been deleted."
+  }
+}

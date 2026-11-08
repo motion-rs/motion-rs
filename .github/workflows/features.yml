@@ -1,0 +1,63 @@
+name: Facade Features
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  consumer:
+    name: ${{ matrix.features || 'minimal' }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { features: '', os: ubuntu-latest }
+          - { features: vector, os: ubuntu-latest }
+          - { features: image, os: ubuntu-latest }
+          - { features: gpu, os: ubuntu-latest }
+          - { features: particles, os: ubuntu-latest }
+          - { features: 'gpu,particles', os: ubuntu-latest }
+          - { features: 'gpu,particles,ffmpeg', os: macos-latest, native: true }
+          - { features: svg, os: ubuntu-latest }
+          - { features: text, os: ubuntu-latest }
+          - { features: typst, os: ubuntu-latest }
+          - { features: formula, os: ubuntu-latest }
+          - { features: ink, os: ubuntu-latest }
+          - { features: diagram, os: ubuntu-latest }
+          - { features: captions, os: ubuntu-latest }
+          - { features: declarative, os: ubuntu-latest }
+          - { features: 'declarative,svg', os: ubuntu-latest }
+          - { features: 'declarative,particles', os: ubuntu-latest }
+          - { features: 'declarative,diagram,captions', os: ubuntu-latest }
+          - { features: 'declarative,formula', os: ubuntu-latest }
+          - { features: 'declarative,audio', os: ubuntu-latest }
+          - { features: audio, os: ubuntu-latest }
+          - { features: ffmpeg, os: macos-latest, native: true }
+          - { features: studio, os: macos-latest, native: true }
+          - { features: default, os: macos-latest, native: true }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.features || 'minimal' }}-${{ matrix.os }}
+      - name: Install native FFmpeg dependencies
+        if: matrix.native
+        run: |
+          brew install ffmpeg pkg-config llvm
+          echo "LIBCLANG_PATH=$(brew --prefix llvm)/lib" >> "$GITHUB_ENV"
+      - run: node tools/check-features.cjs --features '${{ matrix.features }}'

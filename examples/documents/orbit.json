@@ -1,0 +1,65 @@
+{
+  "$schema": "./motion.schema.json",
+  "version": 1,
+  "name": "Parametric orbit",
+  "size": [640, 360],
+  "fps": 30,
+  "background": "#0c1311",
+  "params": { "radius": 110, "speed": 1.2, "tint": "#6ad6b8" },
+  "tracks": [
+    {
+      "items": [
+        {
+          "scene": {
+            "duration": 4,
+            "content": {
+              "children": [
+                {
+                  "id": "sun",
+                  "circle": { "center": [320, 180], "radius": 14 },
+                  "fill": "#e8c26a"
+                },
+                {
+                  "id": "planet",
+                  "circle": { "center": [0, 0], "radius": 10 },
+                  "fill": { "$param": "tint" },
+                  "position": {
+                    "expr": ["320 + $radius * cos(t * $speed)", "180 + $radius * sin(t * $speed)"]
+                  }
+                },
+                {
+                  "id": "moon",
+                  "circle": { "center": [0, 0], "radius": 4 },
+                  "fill": "white",
+                  "position": {
+                    "expr": [
+                      "@planet.position.x + 28 * cos(t * 4)",
+                      "@planet.position.y + 28 * sin(t * 4)"
+                    ]
+                  }
+                },
+                {
+                  "particles": {
+                    "seed": 5,
+                    "emitters": [
+                      {
+                        "point": [320, 180],
+                        "rate": 40,
+                        "lifetime": 1.5,
+                        "speed": 30,
+                        "color": "#e8c26a"
+                      }
+                    ],
+                    "modifiers": [{ "drag": 0.4 }],
+                    "style": { "glow_dots": { "radius": 2 } },
+                    "blend": "plus"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

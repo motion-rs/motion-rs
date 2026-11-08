@@ -1,0 +1,34 @@
+[package]
+name = "motion-encode"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Transactional encoding and stateless audio preparation"
+
+[features]
+default = ["audio"]
+audio = ["dep:symphonia", "dep:rubato", "dep:rustfft", "dep:mp4parse"]
+ffmpeg = ["audio", "dep:motion-ffmpeg"]
+gpu = ["motion-render/gpu"]
+
+[dependencies]
+motion-core = { path = "../motion-core" }
+motion-render = { path = "../motion-render", default-features = false }
+motion-ffmpeg = { path = "../motion-ffmpeg", optional = true }
+libm = "0.2"
+serde_json = "1"
+tempfile = "3"
+rustix = { version = "1", features = ["fs"] }
+gif = "0.14"
+color_quant = "1"
+rayon = "1.12"
+symphonia = { version = "0.5", default-features = false, features = ["aac", "mp3", "flac", "pcm", "vorbis", "isomp4", "ogg", "wav"], optional = true }
+rubato = { version = "0.16", optional = true }
+rustfft = { version = "6", optional = true }
+mp4parse = { version = "0.17", optional = true }
+
+[dev-dependencies]
+motion-content = { path = "../motion-content", default-features = false, features = ["text"] }
+
+[lints]
+workspace = true

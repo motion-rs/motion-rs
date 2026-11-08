@@ -1,0 +1,72 @@
+{
+  "$schema": "./motion.schema.json",
+  "version": 1,
+  "name": "Declarative intro",
+  "size": [640, 360],
+  "fps": 30,
+  "background": "#0c1311",
+  "tracks": [
+    {
+      "name": "main",
+      "items": [
+        {
+          "scene": {
+            "name": "orbit",
+            "duration": 3,
+            "content": {
+              "children": [
+                {
+                  "ring": { "center": [320, 180], "inner_radius": 96, "outer_radius": 100 },
+                  "fill": "rgb(255 255 255 / 15%)"
+                },
+                {
+                  "circle": { "center": [0, 0], "radius": 28 },
+                  "fill": {
+                    "radial": {
+                      "center": [0.5, 0.4],
+                      "radius": 0.6,
+                      "stops": [
+                        { "offset": 0, "color": "#a6f4dc" },
+                        { "offset": 1, "color": "#14a082" }
+                      ]
+                    }
+                  },
+                  "position": {
+                    "keyframes": {
+                      "keys": [
+                        { "time": 0, "value": [220, 180] },
+                        { "time": 1.5, "value": [420, 180], "easing": "cubic_in_out" },
+                        { "time": 3, "value": [220, 180], "easing": "cubic_in_out" }
+                      ]
+                    }
+                  },
+                  "scale": { "oscillate": { "frequency": 1, "amplitude": 0.1, "offset": 1 } },
+                  "filters": [
+                    { "drop_shadow": { "offset": [0, 8], "sigma": 10, "color": "rgb(0 0 0 / 50%)" } }
+                  ]
+                },
+                {
+                  "path": { "data": "M120 300 C240 240 400 360 520 300" },
+                  "stroke": { "width": 4, "paint": "#e8c26a", "cap": "round" },
+                  "trim": { "end": { "tween": { "from": 0, "to": 1, "duration": 2, "easing": "quadratic_out" } } }
+                }
+              ]
+            }
+          }
+        },
+        { "transition": { "effect": { "wipe": { "angle": 20, "feather": 60 } }, "duration": 0.6 } },
+        {
+          "scene": {
+            "name": "outro",
+            "duration": 2,
+            "content": {
+              "star": { "center": [320, 180], "points": 5, "outer_radius": 90, "inner_radius": 40 },
+              "fill": { "tween": { "from": "#e8c26a", "to": "#d2506e", "duration": 2 } },
+              "rotate": { "tween": { "from": 0, "to": 72, "duration": 2, "easing": { "back_out": { "overshoot": 1.4 } } } }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
