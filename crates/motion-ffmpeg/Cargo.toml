@@ -1,10 +1,16 @@
 [package]
 name = "motion-ffmpeg"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
+description = "Native FFmpeg bindings with thread-confined codec and mixer resources"
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+readme = "README.md"
+keywords.workspace = true
+categories.workspace = true
 links = "motion_ffmpeg"
 build = "build.rs"
-publish = false
 
 [lib]
 path = "src/lib.rs"

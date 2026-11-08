@@ -1,16 +1,21 @@
 [package]
 name = "motion-render"
-version = "0.1.0"
-edition = "2024"
-publish = false
+version.workspace = true
+edition.workspace = true
 description = "Shared bounded raster preparation and CPU/GPU rendering"
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+readme = "README.md"
+keywords.workspace = true
+categories.workspace = true
 
 [features]
 default = []
 gpu = ["dep:bytemuck", "dep:pollster", "dep:wgpu"]
 
 [dependencies]
-motion-core = { path = "../motion-core" }
+motion-core = { version = "0.1.0", path = "../motion-core" }
 libm = "0.2"
 half = "2"
 tempfile = "3"

@@ -1,9 +1,14 @@
 [package]
 name = "motion-scene"
-version = "0.1.0"
-edition = "2024"
-publish = false
+version.workspace = true
+edition.workspace = true
 description = "Declarative JSON scene documents for motion timelines"
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+readme = "README.md"
+keywords.workspace = true
+categories.workspace = true
 
 [features]
 default = []
@@ -18,11 +23,11 @@ formula = ["text", "dep:motion-formula", "motion-formula/formula"]
 audio = ["dep:motion-encode", "motion-encode/audio"]
 
 [dependencies]
-motion-core = { path = "../motion-core" }
-motion-render = { path = "../motion-render", default-features = false }
-motion-content = { path = "../motion-content", default-features = false, optional = true }
-motion-formula = { path = "../motion-formula", default-features = false, optional = true }
-motion-encode = { path = "../motion-encode", default-features = false, optional = true }
+motion-core = { version = "0.1.0", path = "../motion-core" }
+motion-render = { version = "0.1.0", path = "../motion-render", default-features = false }
+motion-content = { version = "0.1.0", path = "../motion-content", default-features = false, optional = true }
+motion-formula = { version = "0.1.0", path = "../motion-formula", default-features = false, optional = true }
+motion-encode = { version = "0.1.0", path = "../motion-encode", default-features = false, optional = true }
 schemars = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["float_roundtrip"] }

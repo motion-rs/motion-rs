@@ -1,16 +1,21 @@
 [package]
 name = "motion-cli"
-version = "0.1.0"
-edition = "2024"
-publish = false
+version.workspace = true
+edition.workspace = true
 description = "Command-line program that loads, validates, renders and previews declarative JSON documents"
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+readme = "README.md"
+keywords.workspace = true
+categories = ["command-line-utilities", "multimedia::video"]
 
 [[bin]]
 name = "motion"
 path = "src/main.rs"
 
 [dependencies]
-motion = { package = "motion-rs", path = "../motion", features = ["declarative"] }
+motion = { package = "motion-rs", version = "0.1.0", path = "../motion", features = ["declarative"] }
 
 [lints]
 workspace = true

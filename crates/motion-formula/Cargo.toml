@@ -1,9 +1,14 @@
 [package]
 name = "motion-formula"
-version = "0.1.0"
-edition = "2024"
-publish = false
+version.workspace = true
+edition.workspace = true
 description = "Typst-only compilation into shared motion vector content"
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+readme = "README.md"
+keywords.workspace = true
+categories.workspace = true
 
 [features]
 default = ["formula"]
@@ -12,8 +17,8 @@ formula = ["typst"]
 gpu = []
 
 [dependencies]
-motion-core = { path = "../motion-core" }
-motion-content = { path = "../motion-content", default-features = false, features = ["text", "svg"] }
+motion-core = { version = "0.1.0", path = "../motion-core" }
+motion-content = { version = "0.1.0", path = "../motion-content", default-features = false, features = ["text", "svg"] }
 libm = "0.2"
 typst = "0.15.1"
 typst-assets = { version = "0.15.1", features = ["fonts"] }

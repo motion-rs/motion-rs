@@ -1,9 +1,14 @@
 [package]
 name = "motion-content"
-version = "0.1.0"
-edition = "2024"
-publish = false
+version.workspace = true
+edition.workspace = true
 description = "Backend-independent images, text, vectors, particles and artwork"
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+readme = "README.md"
+keywords.workspace = true
+categories.workspace = true
 
 [features]
 default = ["image", "svg", "text", "particles", "ink", "diagram", "captions"]
@@ -17,7 +22,7 @@ captions = ["text"]
 gpu = ["dep:bytemuck"]
 
 [dependencies]
-motion-core = { path = "../motion-core" }
+motion-core = { version = "0.1.0", path = "../motion-core" }
 libm = "0.2"
 half = "2"
 kurbo = "0.13"
