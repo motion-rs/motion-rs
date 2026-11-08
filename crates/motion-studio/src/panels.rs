@@ -14,12 +14,7 @@ fn sidebar_defaults(width: f32) -> (bool, bool) {
 }
 
 fn sidebar_toggle(ui: &mut egui::Ui, icon: &str, label: &str, selected: bool) -> bool {
-    ui.add_sized(
-        [30.0, 30.0],
-        egui::Button::new(RichText::new(icon).size(18.0)).selected(selected),
-    )
-    .on_hover_text(label)
-    .clicked()
+    theme::icon_toggle_sized(ui, icon, label, selected, egui::vec2(30.0, 30.0))
 }
 
 fn preview_status(
@@ -88,26 +83,18 @@ impl StudioApp {
 
     fn export_contents(&mut self, ui: &mut egui::Ui, context: &egui::Context) {
         egui::ScrollArea::vertical().show(ui, |ui| {
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = 4.0;
-                let cell = ((ui.available_width() - 3.0 * 4.0) / 4.0).floor();
-                for (index, icon, label) in [
-                    (0, icons::EXPORT, "Export"),
-                    (1, icons::TREE_STRUCTURE, "Node"),
-                    (2, icons::WARNING_CIRCLE, "Diagnostics"),
-                    (3, icons::CHART_BAR, "Stats"),
-                ] {
-                    if theme::icon_toggle_sized(
-                        ui,
-                        icon,
-                        label,
-                        self.inspection.inspector_tab == index,
-                        egui::vec2(cell, 30.0),
-                    ) {
-                        self.inspection.inspector_tab = index;
-                    }
-                }
-            });
+            if let Some(index) = theme::segmented_control(
+                ui,
+                &[
+                    (icons::EXPORT, "Export"),
+                    (icons::TREE_STRUCTURE, "Node"),
+                    (icons::WARNING_CIRCLE, "Diagnostics"),
+                    (icons::CHART_BAR, "Stats"),
+                ],
+                self.inspection.inspector_tab,
+            ) {
+                self.inspection.inspector_tab = index;
+            }
             ui.add_space(4.0);
             ui.separator();
             if self.inspection.inspector_tab != 0 {
@@ -343,15 +330,7 @@ impl StudioApp {
                 ui.add_space(12.0);
                 if theme::primary_button(
                     ui,
-                    format!(
-                        "{}  Queue {}",
-                        icons::EXPORT,
-                        if self.exports.export_png {
-                            "PNG"
-                        } else {
-                            self.exports.export_format.label()
-                        }
-                    ),
+                    format!("{}  Export", icons::EXPORT),
                     egui::vec2(ui.available_width(), 36.0),
                 )
                 .clicked()

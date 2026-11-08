@@ -23,53 +23,55 @@ pub(crate) struct Palette {
     pub overlay: Color32,
 }
 
-pub(crate) const ACCENT: Color32 = Color32::from_rgb(31, 169, 140);
+pub(crate) const ACCENT: Color32 = Color32::from_rgb(10, 132, 255);
 
 pub(crate) fn palette(dark: bool) -> Palette {
     if dark {
         Palette {
             accent: ACCENT,
-            accent_text: Color32::from_rgb(124, 224, 197),
-            canvas: Color32::from_gray(16),
-            lane: Color32::from_gray(33),
-            ruler_text: Color32::from_gray(150),
-            ruler_tick: Color32::from_gray(78),
+            accent_text: Color32::from_rgb(64, 156, 255),
+            canvas: Color32::BLACK,
+            lane: Color32::from_rgb(28, 28, 30),
+            ruler_text: Color32::from_rgb(152, 152, 157),
+            ruler_tick: Color32::from_rgb(72, 72, 74),
             clip: [
-                Color32::from_rgb(45, 112, 94),
-                Color32::from_rgb(52, 98, 140),
-                Color32::from_rgb(122, 86, 150),
-            ],
-            transition: Color32::from_rgba_unmultiplied(232, 176, 64, 190),
-            playhead: Color32::from_rgb(255, 99, 88),
-            range: Color32::from_rgb(232, 176, 64),
-            cache: Color32::from_rgb(88, 178, 142),
-            waveform: Color32::from_rgb(142, 150, 214),
-            cue: Color32::from_rgb(255, 214, 90),
-            error: Color32::from_rgb(255, 130, 130),
-            success: Color32::from_rgb(120, 216, 160),
+                Color32::from_rgb(48, 209, 88),
+                Color32::from_rgb(10, 132, 255),
+                Color32::from_rgb(191, 90, 242),
+            ]
+            .map(|color| color.gamma_multiply(0.7)),
+            transition: Color32::from_rgba_unmultiplied(255, 159, 10, 190),
+            playhead: Color32::from_rgb(255, 69, 58),
+            range: Color32::from_rgb(255, 159, 10),
+            cache: Color32::from_rgb(48, 209, 88),
+            waveform: Color32::from_rgb(94, 92, 230),
+            cue: Color32::from_rgb(255, 214, 10),
+            error: Color32::from_rgb(255, 69, 58),
+            success: Color32::from_rgb(48, 209, 88),
             overlay: Color32::from_black_alpha(190),
         }
     } else {
         Palette {
-            accent: Color32::from_rgb(17, 124, 103),
-            accent_text: Color32::from_rgb(14, 110, 90),
-            canvas: Color32::from_gray(226),
-            lane: Color32::from_gray(238),
-            ruler_text: Color32::from_gray(98),
-            ruler_tick: Color32::from_gray(170),
+            accent: Color32::from_rgb(0, 122, 255),
+            accent_text: Color32::from_rgb(0, 122, 255),
+            canvas: Color32::from_rgb(229, 229, 234),
+            lane: Color32::from_rgb(242, 242, 247),
+            ruler_text: Color32::from_rgb(110, 110, 115),
+            ruler_tick: Color32::from_rgb(199, 199, 204),
             clip: [
-                Color32::from_rgb(74, 160, 134),
-                Color32::from_rgb(92, 142, 200),
-                Color32::from_rgb(160, 124, 190),
-            ],
-            transition: Color32::from_rgba_unmultiplied(230, 160, 40, 200),
-            playhead: Color32::from_rgb(220, 60, 52),
-            range: Color32::from_rgb(200, 130, 20),
-            cache: Color32::from_rgb(52, 150, 112),
-            waveform: Color32::from_rgb(92, 100, 180),
-            cue: Color32::from_rgb(214, 150, 0),
-            error: Color32::from_rgb(190, 40, 52),
-            success: Color32::from_rgb(17, 110, 87),
+                Color32::from_rgb(52, 199, 89),
+                Color32::from_rgb(0, 122, 255),
+                Color32::from_rgb(175, 82, 222),
+            ]
+            .map(|color| color.gamma_multiply(0.85)),
+            transition: Color32::from_rgba_unmultiplied(255, 149, 0, 200),
+            playhead: Color32::from_rgb(255, 59, 48),
+            range: Color32::from_rgb(255, 149, 0),
+            cache: Color32::from_rgb(52, 199, 89),
+            waveform: Color32::from_rgb(88, 86, 214),
+            cue: Color32::from_rgb(255, 204, 0),
+            error: Color32::from_rgb(255, 59, 48),
+            success: Color32::from_rgb(36, 138, 61),
             overlay: Color32::from_black_alpha(170),
         }
     }
@@ -86,6 +88,11 @@ fn rounded(radius: u8) -> CornerRadius {
 /// Applies colors, spacing and typography. Safe to call repeatedly for theme switches.
 pub(crate) fn apply(context: &egui::Context, dark: bool) {
     let colors = palette(dark);
+    context.set_theme(if dark {
+        egui::Theme::Dark
+    } else {
+        egui::Theme::Light
+    });
     let mut visuals = if dark {
         egui::Visuals::dark()
     } else {
@@ -93,25 +100,25 @@ pub(crate) fn apply(context: &egui::Context, dark: bool) {
     };
     let (panel, window, field, faint, line, idle, hover, press) = if dark {
         (
-            Color32::from_gray(27),
-            Color32::from_gray(34),
-            Color32::from_gray(19),
-            Color32::from_gray(33),
-            Color32::from_gray(46),
-            Color32::from_gray(44),
-            Color32::from_gray(58),
-            Color32::from_gray(70),
+            Color32::from_rgb(28, 28, 30),
+            Color32::from_rgb(44, 44, 46),
+            Color32::from_rgb(18, 18, 20),
+            Color32::from_rgb(36, 36, 38),
+            Color32::from_rgb(56, 56, 58),
+            Color32::from_rgb(58, 58, 60),
+            Color32::from_rgb(72, 72, 74),
+            Color32::from_rgb(99, 99, 102),
         )
     } else {
         (
-            Color32::from_gray(246),
-            Color32::from_gray(252),
-            Color32::from_gray(255),
-            Color32::from_gray(238),
-            Color32::from_gray(218),
-            Color32::from_gray(232),
-            Color32::from_gray(222),
-            Color32::from_gray(208),
+            Color32::from_rgb(242, 242, 247),
+            Color32::WHITE,
+            Color32::WHITE,
+            Color32::from_rgb(235, 235, 240),
+            Color32::from_rgb(209, 209, 214),
+            Color32::from_rgb(229, 229, 234),
+            Color32::from_rgb(216, 216, 220),
+            Color32::from_rgb(199, 199, 204),
         )
     };
     visuals.panel_fill = panel;
@@ -119,7 +126,7 @@ pub(crate) fn apply(context: &egui::Context, dark: bool) {
     visuals.extreme_bg_color = field;
     visuals.faint_bg_color = faint;
     visuals.window_stroke = Stroke::new(1.0_f32, line);
-    visuals.window_corner_radius = rounded(10);
+    visuals.window_corner_radius = rounded(12);
     visuals.menu_corner_radius = rounded(8);
     visuals.hyperlink_color = colors.accent_text;
     visuals.selection.bg_fill = colors.accent.gamma_multiply(if dark { 0.42 } else { 0.30 });
@@ -132,14 +139,14 @@ pub(crate) fn apply(context: &egui::Context, dark: bool) {
         (&mut visuals.widgets.active, press),
         (&mut visuals.widgets.open, hover),
     ] {
-        state.corner_radius = rounded(6);
+        state.corner_radius = rounded(8);
         state.bg_fill = fill;
         state.weak_bg_fill = fill;
         state.bg_stroke = Stroke::NONE;
     }
-    visuals.widgets.noninteractive.corner_radius = rounded(6);
-    visuals.widgets.hovered.bg_stroke = Stroke::new(1.0_f32, colors.accent.gamma_multiply(0.7));
-    visuals.widgets.active.bg_stroke = Stroke::new(1.0_f32, colors.accent);
+    visuals.widgets.noninteractive.corner_radius = rounded(8);
+    visuals.widgets.hovered.bg_stroke = Stroke::NONE;
+    visuals.widgets.active.bg_stroke = Stroke::NONE;
     visuals.slider_trailing_fill = true;
     context.set_visuals(visuals);
     context.style_mut(|style| {
@@ -188,13 +195,15 @@ pub(crate) fn icon_toggle_sized(
     selected: bool,
     size: egui::Vec2,
 ) -> bool {
-    let mut text = RichText::new(icon).size(17.0);
-    if selected {
-        text = text.color(palette_for(ui).accent_text);
-    }
-    ui.add_sized(size, egui::Button::new(text).selected(selected))
-        .on_hover_text(label)
-        .clicked()
+    let text = RichText::new(icon).size(17.0);
+    let button = if selected {
+        egui::Button::new(text.color(Color32::WHITE))
+            .fill(palette_for(ui).accent)
+            .corner_radius(rounded(8))
+    } else {
+        egui::Button::new(text)
+    };
+    ui.add_sized(size, button).on_hover_text(label).clicked()
 }
 
 /// Filled call-to-action button.
@@ -203,6 +212,70 @@ pub(crate) fn primary_button(ui: &mut egui::Ui, text: String, size: egui::Vec2) 
         size,
         egui::Button::new(RichText::new(text).strong().color(Color32::WHITE))
             .fill(palette_for(ui).accent)
-            .corner_radius(rounded(7)),
+            .corner_radius(rounded(10)),
     )
+}
+
+/// iOS-style segmented control: a rounded track with a raised thumb under the selected icon.
+/// Returns the newly clicked segment, if any.
+pub(crate) fn segmented_control(
+    ui: &mut egui::Ui,
+    segments: &[(&str, &str)],
+    selected: usize,
+) -> Option<usize> {
+    let dark = ui.visuals().dark_mode;
+    let height = 32.0;
+    let (track, _) = ui.allocate_exact_size(
+        egui::vec2(ui.available_width(), height),
+        egui::Sense::hover(),
+    );
+    let track_fill = if dark {
+        Color32::from_rgba_unmultiplied(118, 118, 128, 61)
+    } else {
+        Color32::from_rgba_unmultiplied(118, 118, 128, 31)
+    };
+    ui.painter().rect_filled(track, rounded(9), track_fill);
+    let inset = 2.0;
+    let inner = track.shrink(inset);
+    let width = inner.width() / segments.len() as f32;
+    let position =
+        ui.ctx()
+            .animate_value_with_time(ui.id().with("segment-thumb"), selected as f32, 0.25);
+    let cell_at = |slot: f32| {
+        egui::Rect::from_min_size(
+            egui::pos2(inner.left() + width * slot, inner.top()),
+            egui::vec2(width, inner.height()),
+        )
+    };
+    let thumb = cell_at(position);
+    ui.painter()
+        .rect_filled(thumb, rounded(7), palette_for(ui).accent);
+    let mut clicked = None;
+    for (index, (icon, label)) in segments.iter().enumerate() {
+        let cell = cell_at(index as f32);
+        let response = ui
+            .interact(cell, ui.id().with(("segment", index)), egui::Sense::click())
+            .on_hover_text(*label);
+        if index != selected && response.hovered() {
+            ui.painter().rect_filled(cell, rounded(7), track_fill);
+        }
+        let covered = (1.0 - (position - index as f32).abs()).clamp(0.0, 1.0);
+        let idle_icon = if dark {
+            Color32::from_rgb(174, 174, 178)
+        } else {
+            Color32::from_rgb(99, 99, 102)
+        };
+        let color = idle_icon.lerp_to_gamma(Color32::WHITE, covered);
+        ui.painter().text(
+            cell.center(),
+            egui::Align2::CENTER_CENTER,
+            icon,
+            egui::FontId::proportional(17.0),
+            color,
+        );
+        if response.clicked() {
+            clicked = Some(index);
+        }
+    }
+    clicked
 }
