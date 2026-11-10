@@ -51,11 +51,7 @@ pub(crate) fn failure(error: impl Into<crate::Error>) -> Node {
 }
 
 impl Drawable for SceneFailure {
-    fn bounds(&self, _: &DrawContext) -> Rect {
-        Rect::new(0.0, 0.0, 0.0, 0.0)
-    }
-
-    fn try_bounds(&self, context: &DrawContext) -> Result<Rect, ValidationError> {
+    fn bounds(&self, context: &DrawContext) -> Result<Rect, ValidationError> {
         Err(self.diagnostic(context))
     }
 

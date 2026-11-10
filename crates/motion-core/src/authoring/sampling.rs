@@ -271,6 +271,7 @@ pub(crate) fn capture(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Shape;
 
     #[test]
     fn jittered_capture_replays_and_rejects_nested_scopes() {

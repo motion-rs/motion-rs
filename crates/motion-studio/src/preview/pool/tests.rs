@@ -1,4 +1,5 @@
 use super::*;
+use motion_core::Shape;
 
 fn wait_thumbnail(
     worker: &PreviewCoordinator,

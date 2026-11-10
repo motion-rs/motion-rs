@@ -1,5 +1,6 @@
 use super::*;
 use motion_core::Point;
+use motion_core::Shape;
 use motion_core::TimeLiteral;
 use motion_render::RenderPrepare;
 

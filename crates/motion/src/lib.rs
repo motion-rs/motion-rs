@@ -209,8 +209,8 @@ pub use motion_core::{
     CrossFade, Direction, Duration, Easing, Ellipse, Error, ErrorKind, FillRule, Filter,
     FontEnvironment, FrameRate, FunctionGraph, GradientExtend, GradientSpace, GradientUnits,
     ImagePattern, Interpolate, Iris, IrisShape, Keyframes, Layout, Line, LineCap, LineJoin,
-    LinearGradient, MaskMode, MotionBlur, Node, NodeModifiers, Paint, Path2D, Pivot, PixelSize,
-    Point, Polygon, Polyline, Pose, Push, RadialGradient, Random, Rect, RegularPolygon,
+    LinearGradient, MaskMode, MotionBlur, Node, NodeModifiers, Paint, Path2D, PathBuilder, Pivot,
+    PixelSize, Point, Polygon, Polyline, Pose, Push, RadialGradient, Random, Rect, RegularPolygon,
     RenderQuality, Ring, RoundedRect, Row, Sampling, Scene, SceneContext, Shape, Side, Size,
     Skeleton, Slide, Soundtrack, Source, Spline, Spring, Star, StrokeStyle, Styled, SweepGradient,
     Time, TimeLiteral, Timeline, TimelineBuilder, TimelineWarning, Track, TrackBuilder, Transform,
@@ -302,8 +302,8 @@ pub mod render {
     pub use motion_core::{
         AssetStatus, AudioClipParameters, BoundaryAdjustment, BoundaryEdge, BoxedError,
         CacheLimits, DisplayList, DrawCommand, FilterOperation, FontIdentity, Handle,
-        MAX_PATH_VERBS, MAX_STROKE_VERBS, MAX_SVG_PATH_BYTES, MorphPath, PathClip, PathVerb,
-        RasterLimits, RectClip, RequestDiagnostics, ResourcePool, SceneCache, SceneStats,
+        IntoShapeClip, MAX_PATH_VERBS, MAX_STROKE_VERBS, MAX_SVG_PATH_BYTES, MorphPath, PathClip,
+        PathVerb, RasterLimits, RectClip, RequestDiagnostics, ResourcePool, SceneCache, SceneStats,
         ShapeClip, TICKS_PER_SECOND, ValidatedDisplayList, ValidationErrorKind, ValidationLimits,
     };
     pub use motion_core::{

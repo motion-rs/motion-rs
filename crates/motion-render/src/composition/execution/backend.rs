@@ -6,7 +6,7 @@ use crate::composition::FrameStats;
 use crate::{OutputStats, RasterLimits, Renderer};
 use motion_core::Result;
 #[cfg(feature = "gpu")]
-use motion_core::{Color, Node, SceneContext, Time};
+use motion_core::{Color, Node, SceneContext, Shape, Time};
 
 impl FrameExecution<'_> {
     /// Shared context after startup selection; None means the fixed CPU decision.

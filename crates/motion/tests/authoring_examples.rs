@@ -148,7 +148,7 @@ fn authoring_example_5() -> Result<(), Box<dyn std::error::Error>> {
     use motion::prelude::*;
     use motion::render::RasterLimits;
     use motion::render::*;
-    let triangle = Path2D::polyline([Point::ORIGIN, Point::new(1.0, 0.0), Point::new(0.0, 1.0)]);
+    let triangle = Path2D::polyline([Point::ORIGIN, Point::new(1.0, 0.0), Point::new(0.0, 1.0)])?;
     let inner = Node::from(Rect::new(0.0, 0.0, 1.0, 1.0).fill(Color::WHITE))
         .clip_with(triangle.clone(), motion::ClipMode::Geometric);
     let frame = Node::group([inner])
@@ -332,7 +332,7 @@ fn authoring_example_12() -> Result<(), Box<dyn std::error::Error>> {
     use motion::render::*;
     let path = Path2D::from_rect(Rect::new(0.0, 0.0, 1.0, 1.0))?;
     let shape: &dyn Shape = &path;
-    let mut clip = ShapeClip::new(shape);
+    let mut clip = ShapeClip::new(shape)?;
     clip.rule = FillRule::EvenOdd;
     clip.transform = Transform::translate(0.5, 0.0);
     let frame = Node::from(Rect::new(0.0, 0.0, 2.0, 1.0).fill(Color::WHITE))
@@ -419,7 +419,7 @@ fn authoring_example_16() -> Result<(), Box<dyn std::error::Error>> {
         Point::new(1.0, 6.0),
         Point::new(4.0, 1.0),
         Point::new(7.0, 6.0),
-    ])
+    ])?
     .stroke(0.5, Color::WHITE)
     .trim(0.0, 0.8)
     .dash(&[1.0, 0.5], -0.2);
@@ -438,7 +438,7 @@ fn authoring_example_17() -> Result<(), Box<dyn std::error::Error>> {
         Point::new(1.0, 6.0),
         Point::new(4.0, 1.0),
         Point::new(7.0, 6.0),
-    ])
+    ])?
     .stroke(0.5, Color::WHITE)
     .trim(0.0, 0.8)
     .dash(&[1.0, 0.5], -0.2);

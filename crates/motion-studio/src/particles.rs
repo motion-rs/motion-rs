@@ -2,7 +2,7 @@
 
 use crate::StudioScene;
 use motion_content::particles::presets::{Preset, PresetOptions};
-use motion_core::{Color, Filter, Node, NodeModifiers, Size};
+use motion_core::{Color, Filter, Node, NodeModifiers, Shape, Size};
 use motion_render::Composition;
 
 /// Registers every recipe for preview/export using the supplied output settings.

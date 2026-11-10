@@ -14,8 +14,8 @@ use motion::extend::{Canvas, DrawContext, Drawable, ValidationError};
 struct Badge;
 
 impl Drawable for Badge {
-    fn bounds(&self, _context: &DrawContext) -> Rect {
-        Rect::new(0.0, 0.0, 160.0, 60.0)
+    fn bounds(&self, _context: &DrawContext) -> Result<Rect, ValidationError> {
+        Ok(Rect::new(0.0, 0.0, 160.0, 60.0))
     }
 
     fn draw(
@@ -23,7 +23,7 @@ impl Drawable for Badge {
         context: &DrawContext,
         canvas: &mut Canvas<'_>,
     ) -> Result<(), ValidationError> {
-        canvas.fill_rect(self.bounds(context), Color::rgb(20, 150, 125))?;
+        canvas.fill_rect(self.bounds(context)?, Color::rgb(20, 150, 125))?;
         canvas.fill_rect(Rect::new(20.0, 20.0, 140.0, 40.0), Color::WHITE)
     }
 }
@@ -37,7 +37,7 @@ fn main() -> motion::Result {
 }
 ```
 
-Drawable returns local bounds and emits commands to a checked Canvas. It does not create devices, write files or return an image task with a separate backend lifetime. `try_bounds` provides fallible measurement; `resolve_node` resolves lazy content into ordinary Nodes.
+Drawable returns local bounds and emits commands to a checked Canvas. It does not create devices, write files or return an image task with a separate backend lifetime. `bounds` is fallible, so a Drawable reports invalid geometry as a `ValidationError`; `resolve_node` resolves lazy content into ordinary Nodes.
 
 ## Crate Ownership
 

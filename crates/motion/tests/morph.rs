@@ -14,8 +14,8 @@ fn morph_paths_match_gpu_and_replay_across_topology_changes() -> motion::Result 
     let info = gpu.info().clone();
     let cases = [
         (
-            Circle::new(Point::new(8.0, 8.0), 6.0).path(),
-            Star::new(Point::new(8.0, 8.0), 5, 6.0, 2.5).path(),
+            Circle::new(Point::new(8.0, 8.0), 6.0)?.path()?,
+            Star::new(Point::new(8.0, 8.0), 5, 6.0, 2.5)?.path()?,
         ),
         (
             Path2D::parse_svg("M1 1H15V15H1Z M5 5V11H11V5Z")?,
@@ -37,10 +37,10 @@ fn morph_paths_match_gpu_and_replay_across_topology_changes() -> motion::Result 
         for progress in [0.0, 0.2, 0.5, 0.8, 1.0, 0.2] {
             let morph = first.try_interpolate(&second, progress)?;
             if progress == 0.0 {
-                assert_eq!(morph.path(), source);
+                assert_eq!(morph.path()?, source);
             }
             if progress == 1.0 {
-                assert_eq!(morph.path(), target);
+                assert_eq!(morph.path()?, target);
             }
             let prepared = Node::from(
                 morph
@@ -129,7 +129,7 @@ fn morph_phase_alignment_and_holes_keep_rendered_coverage() -> motion::Result {
         Some([0.0; 4])
     );
     let reversed = Path2D::parse_svg("M0 0V16H16V0Z M6 6H10V10H6Z")?;
-    let (first, second) = MorphPath::pair(second.path(), reversed)?;
+    let (first, second) = MorphPath::pair(second.path()?, reversed)?;
     assert_eq!(
         render(&first.interpolate(&second, 0.5)).pixel(8, 8),
         Some([0.0; 4])

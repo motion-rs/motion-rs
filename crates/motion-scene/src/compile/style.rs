@@ -7,7 +7,7 @@ use crate::options::LineJoinSpec;
 use crate::paint::{GradientOptions, GradientSpec, PaintSpec, StrokeSpec};
 use motion_core::{
     Color, FillRule, LineCap, LineJoin, LinearGradient, Node, Paint, Point, RadialGradient, Shape,
-    StrokeStyle, SweepGradient, Time,
+    StrokeStyle, SweepGradient, Time, ValidationError,
 };
 use std::sync::Arc;
 
@@ -73,7 +73,16 @@ impl Style {
     }
 
     /// Paints geometry; compilation guarantees at least one of fill or stroke.
-    pub(crate) fn shape<Geometry: Shape + 'static>(&self, geometry: Geometry, time: Time) -> Node {
+    /// Invalid geometry becomes a node that reports its error when prepared.
+    pub(crate) fn shape<Geometry: Shape + 'static>(
+        &self,
+        geometry: Result<Geometry, ValidationError>,
+        time: Time,
+    ) -> Node {
+        let geometry = match geometry {
+            Ok(geometry) => geometry,
+            Err(error) => return super::failure::failure(error),
+        };
         let mut styled = match (&self.fill, &self.stroke) {
             (Some(fill), _) => geometry.fill(fill.at(time)),
             (None, Some(stroke)) => geometry.stroke(stroke.width.at(time), stroke.paint.at(time)),

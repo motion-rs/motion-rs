@@ -36,14 +36,14 @@ struct GlyphDrawable {
 }
 
 impl Drawable for GlyphDrawable {
-    fn bounds(&self, _: &DrawContext) -> Rect {
+    fn bounds(&self, _: &DrawContext) -> Result<Rect, ValidationError> {
         let margin = self.stroke.as_ref().map_or(0.0, |(width, _)| width * 2.0);
-        Rect::new(
+        Ok(Rect::new(
             self.bounds.left - margin,
             self.bounds.top - margin,
             self.bounds.right + margin,
             self.bounds.bottom + margin,
-        )
+        ))
     }
 
     fn draw(&self, context: &DrawContext, canvas: &mut Canvas<'_>) -> Result<(), ValidationError> {
@@ -130,7 +130,7 @@ impl Drawable for Text {
         base.write_with_context(progress, context).map(Some)
     }
 
-    fn try_bounds(&self, context: &DrawContext) -> Result<Rect, ValidationError> {
+    fn bounds(&self, context: &DrawContext) -> Result<Rect, ValidationError> {
         if let Some(node) = self.resolve_node(context)? {
             return node.measure_with(context, motion_core::ValidationLimits::default());
         }
@@ -142,11 +142,6 @@ impl Drawable for Text {
             layout.bounds.right + margin,
             layout.bounds.bottom + margin,
         ))
-    }
-
-    fn bounds(&self, context: &DrawContext) -> Rect {
-        self.try_bounds(context)
-            .unwrap_or(Rect::new(f64::NAN, 0.0, 0.0, 0.0))
     }
 
     fn baseline(&self, context: &DrawContext) -> Option<f64> {

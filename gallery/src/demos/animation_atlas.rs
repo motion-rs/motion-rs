@@ -223,7 +223,7 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
     let curves = easing_curves();
     let signals = signal_studies(parameters.seed);
     let compositions = composition_studies();
-    let path = flight_path();
+    let path = flight_path()?;
     let flight = FollowPath::new(path.clone(), 2.5.seconds())
         .easing(Easing::SineInOut)
         .delay(0.2.seconds());
@@ -234,17 +234,17 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
                     .easing(curves[page].1.clone())
                     .ping_pong()
                     .delay(0.2.seconds());
-                animation_plot(&movement, progress, false)
+                animation_plot(&movement, progress, false)?
             }
             24..=31 => {
                 let study = &signals[page - 24];
-                animation_plot(study.as_ref(), progress, page >= 27)
+                animation_plot(study.as_ref(), progress, page >= 27)?
             }
-            32 => path_board(&path, &flight, progress),
+            32 => path_board(&path, &flight, progress)?,
             33 => transform_board(progress),
             _ => {
                 let study = &compositions[page - 34];
-                animation_plot(study.as_ref(), progress, false)
+                animation_plot(study.as_ref(), progress, false)?
             }
         })
     })
@@ -321,7 +321,11 @@ fn signal_studies(seed: u64) -> Vec<Arc<dyn Animation<f64>>> {
     studies
 }
 
-fn animation_plot(animation: &dyn Animation<f64>, progress: f64, signed: bool) -> Node {
+fn animation_plot(
+    animation: &dyn Animation<f64>,
+    progress: f64,
+    signed: bool,
+) -> motion::Result<Node> {
     let time = (progress * 3.2).seconds();
     let (lower, upper) = if signed { (-1.2, 1.2) } else { (-0.3, 1.4) };
     let vertical = |value: f64| 190.0 - (value - lower) / (upper - lower) * 142.0;
@@ -331,9 +335,9 @@ fn animation_plot(animation: &dyn Animation<f64>, progress: f64, signed: bool) -
         let value = animation.sample((fraction * 3.2).seconds());
         let position = Point::new(56.0 + 400.0 * fraction, vertical(value));
         if index == 0 {
-            trace.move_to(position);
+            trace.try_move_to(position)?;
         } else {
-            trace.line_to(position);
+            trace.try_line_to(position)?;
         }
     }
     let value = animation.sample(time);
@@ -342,7 +346,7 @@ fn animation_plot(animation: &dyn Animation<f64>, progress: f64, signed: bool) -
     } else {
         80.0 + value * 300.0
     };
-    Node::group([
+    Ok(Node::group([
         Rect::new(56.0, vertical(0.0), 456.0, vertical(0.0) + 0.8)
             .fill(Color::from_hex(0x648377))
             .into(),
@@ -355,13 +359,13 @@ fn animation_plot(animation: &dyn Animation<f64>, progress: f64, signed: bool) -
         )
         .fill(Color::from_hex(0x648377))
         .into(),
-        Circle::new(Point::new(56.0 + progress * 400.0, vertical(value)), 5.0)
+        Circle::new(Point::new(56.0 + progress * 400.0, vertical(value)), 5.0)?
             .fill(Color::from_hex(atlas::GOLD))
             .into(),
         Rect::new(64.0, 234.0, 464.0, 235.0)
             .fill(Color::from_hex(0x648377))
             .into(),
-        Circle::new(Point::new(position, 234.0), 10.0)
+        Circle::new(Point::new(position, 234.0), 10.0)?
             .fill(Color::from_hex(atlas::BLUE))
             .into(),
         atlas::text("0", 12.0, 0xb9cec5, 28.0, vertical(0.0) - 6.0),
@@ -373,7 +377,7 @@ fn animation_plot(animation: &dyn Animation<f64>, progress: f64, signed: bool) -
             363.0,
             271.0,
         ),
-    ])
+    ]))
 }
 
 fn composition_studies() -> Vec<Arc<dyn Animation<f64>>> {
@@ -402,9 +406,9 @@ fn composition_studies() -> Vec<Arc<dyn Animation<f64>>> {
     ]
 }
 
-fn flight_path() -> Path2D {
-    let mut path = Path2D::new();
-    path.move_to(Point::new(70.0, 285.0))
+fn flight_path() -> Result<Path2D, ValidationError> {
+    Path2D::builder()
+        .move_to(Point::new(70.0, 285.0))
         .cubic_to(
             Point::new(80.0, 150.0),
             Point::new(250.0, 160.0),
@@ -414,30 +418,33 @@ fn flight_path() -> Path2D {
             Point::new(235.0, 370.0),
             Point::new(400.0, 365.0),
             Point::new(425.0, 210.0),
-        );
-    path
+        )
+        .build()
 }
 
-fn path_board(path: &Path2D, flight: &impl Animation<PathSample>, progress: f64) -> Node {
+fn path_board(
+    path: &Path2D,
+    flight: &impl Animation<PathSample>,
+    progress: f64,
+) -> motion::Result<Node> {
     let time = (progress * 3.2).seconds();
     let sample = flight.sample(time);
-    let mut arrow = Path2D::new();
-    arrow
+    let arrow = Path2D::builder()
         .move_to(Point::new(14.0, 0.0))
         .line_to(Point::new(-10.0, -8.0))
         .line_to(Point::new(-5.0, 0.0))
         .line_to(Point::new(-10.0, 8.0))
-        .close();
-    let arrow = arrow
+        .close()
+        .build()?
         .fill(Color::from_hex(ACCENTS[1]))
         .pivot(Pivot::Point(Point::ORIGIN))
         .rotate(sample.angle)
         .translate(sample.position.x, sample.position.y);
-    Node::group([
+    Ok(Node::group([
         Node::group((path.clone().stroke(2.5, Color::from_hex(0x648377)), arrow))
             .translate(0.0, -110.0),
         atlas::text("position + tangent", 14.0, 0xb9cec5, 28.0, 272.0),
-    ])
+    ]))
 }
 
 fn transform_board(progress: f64) -> Node {
@@ -546,7 +553,7 @@ mod tests {
 
     #[test]
     fn flight_uses_the_authored_path_endpoints() {
-        let flight = FollowPath::new(flight_path(), 2.5.seconds());
+        let flight = FollowPath::new(flight_path().unwrap(), 2.5.seconds());
         assert_eq!(flight.sample(Time::ZERO).position, Point::new(70.0, 285.0));
         let endpoint = flight.sample(3.seconds()).position;
         assert!((endpoint.x - 425.0).abs() <= 1e-9);

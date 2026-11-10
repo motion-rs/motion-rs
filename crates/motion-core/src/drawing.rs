@@ -11,7 +11,7 @@ mod stroke;
 pub use crate::shape::{Shape, Styled};
 pub use blend::{BlendMode, BlendSpace, FillRule, MaskMode};
 pub use canvas::Canvas;
-pub use clip::{ClipGeometry, ClipMode, PathClip, RectClip, ShapeClip};
+pub use clip::{ClipGeometry, ClipMode, IntoShapeClip, PathClip, RectClip, ShapeClip};
 pub use command::DrawCommand;
 pub use context::{DrawContext, Drawable, RenderQuality};
 

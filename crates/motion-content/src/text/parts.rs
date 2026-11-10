@@ -94,8 +94,8 @@ struct ParagraphAnchor {
 }
 
 impl Drawable for ParagraphAnchor {
-    fn bounds(&self, _: &DrawContext) -> Rect {
-        self.bounds
+    fn bounds(&self, _: &DrawContext) -> Result<Rect, ValidationError> {
+        Ok(self.bounds)
     }
 
     fn baseline(&self, _: &DrawContext) -> Option<f64> {

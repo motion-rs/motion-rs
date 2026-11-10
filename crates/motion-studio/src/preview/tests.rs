@@ -1,6 +1,7 @@
 use super::*;
 use crate::app::SceneDefinition;
 use motion_content::{AssetsExt, FontFace, Image, Text};
+use motion_core::Shape;
 
 #[test]
 #[ignore = "requires native FFmpeg codecs; correctness only, no window or audio device"]
@@ -1460,6 +1461,7 @@ fn gpu_preview_seek_export_and_cancellation_preserve_worker_contracts() -> motio
         let left = 8.0 + context.time().to_frame(context.frame_rate()) as f64 * 4.0;
         Node::from(
             RoundedRect::new(Rect::new(left, 12.0, left + 24.0, 44.0), 6.0)
+                .unwrap()
                 .fill(Color::from_hex(0x118677)),
         )
     };

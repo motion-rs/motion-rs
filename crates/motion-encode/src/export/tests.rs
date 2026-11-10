@@ -1,6 +1,7 @@
 //! Export pipeline acceptance and regression tests.
 
 use super::*;
+use motion_core::Shape;
 use motion_core::{Color, FrameRate, Node, NodeModifiers, Rect, Scene, Size, Time, TimeLiteral};
 use motion_render::PixelFormat;
 

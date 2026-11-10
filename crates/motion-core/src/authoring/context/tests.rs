@@ -1,6 +1,7 @@
 //! Unit tests for scene contexts, scene caches and rendering-cache partitions.
 
 use super::*;
+use crate::Shape;
 use crate::{TimeLiteral, Tween};
 use std::sync::atomic::{AtomicUsize, Ordering};
 

@@ -251,9 +251,9 @@ pub(super) const PAGES: &[Page] = &[
 pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
     atlas::timeline(parameters, METADATA, PAGES, |page, progress, _| {
         if page < MODES.len() {
-            return Ok(layers(progress, MODES[page], 1.0));
+            return layers(progress, MODES[page], 1.0);
         }
-        let source = atlas::specimen(progress);
+        let source = atlas::specimen(progress)?;
         let processed = match page {
             17..=20 => {
                 let mode = [
@@ -262,7 +262,7 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
                     MaskMode::InvertedAlpha,
                     MaskMode::InvertedLuminance,
                 ][page - 17];
-                let mask = Circle::new(Point::new(150.0 + 212.0 * progress, 152.0), 100.0).fill(
+                let mask = Circle::new(Point::new(150.0 + 212.0 * progress, 152.0), 100.0)?.fill(
                     LinearGradient::new(Point::new(110.0, 0.0), Point::new(400.0, 0.0))
                         .units(GradientUnits::UserSpace)
                         .stop(0.0, Color::BLACK)
@@ -271,7 +271,7 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
                 source.clone().mask(mask, mode)
             }
             21 | 22 => source.clone().clip_with(
-                Circle::new(Point::new(180.0 + 150.0 * progress, 152.0), 105.0),
+                Circle::new(Point::new(180.0 + 150.0 * progress, 152.0), 105.0)?,
                 if page == 21 {
                     ClipMode::Coverage
                 } else {
@@ -282,8 +282,8 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
                 let background =
                     Node::from(Rect::new(48.0, 48.0, 464.0, 256.0).fill(Color::from_hex(0xc9d9cf)));
                 return Ok(atlas::pair(
-                    Node::group([background.clone(), Node::group(shapes(progress, 0.5))]),
-                    Node::group([background, Node::group(shapes(progress, 1.0)).opacity(0.5)]),
+                    Node::group([background.clone(), Node::group(shapes(progress, 0.5)?)]),
+                    Node::group([background, Node::group(shapes(progress, 1.0)?).opacity(0.5)]),
                     "Child alpha",
                     "Group opacity",
                 ));
@@ -295,13 +295,13 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
                 let front = Circle::new(
                     Point::new(290.0 + math::sin(progress * 6.0) * 40.0, 152.0),
                     84.0,
-                )
+                )?
                 .fill(Color::from_hex(atlas::GOLD))
                 .z_index(if progress < 0.5 { 0 } else { 2 });
                 return Ok(Node::group([back, front]));
             }
             _ => {
-                let children = shapes(progress, 1.0);
+                let children = shapes(progress, 1.0)?;
                 let blur = Filter::Blur { sigma: 12.0 };
                 return Ok(atlas::pair(
                     Node::group(children.clone()).filter(blur.clone()),
@@ -315,18 +315,18 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
     })
 }
 
-fn layers(progress: f64, mode: BlendMode, alpha: f64) -> Node {
-    let [back, front] = shapes(progress, alpha);
-    Node::group([
+fn layers(progress: f64, mode: BlendMode, alpha: f64) -> motion::Result<Node> {
+    let [back, front] = shapes(progress, alpha)?;
+    Ok(Node::group([
         Node::from(Rect::new(48.0, 48.0, 464.0, 256.0).fill(Color::from_hex(0xc9d9cf))),
         back,
         front.blend_mode(mode),
-    ])
+    ]))
 }
 
-fn shapes(progress: f64, alpha: f64) -> [Node; 2] {
-    [
-        Circle::new(Point::new(210.0, 152.0), 86.0)
+fn shapes(progress: f64, alpha: f64) -> motion::Result<[Node; 2]> {
+    Ok([
+        Circle::new(Point::new(210.0, 152.0), 86.0)?
             .fill(
                 LinearGradient::new(Point::new(124.0, 0.0), Point::new(296.0, 0.0))
                     .units(GradientUnits::UserSpace)
@@ -337,8 +337,8 @@ fn shapes(progress: f64, alpha: f64) -> [Node; 2] {
         Circle::new(
             Point::new(290.0 + math::sin(progress * 6.0) * 36.0, 152.0),
             86.0,
-        )
+        )?
         .fill(Color::from_hex(0xe37659))
         .opacity(alpha),
-    ]
+    ])
 }

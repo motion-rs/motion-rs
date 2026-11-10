@@ -129,9 +129,11 @@ pub(super) fn artwork(kind: &str, context: &SceneContext<'_>) -> Node {
                 Node::from(context.bounds().fill(Color::from_hex(0xe8dfc8))),
                 grid(4, 3, |bounds, index| {
                     Node::group([
-                        Node::from(RoundedRect::new(bounds, 6.0).fill(teal())),
+                        Node::from(RoundedRect::new(bounds, 6.0).unwrap().fill(teal())),
                         Node::from(
-                            Circle::new(bounds.center(), bounds.height() * 0.42).fill(coral()),
+                            Circle::new(bounds.center(), bounds.height() * 0.42)
+                                .unwrap()
+                                .fill(coral()),
                         )
                         .blend_mode(modes[index as usize % modes.len()]),
                     ])
@@ -164,11 +166,12 @@ pub(super) fn artwork(kind: &str, context: &SceneContext<'_>) -> Node {
                     ),
                     60.0,
                 )
+                .unwrap()
                 .fill([teal(), coral(), blue()][index as usize % 3]),
             )
         }))
         .clip(RectClip::new(Rect::new(40.0, 20.0, 600.0, 340.0)))
-        .clip(Circle::new(Point::new(320.0, 180.0), 190.0)),
+        .clip(Circle::new(Point::new(320.0, 180.0), 190.0).unwrap()),
         "stroke-dash" => Node::group((0..40).map(|row| {
             Node::from(
                 wave(row)
@@ -219,6 +222,7 @@ pub(super) fn artwork(kind: &str, context: &SceneContext<'_>) -> Node {
                 Node::group([
                     Node::from(
                         Circle::new(Point::new(80.0 + f64::from(depth) * 70.0, 180.0), 50.0)
+                            .unwrap()
                             .fill(coral()),
                     ),
                     inner,
@@ -228,8 +232,8 @@ pub(super) fn artwork(kind: &str, context: &SceneContext<'_>) -> Node {
         ),
         "layers-wide" => grid(20, 10, |bounds, index| {
             Node::group([
-                Node::from(RoundedRect::new(bounds, 3.0).fill(teal())),
-                Node::from(Circle::new(bounds.center(), 5.0).fill(coral())),
+                Node::from(RoundedRect::new(bounds, 3.0).unwrap().fill(teal())),
+                Node::from(Circle::new(bounds.center(), 5.0).unwrap().fill(coral())),
             ])
             .opacity(0.4 + f64::from(index % 5) * 0.1)
         }),
@@ -276,8 +280,16 @@ pub(super) fn artwork(kind: &str, context: &SceneContext<'_>) -> Node {
             ))
         }
         "blur-large" => Node::group([
-            Node::from(Circle::new(Point::new(220.0, 180.0), 110.0).fill(coral())),
-            Node::from(RoundedRect::new(Rect::new(260.0, 90.0, 560.0, 270.0), 24.0).fill(blue())),
+            Node::from(
+                Circle::new(Point::new(220.0, 180.0), 110.0)
+                    .unwrap()
+                    .fill(coral()),
+            ),
+            Node::from(
+                RoundedRect::new(Rect::new(260.0, 90.0, 560.0, 270.0), 24.0)
+                    .unwrap()
+                    .fill(blue()),
+            ),
         ])
         .filter(Filter::Blur { sigma: 24.0 }),
         "filter-chromatic" => grid(8, 4, |bounds, index| {
@@ -291,7 +303,9 @@ pub(super) fn artwork(kind: &str, context: &SceneContext<'_>) -> Node {
         })),
         "filter-chain" => grid(8, 4, |bounds, index| {
             Node::from(
-                RoundedRect::new(bounds, 8.0).fill([teal(), coral(), blue()][index as usize % 3]),
+                RoundedRect::new(bounds, 8.0)
+                    .unwrap()
+                    .fill([teal(), coral(), blue()][index as usize % 3]),
             )
         })
         .filter(Filter::ColorAdjust {

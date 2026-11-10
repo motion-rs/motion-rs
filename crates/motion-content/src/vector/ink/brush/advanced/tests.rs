@@ -4,7 +4,7 @@ use super::material::material;
 use super::*;
 use crate::vector::ink::Ink;
 use crate::vector::ink::paint::paint_sample;
-use motion_core::{Color, Paint, TimeLiteral};
+use motion_core::{Color, Paint, Shape, TimeLiteral};
 use motion_render::RenderPrepare;
 
 #[test]
@@ -270,7 +270,7 @@ fn curved_recordings_pauses_tilt_and_flat_caps_are_analytic() -> motion_core::Re
     assert!(
         stroke
             .clone()
-            .tip_node(motion_core::Circle::new(Point::new(0.0, 0.0), 1.0).fill(Color::WHITE))
+            .tip_node(motion_core::Circle::new(Point::new(0.0, 0.0), 1.0)?.fill(Color::WHITE))
             .is_ok()
     );
     let late = builder.clone().boil(1.0, 0.1, 17, 100);

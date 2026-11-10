@@ -1,4 +1,5 @@
 use super::*;
+use crate::Shape;
 use crate::ValidationErrorKind;
 use crate::{Color, DisplayList, DrawCommand, PixelSize, Size, ValidatedDisplayList};
 

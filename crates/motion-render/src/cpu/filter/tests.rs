@@ -1,5 +1,6 @@
 use super::blur::{BOX_SCRATCH_BYTES, BoxSums, Lines, box_pass, slide_box};
 use super::*;
+use motion_core::Shape;
 use motion_core::{
     Color, DrawCommand, Node, NodeModifiers, Size, ValidationErrorKind, ValidationLimits,
 };
@@ -65,17 +66,20 @@ fn single_fill_layers_match_isolated_rounding_blends_and_budgets() {
                     motion_core::LinearGradient::new(Point::ORIGIN, Point::new(1.0, 1.0))
                         .stop(0.0, Color::rgba(230, 30, 100, 179))
                         .stop(1.0, Color::rgba(30, 150, 220, 77));
-                let crossing = motion_core::Path2D::polyline([
+                let mut crossing = motion_core::Path2D::polyline([
                     Point::new(1.25, 0.5),
                     Point::new(6.75, 3.25),
                     Point::new(6.75, 0.5),
                     Point::new(1.25, 3.25),
                 ])
-                .closed();
+                .unwrap();
+                crossing.try_close().unwrap();
                 for fill in [
                     Node::from(Rect::new(1.25, 0.5, 6.75, 3.25).fill(gradient.clone())),
                     Node::from(
-                        motion_core::Circle::new(Point::new(4.0, 2.0), 1.35).fill(gradient.clone()),
+                        motion_core::Circle::new(Point::new(4.0, 2.0), 1.35)
+                            .unwrap()
+                            .fill(gradient.clone()),
                     ),
                     Node::from(
                         crossing

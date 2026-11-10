@@ -13,10 +13,10 @@ use motion::render::Composition;
 
 fn main() -> motion::Result {
     let timeline = Timeline::new(Size::new(640.0, 360.0), FrameRate::NTSC).track(|track| {
-        track.scene(4.seconds(), |context| {
-            RoundedRect::new(Rect::new(180.0, 100.0, 460.0, 260.0), 12.0)
+        track.scene(4.seconds(), |context| -> motion::Result<_> {
+            Ok(RoundedRect::new(Rect::new(180.0, 100.0, 460.0, 260.0), 12.0)?
                 .fill(Color::rgb(35, 155, 130))
-                .rotate(context.seconds() * 0.6)
+                .rotate(context.seconds() * 0.6))
         })
     }).build()?;
     motion::studio::run(motion::studio::StudioScene::timeline(

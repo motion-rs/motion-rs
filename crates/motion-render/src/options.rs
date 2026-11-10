@@ -234,7 +234,9 @@ mod tests {
         )?;
         let build = |context: &SceneContext<'_>| {
             Node::from(
-                Circle::new(Point::new(8.0 + context.seconds(), 8.0), 4.0).fill(Color::WHITE),
+                Circle::new(Point::new(8.0 + context.seconds(), 8.0), 4.0)
+                    .unwrap()
+                    .fill(Color::WHITE),
             )
         };
         let format = PixelFormat::SrgbRgba8 {
@@ -284,7 +286,11 @@ mod tests {
             .with_options(options.clone())?;
         let mut first = composition.frame_renderer(Size::new(8.0, 8.0))?;
         first.render_frame(0, |_| {
-            Node::from(Circle::new(Point::new(4.0, 4.0), 2.75).fill(Color::WHITE))
+            Node::from(
+                Circle::new(Point::new(4.0, 4.0), 2.75)
+                    .unwrap()
+                    .fill(Color::WHITE),
+            )
         })?;
         let bytes = first.cached_coverage_bytes();
         assert!(bytes > 0);

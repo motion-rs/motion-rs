@@ -1,4 +1,5 @@
 use super::*;
+use motion_core::Shape;
 use motion_core::drawing::{
     GradientExtend, GradientSpace, ImagePattern, LinearGradient, RadialGradient, SweepGradient,
 };

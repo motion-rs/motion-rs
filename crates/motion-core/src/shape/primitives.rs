@@ -1,7 +1,9 @@
 //! Built-in geometric primitives.
 //!
-//! Invalid constructors retain a checked error. Use try_path to inspect it;
-//! drawing validates invalid bounds before Shape::path could panic.
+//! Constructors validate their inputs and return a [`ValidationError`], so a
+//! stored primitive always holds valid geometry. Shapes configured through
+//! chained setters, such as `Ring`, `Arrow` and `Spline`, report invalid
+//! settings from [`Shape::path`].
 //!
 //! ```
 //! use motion_core::prelude::*;
@@ -13,7 +15,7 @@
 //!     Point::new(1.0, 6.0),
 //!     Point::new(4.0, 1.0),
 //!     Point::new(7.0, 6.0),
-//! ])
+//! ])?
 //! .stroke(0.5, Color::WHITE)
 //! .trim(0.0, 0.8)
 //! .dash(&[1.0, 0.5], -0.2);
@@ -74,17 +76,11 @@ fn polyline(values: &[Point], closed: bool) -> Result<Path2D, ValidationError> {
     Ok(path)
 }
 
-macro_rules! shape_impl {
+macro_rules! computed_shape {
     ($name:ident) => {
         impl Shape for $name {
-            fn path(&self) -> Path2D {
-                self.try_path()
-                    .expect("Shape::path requires valid geometry")
-            }
-            fn bounding_box(&self) -> Rect {
-                self.try_path()
-                    .map(|path| path.bounding_box())
-                    .unwrap_or(Rect::new(f64::NAN, 0.0, 0.0, 0.0))
+            fn path(&self) -> Result<Path2D, ValidationError> {
+                self.checked_path()
             }
         }
     };
@@ -95,15 +91,17 @@ macro_rules! stored_shape {
         #[doc = $description]
         #[derive(Clone, Debug)]
         pub struct $name {
-            path: Result<Path2D, ValidationError>,
+            path: Path2D,
         }
-        impl $name {
-            /// Returns checked geometry without resource work or narrowing.
-            pub fn try_path(&self) -> Result<Path2D, ValidationError> {
-                self.path.clone()
+        impl Shape for $name {
+            fn path(&self) -> Result<Path2D, ValidationError> {
+                Ok(self.path.clone())
+            }
+
+            fn bounding_box(&self) -> Result<Rect, ValidationError> {
+                Ok(self.path.bounding_box())
             }
         }
-        shape_impl!($name);
     };
 }
 
@@ -114,10 +112,9 @@ stored_shape!(
 
 impl Circle {
     /// Builds a clockwise closed contour; zero radius is degenerate geometry.
-    pub fn new(center: Point, radius: f64) -> Self {
-        Self {
-            path: Ellipse::new(center, Vector2::new(radius, radius)).try_path(),
-        }
+    pub fn new(center: Point, radius: f64) -> Result<Self, ValidationError> {
+        Ellipse::new(center, Vector2::new(radius, radius))
+            .map(|ellipse| Self { path: ellipse.path })
     }
 }
 
@@ -125,15 +122,11 @@ stored_shape!(Ellipse, "An axis-aligned elliptical contour.");
 
 impl Ellipse {
     /// Builds a clockwise closed ellipse from nonnegative horizontal/vertical radii.
-    pub fn new(center: Point, radii: Vector2) -> Self {
-        Self {
-            path: (|| {
-                let mut path = Path2D::new();
-                path.try_arc_to(center, radii, 0.0, std::f64::consts::TAU)?;
-                path.try_close()?;
-                Ok(path)
-            })(),
-        }
+    pub fn new(center: Point, radii: Vector2) -> Result<Self, ValidationError> {
+        let mut path = Path2D::new();
+        path.try_arc_to(center, radii, 0.0, std::f64::consts::TAU)?;
+        path.try_close()?;
+        Ok(Self { path })
     }
 }
 
@@ -144,19 +137,20 @@ stored_shape!(
 
 impl Arc {
     /// Builds a clockwise-positive arc in radians, connecting no implicit center.
-    pub fn new(center: Point, radius: f64, start_angle: f64, sweep_angle: f64) -> Self {
-        Self {
-            path: (|| {
-                let mut path = Path2D::new();
-                path.try_arc_to(
-                    center,
-                    Vector2::new(radius, radius),
-                    start_angle,
-                    sweep_angle,
-                )?;
-                Ok(path)
-            })(),
-        }
+    pub fn new(
+        center: Point,
+        radius: f64,
+        start_angle: f64,
+        sweep_angle: f64,
+    ) -> Result<Self, ValidationError> {
+        let mut path = Path2D::new();
+        path.try_arc_to(
+            center,
+            Vector2::new(radius, radius),
+            start_angle,
+            sweep_angle,
+        )?;
+        Ok(Self { path })
     }
 }
 
@@ -167,44 +161,42 @@ stored_shape!(
 
 impl RoundedRect {
     /// Clamps the radius to half the smaller valid rectangle dimension.
-    pub fn new(rect: Rect, corner_radius: f64) -> Self {
-        Self {
-            path: (|| {
-                crate::drawing::validate_rect(rect, "shape", "bounds")?;
-                radius(corner_radius)?;
-                let corner_radius = corner_radius
-                    .min(rect.width() * 0.5)
-                    .min(rect.height() * 0.5);
-                if corner_radius == 0.0 {
-                    return Path2D::from_rect(rect);
-                }
-                let mut path = Path2D::new();
-                path.try_move_to(Point::new(rect.left + corner_radius, rect.top))?;
-                let radii = Vector2::new(corner_radius, corner_radius);
-                for (center, start) in [
-                    (
-                        Point::new(rect.right - corner_radius, rect.top + corner_radius),
-                        -std::f64::consts::FRAC_PI_2,
-                    ),
-                    (
-                        Point::new(rect.right - corner_radius, rect.bottom - corner_radius),
-                        0.0,
-                    ),
-                    (
-                        Point::new(rect.left + corner_radius, rect.bottom - corner_radius),
-                        std::f64::consts::FRAC_PI_2,
-                    ),
-                    (
-                        Point::new(rect.left + corner_radius, rect.top + corner_radius),
-                        std::f64::consts::PI,
-                    ),
-                ] {
-                    path.try_arc_to(center, radii, start, std::f64::consts::FRAC_PI_2)?;
-                }
-                path.try_close()?;
-                Ok(path)
-            })(),
+    pub fn new(rect: Rect, corner_radius: f64) -> Result<Self, ValidationError> {
+        crate::drawing::validate_rect(rect, "shape", "bounds")?;
+        radius(corner_radius)?;
+        let corner_radius = corner_radius
+            .min(rect.width() * 0.5)
+            .min(rect.height() * 0.5);
+        if corner_radius == 0.0 {
+            return Ok(Self {
+                path: Path2D::from_rect(rect)?,
+            });
         }
+        let mut path = Path2D::new();
+        path.try_move_to(Point::new(rect.left + corner_radius, rect.top))?;
+        let radii = Vector2::new(corner_radius, corner_radius);
+        for (center, start) in [
+            (
+                Point::new(rect.right - corner_radius, rect.top + corner_radius),
+                -std::f64::consts::FRAC_PI_2,
+            ),
+            (
+                Point::new(rect.right - corner_radius, rect.bottom - corner_radius),
+                0.0,
+            ),
+            (
+                Point::new(rect.left + corner_radius, rect.bottom - corner_radius),
+                std::f64::consts::FRAC_PI_2,
+            ),
+            (
+                Point::new(rect.left + corner_radius, rect.top + corner_radius),
+                std::f64::consts::PI,
+            ),
+        ] {
+            path.try_arc_to(center, radii, start, std::f64::consts::FRAC_PI_2)?;
+        }
+        path.try_close()?;
+        Ok(Self { path })
     }
 }
 
@@ -212,10 +204,10 @@ stored_shape!(Line, "An open line segment with f64 endpoints.");
 
 impl Line {
     /// Builds a segment without an implicit closed interior.
-    pub fn new(from: Point, to: Point) -> Self {
-        Self {
-            path: polyline(&[from, to], false),
-        }
+    pub fn new(from: Point, to: Point) -> Result<Self, ValidationError> {
+        Ok(Self {
+            path: polyline(&[from, to], false)?,
+        })
     }
 }
 
@@ -223,10 +215,10 @@ stored_shape!(Polyline, "An open bounded sequence of line segments.");
 
 impl Polyline {
     /// Captures at most MAX_PATH_VERBS-1 finite points; empty input is empty.
-    pub fn new(values: impl IntoIterator<Item = Point>) -> Self {
-        Self {
-            path: points(values).and_then(|values| polyline(&values, false)),
-        }
+    pub fn new(values: impl IntoIterator<Item = Point>) -> Result<Self, ValidationError> {
+        Ok(Self {
+            path: polyline(&points(values)?, false)?,
+        })
     }
 }
 
@@ -237,10 +229,10 @@ stored_shape!(
 
 impl Polygon {
     /// Captures points and closes the last edge to the first point.
-    pub fn new(values: impl IntoIterator<Item = Point>) -> Self {
-        Self {
-            path: points(values).and_then(|values| polyline(&values, true)),
-        }
+    pub fn new(values: impl IntoIterator<Item = Point>) -> Result<Self, ValidationError> {
+        Ok(Self {
+            path: polyline(&points(values)?, true)?,
+        })
     }
 }
 
@@ -290,10 +282,10 @@ stored_shape!(
 
 impl RegularPolygon {
     /// Builds at least three equally spaced vertices on a radius.
-    pub fn new(center: Point, radius: f64, sides: usize) -> Self {
-        Self {
-            path: radial(center, radius, None, sides),
-        }
+    pub fn new(center: Point, radius: f64, sides: usize) -> Result<Self, ValidationError> {
+        Ok(Self {
+            path: radial(center, radius, None, sides)?,
+        })
     }
 }
 
@@ -301,10 +293,15 @@ stored_shape!(Star, "A closed star alternating outer and inner radii.");
 
 impl Star {
     /// Builds at least two tips, alternating finite outer and inner radii.
-    pub fn new(center: Point, count: usize, outer_radius: f64, inner_radius: f64) -> Self {
-        Self {
-            path: radial(center, outer_radius, Some(inner_radius), count),
-        }
+    pub fn new(
+        center: Point,
+        count: usize,
+        outer_radius: f64,
+        inner_radius: f64,
+    ) -> Result<Self, ValidationError> {
+        Ok(Self {
+            path: radial(center, outer_radius, Some(inner_radius), count)?,
+        })
     }
 }
 
@@ -338,7 +335,7 @@ impl Ring {
     }
 
     /// Returns checked annular geometry; full rings retain a real winding hole.
-    pub fn try_path(&self) -> Result<Path2D, ValidationError> {
+    fn checked_path(&self) -> Result<Path2D, ValidationError> {
         radius(self.inner)?;
         radius(self.outer)?;
         if self.inner > self.outer || !self.sweep.is_finite() {
@@ -357,7 +354,7 @@ impl Ring {
         if sweep.abs() == std::f64::consts::TAU {
             path.try_close()?;
             if self.inner > 0.0 {
-                let inner = Arc::new(self.center, self.inner, self.start, -sweep).try_path()?;
+                let inner = Arc::new(self.center, self.inner, self.start, -sweep)?.path;
                 for verb in inner.verbs() {
                     append(&mut path, *verb)?;
                 }
@@ -375,7 +372,7 @@ impl Ring {
         Ok(path)
     }
 }
-shape_impl!(Ring);
+computed_shape!(Ring);
 
 fn append(path: &mut Path2D, verb: crate::PathVerb) -> Result<(), ValidationError> {
     match verb {
@@ -451,7 +448,7 @@ impl Arrow {
     }
 
     /// Returns a single filled arrow, an open Vee or shaft-only segment.
-    pub fn try_path(&self) -> Result<Path2D, ValidationError> {
+    fn checked_path(&self) -> Result<Path2D, ValidationError> {
         radius(self.size)?;
         radius(self.width)?;
         if let Some(width) = self.head_width {
@@ -460,7 +457,7 @@ impl Arrow {
                 return Err(invalid("Explicit arrow head dimensions must be positive"));
             }
         }
-        let line = Line::new(self.from, self.to).try_path()?;
+        let line = Line::new(self.from, self.to)?.path;
         let displacement = self.to - self.from;
         let length = displacement.length();
         if !length.is_finite() {
@@ -498,22 +495,22 @@ impl Arrow {
         )
     }
 }
-shape_impl!(Arrow);
+computed_shape!(Arrow);
 
 /// A cardinal Catmull-Rom interpolating spline with clamped endpoint neighbors.
 #[derive(Clone, Debug)]
 pub struct Spline {
-    points: Result<Shared<[Point]>, ValidationError>,
+    points: Shared<[Point]>,
     tension: f64,
 }
 
 impl Spline {
     /// Captures a bounded point list, including empty/single-point degeneracies.
-    pub fn through(values: impl IntoIterator<Item = Point>) -> Self {
-        Self {
-            points: points(values),
+    pub fn through(values: impl IntoIterator<Item = Point>) -> Result<Self, ValidationError> {
+        Ok(Self {
+            points: points(values)?,
             tension: 0.0,
-        }
+        })
     }
 
     /// Sets tension in 0..=1; zero is Catmull-Rom, one has zero endpoint tangents.
@@ -523,11 +520,11 @@ impl Spline {
     }
 
     /// Produces cubic spans passing through every supplied point.
-    pub fn try_path(&self) -> Result<Path2D, ValidationError> {
+    fn checked_path(&self) -> Result<Path2D, ValidationError> {
         if !self.tension.is_finite() || !(0.0..=1.0).contains(&self.tension) {
             return Err(invalid("Spline tension must be in 0..=1"));
         }
-        let values = self.points.as_ref().map_err(Clone::clone)?;
+        let values = &self.points;
         let mut path = Path2D::new();
         if let Some(first) = values.first() {
             path.try_move_to(*first)?;
@@ -545,7 +542,7 @@ impl Spline {
         Ok(path)
     }
 }
-shape_impl!(Spline);
+computed_shape!(Spline);
 
 /// A deterministically sampled function/parametric curve with finite output.
 /// Callbacks must be pure; their panics propagate like other user callbacks.
@@ -594,7 +591,7 @@ impl FunctionGraph {
     }
 
     /// Evaluates a bounded sample list and rejects nonfinite output, never bridges gaps.
-    pub fn try_path(&self) -> Result<Path2D, ValidationError> {
+    fn checked_path(&self) -> Result<Path2D, ValidationError> {
         if !self.domain.start.is_finite()
             || !self.domain.end.is_finite()
             || self.domain.start >= self.domain.end
@@ -624,7 +621,7 @@ impl FunctionGraph {
         Ok(path)
     }
 }
-shape_impl!(FunctionGraph);
+computed_shape!(FunctionGraph);
 
 #[cfg(test)]
 mod tests {
@@ -637,7 +634,7 @@ mod tests {
             let arrow = Arrow::new(Point::ORIGIN, Point::new(length, 0.0))
                 .width(2.0)
                 .head_dimensions(12.0, 10.0);
-            let path = arrow.try_path().unwrap();
+            let path = arrow.path().unwrap();
             assert_eq!(path.bounding_box(), Rect::new(0.0, -5.0, length, 5.0));
             assert!(path.verbs().iter().any(|verb| matches!(verb, crate::PathVerb::LineTo(point) if *point == Point::new(length, 0.0))));
             let commands = crate::DrawContext::default()
@@ -657,56 +654,68 @@ mod tests {
         }
         let empty = Arrow::new(Point::new(2.0, 3.0), Point::new(2.0, 3.0))
             .head_dimensions(12.0, 10.0)
-            .try_path()
+            .path()
             .unwrap();
         assert!(empty.verbs().is_empty());
         for invalid in [
             Arrow::new(Point::ORIGIN, Point::ORIGIN).head_dimensions(0.0, 10.0),
             Arrow::new(Point::ORIGIN, Point::ORIGIN).head_dimensions(12.0, f64::NAN),
         ] {
-            assert!(invalid.try_path().is_err());
+            assert!(invalid.path().is_err());
         }
     }
 
     #[test]
     fn shapes_validate_bounds_degeneracies_splines_and_function_samples() {
         assert_eq!(
-            Circle::new(Point::ORIGIN, 3.0).bounding_box(),
+            Circle::new(Point::ORIGIN, 3.0)
+                .unwrap()
+                .bounding_box()
+                .unwrap(),
             Rect::new(-3.0, -3.0, 3.0, 3.0)
         );
         assert_eq!(
-            RoundedRect::new(Rect::new(0.0, 0.0, 6.0, 4.0), 100.0).bounding_box(),
+            RoundedRect::new(Rect::new(0.0, 0.0, 6.0, 4.0), 100.0)
+                .unwrap()
+                .bounding_box()
+                .unwrap(),
             Rect::new(0.0, 0.0, 6.0, 4.0)
         );
-        assert!(Circle::new(Point::ORIGIN, -1.0).try_path().is_err());
-        assert!(
-            Star::new(Point::ORIGIN, usize::MAX, 2.0, 1.0)
-                .try_path()
-                .is_err()
-        );
-        assert!(
-            RegularPolygon::new(Point::ORIGIN, 1.0, 2)
-                .try_path()
-                .is_err()
-        );
-        assert!(Ring::new(Point::ORIGIN, 3.0, 2.0).try_path().is_err());
+        assert!(Circle::new(Point::ORIGIN, -1.0).is_err());
+        assert!(Star::new(Point::ORIGIN, usize::MAX, 2.0, 1.0).is_err());
+        assert!(RegularPolygon::new(Point::ORIGIN, 1.0, 2).is_err());
+        assert!(Ring::new(Point::ORIGIN, 3.0, 2.0).path().is_err());
         assert!(
             Arrow::new(Point::ORIGIN, Point::ORIGIN)
-                .try_path()
+                .path()
                 .unwrap()
                 .verbs()
                 .is_empty()
         );
-        assert!(Circle::new(Point::ORIGIN, 0.0).try_path().unwrap().length() == 0.0);
+        assert!(
+            Circle::new(Point::ORIGIN, 0.0)
+                .unwrap()
+                .path()
+                .unwrap()
+                .length()
+                == 0.0
+        );
         let knots = [Point::ORIGIN, Point::new(2.0, 3.0), Point::new(4.0, 1.0)];
-        let spline = Spline::through(knots).try_path().unwrap();
+        let spline = Spline::through(knots).unwrap().path().unwrap();
         assert!(
             matches!(spline.verbs()[1], crate::PathVerb::CubicTo(_, _, end) if end == knots[1])
         );
-        assert!(Spline::through(knots).tension(f64::NAN).try_path().is_err());
+        assert!(
+            Spline::through(knots)
+                .unwrap()
+                .tension(f64::NAN)
+                .path()
+                .is_err()
+        );
+        assert!(Spline::through([Point::new(f64::NAN, 0.0)]).is_err());
         let graph = FunctionGraph::new(|value| value * value, -2.0..2.0)
             .samples(5)
-            .try_path()
+            .path()
             .unwrap();
         assert_eq!(
             graph.verbs()[0],
@@ -716,19 +725,15 @@ mod tests {
             graph.verbs().last(),
             Some(&crate::PathVerb::LineTo(Point::new(2.0, 4.0)))
         );
-        assert!(
-            FunctionGraph::new(|_| f64::NAN, 0.0..1.0)
-                .try_path()
-                .is_err()
-        );
+        assert!(FunctionGraph::new(|_| f64::NAN, 0.0..1.0).path().is_err());
         assert!(
             FunctionGraph::new(|_| panic!("Invalid count must precede callback"), 0.0..1.0)
                 .samples(usize::MAX)
-                .try_path()
+                .path()
                 .is_err()
         );
         assert!(
-            Node::from(Circle::new(Point::ORIGIN, -1.0).fill(Color::WHITE))
+            Node::from(Rect::new(f64::NAN, 0.0, 1.0, 1.0).fill(Color::WHITE))
                 .compile(
                     Size::new(8.0, 8.0),
                     PixelSize::new(8, 8),

@@ -30,9 +30,9 @@ fn main() -> motion::Result {
     let timeline = Timeline::new(Size::new(320.0, 180.0), 30)
         .audio(sound)
         .track(|track| {
-            track.scene(1.seconds(), move |context| {
+            track.scene(1.seconds(), move |context| -> motion::Result<_> {
                 let radius = 20.0 + context.sample(&loudness) * 80.0;
-                Circle::new(context.center(), radius).fill(Color::rgb(20, 150, 125))
+                Ok(Circle::new(context.center(), radius)?.fill(Color::rgb(20, 150, 125)))
             })
         }).build()?;
     render_still(&timeline, 500.milliseconds(), &RenderOptions::default())?

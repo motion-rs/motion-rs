@@ -10,19 +10,19 @@ Combine animated values into measurable, layout-aware scenes, then organize a fi
 use motion::prelude::*;
 
 fn main() -> motion::Result {
-    let first = scene(|context| {
+    let first = scene(|context| -> motion::Result<_> {
         let progress = context.sample(&Tween::new(0.0, 1.0, 2.seconds()));
-        Node::group((
+        Ok(Node::group((
             Rect::new(40.0, 40.0, 440.0, 230.0)
                 .fill(Color::rgb(20, 80, 70)),
-            Circle::new(Point::new(120.0 + 240.0 * progress, 135.0), 24.0)
+            Circle::new(Point::new(120.0 + 240.0 * progress, 135.0), 24.0)?
                 .fill(Color::WHITE)
                 .z_index(1),
         ))
-        .opacity(0.9)
+        .opacity(0.9))
     });
-    let second = scene(|context| {
-        Circle::new(context.center(), 40.0).fill(Color::rgb(210, 80, 105))
+    let second = scene(|context| -> motion::Result<_> {
+        Ok(Circle::new(context.center(), 40.0)?.fill(Color::rgb(210, 80, 105)))
     });
     let timeline = Timeline::new(Size::new(480.0, 270.0), 30).track(|track| {
         track

@@ -331,7 +331,7 @@ fn line_chart(
         } else {
             point.x - 24.0
         };
-        nodes.push(Circle::new(point, 6.0).fill(color(CORAL)).into());
+        nodes.push(Circle::new(point, 6.0)?.fill(color(CORAL)).into());
         nodes.push(
             label(format!("{:.0} min", head.1), 14.0, 0xc54230)
                 .translate(label_left, point.y - 26.0),

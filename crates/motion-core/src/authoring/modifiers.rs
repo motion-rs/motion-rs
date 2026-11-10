@@ -171,13 +171,16 @@ pub trait NodeModifiers: Into<Node> + Sized {
     /// )?;
     /// # Ok::<(), motion_core::ValidationError>(())
     /// ```
-    fn clip(self, shape: impl Into<crate::ShapeClip>) -> Node {
+    fn clip(self, shape: impl crate::IntoShapeClip) -> Node {
         self.clip_with(shape, crate::ClipMode::Coverage)
     }
 
     /// Clips with explicit coverage multiplication or geometric intersection.
-    fn clip_with(self, shape: impl Into<crate::ShapeClip>, mode: crate::ClipMode) -> Node {
-        let shape = shape.into();
+    fn clip_with(self, shape: impl crate::IntoShapeClip, mode: crate::ClipMode) -> Node {
+        let shape = match shape.into_shape_clip() {
+            Ok(shape) => shape,
+            Err(error) => return super::transition::diagnostic(error),
+        };
         let mut node = self.into();
         let data = Arc::make_mut(&mut node.data);
         match mode {
@@ -259,11 +262,11 @@ pub trait NodeModifiers: Into<Node> + Sized {
     ///     DisplayList, RasterLimits, ResourcePool, ValidatedDisplayList, MAX_PATH_VERBS,
     ///     MAX_STROKE_VERBS, MAX_SVG_PATH_BYTES, sample_offsets,
     /// };
-    /// let mut triangle = Path2D::new();
-    /// triangle
+    /// let triangle = Path2D::builder()
     ///     .move_to(Point::ORIGIN)
     ///     .line_to(Point::new(1.0, 0.0))
-    ///     .line_to(Point::new(0.0, 1.0));
+    ///     .line_to(Point::new(0.0, 1.0))
+    ///     .build()?;
     /// let inner = Node::from(Rect::new(0.0, 0.0, 1.0, 1.0).fill(Color::WHITE))
     ///     .clip_with(triangle.clone(), motion_core::ClipMode::Geometric);
     /// let frame = Node::group([inner])

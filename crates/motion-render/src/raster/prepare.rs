@@ -101,9 +101,10 @@ impl RenderPrepare for DisplayList {
     ///     MAX_STROKE_VERBS, MAX_SVG_PATH_BYTES, sample_offsets,
     /// };
     /// use motion_render::{Composition, RenderPrepare, RenderOptions, Renderer, render_still};
-    /// let mut path = Path2D::new();
-    /// path.move_to(Point::ORIGIN);
-    /// path.quadratic_to(Point::new(0.5, 2.0), Point::new(1.0, 0.0));
+    /// let path = Path2D::builder()
+    ///     .move_to(Point::ORIGIN)
+    ///     .quadratic_to(Point::new(0.5, 2.0), Point::new(1.0, 0.0))
+    ///     .build()?;
     /// let list = Node::from(path.fill(Color::WHITE)).compile(
     ///     Size::new(1.0, 1.0),
     ///     PixelSize::new(1, 1),

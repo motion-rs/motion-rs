@@ -260,6 +260,7 @@ fn map(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Shape;
 
     #[test]
     fn thin_lens_focus_is_exact_and_out_of_focus_radius_is_capped() {

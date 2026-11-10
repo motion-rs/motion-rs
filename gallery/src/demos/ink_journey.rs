@@ -64,8 +64,8 @@ fn frame_mode<const RETAIN_COMPLETE: bool>(
     let layers = vec![
         paper(context),
         artwork,
-        Node::group(caption(progress)),
-        dust(context, frame),
+        Node::group(caption(progress)?),
+        dust(context, frame)?,
         light_leak(context),
     ];
     Ok(Node::group(layers)
@@ -125,7 +125,7 @@ fn landscape<const RETAIN_COMPLETE: bool>(
         .edge_pooling(0.22, 0.8);
     let mut strokes = Vec::new();
     for index in 0..6 {
-        let path = context.cache(("landscape-ridge", index), || ridge(index));
+        let path = context.try_cache(("landscape-ridge", index), || ridge(index))?;
         let reveal = ((progress - index as f64 * 0.075) / 0.43).clamp(0.0, 1.0);
         let complete = || {
             BrushStroke::builder((*path).clone(), 6.0 + index as f64 * 1.1, ink)
@@ -151,18 +151,18 @@ fn landscape<const RETAIN_COMPLETE: bool>(
         });
     }
     for index in 0..7 {
-        let path = context.cache(("landscape-detail", index), || {
-            let mut path = Path2D::new();
-            path.move_to(Point::new(
-                300.0 + index as f64 * 25.0,
-                395.0 + index as f64 * 6.0,
-            ))
-            .quadratic_to(
-                Point::new(480.0, 385.0 + index as f64 * 5.0),
-                Point::new(850.0 - index as f64 * 20.0, 394.0 + index as f64 * 6.0),
-            );
-            path
-        });
+        let path = context.try_cache(("landscape-detail", index), || {
+            Path2D::builder()
+                .move_to(Point::new(
+                    300.0 + index as f64 * 25.0,
+                    395.0 + index as f64 * 6.0,
+                ))
+                .quadratic_to(
+                    Point::new(480.0, 385.0 + index as f64 * 5.0),
+                    Point::new(850.0 - index as f64 * 20.0, 394.0 + index as f64 * 6.0),
+                )
+                .build()
+        })?;
         strokes.push(
             path.as_ref()
                 .clone()
@@ -173,14 +173,13 @@ fn landscape<const RETAIN_COMPLETE: bool>(
     // Diluted ink washes give the far ridges body beneath the brush lines.
     let mut washes = Vec::new();
     for index in [0usize, 2, 4] {
-        let path = context.cache(("landscape-wash", index), || {
-            let mut shape = ridge(index);
-            shape
-                .line_to(Point::new(945.0, 460.0))
-                .line_to(Point::new(35.0, 460.0))
-                .close();
-            shape
-        });
+        let path = context.try_cache(("landscape-wash", index), || {
+            let mut shape = ridge(index)?;
+            shape.try_line_to(Point::new(945.0, 460.0))?;
+            shape.try_line_to(Point::new(35.0, 460.0))?;
+            shape.try_close()?;
+            Ok::<_, ValidationError>(shape)
+        })?;
         let top = 120.0 + index as f64 * 24.0;
         washes.push(
             Node::from(
@@ -200,18 +199,18 @@ fn landscape<const RETAIN_COMPLETE: bool>(
         zoom: 1.0 + progress * 0.035,
         rotation: 0.0,
     };
-    let sun = Circle::new(Point::new(735.0, 173.0), 34.0)
+    let sun = Circle::new(Point::new(735.0, 173.0), 34.0)?
         .fill(color(RUST))
         .opacity((progress * 5.0).clamp(0.0, 1.0))
         .blend_mode(BlendMode::Multiply);
-    let birds = flock(progress);
+    let birds = flock(progress)?;
     Ok(
         Node::group([sun, camera(context, Node::group(strokes), view), birds])
             .clip_with(Rect::new(48.0, 92.0, 912.0, 442.0), ClipMode::Geometric),
     )
 }
 
-fn ridge(index: usize) -> Path2D {
+fn ridge(index: usize) -> Result<Path2D, ValidationError> {
     let mut path = Path2D::new();
     for sample in 0..=64 {
         let x = 35.0 + sample as f64 * 14.0;
@@ -220,16 +219,16 @@ fn ridge(index: usize) -> Path2D {
         let y = 357.0 - index as f64 * 23.0 - peak * (91.0 + index as f64 * 7.0) - shoulder * 35.0
             + math::sin(x * 0.016 + index as f64 * 0.4) * 9.0;
         if sample == 0 {
-            path.move_to(Point::new(x, y));
+            path.try_move_to(Point::new(x, y))?;
         } else {
-            path.line_to(Point::new(x, y));
+            path.try_line_to(Point::new(x, y))?;
         }
     }
-    path
+    Ok(path)
 }
 
 /// Three gulls drifting across the sun, drawn as simple wing strokes.
-fn flock(progress: f64) -> Node {
+fn flock(progress: f64) -> motion::Result<Node> {
     let mut wings = Path2D::new();
     for (index, (x, y, size)) in [
         (560.0, 150.0, 9.0),
@@ -242,20 +241,19 @@ fn flock(progress: f64) -> Node {
         let flap = math::sin(progress * 60.0 + index as f64 * 1.7) * size * 0.35;
         let x = x + progress * 150.0;
         let y = y - progress * 24.0;
-        wings
-            .move_to(Point::new(x - size, y + flap))
-            .quadratic_to(Point::new(x - size * 0.4, y - size * 0.5), Point::new(x, y))
-            .quadratic_to(
-                Point::new(x + size * 0.4, y - size * 0.5),
-                Point::new(x + size, y + flap),
-            );
+        wings.try_move_to(Point::new(x - size, y + flap))?;
+        wings.try_quadratic_to(Point::new(x - size * 0.4, y - size * 0.5), Point::new(x, y))?;
+        wings.try_quadratic_to(
+            Point::new(x + size * 0.4, y - size * 0.5),
+            Point::new(x + size, y + flap),
+        )?;
     }
-    Node::from(wings.stroke(1.3, color(INK).with_alpha(0.8)))
-        .opacity(math::smoothstep(0.25, 0.4, progress))
+    Ok(Node::from(wings.stroke(1.3, color(INK).with_alpha(0.8)))
+        .opacity(math::smoothstep(0.25, 0.4, progress)))
 }
 
 /// A typed caption with a blinking block cursor, plus a rust stamp and date mark.
-fn caption(progress: f64) -> Vec<Node> {
+fn caption(progress: f64) -> motion::Result<Vec<Node>> {
     let typed = ((progress - 0.04) / 0.22 * CAPTION.len() as f64)
         .clamp(0.0, CAPTION.len() as f64)
         .floor() as usize;
@@ -265,7 +263,7 @@ fn caption(progress: f64) -> Vec<Node> {
         .visible_parts(typed);
     let cursor_x = 52.0 + typed as f64 * 16.8;
     let stamp = math::smoothstep(0.6, 0.72, progress);
-    vec![
+    Ok(vec![
         text.translate(52.0, 52.0),
         Rect::new(cursor_x, 54.0, cursor_x + 11.0, 76.0)
             .fill(color(INK))
@@ -281,8 +279,8 @@ fn caption(progress: f64) -> Vec<Node> {
         .translate(52.0, 468.0)
         .opacity(math::smoothstep(0.3, 0.45, progress)),
         Node::group([
-            Node::from(Circle::new(Point::new(0.0, 0.0), 30.0).stroke(2.2, color(RUST))),
-            Node::from(Circle::new(Point::new(0.0, 0.0), 24.0).stroke(0.8, color(RUST))),
+            Node::from(Circle::new(Point::new(0.0, 0.0), 30.0)?.stroke(2.2, color(RUST))),
+            Node::from(Circle::new(Point::new(0.0, 0.0), 24.0)?.stroke(0.8, color(RUST))),
             label("HOME", TYPEWRITER, 12.0, 2.0, FontWeight::BOLD, color(RUST))
                 .translate(-17.0, -9.0),
         ])
@@ -306,12 +304,12 @@ fn caption(progress: f64) -> Vec<Node> {
             sigma: 3.0,
             intensity: 0.9,
         }),
-    ]
+    ])
 }
 
 /// Dust, hairs and the occasional vertical scratch, reseeded every frame so the
 /// damage jumps like emulsion and still replays exactly after a seek.
-fn dust(context: &SceneContext<'_>, frame: u64) -> Node {
+fn dust(context: &SceneContext<'_>, frame: u64) -> motion::Result<Node> {
     let mut specks = Vec::new();
     for speck in 0..22 {
         let x = context.random(("dust-x", frame, speck)) * 960.0;
@@ -322,26 +320,29 @@ fn dust(context: &SceneContext<'_>, frame: u64) -> Node {
         } else {
             color(INK).with_alpha(0.55)
         };
-        specks.push(Node::from(Circle::new(Point::new(x, y), size).fill(shade)));
+        specks.push(Node::from(Circle::new(Point::new(x, y), size)?.fill(shade)));
     }
     if context.random(("scratch", frame / 2)) > 0.62 {
         let x = context.random(("scratch-x", frame / 2)) * 960.0;
-        let mut path = Path2D::new();
-        path.move_to(Point::new(x, 0.0))
-            .line_to(Point::new(x + 1.5, 540.0));
+        let path = Path2D::builder()
+            .move_to(Point::new(x, 0.0))
+            .line_to(Point::new(x + 1.5, 540.0))
+            .build()?;
         specks.push(Node::from(path.stroke(0.8, Color::WHITE.with_alpha(0.35))));
     }
     if context.random(("hair", frame / 3)) > 0.8 {
         let x = context.random(("hair-x", frame / 3)) * 860.0 + 40.0;
         let y = context.random(("hair-y", frame / 3)) * 440.0 + 40.0;
-        let mut hair = Path2D::new();
-        hair.move_to(Point::new(x, y)).quadratic_to(
-            Point::new(x + 22.0, y - 14.0),
-            Point::new(x + 40.0, y + 6.0),
-        );
+        let hair = Path2D::builder()
+            .move_to(Point::new(x, y))
+            .quadratic_to(
+                Point::new(x + 22.0, y - 14.0),
+                Point::new(x + 40.0, y + 6.0),
+            )
+            .build()?;
         specks.push(Node::from(hair.stroke(0.7, color(INK).with_alpha(0.6))));
     }
-    Node::group(specks)
+    Ok(Node::group(specks))
 }
 
 /// A slow, warm light leak that breathes in from the upper-right corner.

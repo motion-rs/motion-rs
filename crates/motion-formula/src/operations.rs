@@ -242,8 +242,8 @@ impl FormulaSelection {
 struct Bounds(Rect);
 
 impl Drawable for Bounds {
-    fn bounds(&self, _: &DrawContext) -> Rect {
-        self.0
+    fn bounds(&self, _: &DrawContext) -> Result<Rect, ValidationError> {
+        Ok(self.0)
     }
 
     fn draw(&self, _: &DrawContext, _: &mut Canvas<'_>) -> Result<(), ValidationError> {

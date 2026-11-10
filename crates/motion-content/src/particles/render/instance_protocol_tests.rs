@@ -60,7 +60,7 @@ impl motion_core::instances::InstanceBatch for ScalarBatch {
 }
 
 impl Drawable for ScalarBatch {
-    fn bounds(&self, context: &DrawContext) -> Rect {
+    fn bounds(&self, context: &DrawContext) -> Result<Rect, ValidationError> {
         Drawable::bounds(&self.0, context)
     }
 

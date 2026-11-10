@@ -128,7 +128,6 @@ impl StrokeStyle {
     /// Expands checked centerline geometry into a bounded filled outline.
     pub fn outline(&self, source: &Path2D, path: &str) -> Result<Path2D, ValidationError> {
         self.validate(path)?;
-        source.validate()?;
         if source.verbs().len() > MAX_STROKE_VERBS {
             return Err(ValidationError::limit(
                 path,
@@ -468,8 +467,8 @@ mod tests {
         struct Ignores;
 
         impl Drawable for Ignores {
-            fn bounds(&self, _: &DrawContext) -> Rect {
-                Rect::new(0.0, 0.0, 8.0, 8.0)
+            fn bounds(&self, _: &DrawContext) -> Result<Rect, ValidationError> {
+                Ok(Rect::new(0.0, 0.0, 8.0, 8.0))
             }
 
             fn draw(

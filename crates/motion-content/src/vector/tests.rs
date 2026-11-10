@@ -108,7 +108,7 @@ fn text_tree_preserves_actual_rich_paragraph_pixels_bounds_and_reading_order()
     let tree = text.vector_tree(&context)?;
     assert_eq!(
         tree.node().measure(ValidationLimits::default())?,
-        text.try_bounds(&context)?
+        text.bounds(&context)?
     );
     let render = |node: Node| -> motion_core::Result<motion_render::Bitmap> {
         let frame = node
@@ -197,7 +197,7 @@ fn vector_effects_match_cpu_with_clips_images_morphs_and_surface_points() -> mot
     target.children[0] = VectorItem::Path(VectorPath {
         id: Some("shape".into()),
         path: Arc::new(
-            motion_core::Star::new(motion_core::Point::new(7.0, 7.0), 5, 6.0, 2.5).path(),
+            motion_core::Star::new(motion_core::Point::new(7.0, 7.0), 5, 6.0, 2.5)?.path()?,
         ),
         fill: Some((Color::rgb(0, 200, 255).into(), FillRule::NonZero)),
         stroke: None,
@@ -215,10 +215,13 @@ fn vector_effects_match_cpu_with_clips_images_morphs_and_surface_points() -> mot
     let mut cases = 0;
     for progress in [0.0, 0.2, 0.5, 0.8, 1.0, 0.5] {
         let points = tree.sample_points(32, 42)?;
-        let dots =
-            Node::group(points.iter().map(|point| {
-                Node::from(motion_core::Circle::new(*point, 0.15).fill(Color::WHITE))
-            }));
+        let dots = Node::group(points.iter().map(|point| {
+            Node::from(
+                motion_core::Circle::new(*point, 0.15)
+                    .unwrap()
+                    .fill(Color::WHITE),
+            )
+        }));
         for node in [
             tree.node(),
             tree.write(progress, WriteOptions::default())?,

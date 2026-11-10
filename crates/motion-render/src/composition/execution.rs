@@ -5,7 +5,7 @@
 
 use super::*;
 use crate::{OutputStats, RasterLimits, RenderContext, Renderer, Snapshot};
-use motion_core::{Color, Node, Result, SceneContext, Time, ValidationError};
+use motion_core::{Color, Node, Result, SceneContext, Shape, Time, ValidationError};
 
 mod backend;
 mod preparation;

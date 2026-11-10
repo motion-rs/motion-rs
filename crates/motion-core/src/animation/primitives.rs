@@ -369,7 +369,10 @@ mod tests {
 
     #[test]
     fn path_motion_uses_arc_length_and_has_exact_endpoints() {
-        let path = crate::Line::new(Point::ORIGIN, Point::new(10.0, 0.0)).path();
+        let path = crate::Line::new(Point::ORIGIN, Point::new(10.0, 0.0))
+            .unwrap()
+            .path()
+            .unwrap();
         let motion = FollowPath::new(path, 2.seconds());
         assert_eq!(motion.duration(), Some(2.seconds()));
         assert_eq!(motion.sample(1.seconds()).position, Point::new(5.0, 0.0));

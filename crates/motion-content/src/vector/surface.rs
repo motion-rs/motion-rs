@@ -594,7 +594,7 @@ mod tests {
         use motion_core::Shape;
         let mut group = VectorGroup::default();
         group.children.push(VectorItem::Path(VectorPath::filled(
-            motion_core::Circle::new(Point::new(5.0, 5.0), 3.0).path(),
+            motion_core::Circle::new(Point::new(5.0, 5.0), 3.0)?.path()?,
             Color::WHITE,
         )));
         group.children.push(VectorItem::Path(VectorPath::filled(
@@ -628,7 +628,7 @@ mod tests {
     -> motion_core::Result<()> {
         use motion_core::Shape;
         let circle = tree(
-            motion_core::Circle::new(Point::new(5.0, 5.0), 3.0).path(),
+            motion_core::Circle::new(Point::new(5.0, 5.0), 3.0)?.path()?,
             FillRule::NonZero,
         )?;
         assert!((circle.surface()?.area() - std::f64::consts::PI * 9.0).abs() < 0.03);

@@ -2,6 +2,7 @@
 
 use super::*;
 use motion_core::NodeModifiers;
+use motion_core::Shape;
 
 #[test]
 fn typed_parameters_preserve_layout_and_reject_oversized_values() {

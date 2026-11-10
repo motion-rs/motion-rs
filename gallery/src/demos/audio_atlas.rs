@@ -250,7 +250,7 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
         studies.push(study);
     }
     let mut timeline = atlas::builder(parameters, METADATA, PAGES, move |page, progress, _| {
-        Ok(waveforms(&studies[page], progress))
+        waveforms(&studies[page], progress)
     });
     for clip in clips {
         timeline = timeline.audio(clip);
@@ -477,7 +477,7 @@ fn stereo(duration: Time, seed: u32) -> motion::Result<PcmBuffer> {
     Ok(PcmBuffer::new(RATE, 2, samples)?)
 }
 
-fn waveforms(study: &Study, progress: f64) -> Node {
+fn waveforms(study: &Study, progress: f64) -> motion::Result<Node> {
     let center = (study.duration.as_seconds() * progress * f64::from(RATE)) as u64;
     let start = center.saturating_sub(WINDOW_FRAMES as u64 / 2);
     let mut dry = vec![0.0; WINDOW_FRAMES * 2];
@@ -523,9 +523,9 @@ fn waveforms(study: &Study, progress: f64) -> Node {
                 top - f64::from(sample) * gain * 32.0,
             );
             if column == 0 {
-                path.move_to(point);
+                path.try_move_to(point)?;
             } else {
-                path.line_to(point);
+                path.try_line_to(point)?;
             }
         }
         nodes.push(Node::from(path.stroke(1.7, color)));
@@ -564,11 +564,11 @@ fn waveforms(study: &Study, progress: f64) -> Node {
         Circle::new(
             Point::new(TRACK_LEFT + progress * (TRACK_RIGHT - TRACK_LEFT), 281.0),
             4.0,
-        )
+        )?
         .fill(Color::from_hex(atlas::BLUE))
         .into(),
     );
-    Node::group(nodes)
+    Ok(Node::group(nodes))
 }
 
 #[cfg(test)]

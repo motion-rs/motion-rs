@@ -13,8 +13,8 @@ use motion::render::{DisplayList, FilterOperation, ValidatedDisplayList};
 
 fn main() -> motion::Result {
     let timeline = Timeline::new(Size::new(480.0, 270.0), 30).track(|track| {
-        track.scene(1.seconds(), |_| {
-            Node::group((
+        track.scene(1.seconds(), |_| -> motion::Result<_> {
+            Ok(Node::group((
                 Rect::new(60.0, 60.0, 420.0, 210.0)
                     .fill(Color::rgb(20, 150, 125))
                     .filter(Filter::DropShadow {
@@ -22,9 +22,9 @@ fn main() -> motion::Result {
                         sigma: 3.0,
                         color: Color::BLACK.with_alpha(0.35),
                     }),
-                Circle::new(Point::new(240.0, 135.0), 72.0)
+                Circle::new(Point::new(240.0, 135.0), 72.0)?
                     .fill(Color::rgb(220, 90, 115))
-                    .clip_with(Rect::new(180.0, 80.0, 300.0, 190.0), ClipMode::Geometric),
+                    .clip_with(Rect::new(180.0, 80.0, 300.0, 190.0), ClipMode::Geometric),)
             ))
         })
     }).build()?;
@@ -115,9 +115,10 @@ use motion::prelude::*;
 use motion::ink::{BrushStroke, NibMode, StrokeFont};
 
 fn main() -> motion::Result {
-    let mut path = Path2D::new();
-    path.try_move_to(Point::new(20.0, 30.0))?;
-    path.try_line_to(Point::new(120.0, 70.0))?;
+    let path = Path2D::builder()
+        .move_to(Point::new(20.0, 30.0))
+        .line_to(Point::new(120.0, 70.0))
+        .build()?;
     let stroke = BrushStroke::builder(path, 8.0, Color::rgb(20, 150, 125))
         .pressure_curve(vec![(0.0, 0.2), (0.5, 1.5), (1.0, 0.1)])
         .nib_mode(NibMode::FollowPath(0.0))
@@ -125,7 +126,7 @@ fn main() -> motion::Result {
         .parallel_material(true)
         .build()?;
     let _revealed = Node::from(stroke.clone().write(0.5));
-    let _cursor = stroke.write(0.5).tip_node(Circle::new(Point::new(0.0, 0.0), 2.0).fill(Color::WHITE))?;
+    let _cursor = stroke.write(0.5).tip_node(Circle::new(Point::new(0.0, 0.0), 2.0)?.fill(Color::WHITE))?;
     let _letters = StrokeFont::new(20.0)?.strokes("MOTION", 1.0, Color::WHITE)?;
     Ok(())
 }

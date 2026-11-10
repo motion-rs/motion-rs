@@ -65,6 +65,7 @@ impl Plan {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use motion_core::Shape;
 
     #[test]
     fn fill_batches_respect_color_space_hdr_saved_inputs_and_admission() -> motion_core::Result {

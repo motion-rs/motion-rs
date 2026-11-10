@@ -160,8 +160,8 @@ impl Svg {
 struct Viewport(Rect);
 
 impl Drawable for Viewport {
-    fn bounds(&self, _: &DrawContext) -> Rect {
-        self.0
+    fn bounds(&self, _: &DrawContext) -> Result<Rect, ValidationError> {
+        Ok(self.0)
     }
 
     fn draw(&self, _: &DrawContext, _: &mut Canvas<'_>) -> Result<(), ValidationError> {
@@ -173,20 +173,20 @@ impl Drawable for Viewport {
 struct FailedResource(Svg);
 
 impl Drawable for FailedResource {
-    fn bounds(&self, context: &DrawContext) -> Rect {
+    fn bounds(&self, context: &DrawContext) -> Result<Rect, ValidationError> {
         let _ = self.0.asset(context);
-        Rect::new(
+        Ok(Rect::new(
             0.0,
             0.0,
             self.0.size.map_or(64.0, |size| size.width),
             self.0.size.map_or(64.0, |size| size.height),
-        )
+        ))
     }
 
     fn draw(&self, context: &DrawContext, canvas: &mut Canvas<'_>) -> Result<(), ValidationError> {
         let _ = self.0.asset(context);
         canvas.fill(
-            &self.bounds(context),
+            &self.bounds(context)?,
             Color::rgb(255, 0, 255),
             motion_core::FillRule::NonZero,
         )
@@ -197,8 +197,8 @@ impl Drawable for FailedResource {
 struct DeferredSvg(Svg);
 
 impl Drawable for DeferredSvg {
-    fn bounds(&self, _: &DrawContext) -> Rect {
-        Rect::default()
+    fn bounds(&self, _: &DrawContext) -> Result<Rect, ValidationError> {
+        Ok(Rect::default())
     }
 
     fn draw(&self, _: &DrawContext, _: &mut Canvas<'_>) -> Result<(), ValidationError> {

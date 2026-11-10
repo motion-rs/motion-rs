@@ -23,12 +23,12 @@ const MAX_ALIGNMENT_WORK: usize = 16_777_216;
 ///     MAX_STROKE_VERBS, MAX_SVG_PATH_BYTES, sample_offsets,
 /// };
 /// let (from, to) = MorphPath::pair(
-///     Circle::new(Point::new(8.0, 8.0), 6.0).path(),
-///     Star::new(Point::new(8.0, 8.0), 5, 6.0, 2.5).path(),
+///     Circle::new(Point::new(8.0, 8.0), 6.0)?.path()?,
+///     Star::new(Point::new(8.0, 8.0), 5, 6.0, 2.5)?.path()?,
 /// )?;
 /// let animation = Tween::new(from, to, 1.seconds());
 /// let middle = animation.sample(500.milliseconds());
-/// assert!(middle.bounding_box().is_finite());
+/// assert!(middle.bounding_box()?.is_finite());
 /// # Ok::<(), motion_core::Error>(())
 /// ```
 #[derive(Clone, Debug)]
@@ -89,7 +89,6 @@ impl MorphPath {
     /// Captures a path and promotes line/quadratic segments to cubic controls.
     /// At most 64 contours are accepted; all existing path limits still apply.
     pub fn new(path: Path2D) -> Result<Self, ValidationError> {
-        path.validate()?;
         let mut contours = Vec::new();
         let mut current = None;
         let mut position = Point::ORIGIN;
@@ -540,12 +539,12 @@ impl Pair {
 }
 
 impl Shape for MorphPath {
-    fn path(&self) -> Path2D {
-        self.path.clone()
+    fn path(&self) -> Result<Path2D, ValidationError> {
+        Ok(self.path.clone())
     }
 
-    fn bounding_box(&self) -> Rect {
-        self.path.bounding_box()
+    fn bounding_box(&self) -> Result<Rect, ValidationError> {
+        Ok(self.path.bounding_box())
     }
 }
 
@@ -559,15 +558,16 @@ mod tests {
         let source = Path2D::parse_svg("M0 0Q4 8 8 0").unwrap();
         let target = Path2D::parse_svg("M0 0Q2 4 4 4Q6 4 8 0").unwrap();
         let (first, second) = MorphPath::pair(source.clone(), target.clone()).unwrap();
-        assert_eq!(first.interpolate(&second, 0.0).path(), source);
-        assert_eq!(first.interpolate(&second, 1.0).path(), target);
+        assert_eq!(first.interpolate(&second, 0.0).path().unwrap(), source);
+        assert_eq!(first.interpolate(&second, 1.0).path().unwrap(), target);
         for progress in [0.01, 0.25, 0.5, 0.99] {
             let result = first.try_interpolate(&second, progress).unwrap();
-            assert!((result.path().length() - source.length()).abs() < 1e-8);
+            assert!((result.path().unwrap().length() - source.length()).abs() < 1e-8);
             for sample in [0.0, 0.25, 0.5, 0.75, 1.0] {
                 assert!(
                     result
                         .path()
+                        .unwrap()
                         .point_at(sample)
                         .0
                         .distance(source.point_at(sample).0)
@@ -578,7 +578,7 @@ mod tests {
         let line = Path2D::parse_svg("M0 0H8").unwrap();
         let curve = Path2D::parse_svg("M0 4Q4 12 8 4").unwrap();
         let (first, second) = MorphPath::pair(line, curve).unwrap();
-        let middle = first.interpolate(&second, 0.5).path();
+        let middle = first.interpolate(&second, 0.5).path().unwrap();
         assert!(middle.point_at(0.5).0.distance(Point::new(4.0, 4.0)) < 1e-8);
         assert_eq!(middle.point_at(0.0).0, Point::new(0.0, 2.0));
         assert_eq!(middle.point_at(1.0).0, Point::new(8.0, 2.0));
@@ -590,7 +590,10 @@ mod tests {
         let target = Path2D::parse_svg("M10 10H2V2H10Z").unwrap();
         let (first, second) = MorphPath::pair(source, target).unwrap();
         let middle = first.interpolate(&second, 0.5);
-        assert_eq!(middle.bounding_box(), Rect::new(2.0, 2.0, 10.0, 10.0));
+        assert_eq!(
+            middle.bounding_box().unwrap(),
+            Rect::new(2.0, 2.0, 10.0, 10.0)
+        );
         let source = Path2D::parse_svg("M99 -1h2v2h-2Z M-3 -3h6v6h-6Z").unwrap();
         let target = Path2D::parse_svg("M16 -4h8v8h-8Z M199 -1h2v2h-2Z").unwrap();
         let (first, second) = MorphPath::pair(source, target).unwrap();
@@ -612,12 +615,31 @@ mod tests {
         );
         let (empty, filled) = MorphPath::pair(
             Path2D::new(),
-            crate::Circle::new(Point::new(8.0, 8.0), 4.0).path(),
+            crate::Circle::new(Point::new(8.0, 8.0), 4.0)
+                .unwrap()
+                .path()
+                .unwrap(),
         )
         .unwrap();
-        assert!(empty.path().verbs().is_empty());
-        assert!((empty.interpolate(&filled, 0.5).bounding_box().width() - 4.0).abs() < 1e-8);
-        assert!(filled.interpolate(&empty, 1.0).path().verbs().is_empty());
+        assert!(empty.path().unwrap().verbs().is_empty());
+        assert!(
+            (empty
+                .interpolate(&filled, 0.5)
+                .bounding_box()
+                .unwrap()
+                .width()
+                - 4.0)
+                .abs()
+                < 1e-8
+        );
+        assert!(
+            filled
+                .interpolate(&empty, 1.0)
+                .path()
+                .unwrap()
+                .verbs()
+                .is_empty()
+        );
     }
 
     #[test]
@@ -691,11 +713,12 @@ mod tests {
                 .try_interpolate(&growing, 1e16)
                 .unwrap()
                 .path()
+                .unwrap()
                 .verbs()[0],
             PathVerb::MoveTo(Point::new(1.0, 0.0))
         );
-        assert_eq!(first.path(), source);
-        assert_eq!(second.path(), target);
+        assert_eq!(first.path().unwrap(), source);
+        assert_eq!(second.path().unwrap(), target);
         assert!(MorphPath::pair_with_samples(source, target, 257).is_err());
         let mut many = Path2D::new();
         for index in 0..65 {
@@ -723,7 +746,7 @@ mod tests {
         let source = Path2D::parse_svg("M0 0L2 0Q3 2 4 0Z L1 1 M10 10").unwrap();
         let retained = source.clone();
         let morph = MorphPath::new(source).unwrap();
-        assert_eq!(morph.path(), retained);
+        assert_eq!(morph.path().unwrap(), retained);
         assert_eq!(morph.contours.len(), 3);
         assert!(morph.contours[0].closed);
         assert!(!morph.contours[1].closed);

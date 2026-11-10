@@ -1361,11 +1361,11 @@ fn hardware_fill_batches_preserve_rgba_tolerance_boundaries_and_pooling() -> mot
             children.push(if phase == 4 {
                 let mut path = motion_core::Path2D::new();
                 for left in [0.25, 28.25] {
-                    path.move_to(motion_core::Point::new(left, 0.5))
-                        .line_to(motion_core::Point::new(left + 1.0, 0.5))
-                        .line_to(motion_core::Point::new(left + 1.0, 63.5))
-                        .line_to(motion_core::Point::new(left, 63.5))
-                        .close();
+                    path.try_move_to(motion_core::Point::new(left, 0.5))?;
+                    path.try_line_to(motion_core::Point::new(left + 1.0, 0.5))?;
+                    path.try_line_to(motion_core::Point::new(left + 1.0, 63.5))?;
+                    path.try_line_to(motion_core::Point::new(left, 63.5))?;
+                    path.try_close()?;
                 }
                 if index % 3 == 0 {
                     motion_core::Node::from(
@@ -2638,10 +2638,12 @@ fn hundreds_of_layers_complete_and_match_cpu() -> motion_core::Result {
         motion_core::Node::group([
             motion_core::Node::from(
                 motion_core::RoundedRect::new(bounds, 2.0)
+                    .unwrap()
                     .fill(motion_core::Color::rgb(30, 150, 160)),
             ),
             motion_core::Node::from(
                 motion_core::Circle::new(bounds.center(), 2.0)
+                    .unwrap()
                     .fill(motion_core::Color::rgb(240, 100, 80)),
             ),
         ])

@@ -132,13 +132,18 @@ fn frame(context: &SceneContext<'_>, rig: &Rig) -> motion::Result<Node> {
         let _ = rig.dissolve.set(dissolve(rig.seed, window, context)?);
     }
     let dissolve = rig.dissolve.get().expect("initialised above");
-    rig.look
-        .scene(context, PixelSize::new(960, 540), |context| {
-            compose(context, rig, dissolve)
-        })
+    rig.look.scene(
+        context,
+        PixelSize::new(960, 540),
+        scene(|context| compose(context, rig, dissolve)),
+    )
 }
 
-fn compose(context: &SceneContext<'_>, rig: &Rig, dissolve: &ParticleSimulation) -> Node {
+fn compose(
+    context: &SceneContext<'_>,
+    rig: &Rig,
+    dissolve: &ParticleSimulation,
+) -> motion::Result<Node> {
     let now = context.seconds() / rig.scale;
     let act = |index: usize, simulation: &ParticleSimulation| {
         let (start, end, ..) = ACTS[index];
@@ -153,7 +158,7 @@ fn compose(context: &SceneContext<'_>, rig: &Rig, dissolve: &ParticleSimulation)
     };
     let mut layers = vec![
         backdrop(now),
-        stage_geometry(opacity(now, (ACTS[0].0, ACTS[0].1), false)),
+        stage_geometry(opacity(now, (ACTS[0].0, ACTS[0].1), false))?,
         act(0, &rig.fireworks),
         act(1, &rig.flock),
         act(2, dissolve),
@@ -162,7 +167,7 @@ fn compose(context: &SceneContext<'_>, rig: &Rig, dissolve: &ParticleSimulation)
     ];
     layers.push(atmosphere(context, now));
     layers.push(captions(now));
-    Node::group(layers)
+    Ok(Node::group(layers))
 }
 
 fn backdrop(now: f64) -> Node {
@@ -180,19 +185,19 @@ fn backdrop(now: f64) -> Node {
     ])
 }
 
-fn stage_geometry(weight: f64) -> Node {
+fn stage_geometry(weight: f64) -> motion::Result<Node> {
     let edge = color(0x86a8ff).with_alpha(0.55);
-    let floor = Path2D::polyline([Point::new(0.0, FLOOR), Point::new(WIDTH, FLOOR)]);
+    let floor = Path2D::polyline([Point::new(0.0, FLOOR), Point::new(WIDTH, FLOOR)])?;
     let mut nodes = vec![Node::from(floor.stroke(1.2, edge))];
     for mut slab in slabs() {
         slab.push(slab[0]);
-        let outline = Path2D::polyline(slab);
+        let outline = Path2D::polyline(slab)?;
         nodes.push(Node::from(
             outline.clone().fill(color(0x86a8ff).with_alpha(0.08)),
         ));
         nodes.push(Node::from(outline.stroke(1.2, edge)));
     }
-    Node::group(nodes).opacity(weight)
+    Ok(Node::group(nodes).opacity(weight))
 }
 
 /// Fog and dust advect through shared noise; a half-resolution image is enough for soft haze.

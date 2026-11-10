@@ -28,8 +28,8 @@
 
 use super::Scene;
 use crate::{
-    Color, Duration, Error, FrameRate, Node, NodeModifiers, SceneContext, Size, TICKS_PER_SECOND,
-    Time,
+    Color, Duration, Error, FrameRate, Node, NodeModifiers, SceneContext, Shape, Size,
+    TICKS_PER_SECOND, Time,
 };
 use std::{fmt, sync::Arc};
 

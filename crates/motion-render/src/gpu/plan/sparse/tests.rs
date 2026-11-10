@@ -100,11 +100,11 @@ fn direct_descriptors_preserve_ranges_bounds_and_alpha_bits() -> motion_core::Re
 fn sparse_records_preserve_original_u8_coverage_after_clipping() -> motion_core::Result {
     let mut path = motion_core::Path2D::new();
     for left in [1.25, 120.25] {
-        path.move_to(motion_core::Point::new(left, 0.5))
-            .line_to(motion_core::Point::new(left + 1.0, 0.5))
-            .line_to(motion_core::Point::new(left + 1.0, 63.5))
-            .line_to(motion_core::Point::new(left, 63.5))
-            .close();
+        path.try_move_to(motion_core::Point::new(left, 0.5))?;
+        path.try_line_to(motion_core::Point::new(left + 1.0, 0.5))?;
+        path.try_line_to(motion_core::Point::new(left + 1.0, 63.5))?;
+        path.try_line_to(motion_core::Point::new(left, 63.5))?;
+        path.try_close()?;
     }
     let limits = RasterLimits::default();
     let frame = motion_core::Node::from(path.fill(motion_core::Color::WHITE))
@@ -275,12 +275,11 @@ fn native_sparse_nested_clips_preserve_cpu_tolerance_and_replay() -> motion_core
     let mut gpu = Gpu::from_context(context);
     let mut sparse = motion_core::Path2D::new();
     for left in [1.25, 120.25] {
-        sparse
-            .move_to(motion_core::Point::new(left, 0.5))
-            .line_to(motion_core::Point::new(left + 1.0, 0.5))
-            .line_to(motion_core::Point::new(left + 1.0, 7.5))
-            .line_to(motion_core::Point::new(left, 7.5))
-            .close();
+        sparse.try_move_to(motion_core::Point::new(left, 0.5))?;
+        sparse.try_line_to(motion_core::Point::new(left + 1.0, 0.5))?;
+        sparse.try_line_to(motion_core::Point::new(left + 1.0, 7.5))?;
+        sparse.try_line_to(motion_core::Point::new(left, 7.5))?;
+        sparse.try_close()?;
     }
     let ancestor = motion_core::Path2D::from_rect(motion_core::Rect::new(0.5, 1.25, 127.0, 61.5))?;
     for mode in [
@@ -353,11 +352,11 @@ fn clips_with_many_records_use_dense_coverage_and_few_records_stay_direct() -> m
     let plan = |height: f64| -> motion_core::Result<Plan> {
         let mut path = motion_core::Path2D::new();
         for left in [1.25, 120.25] {
-            path.move_to(motion_core::Point::new(left, 0.5))
-                .line_to(motion_core::Point::new(left + 1.0, 0.5))
-                .line_to(motion_core::Point::new(left + 1.0, height))
-                .line_to(motion_core::Point::new(left, height))
-                .close();
+            path.try_move_to(motion_core::Point::new(left, 0.5))?;
+            path.try_line_to(motion_core::Point::new(left + 1.0, 0.5))?;
+            path.try_line_to(motion_core::Point::new(left + 1.0, height))?;
+            path.try_line_to(motion_core::Point::new(left, height))?;
+            path.try_close()?;
         }
         let node = motion_core::Node::group([motion_core::Node::from(
             motion_core::Rect::new(0.0, 0.0, 128.0, 64.0).fill(motion_core::Color::WHITE),

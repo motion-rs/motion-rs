@@ -124,7 +124,7 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
     let seed = parameters.seed as u32 ^ (parameters.seed >> 32) as u32;
     atlas::timeline(parameters, METADATA, PAGES, move |page, progress, _| {
         if page >= 10 {
-            return Ok(arrows(page, progress, seed));
+            return arrows(page, progress, seed);
         }
         let image = field_image(page, progress, seed)?;
         Ok(Image::from_asset(Arc::new(image))
@@ -192,7 +192,7 @@ fn scalar(page: usize, point: [f64; 2], progress: f64, seed: u32) -> motion::Res
     })
 }
 
-fn arrows(page: usize, progress: f64, seed: u32) -> Node {
+fn arrows(page: usize, progress: f64, seed: u32) -> motion::Result<Node> {
     let mut nodes = Vec::new();
     for row in 0..7 {
         for column in 0..12 {
@@ -211,16 +211,17 @@ fn arrows(page: usize, progress: f64, seed: u32) -> Node {
             };
             let end = Point::new(origin.x + velocity[0] * 15.0, origin.y + velocity[1] * 15.0);
             let mut path = Path2D::new();
-            path.move_to(origin).line_to(end);
+            path.try_move_to(origin)?;
+            path.try_line_to(end)?;
             nodes.push(Node::from(path.stroke(1.7, Color::from_hex(atlas::MINT))));
             nodes.push(
-                Circle::new(end, 2.5)
+                Circle::new(end, 2.5)?
                     .fill(Color::from_hex(atlas::GOLD))
                     .into(),
             );
         }
     }
-    Node::group(nodes)
+    Ok(Node::group(nodes))
 }
 
 #[cfg(test)]

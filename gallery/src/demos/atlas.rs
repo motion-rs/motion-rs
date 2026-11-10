@@ -70,7 +70,7 @@ pub(super) fn builder(
                 let (index, progress) = page_at(context.progress(), pages.len());
                 let page = &pages[index];
                 let specimen = Node::group([stage(), draw(index, progress, context)?]);
-                Ok::<_, motion::Error>(sheet(
+                sheet(
                     &Sheet {
                         metadata,
                         page: index,
@@ -82,7 +82,7 @@ pub(super) fn builder(
                         next: pages.get(index + 1).map(|next| next.title),
                     },
                     specimen,
-                ))
+                )
             })
         })
 }
@@ -97,12 +97,12 @@ pub(super) fn timeline(
 }
 
 /// Composes the page frame, the caption column and a specimen drawn in [`VIEWPORT`] units.
-pub(super) fn sheet(sheet: &Sheet<'_>, specimen: Node) -> Node {
+pub(super) fn sheet(sheet: &Sheet<'_>, specimen: Node) -> motion::Result<Node> {
     let mut nodes = header(sheet);
     nodes.extend(caption(sheet));
-    nodes.push(card(specimen));
+    nodes.push(card(specimen)?);
     nodes.extend(footer(sheet.page, sheet.count, sheet.progress));
-    Node::group(nodes)
+    Ok(Node::group(nodes))
 }
 
 fn header(sheet: &Sheet<'_>) -> Vec<Node> {
@@ -187,10 +187,10 @@ fn caption(sheet: &Sheet<'_>) -> Vec<Node> {
     nodes
 }
 
-fn card(specimen: Node) -> Node {
+fn card(specimen: Node) -> motion::Result<Node> {
     let scale = SPECIMEN_BOUNDS.width() / VIEWPORT.width();
-    Node::group([
-        RoundedRect::new(SPECIMEN_BOUNDS, CARD_RADIUS)
+    Ok(Node::group([
+        RoundedRect::new(SPECIMEN_BOUNDS, CARD_RADIUS)?
             .fill(Color::from_hex(DARK))
             .filter(Filter::DropShadow {
                 offset: Vector2::new(0.0, 8.0),
@@ -199,13 +199,13 @@ fn card(specimen: Node) -> Node {
             }),
         specimen
             .clip_with(
-                RoundedRect::new(VIEWPORT, CARD_RADIUS / scale),
+                RoundedRect::new(VIEWPORT, CARD_RADIUS / scale)?,
                 ClipMode::Geometric,
             )
             .pivot(Pivot::Point(Point::ORIGIN))
             .scale(scale)
             .translate(SPECIMEN_BOUNDS.left, SPECIMEN_BOUNDS.top),
-    ])
+    ]))
 }
 
 fn footer(page: usize, count: usize, progress: f64) -> Vec<Node> {
@@ -301,9 +301,9 @@ pub(super) fn stage() -> Node {
     Node::group(nodes)
 }
 
-pub(super) fn specimen(progress: f64) -> Node {
+pub(super) fn specimen(progress: f64) -> motion::Result<Node> {
     let phase = progress * std::f64::consts::TAU;
-    Node::group([
+    Ok(Node::group([
         Node::from(VIEWPORT.fill(Color::from_hex(DARK).with_alpha(0.0))),
         Rect::new(72.0, 64.0, 440.0, 240.0)
             .fill(
@@ -313,10 +313,10 @@ pub(super) fn specimen(progress: f64) -> Node {
                     .stop(1.0, Color::from_hex(0xd64b36)),
             )
             .into(),
-        Circle::new(Point::new(256.0 + math::sin(phase) * 55.0, 152.0), 64.0)
+        Circle::new(Point::new(256.0 + math::sin(phase) * 55.0, 152.0), 64.0)?
             .fill(Color::from_hex(GOLD))
             .into(),
-        Circle::new(Point::new(250.0, 127.0), 12.0)
+        Circle::new(Point::new(250.0, 127.0), 12.0)?
             .fill(Color::WHITE)
             .filter(Filter::ColorAdjust {
                 exposure: 2.0,
@@ -327,7 +327,7 @@ pub(super) fn specimen(progress: f64) -> Node {
         Rect::new(184.0, 177.0, 330.0, 184.0)
             .fill(Color::WHITE)
             .into(),
-    ])
+    ]))
 }
 
 pub(super) fn comparison(source: Node, processed: Node) -> Node {

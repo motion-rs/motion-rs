@@ -234,7 +234,7 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
             ),
             16 => Node::from(recorded.clone().write_with((progress * 4.0).seconds())?),
             17 => Node::from(stroke.write_timed((progress * 3.45).seconds(), &timing)?),
-            18 => stroke.write(reveal).erase(atlas::specimen(progress)),
+            18 => stroke.write(reveal).erase(atlas::specimen(progress)?),
             19 => pigment(progress)?,
             20 => {
                 let relief = builders[page]
@@ -265,7 +265,7 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
 }
 
 fn configured(page: usize, seed: u32) -> motion::Result<BrushStrokeBuilder> {
-    let base = BrushStroke::builder(stroke_path(page), 28.0, Color::from_hex(0x167d71))
+    let base = BrushStroke::builder(stroke_path(page)?, 28.0, Color::from_hex(0x167d71))
         .material_work_limit(MATERIAL_WORK);
     Ok(match page {
         0 => base.pressure_curve(vec![
@@ -305,33 +305,35 @@ fn configured(page: usize, seed: u32) -> motion::Result<BrushStrokeBuilder> {
     })
 }
 
-fn stroke_path(page: usize) -> Path2D {
+fn stroke_path(page: usize) -> motion::Result<Path2D> {
     let mut path = Path2D::new();
     if page == 17 {
-        path.move_to(Point::new(48.0, 180.0)).cubic_to(
+        path.try_move_to(Point::new(48.0, 180.0))?;
+        path.try_cubic_to(
             Point::new(120.0, 30.0),
             Point::new(160.0, 240.0),
             Point::new(230.0, 140.0),
-        );
-        path.move_to(Point::new(285.0, 180.0)).cubic_to(
+        )?;
+        path.try_move_to(Point::new(285.0, 180.0))?;
+        path.try_cubic_to(
             Point::new(330.0, 40.0),
             Point::new(400.0, 235.0),
             Point::new(465.0, 130.0),
-        );
+        )?;
     } else {
-        path.move_to(Point::new(48.0, 190.0))
-            .cubic_to(
-                Point::new(130.0, 18.0),
-                Point::new(390.0, 285.0),
-                Point::new(280.0, 150.0),
-            )
-            .cubic_to(
-                Point::new(170.0, 10.0),
-                Point::new(350.0, 85.0),
-                Point::new(464.0, 190.0),
-            );
+        path.try_move_to(Point::new(48.0, 190.0))?;
+        path.try_cubic_to(
+            Point::new(130.0, 18.0),
+            Point::new(390.0, 285.0),
+            Point::new(280.0, 150.0),
+        )?;
+        path.try_cubic_to(
+            Point::new(170.0, 10.0),
+            Point::new(350.0, 85.0),
+            Point::new(464.0, 190.0),
+        )?;
     }
-    path
+    Ok(path)
 }
 
 fn paper(seed: u32) -> motion::Result<Paper> {

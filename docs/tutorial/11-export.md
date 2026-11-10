@@ -14,9 +14,9 @@ use motion::extend::{Encoder, ProgressSink};
 
 fn main() -> motion::Result {
     let timeline = Timeline::new(Size::new(320.0, 180.0), 30).track(|track| {
-        track.scene(1.seconds(), |context| {
-            Circle::new(Point::new(40.0 + context.seconds() * 240.0, 90.0), 20.0)
-                .fill(Color::rgb(20, 150, 125))
+        track.scene(1.seconds(), |context| -> motion::Result<_> {
+            Ok(Circle::new(Point::new(40.0 + context.seconds() * 240.0, 90.0), 20.0)?
+                .fill(Color::rgb(20, 150, 125)))
         })
     }).build()?;
     let options = ExportOptions::new("tutorial-frames").codec(Codec::PngSequence);
@@ -50,9 +50,9 @@ use motion::prelude::*;
 
 fn main() -> motion::Result {
     let timeline = Timeline::new(Size::new(320.0, 180.0), 30).track(|track| {
-        track.scene(2.seconds(), |context| {
-            Circle::new(context.center(), 20.0 + context.progress() * 30.0)
-                .fill(Color::rgb(20, 150, 125))
+        track.scene(2.seconds(), |context| -> motion::Result<_> {
+            Ok(Circle::new(context.center(), 20.0 + context.progress() * 30.0)?
+                .fill(Color::rgb(20, 150, 125)))
         })
     }).build()?;
     export(&timeline, &ExportOptions::new("tutorial-film.mp4"), &NoProgress)?;

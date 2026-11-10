@@ -207,14 +207,14 @@ impl SpatialInstances for ExtendedBatch {
 }
 
 impl Drawable for ExtendedBatch {
-    fn bounds(&self, context: &motion_core::DrawContext) -> Rect {
+    fn bounds(&self, context: &motion_core::DrawContext) -> Result<Rect, ValidationError> {
         let margin = 1.0 / context.device_scale();
-        Rect::new(
+        Ok(Rect::new(
             self.bounds.left - margin,
             self.bounds.top - margin,
             self.bounds.right + margin,
             self.bounds.bottom + margin,
-        )
+        ))
     }
 
     fn draw(

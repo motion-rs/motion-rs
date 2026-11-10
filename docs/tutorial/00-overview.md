@@ -17,9 +17,9 @@ use motion::particles::{Particle};
 
 fn main() -> motion::Result {
     let timeline = Timeline::new(Size::new(320.0, 180.0), 30).track(|track| {
-        track.scene(1.seconds(), |_| {
-            Circle::new(Point::new(160.0, 90.0), 24.0)
-                .fill(Color::rgb(20, 150, 125))
+        track.scene(1.seconds(), |_| -> motion::Result<_> {
+            Ok(Circle::new(Point::new(160.0, 90.0), 24.0)?
+                .fill(Color::rgb(20, 150, 125)))
         })
     }).build()?;
     let bitmap = render_still(&timeline, Time::ZERO, &RenderOptions::default())?;

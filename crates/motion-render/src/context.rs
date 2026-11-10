@@ -147,6 +147,7 @@ impl RenderContext {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use motion_core::Shape;
 
     #[test]
     fn compiled_gpu_policy_is_distinct_from_live_adapter_metadata() {

@@ -1,6 +1,7 @@
 use super::*;
 use crate::raster::prepare::RenderPrepare;
 use crate::{PreparedFrame, PreparedItem};
+use motion_core::Shape;
 use motion_core::{
     BlendMode, Color, DrawCommand, Node, NodeModifiers, PixelSize, RasterLimits, Rect, Size,
     ValidationErrorKind, ValidationLimits,

@@ -111,36 +111,34 @@ fn rising(text: Text, spring: &std::sync::Arc<Spring<f64>>, delay: Duration, lif
         })
 }
 
-fn cover_art(context: &SceneContext<'_>, settle: f64) -> Node {
+fn cover_art(context: &SceneContext<'_>, settle: f64) -> motion::Result<Node> {
     let drift = math::sin(context.progress() * PI * 2.0);
-    let arch = {
-        let mut path = Path2D::new();
-        path.move_to(Point::new(0.0, 250.0))
-            .line_to(Point::new(0.0, 90.0))
-            .quadratic_to(Point::new(0.0, 0.0), Point::new(90.0, 0.0))
-            .quadratic_to(Point::new(180.0, 0.0), Point::new(180.0, 90.0))
-            .line_to(Point::new(180.0, 250.0))
-            .close();
-        path
-    };
-    Node::group((
+    let arch = Path2D::builder()
+        .move_to(Point::new(0.0, 250.0))
+        .line_to(Point::new(0.0, 90.0))
+        .quadratic_to(Point::new(0.0, 0.0), Point::new(90.0, 0.0))
+        .quadratic_to(Point::new(180.0, 0.0), Point::new(180.0, 90.0))
+        .line_to(Point::new(180.0, 250.0))
+        .close()
+        .build()?;
+    Ok(Node::group((
         Rect::new(0.0, 0.0, 250.0, 330.0).fill(color(FOREST)),
         arch.fill(color(OCHRE))
             .translate(34.0, 54.0 + (1.0 - settle) * 40.0),
-        Circle::new(Point::new(96.0, 232.0), 78.0)
+        Circle::new(Point::new(96.0, 232.0), 78.0)?
             .fill(color(VERMILION))
             .translate(drift * 8.0, 0.0),
-        Circle::new(Point::new(96.0, 232.0), 78.0)
+        Circle::new(Point::new(96.0, 232.0), 78.0)?
             .stroke(1.2, color(PAPER))
             .translate(drift * 8.0 + 14.0, -10.0),
         Rect::new(0.0, 296.0, 250.0, 330.0).fill(color(INK)),
     ))
     .clip_with(Rect::new(0.0, 0.0, 250.0, 330.0), ClipMode::Geometric)
     .translate(660.0, 70.0 + (1.0 - settle) * 24.0)
-    .opacity(settle.clamp(0.0, 1.0))
+    .opacity(settle.clamp(0.0, 1.0)))
 }
 
-fn cover(context: &SceneContext<'_>) -> Node {
+fn cover(context: &SceneContext<'_>) -> motion::Result<Node> {
     let progress = context.progress();
     let spring = context.cache("masthead-spring", || {
         Spring::new(0.0, 1.0).stiffness(170.0).damping(22.0)
@@ -153,9 +151,9 @@ fn cover(context: &SceneContext<'_>) -> Node {
         230.0,
     );
     let reveal = math::smoothstep(0.1, 0.5, progress);
-    Node::group((
+    Ok(Node::group((
         context.bounds().fill(color(PAPER)),
-        cover_art(context, settle),
+        cover_art(context, settle)?,
         Node::group([masthead.translate(34.0, 40.0)])
             .clip_with(Rect::new(20.0, 20.0, 640.0, 262.0), ClipMode::Geometric),
         rule(40.0, 620.0, 276.0, 3.0, color(INK), reveal),
@@ -193,10 +191,10 @@ fn cover(context: &SceneContext<'_>) -> Node {
         )
         .translate(40.0, 498.0)
         .opacity(reveal),
-    ))
+    )))
 }
 
-fn spread(context: &SceneContext<'_>) -> Node {
+fn spread(context: &SceneContext<'_>) -> motion::Result<Node> {
     let progress = context.progress();
     let page = math::smoothstep(0.0, 0.25, progress);
     let quote = math::smoothstep(0.22, 0.6, progress);
@@ -251,10 +249,10 @@ fn spread(context: &SceneContext<'_>) -> Node {
         Circle::new(
             Point::new(718.0, 154.0),
             74.0 + 10.0 * math::sin(progress * PI * 2.0),
-        )
+        )?
         .fill(color(VERMILION)),
         Rect::new(520.0, 200.0, 916.0, 270.0).fill(color(FOREST)),
-        Circle::new(Point::new(838.0, 120.0), 22.0).fill(color(OCHRE)),
+        Circle::new(Point::new(838.0, 120.0), 22.0)?.fill(color(OCHRE)),
         label(
             "Emptiness is a\nmaterial.",
             DISPLAY,
@@ -271,10 +269,10 @@ fn spread(context: &SceneContext<'_>) -> Node {
             .opacity(quote),
         small_caps("43", 14.0, color(INK)).translate(896.0, 500.0),
     ));
-    Node::group([left, right])
+    Ok(Node::group([left, right]))
 }
 
-fn closing(context: &SceneContext<'_>) -> Node {
+fn closing(context: &SceneContext<'_>) -> motion::Result<Node> {
     let progress = context.progress();
     let sweep = -240.0 + math::smoothstep(0.05, 0.8, progress) * 1320.0;
     let title = |fill: Color| {
@@ -284,9 +282,9 @@ fn closing(context: &SceneContext<'_>) -> Node {
         ))
     };
     let sheet = Node::from(Rect::new(0.0, 0.0, 960.0, 540.0).fill(Color::WHITE));
-    Node::group((
+    Ok(Node::group((
         context.bounds().fill(color(VERMILION)),
-        Circle::new(Point::new(790.0 - progress * 70.0, 270.0), 190.0)
+        Circle::new(Point::new(790.0 - progress * 70.0, 270.0), 190.0)?
             .stroke(1.5, color(PAPER).with_alpha(0.5)),
         title(color(PAPER)),
         // A band of ink sweeps through the title and inverts it.
@@ -303,7 +301,7 @@ fn closing(context: &SceneContext<'_>) -> Node {
         small_caps("NO. 07", 14.0, color(PAPER))
             .translate(824.0, 482.0)
             .opacity(math::smoothstep(0.4, 0.7, progress)),
-    ))
+    )))
 }
 
 #[cfg(test)]

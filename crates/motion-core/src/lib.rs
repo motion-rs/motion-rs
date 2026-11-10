@@ -74,9 +74,9 @@ pub use color::math::{
 };
 pub use display_list::{DisplayList, PixelSize, ValidatedDisplayList};
 pub use drawing::{
-    BlendMode, BlendSpace, Canvas, ClipMode, DrawCommand, DrawContext, Drawable, FillRule, LineCap,
-    LineJoin, MAX_STROKE_VERBS, MaskMode, Paint, PathClip, RectClip, RenderQuality, Shape,
-    ShapeClip, StrokeStyle, Styled,
+    BlendMode, BlendSpace, Canvas, ClipMode, DrawCommand, DrawContext, Drawable, FillRule,
+    IntoShapeClip, LineCap, LineJoin, MAX_STROKE_VERBS, MaskMode, Paint, PathClip, RectClip,
+    RenderQuality, Shape, ShapeClip, StrokeStyle, Styled,
 };
 pub use drawing::{
     GradientExtend, GradientSpace, GradientUnits, ImagePattern, LinearGradient, RadialGradient,
@@ -88,7 +88,7 @@ pub use geometry::bounds::{Pivot, Rect, Size};
 pub use geometry::{AngleLiteral, Point, Transform, TransformComponents, Vector2};
 pub use grading::{Cdl, ColorWheels, Lut1d, Lut3d, LutInput};
 pub use optics::{ApertureShape, HeightFrom, Optics};
-pub use path2d::{MAX_PATH_VERBS, MAX_SVG_PATH_BYTES, MorphPath, Path2D, PathVerb};
+pub use path2d::{MAX_PATH_VERBS, MAX_SVG_PATH_BYTES, MorphPath, Path2D, PathBuilder, PathVerb};
 pub use pixels::{ImagePixels, Sampling};
 pub use random::Random;
 pub use shape::{

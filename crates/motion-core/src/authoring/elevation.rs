@@ -20,7 +20,7 @@ pub struct ShadowLayer {
 /// offsets grow linearly with `height`, while opacity falls off smoothly.
 ///
 /// ```
-/// use motion_core::{Color, Elevation, NodeModifiers, Rect};
+/// use motion_core::{Color, Elevation, NodeModifiers, Rect, Shape};
 /// let card = Rect::new(0.0, 0.0, 80.0, 50.0).fill(Color::WHITE);
 /// let raised = card.elevated(Elevation::shadow(12.0)?);
 /// # let _ = raised;
@@ -155,6 +155,7 @@ pub(super) fn shadow_stack(
 mod tests {
     use super::*;
     use crate::Rect;
+    use crate::Shape;
 
     #[test]
     fn layers_grow_with_height_and_fade_in_opacity() {

@@ -1,5 +1,6 @@
 //! `DepthOfField::capture` must reach the renderer as per-plane bokeh blur.
 
+use motion_core::Shape;
 use motion_core::{
     Color, DepthOfField, DepthPlane, FrameRate, Node, PixelSize, RasterLimits, Rect, SceneCache,
     SceneContext, Size, Time, ValidationLimits,

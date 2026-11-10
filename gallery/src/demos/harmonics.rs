@@ -51,9 +51,9 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
                             350.0 - math::sin(fraction * TAU * frequency - phase) * 70.0,
                         );
                         if sample == 0 {
-                            path.move_to(point);
+                            path.try_move_to(point)?;
                         } else {
-                            path.line_to(point);
+                            path.try_line_to(point)?;
                         }
                     }
                     let cursor = (progress * 0.7 + 0.1).rem_euclid(1.0);
@@ -70,7 +70,7 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
                         equation.pivot(Pivot::Center).at(Point::new(480.0, 173.0)),
                         Rect::new(80.0, 350.0, 880.0, 351.0).fill(Color::from_hex(0xc0cfcb)),
                         path.stroke(3.0, Color::from_hex(0x188b75)),
-                        Circle::new(point, 7.0).fill(Color::from_hex(0xeb7257)),
+                        Circle::new(point, 7.0)?.fill(Color::from_hex(0xeb7257)),
                         Text::new("One rhythm becomes another.")
                             .size(17.0)
                             .fill(Color::from_hex(0x182628))

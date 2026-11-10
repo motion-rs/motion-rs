@@ -3,7 +3,9 @@
 use crate::{
     CaptionCue, CaptionTrack, FontLibrary, ParagraphLayout, Text, TextAlignment, TextSpan,
 };
-use motion_core::{Color, DrawContext, Node, NodeModifiers, Rect, Size, Time, ValidationError};
+use motion_core::{
+    Color, DrawContext, Node, NodeModifiers, Rect, Shape, Size, Time, ValidationError,
+};
 use std::sync::Arc;
 use unicode_segmentation::UnicodeSegmentation;
 

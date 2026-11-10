@@ -1,6 +1,7 @@
 //! Unit tests for layout stacks, alignment and measurement.
 
 use super::*;
+use crate::Shape;
 use crate::ValidationErrorKind;
 use crate::{
     Color, DrawCommand, NodeModifiers, Pivot, PixelSize, Point, Rect, Size, ValidationLimits,
@@ -15,8 +16,8 @@ fn real_baselines_align_in_measurement_and_compilation() -> crate::Result {
     struct TextTile(f64, f64, f64);
 
     impl crate::Drawable for TextTile {
-        fn bounds(&self, _: &crate::DrawContext) -> Rect {
-            Rect::new(0.0, 0.0, self.0, self.1)
+        fn bounds(&self, _: &crate::DrawContext) -> Result<Rect, ValidationError> {
+            Ok(Rect::new(0.0, 0.0, self.0, self.1))
         }
 
         fn baseline(&self, _: &crate::DrawContext) -> Option<f64> {
@@ -29,7 +30,7 @@ fn real_baselines_align_in_measurement_and_compilation() -> crate::Result {
             canvas: &mut crate::Canvas<'_>,
         ) -> Result<(), ValidationError> {
             canvas.fill(
-                &self.bounds(context),
+                &self.bounds(context)?,
                 crate::Color::WHITE,
                 crate::FillRule::NonZero,
             )

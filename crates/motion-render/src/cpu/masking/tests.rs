@@ -1,6 +1,7 @@
 use super::*;
 use crate::raster::prepare::RenderPrepare;
 use crate::{PreparedFrame, PreparedItem, RasterLimits};
+use motion_core::Shape;
 use motion_core::{
     BlendMode, Canvas, Color, DisplayList, DrawCommand, DrawContext, Drawable, MaskMode, Node,
     NodeModifiers, Path2D, PixelSize, Rect, Size, Transform, ValidationError, ValidationErrorKind,
@@ -839,8 +840,8 @@ fn mask_draw_callbacks_run_once_per_occurrence_and_not_during_measurement() {
     struct Counted(Arc<AtomicUsize>);
 
     impl Drawable for Counted {
-        fn bounds(&self, _: &DrawContext) -> Rect {
-            Rect::new(0.0, 0.0, 2.0, 1.0)
+        fn bounds(&self, _: &DrawContext) -> Result<Rect, ValidationError> {
+            Ok(Rect::new(0.0, 0.0, 2.0, 1.0))
         }
 
         fn draw(&self, _: &DrawContext, canvas: &mut Canvas<'_>) -> Result<(), ValidationError> {

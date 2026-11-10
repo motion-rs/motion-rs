@@ -6,6 +6,7 @@ use kurbo::Shape as _;
 
 use crate::{Pivot, Point, Rect, Transform, ValidationError, Vector2};
 
+mod builder;
 mod construction;
 mod editing;
 mod metrics;
@@ -14,6 +15,7 @@ mod morph;
 mod tests;
 mod validation;
 
+pub use builder::PathBuilder;
 pub use morph::MorphPath;
 
 /// Maximum stored verbs in one path; mutations beyond it fail atomically.
@@ -52,8 +54,9 @@ impl PathVerb {
 
 /// A cheaply cloned, checked f64 path with lazily cached geometric bounds.
 ///
-/// Chainable mutations retain their first diagnostic for compile-time validation.
-/// The `try_` methods return failures immediately and leave the snapshot unchanged.
+/// A path is always valid: the `try_` methods return failures immediately and
+/// leave the snapshot unchanged, and [`PathBuilder`] reports its first failure
+/// from [`PathBuilder::build`].
 /// Bounds include move positions and curve extrema, not the curve control hull.
 /// Empty paths have zero bounds at the origin. SVG path data imports through
 /// [`Self::parse_svg`]. Arc lengths use cached bounded Gaussian integration;
@@ -67,10 +70,11 @@ impl PathVerb {
 ///     DisplayList, RasterLimits, ResourcePool, ValidatedDisplayList, MAX_PATH_VERBS,
 ///     MAX_STROKE_VERBS, MAX_SVG_PATH_BYTES, sample_offsets,
 /// };
-/// let mut path = Path2D::new();
-/// path.move_to(Point::ORIGIN)
+/// let path = Path2D::builder()
+///     .move_to(Point::ORIGIN)
 ///     .quadratic_to(Point::new(10.0, 20.0), Point::new(20.0, 0.0))
-///     .close();
+///     .close()
+///     .build()?;
 /// assert_eq!(path.bounding_box(), Rect::new(0.0, 0.0, 20.0, 10.0));
 /// let node = path
 ///     .fill(Color::from_hex(0x24a49b))
@@ -104,7 +108,6 @@ type StrokeCache = Arc<Mutex<Vec<([u64; 4], PathData)>>>;
 
 #[derive(Clone, Debug, Default)]
 struct PathData {
-    error: Option<ValidationError>,
     verbs: Arc<Vec<PathVerb>>,
     hull: Option<Rect>,
     current: Option<Point>,
@@ -117,14 +120,19 @@ struct PathData {
 
 impl PartialEq for Path2D {
     fn eq(&self, other: &Self) -> bool {
-        self.verbs() == other.verbs() && self.data.error == other.data.error
+        self.verbs() == other.verbs()
     }
 }
 
 impl Path2D {
-    /// Creates an empty chainable path without paint.
+    /// Creates an empty path without paint.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Starts a chainable builder that reports its first error from `build`.
+    pub fn builder() -> PathBuilder {
+        PathBuilder::new()
     }
 
     /// Returns the immutable absolute f64 verbs.
@@ -139,7 +147,6 @@ impl Path2D {
 
     /// Maps all endpoints and controls without flattening or modifying this path.
     pub fn transformed(&self, transform: &Transform) -> Result<Self, ValidationError> {
-        self.validate()?;
         if !transform.is_finite() {
             return Err(invalid("transform", "Path transform must be finite"));
         }
@@ -172,9 +179,6 @@ impl Path2D {
     /// Bounds of a single nondegenerate four-edge axis-aligned closed contour.
     /// Curves, extra contours, retraced edges and nonrectangular paths return None.
     pub fn axis_aligned_rectangle(&self) -> Option<Rect> {
-        if self.data.error.is_some() {
-            return None;
-        }
         let [
             PathVerb::MoveTo(first),
             PathVerb::LineTo(second),

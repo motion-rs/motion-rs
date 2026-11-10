@@ -432,18 +432,24 @@ impl AnimatedImage {
 }
 
 impl motion_core::Drawable for AnimatedImage {
-    fn bounds(&self, context: &motion_core::DrawContext) -> motion_core::Rect {
+    fn bounds(
+        &self,
+        context: &motion_core::DrawContext,
+    ) -> Result<motion_core::Rect, ValidationError> {
         if !self.radius.is_finite() || self.radius < 0.0 {
-            return motion_core::Rect::new(f64::NAN, 0.0, 0.0, 0.0);
+            return Err(invalid(
+                "corner_radius",
+                "Animated image corner radius must be finite and nonnegative",
+            ));
         }
         match self.asset() {
             Ok(asset) => {
                 motion_core::Drawable::bounds(&self.picture(asset.frames[0].clone()), context)
             }
-            Err(_) => self
+            Err(_) => Ok(self
                 .size
                 .unwrap_or(motion_core::Size::new(64.0, 64.0))
-                .to_rect(),
+                .to_rect()),
         }
     }
 
@@ -460,7 +466,7 @@ impl motion_core::Drawable for AnimatedImage {
                 None => Ok(()),
             },
             Err(_) => canvas.fill(
-                &motion_core::Drawable::bounds(self, context),
+                &motion_core::Drawable::bounds(self, context)?,
                 motion_core::Color::rgb(255, 0, 255),
                 motion_core::FillRule::NonZero,
             ),

@@ -422,7 +422,6 @@ pub fn validate_path(
     transform: Transform,
     path: &str,
 ) -> Result<(), ValidationError> {
-    geometry.validate()?;
     if !transform.is_finite() {
         return Err(ValidationError::invalid(
             path,

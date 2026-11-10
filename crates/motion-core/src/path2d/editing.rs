@@ -1,23 +1,12 @@
-//! Chainable and fallible path-building operations, including elliptical arcs.
+//! Fallible path-building operations, including elliptical arcs.
 
 use super::{MAX_PATH_VERBS, Path2D, PathVerb, invalid};
 use crate::{Point, ValidationError, Vector2};
-use std::sync::Arc;
 
 impl Path2D {
-    /// Starts a subpath; invalid input is reported when the path is compiled.
-    pub fn move_to(&mut self, point: Point) -> &mut Self {
-        self.author(PathVerb::MoveTo(point))
-    }
-
     /// Starts a new subpath.
     pub fn try_move_to(&mut self, point: Point) -> Result<(), ValidationError> {
         self.push(PathVerb::MoveTo(point))
-    }
-
-    /// Adds a line, deferring invalid state or coordinates to compilation.
-    pub fn line_to(&mut self, point: Point) -> &mut Self {
-        self.author(PathVerb::LineTo(point))
     }
 
     /// Adds a line; requires a preceding move.
@@ -25,19 +14,9 @@ impl Path2D {
         self.push(PathVerb::LineTo(point))
     }
 
-    /// Adds a quadratic curve, deferring invalid input to compilation.
-    pub fn quadratic_to(&mut self, control: Point, end: Point) -> &mut Self {
-        self.author(PathVerb::QuadraticTo(control, end))
-    }
-
     /// Adds a quadratic Bezier; requires a preceding move.
     pub fn try_quadratic_to(&mut self, control: Point, end: Point) -> Result<(), ValidationError> {
         self.push(PathVerb::QuadraticTo(control, end))
-    }
-
-    /// Adds a cubic curve, deferring invalid input to compilation.
-    pub fn cubic_to(&mut self, first: Point, second: Point, end: Point) -> &mut Self {
-        self.author(PathVerb::CubicTo(first, second, end))
     }
 
     /// Adds a cubic Bezier; requires a preceding move.
@@ -50,22 +29,6 @@ impl Path2D {
         self.push(PathVerb::CubicTo(first, second, end))
     }
 
-    /// Appends an arc and retains the first invalid input for compile-time reporting.
-    pub fn arc_to(
-        &mut self,
-        center: Point,
-        radii: Vector2,
-        start_angle: f64,
-        sweep_angle: f64,
-    ) -> &mut Self {
-        if self.data.error.is_none()
-            && let Err(error) = self.try_arc_to(center, radii, start_angle, sweep_angle)
-        {
-            Arc::make_mut(&mut self.data).error = Some(error);
-        }
-        self
-    }
-
     /// Appends a clockwise elliptical arc in radians, connecting to its start.
     /// Radii must be finite and nonnegative. Cubics span at most pi/8 radians;
     /// errors, including exhausted verb limits, leave the path unchanged.
@@ -74,12 +37,12 @@ impl Path2D {
     /// ```
     /// use motion_core::{Path2D, Point, Vector2};
     /// let mut path = Path2D::new();
-    /// path.arc_to(
+    /// path.try_arc_to(
     ///     Point::ORIGIN,
     ///     Vector2::new(4.0, 4.0),
     ///     0.0,
     ///     std::f64::consts::FRAC_PI_2,
-    /// );
+    /// )?;
     /// assert!((path.length() - 2.0 * std::f64::consts::PI).abs() < 1e-6);
     /// let middle = path.trim(0.25, 0.75);
     /// assert!((middle.length() - path.length() * 0.5).abs() < 1e-7);
@@ -172,28 +135,8 @@ impl Path2D {
         Ok(())
     }
 
-    /// Closes the current contour, deferring invalid state to compilation.
-    pub fn close(&mut self) -> &mut Self {
-        self.author(PathVerb::Close)
-    }
-
     /// Closes the current subpath; requires a preceding move.
     pub fn try_close(&mut self) -> Result<(), ValidationError> {
         self.push(PathVerb::Close)
-    }
-
-    /// Closes and returns this path for direct styling.
-    pub fn closed(mut self) -> Self {
-        self.close();
-        self
-    }
-
-    fn author(&mut self, verb: PathVerb) -> &mut Self {
-        if let Err(error) = self.push(verb)
-            && self.data.error.is_none()
-        {
-            Arc::make_mut(&mut self.data).error = Some(error);
-        }
-        self
     }
 }

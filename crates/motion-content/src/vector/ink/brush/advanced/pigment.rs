@@ -155,12 +155,7 @@ pub struct PigmentPainting {
 }
 
 impl Drawable for PigmentPainting {
-    fn bounds(&self, context: &DrawContext) -> Rect {
-        self.try_bounds(context)
-            .unwrap_or(Rect::new(0.0, 0.0, 0.0, 0.0))
-    }
-
-    fn try_bounds(&self, _: &DrawContext) -> Result<Rect, ValidationError> {
+    fn bounds(&self, _: &DrawContext) -> Result<Rect, ValidationError> {
         if !(1..=32).contains(&self.strokes.len()) {
             return Err(invalid("pigment_strokes", "Require 1..=32 pigment strokes"));
         }
@@ -172,7 +167,7 @@ impl Drawable for PigmentPainting {
     }
 
     fn draw(&self, context: &DrawContext, canvas: &mut Canvas<'_>) -> Result<(), ValidationError> {
-        let bounds = self.try_bounds(context)?;
+        let bounds = self.bounds(context)?;
         let prepared = self
             .prepared
             .get_or_init(|| {

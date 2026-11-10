@@ -3,7 +3,7 @@ use motion_core::{Shape, TimeLiteral};
 
 #[test]
 fn emitters_modifiers_paths_and_surfaces_share_fixed_step_protocol() -> motion_core::Result<()> {
-    let path = Arc::new(motion_core::Line::new(Point::ORIGIN, Point::new(10.0, 0.0)).path());
+    let path = Arc::new(motion_core::Line::new(Point::ORIGIN, Point::new(10.0, 0.0))?.path()?);
     let emitters: Vec<Box<dyn ParticleEmitter>> = vec![
         Box::new(PointEmitter::new(Point::ORIGIN)),
         Box::new(DiskEmitter::new(Point::ORIGIN, 3.0)),

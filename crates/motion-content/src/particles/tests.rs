@@ -246,7 +246,8 @@ fn image_density_color_and_animated_path_are_deterministic() -> motion_core::Res
         .is_err()
     );
     let mut path = Path2D::new();
-    path.move_to(Point::ORIGIN).line_to(Point::new(10.0, 0.0));
+    path.try_move_to(Point::ORIGIN)?;
+    path.try_line_to(Point::new(10.0, 0.0))?;
     let emitter = PathEmitter::new(Arc::new(path))
         .along_path(Constant::new(0.25))
         .speed(2.0);

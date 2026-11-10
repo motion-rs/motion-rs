@@ -125,7 +125,7 @@ pub(super) const PAGES: &[Page] = &[
 ];
 
 pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
-    let path = comparison_path();
+    let path = comparison_path()?;
     atlas::timeline(
         parameters,
         METADATA,
@@ -216,9 +216,9 @@ fn preset_node(
     })
 }
 
-fn comparison_path() -> Path2D {
-    let mut path = Path2D::new();
-    path.move_to(Point::new(12.0, 65.0))
+fn comparison_path() -> Result<Path2D, ValidationError> {
+    Path2D::builder()
+        .move_to(Point::new(12.0, 65.0))
         .cubic_to(
             Point::new(110.0, -30.0),
             Point::new(230.0, 10.0),
@@ -238,8 +238,8 @@ fn comparison_path() -> Path2D {
             Point::new(405.0, 26.0),
             Point::new(450.0, 27.0),
             Point::new(500.0, 66.0),
-        );
-    path
+        )
+        .build()
 }
 
 fn preset_color(preset: BrushPreset) -> Color {
@@ -358,12 +358,14 @@ mod tests {
 
     #[test]
     fn configured_budget_preserves_builtin_preset_compositing() -> motion::Result {
-        let mut path = Path2D::new();
-        path.move_to(Point::new(24.0, 48.0)).cubic_to(
-            Point::new(42.0, 14.0),
-            Point::new(70.0, 82.0),
-            Point::new(102.0, 44.0),
-        );
+        let path = Path2D::builder()
+            .move_to(Point::new(24.0, 48.0))
+            .cubic_to(
+                Point::new(42.0, 14.0),
+                Point::new(70.0, 82.0),
+                Point::new(102.0, 44.0),
+            )
+            .build()?;
         let options = RenderOptions::default()
             .backend(BackendPreference::Cpu)
             .size(PixelSize::new(128, 96));

@@ -39,10 +39,7 @@ impl Compiler<'_> {
             .ok()?;
         let varying = progress.varying() || style.varying();
         Some(Built::new(varying, move |time| {
-            match source.try_interpolate(&target, progress.at(time)) {
-                Ok(shape) => style.shape(shape, time),
-                Err(error) => failure(error),
-            }
+            style.shape(source.try_interpolate(&target, progress.at(time)), time)
         }))
     }
 

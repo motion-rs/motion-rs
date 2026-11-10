@@ -1,6 +1,7 @@
 use super::*;
 use crate::raster::prepare::RenderPrepare;
 use crate::{RenderContext, Renderer};
+use motion_core::Shape;
 use motion_core::ValidationErrorKind;
 use motion_core::{Color, Filter, NodeModifiers, Rect, ValidationLimits};
 
@@ -557,8 +558,11 @@ fn cpu_failures_tag_the_requested_frame_and_preserve_session_reuse() -> Result {
     struct Unsupported;
 
     impl motion_core::Drawable for Unsupported {
-        fn bounds(&self, _: &motion_core::DrawContext) -> motion_core::Rect {
-            motion_core::Rect::new(0.0, 0.0, 1.0, 1.0)
+        fn bounds(
+            &self,
+            _: &motion_core::DrawContext,
+        ) -> std::result::Result<motion_core::Rect, motion_core::ValidationError> {
+            Ok(motion_core::Rect::new(0.0, 0.0, 1.0, 1.0))
         }
 
         fn draw(

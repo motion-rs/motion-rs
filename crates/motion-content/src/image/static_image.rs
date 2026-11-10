@@ -134,7 +134,17 @@ impl Image {
         }
     }
 
-    fn bounds(&self, context: &motion_core::DrawContext) -> motion_core::Rect {
+    fn layout_bounds(
+        &self,
+        context: &motion_core::DrawContext,
+    ) -> Result<motion_core::Rect, motion_core::ValidationError> {
+        if !self.radius.is_finite() || self.radius < 0.0 {
+            return Err(motion_core::ValidationError::invalid(
+                "image",
+                "corner_radius",
+                "Image corner radius must be finite and nonnegative",
+            ));
+        }
         let size = self.size.unwrap_or_else(|| {
             self.image(context)
                 .map(|image| {
@@ -142,16 +152,16 @@ impl Image {
                 })
                 .unwrap_or(motion_core::Size::new(64.0, 64.0))
         });
-        if !self.radius.is_finite() || self.radius < 0.0 {
-            return motion_core::Rect::new(f64::NAN, 0.0, 0.0, 0.0);
-        }
-        size.to_rect()
+        Ok(size.to_rect())
     }
 }
 
 impl motion_core::Drawable for Image {
-    fn bounds(&self, context: &motion_core::DrawContext) -> motion_core::Rect {
-        self.bounds(context)
+    fn bounds(
+        &self,
+        context: &motion_core::DrawContext,
+    ) -> Result<motion_core::Rect, motion_core::ValidationError> {
+        self.layout_bounds(context)
     }
 
     fn draw(
@@ -159,8 +169,8 @@ impl motion_core::Drawable for Image {
         context: &motion_core::DrawContext,
         canvas: &mut motion_core::Canvas<'_>,
     ) -> Result<(), motion_core::ValidationError> {
-        let bounds = self.bounds(context);
-        let shape = motion_core::RoundedRect::new(bounds, self.radius);
+        let bounds = self.layout_bounds(context)?;
+        let shape = motion_core::RoundedRect::new(bounds, self.radius)?;
         match self.image(context) {
             Ok(image) => {
                 if bounds.width() == 0.0 || bounds.height() == 0.0 {

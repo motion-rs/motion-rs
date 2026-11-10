@@ -171,10 +171,10 @@ fn callbacks_receive_actual_device_scale_exactly_once_per_occurrence() {
     }
 
     impl Drawable for Counted {
-        fn bounds(&self, context: &DrawContext) -> Rect {
+        fn bounds(&self, context: &DrawContext) -> Result<Rect, ValidationError> {
             self.bounds.fetch_add(1, Ordering::SeqCst);
             assert_eq!(context.device_scale(), 2.0);
-            Rect::new(0.0, 0.0, 10.0, 20.0)
+            Ok(Rect::new(0.0, 0.0, 10.0, 20.0))
         }
 
         fn draw(
@@ -284,8 +284,8 @@ fn transparent_commands_still_validate_actual_global_geometry_and_repeats() {
     struct BadBounds;
 
     impl Drawable for BadBounds {
-        fn bounds(&self, _: &DrawContext) -> Rect {
-            Rect::new(0.0, 0.0, 1.0, 1.0)
+        fn bounds(&self, _: &DrawContext) -> Result<Rect, ValidationError> {
+            Ok(Rect::new(0.0, 0.0, 1.0, 1.0))
         }
 
         fn draw(&self, _: &DrawContext, canvas: &mut Canvas<'_>) -> Result<(), ValidationError> {

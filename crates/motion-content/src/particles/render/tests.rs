@@ -1,5 +1,6 @@
 use super::*;
 use crate::asset::AssetsExt;
+use motion_core::Shape;
 use motion_core::{
     DrawCommand, NodeModifiers, PixelSize, RasterLimits, Size, TimeLiteral, ValidationLimits,
 };
@@ -592,8 +593,8 @@ fn instance_styles_are_not_paths_and_respect_budget_and_custom_callbacks() -> mo
     struct Ignored(Arc<dyn motion_core::instances::InstanceBatch>);
 
     impl Drawable for Ignored {
-        fn bounds(&self, _: &motion_core::DrawContext) -> Rect {
-            self.0.bounds()
+        fn bounds(&self, _: &motion_core::DrawContext) -> Result<Rect, ValidationError> {
+            Ok(self.0.bounds())
         }
 
         fn draw(
@@ -667,7 +668,9 @@ fn instance_styles_are_not_paths_and_respect_budget_and_custom_callbacks() -> mo
             .is_empty()
     );
     let custom = system.style(ParticleStyle::Custom(Arc::new(|particles, _| {
-        Node::from(Rect::new(0.0, 0.0, particles.len() as f64, 1.0).fill(motion_core::Color::WHITE))
+        Ok(Node::from(
+            Rect::new(0.0, 0.0, particles.len() as f64, 1.0).fill(motion_core::Color::WHITE),
+        ))
     })));
     assert!(
         prepared(custom.try_render(&context)?)?
@@ -1146,18 +1149,23 @@ mod gpu {
                 max_distance: 5.0,
             },
             ParticleStyle::Custom(Arc::new(|particles, _| {
-                Node::group(particles.iter().map(|particle| {
-                    Node::from(
-                        motion_core::Circle::new(
-                            Point::new(
-                                f64::from(particle.position[0]),
-                                f64::from(particle.position[1]),
-                            ),
-                            1.0,
-                        )
-                        .fill(motion_core::Color::WHITE),
-                    )
-                }))
+                Ok(Node::group(
+                    particles
+                        .iter()
+                        .map(|particle| {
+                            Ok(Node::from(
+                                motion_core::Circle::new(
+                                    Point::new(
+                                        f64::from(particle.position[0]),
+                                        f64::from(particle.position[1]),
+                                    ),
+                                    1.0,
+                                )?
+                                .fill(motion_core::Color::WHITE),
+                            ))
+                        })
+                        .collect::<Result<Vec<_>, motion_core::ValidationError>>()?,
+                ))
             })),
         ];
         let cache = motion_core::SceneCache::new(0);

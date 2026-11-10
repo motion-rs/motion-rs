@@ -190,18 +190,6 @@ const policies = [
     "Supported targets have at most 64-bit usize, so a slice length fits u64.",
   ],
   [
-    "motion-core/src/shape.rs",
-    ["Shape::path requires valid rectangle geometry"],
-    "convenience-panic",
-    "Rect's Shape::path is the panicking convenience boundary; Path2D::from_rect returns validation errors for dynamic geometry.",
-  ],
-  [
-    "motion-core/src/shape/primitives.rs",
-    ["Shape::path requires valid geometry"],
-    "convenience-panic",
-    "Shape::path is the panicking convenience boundary; try_path handles invalid geometry.",
-  ],
-  [
     "motion-core/src/time.rs",
     [
       "frame time exceeds the signed tick range",

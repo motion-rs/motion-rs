@@ -1,4 +1,5 @@
 use super::*;
+use motion_core::Shape;
 use motion_core::{Color, Node, NodeModifiers, Rect, ValidationLimits};
 
 fn frame(node: &Node) -> PreparedFrame {

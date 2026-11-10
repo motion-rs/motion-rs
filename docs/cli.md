@@ -18,9 +18,9 @@ fn main() -> std::process::ExitCode {
     Project::new("motion")
         .timeline("motion", || {
             Timeline::new(Size::new(640.0, 360.0), 30).track(|track| {
-                track.scene(3.seconds(), |context| {
+                track.scene(3.seconds(), |context| -> motion::Result<_> {
                     let x = context.sample(&Tween::new(80.0, 560.0, 3.seconds()));
-                    Circle::new(Point::new(x, 180.0), 32.0).fill(Color::rgb(20, 160, 130))
+                    Ok(Circle::new(Point::new(x, 180.0), 32.0)?.fill(Color::rgb(20, 160, 130)))
                 })
             })
         })

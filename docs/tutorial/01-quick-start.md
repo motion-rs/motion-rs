@@ -39,13 +39,13 @@ use motion::render::{Bitmap};
 
 fn main() -> motion::Result {
     let timeline = Timeline::new(Size::new(640.0, 360.0), 30).track(|track| {
-        track.scene(3.seconds(), |context| {
+        track.scene(3.seconds(), |context| -> motion::Result<_> {
             let horizontal = context.sample(&Tween::new(80.0, 560.0, 3.seconds()));
-            (
+            Ok((
                 Rect::new(0.0, 0.0, 640.0, 360.0).fill(Color::rgb(245, 248, 246)),
-                Circle::new(Point::new(horizontal, 180.0), 32.0)
+                Circle::new(Point::new(horizontal, 180.0), 32.0)?
                     .fill(Color::rgb(20, 160, 130)),
-            )
+            ))
         })
     }).build()?;
     let bitmap = render_still(
@@ -71,11 +71,11 @@ fn main() -> std::process::ExitCode {
     Project::new("tutorial")
         .timeline("intro", || {
             Timeline::new(Size::new(640.0, 360.0), 30).track(|track| {
-                track.scene(3.seconds(), |context| {
+                track.scene(3.seconds(), |context| -> motion::Result<_> {
                     let horizontal =
                         context.sample(&Tween::new(80.0, 560.0, 3.seconds()));
-                    Circle::new(Point::new(horizontal, 180.0), 32.0)
-                        .fill(Color::rgb(20, 160, 130))
+                    Ok(Circle::new(Point::new(horizontal, 180.0), 32.0)?
+                        .fill(Color::rgb(20, 160, 130)))
                 })
             })
         })

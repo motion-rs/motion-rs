@@ -1,7 +1,7 @@
 //! GPU context creation, device-limit validation of plans and render pipeline setup.
 
 use super::*;
-use motion_core::{PixelSize, ValidationError};
+use motion_core::{PixelSize, Shape, ValidationError};
 
 mod batch;
 pub(in crate::gpu) mod textures;

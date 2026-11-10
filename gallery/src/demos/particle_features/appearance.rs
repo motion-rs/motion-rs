@@ -423,22 +423,22 @@ pub(super) fn custom(parameters: DemoParameters) -> motion::Result<Study> {
                     .lifetime(3.8.seconds()),
             )
             .style(ParticleStyle::Custom(Arc::new(|particles, _| {
-                Node::group(
+                Ok(Node::group(
                     particles
                         .iter()
                         .map(|particle| {
-                            Circle::new(
+                            Ok(Circle::new(
                                 Point::new(
                                     f64::from(particle.position[0]),
                                     f64::from(particle.position[1]),
                                 ),
                                 3.0 + math::sin(f64::from(particle.age) * 4.0),
-                            )
+                            )?
                             .fill(Color::from_hex(0x67dabb))
-                            .into()
+                            .into())
                         })
-                        .collect::<Vec<Node>>(),
-                )
+                        .collect::<Result<Vec<Node>, ValidationError>>()?,
+                ))
             }))),
     ))
 }

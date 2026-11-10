@@ -182,12 +182,7 @@ impl Drawable for Formula {
         self.node(context).map(Some)
     }
 
-    fn bounds(&self, context: &DrawContext) -> Rect {
-        self.try_bounds(context)
-            .unwrap_or(Rect::new(f64::NAN, 0.0, 0.0, 0.0))
-    }
-
-    fn try_bounds(&self, context: &DrawContext) -> Result<Rect, ValidationError> {
+    fn bounds(&self, context: &DrawContext) -> Result<Rect, ValidationError> {
         self.node(context)?
             .measure_with(context, motion_core::ValidationLimits::default())
     }

@@ -45,7 +45,7 @@ fn render(
         _ => {}
     }
     if let ParticleStyle::Custom(callback) = style {
-        return Ok(callback(&states, context));
+        return callback(&states, context);
     }
     let extent = match style {
         ParticleStyle::Dots { radius }

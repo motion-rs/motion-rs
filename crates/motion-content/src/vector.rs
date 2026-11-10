@@ -90,12 +90,7 @@ impl VectorPath {
 }
 
 impl Drawable for VectorPath {
-    fn bounds(&self, context: &DrawContext) -> Rect {
-        self.try_bounds(context)
-            .unwrap_or(Rect::new(f64::NAN, 0.0, 0.0, 0.0))
-    }
-
-    fn try_bounds(&self, _: &DrawContext) -> Result<Rect, ValidationError> {
+    fn bounds(&self, _: &DrawContext) -> Result<Rect, ValidationError> {
         let mut bounds = self.path.bounding_box();
         if let Some((style, _)) = &self.stroke {
             bounds = bounds.union(
@@ -175,8 +170,8 @@ impl VectorImage {
 }
 
 impl Drawable for VectorImage {
-    fn bounds(&self, _: &DrawContext) -> Rect {
-        self.rect
+    fn bounds(&self, _: &DrawContext) -> Result<Rect, ValidationError> {
+        Ok(self.rect)
     }
 
     fn draw(
@@ -463,8 +458,8 @@ impl VectorTree {
 struct TextBounds(Rect);
 
 impl Drawable for TextBounds {
-    fn bounds(&self, _: &DrawContext) -> Rect {
-        self.0
+    fn bounds(&self, _: &DrawContext) -> Result<Rect, ValidationError> {
+        Ok(self.0)
     }
 
     fn draw(

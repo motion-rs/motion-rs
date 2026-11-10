@@ -12,7 +12,7 @@ mod canonical_api_tests {
     #[test]
     fn tuple_groups_support_sixteen_items_empty_groups_and_snapshot_push() -> motion::Result {
         let sixteen = Node::group((
-            Circle::new(Point::new(2.0, 2.0), 1.0).fill(Color::WHITE),
+            Circle::new(Point::new(2.0, 2.0), 1.0)?.fill(Color::WHITE),
             Node::empty(),
             Node::empty(),
             Node::empty(),
@@ -102,7 +102,7 @@ mod canonical_api_tests {
                     let progress = context.ease_in(Time::ZERO, 1.seconds(), Easing::Linear);
                     Ok((
                         title,
-                        Circle::new(Point::new(4.0, 2.0), math::lerp(&0.5, &1.0, progress))
+                        Circle::new(Point::new(4.0, 2.0), math::lerp(&0.5, &1.0, progress))?
                             .fill(Color::BLACK),
                     ))
                 })

@@ -40,19 +40,16 @@ impl<'a> Canvas<'a> {
         paint: impl Into<Paint>,
         rule: FillRule,
     ) -> Result<(), ValidationError> {
-        let result = geometry
-            .validate()
-            .and_then(|_| {
-                crate::display_list::mapped_bounds(geometry.bounding_box(), transform, self.path)
-            })
-            .and_then(|_| {
-                self.push(DrawCommand::Fill {
-                    path: geometry,
-                    transform,
-                    paint: paint.into(),
-                    rule,
-                })
-            });
+        let result =
+            crate::display_list::mapped_bounds(geometry.bounding_box(), transform, self.path)
+                .and_then(|_| {
+                    self.push(DrawCommand::Fill {
+                        path: geometry,
+                        transform,
+                        paint: paint.into(),
+                        rule,
+                    })
+                });
         if let Err(error) = &result {
             self.error = Some(error.clone());
         }
@@ -97,11 +94,14 @@ impl<'a> Canvas<'a> {
         if let Some(error) = &self.error {
             return Err(error.clone());
         }
-        if let Err(error) = shape.validate() {
-            self.error = Some(error.clone());
-            return Err(error);
-        }
-        if let Err(mut error) = validate_rect(shape.bounding_box(), "", "bounds") {
+        let bounds = match shape.bounding_box() {
+            Ok(bounds) => bounds,
+            Err(error) => {
+                self.error = Some(error.clone());
+                return Err(error);
+            }
+        };
+        if let Err(mut error) = validate_rect(bounds, "", "bounds") {
             error.path = format!("{}.commands[{}]", self.path, self.commands.len());
             self.error = Some(error.clone());
             return Err(error);
@@ -110,8 +110,15 @@ impl<'a> Canvas<'a> {
         if let Some(bounds) = shape.as_rect() {
             return self.fill_rect(bounds, paint);
         }
+        let path = match shape.path() {
+            Ok(path) => path,
+            Err(error) => {
+                self.error = Some(error.clone());
+                return Err(error);
+            }
+        };
         self.push(DrawCommand::Fill {
-            path: Arc::new(shape.path()),
+            path: Arc::new(path),
             transform: Transform::IDENTITY,
             paint,
             rule,
@@ -135,9 +142,8 @@ impl<'a> Canvas<'a> {
         let path = format!("{}.commands[{}].stroke", self.path, self.commands.len());
         let result = (|| {
             style.validate(&path)?;
-            shape.validate()?;
-            validate_rect(shape.bounding_box(), &path, "bounds")?;
-            let geometry = shape.path();
+            validate_rect(shape.bounding_box()?, &path, "bounds")?;
+            let geometry = shape.path()?;
             for index in 0..geometry.verbs().len() {
                 self.state
                     .enter_with(|| format!("{path}.source.verbs[{index}]"), self.depth)?;

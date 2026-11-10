@@ -66,11 +66,7 @@ impl Transition for std::sync::Arc<dyn Transition> {
 struct Failure(crate::ValidationError);
 
 impl crate::Drawable for Failure {
-    fn bounds(&self, _: &crate::DrawContext) -> Rect {
-        Rect::default()
-    }
-
-    fn try_bounds(&self, _: &crate::DrawContext) -> Result<Rect, crate::ValidationError> {
+    fn bounds(&self, _: &crate::DrawContext) -> Result<Rect, crate::ValidationError> {
         Err(self.0.clone())
     }
 
@@ -336,10 +332,12 @@ impl Transition for Iris {
         }
         let center = context.center();
         let mask = match self.shape {
-            IrisShape::Circle => Node::from(
-                crate::Circle::new(center, libm::hypot(center.x, center.y) * progress)
-                    .fill(Color::WHITE),
-            ),
+            IrisShape::Circle => {
+                match crate::Circle::new(center, libm::hypot(center.x, center.y) * progress) {
+                    Ok(circle) => Node::from(circle.fill(Color::WHITE)),
+                    Err(error) => return diagnostic(error),
+                }
+            }
             IrisShape::Rectangle => Node::from(
                 Rect::new(
                     center.x * (1.0 - progress),

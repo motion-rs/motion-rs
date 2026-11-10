@@ -139,17 +139,17 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
         let color = Color::from_hex(atlas::MINT);
         let bounds = Rect::new(40.0, 52.0, 472.0, 252.0);
         Ok(match page {
-            0 => curve()
+            0 => curve()?
                 .stroke(7.0, color)
                 .trim(0.0, 0.1 + 0.9 * progress)
                 .into(),
-            1 => curve()
+            1 => curve()?
                 .stroke(7.0, color)
                 .dash(&[18.0, 10.0, 3.0, 10.0], progress * 100.0)
                 .into(),
-            2 | 3 => stroke_styles(page, progress),
+            2 | 3 => stroke_styles(page, progress)?,
             4 => {
-                let path = nested_path();
+                let path = nested_path()?;
                 Node::group([
                     path.clone()
                         .fill(color)
@@ -213,24 +213,26 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
     })
 }
 
-fn curve() -> Path2D {
-    let mut path = Path2D::new();
-    path.move_to(Point::new(48.0, 212.0)).cubic_to(
-        Point::new(140.0, -20.0),
-        Point::new(350.0, 330.0),
-        Point::new(464.0, 80.0),
-    );
-    path
+fn curve() -> Result<Path2D, ValidationError> {
+    Path2D::builder()
+        .move_to(Point::new(48.0, 212.0))
+        .cubic_to(
+            Point::new(140.0, -20.0),
+            Point::new(350.0, 330.0),
+            Point::new(464.0, 80.0),
+        )
+        .build()
 }
 
-fn stroke_styles(page: usize, progress: f64) -> Node {
+fn stroke_styles(page: usize, progress: f64) -> motion::Result<Node> {
     let mut nodes = Vec::new();
     for index in 0..3 {
         let left = 40.0 + index as f64 * 160.0;
-        let mut path = Path2D::new();
-        path.move_to(Point::new(left, 198.0))
+        let path = Path2D::builder()
+            .move_to(Point::new(left, 198.0))
             .line_to(Point::new(left + 60.0, 96.0 + progress * 30.0))
-            .line_to(Point::new(left + 120.0, 198.0));
+            .line_to(Point::new(left + 120.0, 198.0))
+            .build()?;
         let cap = [LineCap::Butt, LineCap::Round, LineCap::Square][index];
         let join = [
             LineJoin::Miter { limit: 6.0 },
@@ -257,19 +259,19 @@ fn stroke_styles(page: usize, progress: f64) -> Node {
             244.0,
         ));
     }
-    Node::group(nodes)
+    Ok(Node::group(nodes))
 }
 
-fn nested_path() -> Path2D {
+fn nested_path() -> Result<Path2D, ValidationError> {
     let mut path = Path2D::new();
     for (left, top, right, bottom) in [(176.0, 72.0, 336.0, 232.0), (216.0, 112.0, 296.0, 192.0)] {
-        path.move_to(Point::new(left, top))
-            .line_to(Point::new(right, top))
-            .line_to(Point::new(right, bottom))
-            .line_to(Point::new(left, bottom))
-            .close();
+        path.try_move_to(Point::new(left, top))?;
+        path.try_line_to(Point::new(right, top))?;
+        path.try_line_to(Point::new(right, bottom))?;
+        path.try_line_to(Point::new(left, bottom))?;
+        path.try_close()?;
     }
-    path
+    Ok(path)
 }
 
 fn extensions(progress: f64) -> Node {

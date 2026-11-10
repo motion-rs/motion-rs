@@ -12,7 +12,7 @@ mod scenes {
             use super::*;
             use motion::extend::DrawContext;
             use motion::render::Composition;
-            use motion::{Color, Filter, MaskMode, Node, NodeModifiers, Rect, Size};
+            use motion::{Color, Filter, MaskMode, Node, NodeModifiers, Rect, Shape, Size};
 
             fn rectangle() -> Node {
                 Rect::new(0.0, 0.0, 12.0, 8.0).fill(Color::WHITE).into()

@@ -568,47 +568,47 @@ mod drawing {
         use motion::prelude::*;
         use motion::render::*;
 
-        fn sample_paths() -> Vec<Path2D> {
+        fn sample_paths() -> Result<Vec<Path2D>, ValidationError> {
             let center = Point::new(4.0, 4.0);
             let paths = [
-                Circle::new(center, 2.0).try_path(),
-                Ellipse::new(center, Vector2::new(3.0, 2.0)).try_path(),
-                Arc::new(center, 2.0, 0.0, 2.0).try_path(),
-                RoundedRect::new(Rect::new(1.0, 1.0, 7.0, 7.0), 2.0).try_path(),
-                Ring::new(center, 1.0, 3.0).try_path(),
-                Line::new(Point::new(1.0, 2.0), Point::new(7.0, 6.0)).try_path(),
-                Polyline::new([Point::new(1.0, 2.0), center, Point::new(7.0, 2.0)]).try_path(),
+                Circle::new(center, 2.0)?.path(),
+                Ellipse::new(center, Vector2::new(3.0, 2.0))?.path(),
+                Arc::new(center, 2.0, 0.0, 2.0)?.path(),
+                RoundedRect::new(Rect::new(1.0, 1.0, 7.0, 7.0), 2.0)?.path(),
+                Ring::new(center, 1.0, 3.0).path(),
+                Line::new(Point::new(1.0, 2.0), Point::new(7.0, 6.0))?.path(),
+                Polyline::new([Point::new(1.0, 2.0), center, Point::new(7.0, 2.0)])?.path(),
                 Polygon::new([
                     Point::new(1.0, 1.0),
                     Point::new(7.0, 1.0),
                     Point::new(4.0, 7.0),
-                ])
-                .try_path(),
-                RegularPolygon::new(center, 3.0, 5).try_path(),
-                Star::new(center, 5, 3.0, 1.5).try_path(),
+                ])?
+                .path(),
+                RegularPolygon::new(center, 3.0, 5)?.path(),
+                Star::new(center, 5, 3.0, 1.5)?.path(),
                 Arrow::new(Point::new(1.0, 4.0), Point::new(7.0, 4.0))
                     .head_size(2.0)
-                    .try_path(),
+                    .path(),
                 Spline::through([
                     Point::new(1.0, 6.0),
                     Point::new(4.0, 1.0),
                     Point::new(7.0, 6.0),
-                ])
-                .try_path(),
+                ])?
+                .path(),
                 FunctionGraph::new(|value| 4.0 + math::sin(value), 1.0..7.0)
                     .samples(16)
-                    .try_path(),
+                    .path(),
                 FunctionGraph::parametric(|value| Point::new(value, value), 1.0..7.0)
                     .samples(8)
-                    .try_path(),
+                    .path(),
             ];
-            paths.into_iter().map(|path| path.unwrap()).collect()
+            paths.into_iter().collect()
         }
 
         #[test]
         fn all_shapes_record_fill_and_stroke() {
             let center = Point::new(4.0, 4.0);
-            for path in sample_paths() {
+            for path in sample_paths().unwrap() {
                 assert!(!path.verbs().is_empty());
                 let frame = Node::from(path.stroke(0.5, Color::WHITE))
                     .compile(
@@ -648,7 +648,7 @@ mod drawing {
             let limits = RasterLimits::default();
             let mut gpu = motion::render::gpu::Gpu::new()?;
             let info = gpu.info().clone();
-            let mut nodes: Vec<Node> = sample_paths()
+            let mut nodes: Vec<Node> = sample_paths()?
                 .into_iter()
                 .map(|path| {
                     Node::from(

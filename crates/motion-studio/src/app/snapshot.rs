@@ -155,18 +155,18 @@ fn dump_workbench_png() -> motion_core::Result<()> {
                 track
                     .scene(3.seconds(), |scene| {
                         let x = 100.0 + scene.progress() * 600.0;
-                        Node::group((
+                        Ok::<_, motion_core::Error>(Node::group((
                             Rect::new(0.0, 0.0, 960.0, 540.0).fill(Color::rgb(24, 60, 90)),
-                            Circle::new(Point::new(x, 270.0), 80.0).fill(Color::rgb(240, 180, 60)),
-                        ))
+                            Circle::new(Point::new(x, 270.0), 80.0)?.fill(Color::rgb(240, 180, 60)),
+                        )))
                     })
                     .transition(CrossFade, 500.milliseconds())
                     .scene(3.seconds(), |scene| {
-                        Node::group((
+                        Ok::<_, motion_core::Error>(Node::group((
                             Rect::new(0.0, 0.0, 960.0, 540.0).fill(Color::rgb(90, 30, 60)),
-                            Circle::new(scene.center(), 40.0 + 120.0 * scene.progress())
+                            Circle::new(scene.center(), 40.0 + 120.0 * scene.progress())?
                                 .fill(Color::WHITE),
-                        ))
+                        )))
                     })
             })
             .track(|track| {

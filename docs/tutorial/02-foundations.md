@@ -12,18 +12,19 @@ use motion::prelude::*;
 fn main() -> motion::Result {
     let timeline = Timeline::new(Size::new(480.0, 270.0), FrameRate::NTSC)
         .track(|track| {
-            track.scene(2.seconds(), |context| {
+            track.scene(2.seconds(), |context| -> motion::Result<_> {
                 let horizontal = 48.0 + context.random("marker-position") * 300.0;
-                let mut path = Path2D::new();
-                path.move_to(Point::new(48.0, 200.0))
+                let path = Path2D::builder()
+                    .move_to(Point::new(48.0, 200.0))
                     .line_to(Point::new(240.0, 48.0))
                     .line_to(Point::new(432.0, 200.0))
-                    .close();
-                (
+                    .close()
+                    .build()?;
+                Ok((
                     path.fill(Color::from_hex(0x168C78)),
-                    Circle::new(Point::new(horizontal, 210.0), 8.0)
+                    Circle::new(Point::new(horizontal, 210.0), 8.0)?
                         .fill(Color::WHITE),
-                )
+                ))
             })
         }).build()?;
     let time = Time::from_frame(30, FrameRate::NTSC);

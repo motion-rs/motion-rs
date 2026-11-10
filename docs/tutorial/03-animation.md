@@ -19,10 +19,10 @@ fn main() -> motion::Result {
         .hold(3.seconds())
         .to(4.seconds(), 0.0, Easing::Linear);
     let timeline = Timeline::new(Size::new(480.0, 270.0), 30).track(|track| {
-        track.scene(4.seconds(), move |context| {
-            Circle::new(Point::new(context.sample(&movement), 135.0), 24.0)
+        track.scene(4.seconds(), move |context| -> motion::Result<_> {
+            Ok(Circle::new(Point::new(context.sample(&movement), 135.0), 24.0)?
                 .fill(Color::rgb(20, 150, 125))
-                .opacity(context.sample(&opacity))
+                .opacity(context.sample(&opacity)))
         })
     }).build()?;
     render_still(&timeline, 1.seconds(), &RenderOptions::default())?

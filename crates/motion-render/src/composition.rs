@@ -429,6 +429,7 @@ impl Composition {
 #[cfg(test)]
 mod _contract_tests {
     use super::Composition;
+    use motion_core::Shape;
     use motion_core::{
         Color, Easing, FrameRate, Keyframes, Node, NodeModifiers, Rect, SceneCache, SceneContext,
         Size, Time, TimeLiteral, Tween,

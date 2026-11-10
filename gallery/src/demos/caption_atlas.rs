@@ -262,7 +262,7 @@ fn draw(
     let time = seconds.seconds();
     let safe = layout.safe_area();
     let mut nodes = vec![
-        Circle::new(Point::new(64.0 + progress * 384.0, 89.0), 33.0)
+        Circle::new(Point::new(64.0 + progress * 384.0, 89.0), 33.0)?
             .fill(Color::from_hex(atlas::GOLD))
             .into(),
         Rect::new(292.0, 72.0, 432.0, 272.0)
@@ -294,7 +294,7 @@ fn draw(
     if page == 10 {
         let amount = study.sheet.progress(time, "in", "out")?;
         nodes.push(
-            Circle::new(Point::new(50.0 + amount * 412.0, 118.0), 8.0)
+            Circle::new(Point::new(50.0 + amount * 412.0, 118.0), 8.0)?
                 .fill(Color::from_hex(atlas::MINT))
                 .into(),
         );

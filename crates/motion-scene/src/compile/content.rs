@@ -62,7 +62,7 @@ impl Compiler<'_> {
                     let rect = Rect::new(left, top, right, bottom);
                     match &radius {
                         Some(radius) => style.shape(RoundedRect::new(rect, radius.at(time)), time),
-                        None => style.shape(rect, time),
+                        None => style.shape(Ok(rect), time),
                     }
                 })
             }
@@ -120,16 +120,24 @@ impl Compiler<'_> {
             }
             Content::Polygon(spec) => {
                 let points = self.points(&spec.points, &format!("{path}.polygon"))?;
-                let polygon = Polygon::new(points);
+                let polygon = Polygon::new(points)
+                    .map_err(|error| {
+                        self.error(&format!("{path}.polygon"), "points", error.message)
+                    })
+                    .ok()?;
                 shape(style?, false, move |style, time| {
-                    style.shape(polygon.clone(), time)
+                    style.shape(Ok(polygon.clone()), time)
                 })
             }
             Content::Polyline(spec) => {
                 let points = self.points(&spec.points, &format!("{path}.polyline"))?;
-                let polyline = Polyline::new(points);
+                let polyline = Polyline::new(points)
+                    .map_err(|error| {
+                        self.error(&format!("{path}.polyline"), "points", error.message)
+                    })
+                    .ok()?;
                 shape(style?, false, move |style, time| {
-                    style.shape(polyline.clone(), time)
+                    style.shape(Ok(polyline.clone()), time)
                 })
             }
             Content::RegularPolygon(spec) => {
@@ -192,7 +200,7 @@ impl Compiler<'_> {
                     if sector {
                         ring = ring.sweep(start.at(time).to_radians(), sweep.at(time).to_radians());
                     }
-                    style.shape(ring, time)
+                    style.shape(Ok(ring), time)
                 })
             }
             Content::Arrow(spec) => {
@@ -224,24 +232,26 @@ impl Compiler<'_> {
                     if let Some(size) = &size {
                         arrow = arrow.head_size(size.at(time));
                     }
-                    style.shape(arrow, time)
+                    style.shape(Ok(arrow), time)
                 })
             }
             Content::Spline(spec) => {
                 let path = format!("{path}.spline");
                 let points = self.points(&spec.points, &path)?;
-                let mut spline = Spline::through(points);
+                let mut spline = Spline::through(points)
+                    .map_err(|error| self.error(&path, "points", error.message))
+                    .ok()?;
                 if let Some(tension) = spec.tension {
                     spline = spline.tension(tension);
                 }
                 shape(style?, false, move |style, time| {
-                    style.shape(spline.clone(), time)
+                    style.shape(Ok(spline.clone()), time)
                 })
             }
             Content::Path(spec) => {
                 let geometry = self.svg_path(&spec.data, &format!("{path}.path"))?;
                 shape(style?, false, move |style, time| {
-                    style.shape(geometry.clone(), time)
+                    style.shape(Ok(geometry.clone()), time)
                 })
             }
             Content::Text(spec) => self.text(spec, style, &format!("{path}.text")),

@@ -199,12 +199,7 @@ impl BrushStrokeBuilder {
 }
 
 impl Drawable for BrushStroke {
-    fn bounds(&self, context: &DrawContext) -> Rect {
-        self.try_bounds(context)
-            .unwrap_or(Rect::new(f64::NAN, 0.0, 0.0, 0.0))
-    }
-
-    fn try_bounds(&self, _: &DrawContext) -> Result<Rect, ValidationError> {
+    fn bounds(&self, _: &DrawContext) -> Result<Rect, ValidationError> {
         advanced::bounds(self)
     }
 
@@ -438,12 +433,7 @@ impl InkFill {
 }
 
 impl Drawable for InkFill {
-    fn bounds(&self, context: &DrawContext) -> Rect {
-        self.try_bounds(context)
-            .unwrap_or(Rect::new(f64::NAN, 0.0, 0.0, 0.0))
-    }
-
-    fn try_bounds(&self, _: &DrawContext) -> Result<Rect, ValidationError> {
+    fn bounds(&self, _: &DrawContext) -> Result<Rect, ValidationError> {
         Ok(self.prepared()?.bounds)
     }
 

@@ -134,7 +134,7 @@ fn frame(context: &SceneContext<'_>, studies: &[Study]) -> motion::Result<Node> 
         .with_clip_duration(SOURCE_SECONDS.seconds());
     let study = &studies[page];
     let particles = study.render(&sampled)?;
-    Ok(super::atlas::sheet(
+    super::atlas::sheet(
         &super::atlas::Sheet {
             metadata: METADATA,
             page,
@@ -146,7 +146,7 @@ fn frame(context: &SceneContext<'_>, studies: &[Study]) -> motion::Result<Node> 
             next: PAGES.get(page + 1).map(|next| next.title),
         },
         Node::group([stage(), study.guides.clone(), particles]),
-    ))
+    )
 }
 
 fn page_at(progress: f64) -> (usize, f64) {
@@ -187,7 +187,7 @@ fn disk(parameters: DemoParameters) -> motion::Result<Study> {
                 .color([0.3, 0.65, 1.0, 1.0]),
         ),
     );
-    study.guides = Circle::new(VIEWPORT.center(), 72.0)
+    study.guides = Circle::new(VIEWPORT.center(), 72.0)?
         .fill(Color::from_hex(0x263e35))
         .into();
     Ok(study)

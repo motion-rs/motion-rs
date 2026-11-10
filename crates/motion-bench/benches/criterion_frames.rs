@@ -140,7 +140,11 @@ fn frame_benches(criterion: &mut Criterion) {
         let top = f64::from(index / 20) * 36.0;
         Node::group([
             Node::from(Rect::new(left, top, left + 24.0, top + 24.0).fill(Color::BLACK)),
-            Node::from(Circle::new(Point::new(left + 20.0, top + 20.0), 8.0).fill(Color::WHITE)),
+            Node::from(
+                Circle::new(Point::new(left + 20.0, top + 20.0), 8.0)
+                    .unwrap()
+                    .fill(Color::WHITE),
+            ),
         ])
         .opacity(0.6)
     }));
@@ -154,7 +158,9 @@ fn frame_benches(criterion: &mut Criterion) {
     );
 
     let blurred = Node::group([Node::from(
-        Circle::new(Point::new(320.0, 180.0), 100.0).fill(Color::BLACK),
+        Circle::new(Point::new(320.0, 180.0), 100.0)
+            .unwrap()
+            .fill(Color::BLACK),
     )])
     .filter(Filter::Blur { sigma: 12.0 });
     measure_frame(

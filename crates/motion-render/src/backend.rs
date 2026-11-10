@@ -130,6 +130,7 @@ mod tests {
     #[cfg(feature = "gpu")]
     fn automatic_precision_fallback_precedes_device_initialization() -> motion_core::Result<()> {
         use motion_core::NodeModifiers;
+        use motion_core::Shape;
         let mut session = crate::Composition::new(4, 4, crate::FrameClock::new(30, 150))
             .with_options(
                 crate::RenderOptions::default().backend(crate::BackendPreference::automatic()),

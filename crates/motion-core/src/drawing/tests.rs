@@ -199,8 +199,8 @@ fn custom_shapes_use_default_path_bounds_and_generic_styling_in_layout() {
     struct Triangle(Path2D);
 
     impl Shape for Triangle {
-        fn path(&self) -> Path2D {
-            self.0.clone()
+        fn path(&self) -> Result<Path2D, ValidationError> {
+            Ok(self.0.clone())
         }
     }
     let mut path = Path2D::new();
@@ -255,8 +255,8 @@ fn empty_paths_and_ignored_path_budget_errors_keep_recording_contracts() {
     struct Ignores(Path2D);
 
     impl Drawable for Ignores {
-        fn bounds(&self, _: &DrawContext) -> Rect {
-            self.0.bounding_box()
+        fn bounds(&self, _: &DrawContext) -> Result<Rect, ValidationError> {
+            Ok(self.0.bounding_box())
         }
 
         fn draw(&self, _: &DrawContext, canvas: &mut Canvas<'_>) -> Result<(), ValidationError> {
@@ -285,7 +285,7 @@ fn rectangles_record_their_own_bounds_without_geometry_or_color_narrowing() {
     let drawable = bounds.fill(color);
     let context = DrawContext::new(2.0).unwrap();
     assert_eq!(context.device_scale(), 2.0);
-    assert_eq!(drawable.bounds(&context), bounds);
+    assert_eq!(drawable.bounds(&context).unwrap(), bounds);
     assert_eq!(
         context
             .record(&drawable, ValidationLimits::default())
@@ -304,8 +304,8 @@ struct IgnoredErrors {
 }
 
 impl Drawable for IgnoredErrors {
-    fn bounds(&self, _: &DrawContext) -> Rect {
-        Rect::new(0.0, 0.0, 1.0, 1.0)
+    fn bounds(&self, _: &DrawContext) -> Result<Rect, ValidationError> {
+        Ok(Rect::new(0.0, 0.0, 1.0, 1.0))
     }
 
     fn draw(&self, _: &DrawContext, canvas: &mut Canvas<'_>) -> Result<(), ValidationError> {
@@ -446,9 +446,9 @@ struct Counted {
 }
 
 impl Drawable for Counted {
-    fn bounds(&self, context: &DrawContext) -> Rect {
+    fn bounds(&self, context: &DrawContext) -> Result<Rect, ValidationError> {
         self.bounds_calls.fetch_add(1, Ordering::SeqCst);
-        Rect::new(0.0, 0.0, context.device_scale() * 10.0, 20.0)
+        Ok(Rect::new(0.0, 0.0, context.device_scale() * 10.0, 20.0))
     }
 
     fn draw(&self, context: &DrawContext, canvas: &mut Canvas<'_>) -> Result<(), ValidationError> {
@@ -612,8 +612,8 @@ fn callback_failures_discard_partial_commands_and_keep_named_node_diagnostics() 
     }
 
     impl Drawable for Fails {
-        fn bounds(&self, _: &DrawContext) -> Rect {
-            Rect::new(0.0, 0.0, 1.0, 1.0)
+        fn bounds(&self, _: &DrawContext) -> Result<Rect, ValidationError> {
+            Ok(Rect::new(0.0, 0.0, 1.0, 1.0))
         }
 
         fn draw(&self, _: &DrawContext, canvas: &mut Canvas<'_>) -> Result<(), ValidationError> {

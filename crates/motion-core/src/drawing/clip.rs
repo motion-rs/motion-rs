@@ -12,23 +12,43 @@ pub enum ClipMode {
     Geometric,
 }
 
-impl From<PathClip> for ShapeClip {
-    fn from(clip: PathClip) -> Self {
-        Self {
-            geometry: ClipGeometry::Path(clip.path),
-            transform: clip.transform,
-            rule: clip.rule,
-        }
+/// Values accepted by [`crate::NodeModifiers::clip`] that convert to a [`ShapeClip`].
+///
+/// Shapes convert through their fallible [`Shape::path`]; clips convert directly.
+pub trait IntoShapeClip {
+    /// Captures the clip geometry, reporting invalid shapes.
+    fn into_shape_clip(self) -> Result<ShapeClip, ValidationError>;
+}
+
+impl IntoShapeClip for ShapeClip {
+    fn into_shape_clip(self) -> Result<ShapeClip, ValidationError> {
+        Ok(self)
     }
 }
 
-impl From<RectClip> for ShapeClip {
-    fn from(clip: RectClip) -> Self {
-        Self {
-            geometry: ClipGeometry::Rectangle(clip.bounds),
-            transform: clip.transform,
+impl IntoShapeClip for PathClip {
+    fn into_shape_clip(self) -> Result<ShapeClip, ValidationError> {
+        Ok(ShapeClip {
+            geometry: ClipGeometry::Path(self.path),
+            transform: self.transform,
+            rule: self.rule,
+        })
+    }
+}
+
+impl IntoShapeClip for RectClip {
+    fn into_shape_clip(self) -> Result<ShapeClip, ValidationError> {
+        Ok(ShapeClip {
+            geometry: ClipGeometry::Rectangle(self.bounds),
+            transform: self.transform,
             rule: FillRule::NonZero,
-        }
+        })
+    }
+}
+
+impl<Geometry: Shape> IntoShapeClip for Geometry {
+    fn into_shape_clip(self) -> Result<ShapeClip, ValidationError> {
+        ShapeClip::new(&self)
     }
 }
 
@@ -115,7 +135,7 @@ impl ShapeClip {
     /// Captures a shape once; trait objects are accepted without retaining them.
     ///
     /// Exact rectangles retain raw bounds so invalid rectangles fail validation
-    /// rather than panicking in Shape::path. Other shapes share a checked path.
+    /// with the clip. Other shapes share a checked path and report its errors.
     ///
     /// ```
     /// use motion_core::prelude::*;
@@ -125,7 +145,7 @@ impl ShapeClip {
     /// };
     /// let path = Path2D::from_rect(Rect::new(0.0, 0.0, 1.0, 1.0))?;
     /// let shape: &dyn Shape = &path;
-    /// let mut clip = ShapeClip::new(shape);
+    /// let mut clip = ShapeClip::new(shape)?;
     /// clip.rule = FillRule::EvenOdd;
     /// clip.transform = Transform::translate(0.5, 0.0);
     /// let frame = Node::from(Rect::new(0.0, 0.0, 2.0, 1.0).fill(Color::WHITE))
@@ -137,15 +157,16 @@ impl ShapeClip {
     ///     )?;
     /// # Ok::<(), motion_core::ValidationError>(())
     /// ```
-    pub fn new(shape: &(impl Shape + ?Sized)) -> Self {
-        Self {
-            geometry: shape.as_rect().map_or_else(
-                || ClipGeometry::Path(Arc::new(shape.path())),
-                ClipGeometry::Rectangle,
-            ),
+    pub fn new(shape: &(impl Shape + ?Sized)) -> Result<Self, ValidationError> {
+        let geometry = match shape.as_rect() {
+            Some(bounds) => ClipGeometry::Rectangle(bounds),
+            None => ClipGeometry::Path(Arc::new(shape.path()?)),
+        };
+        Ok(Self {
+            geometry,
             transform: Transform::IDENTITY,
             rule: FillRule::NonZero,
-        }
+        })
     }
 
     /// Checks geometry and transform, returning the path-verb count for structural charging.
@@ -160,11 +181,5 @@ impl ShapeClip {
                 Ok(geometry.verbs().len())
             }
         }
-    }
-}
-
-impl<Geometry: Shape> From<Geometry> for ShapeClip {
-    fn from(shape: Geometry) -> Self {
-        Self::new(&shape)
     }
 }

@@ -230,7 +230,7 @@ impl Morph {
         let mut source = BTreeMap::<Vec<usize>, Vec<Node>>::new();
         let mut target = BTreeMap::<Vec<usize>, Vec<Node>>::new();
         for pair in self.pairs.iter() {
-            let geometry = pair.from.try_interpolate(&pair.to, progress)?.path();
+            let geometry = pair.from.try_interpolate(&pair.to, progress)?.path()?;
             let color = match (&pair.source, &pair.target) {
                 (Some(source), Some(target)) => match (&source.paint, &target.paint) {
                     (Paint::Solid(source), Paint::Solid(target)) => {

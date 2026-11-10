@@ -1,5 +1,6 @@
 use super::*;
 use crate::preview::PreviewKey;
+use motion_core::Shape;
 use motion_core::{Node, Size};
 use motion_render::Composition;
 

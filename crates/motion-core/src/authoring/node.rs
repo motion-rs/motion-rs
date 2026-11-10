@@ -389,7 +389,7 @@ impl Node {
                 if let Some(resolved) = drawable.resolve_node(context)? {
                     resolved.measure_bounds(&path, depth + 1, state, context)?
                 } else {
-                    let bounds = drawable.try_bounds(context)?;
+                    let bounds = drawable.bounds(context)?;
                     crate::drawing::validate_rect(bounds, &path, "bounds")?;
                     Bounds::Known(bounds)
                 }
@@ -477,7 +477,7 @@ impl Node {
             let Some(baseline) = drawable.baseline(context) else {
                 return Ok(None);
             };
-            (baseline, drawable.try_bounds(context)?)
+            (baseline, drawable.bounds(context)?)
         };
         if !baseline.is_finite() {
             return Err(ValidationError::invalid(

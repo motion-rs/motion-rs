@@ -14,12 +14,14 @@ use std::sync::Arc;
 const IMAGE_SIDE: u32 = 48;
 
 pub(super) fn path(parameters: DemoParameters) -> motion::Result<Study> {
-    let mut path = Path2D::new();
-    path.move_to(Point::new(60.0, 210.0)).cubic_to(
-        Point::new(150.0, -20.0),
-        Point::new(360.0, 324.0),
-        Point::new(452.0, 90.0),
-    );
+    let path = Path2D::builder()
+        .move_to(Point::new(60.0, 210.0))
+        .cubic_to(
+            Point::new(150.0, -20.0),
+            Point::new(360.0, 324.0),
+            Point::new(452.0, 90.0),
+        )
+        .build()?;
     Ok(Study::new(
         base(parameters).emitter(
             PathEmitter::new(Arc::new(path))

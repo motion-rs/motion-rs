@@ -5,15 +5,7 @@ use crate::{Point, Rect, ValidationError};
 use std::sync::Arc;
 
 impl Path2D {
-    pub(crate) fn validate(&self) -> Result<(), ValidationError> {
-        match &self.data.error {
-            Some(error) => Err(error.clone()),
-            None => Ok(()),
-        }
-    }
-
     pub(super) fn push(&mut self, verb: PathVerb) -> Result<(), ValidationError> {
-        self.validate()?;
         if self.verbs().len() >= MAX_PATH_VERBS {
             return Err(ValidationError::limit(
                 "path2d",

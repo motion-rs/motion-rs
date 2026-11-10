@@ -87,7 +87,7 @@ fn frame(context: &SceneContext<'_>, simulations: &[ParticleSimulation]) -> moti
             tint: Color::WHITE,
         });
     }
-    Ok(super::atlas::sheet(
+    super::atlas::sheet(
         &super::atlas::Sheet {
             metadata: METADATA,
             page,
@@ -99,7 +99,7 @@ fn frame(context: &SceneContext<'_>, simulations: &[ParticleSimulation]) -> moti
             next: Preset::ALL.get(page + 1).map(|next| next.name()),
         },
         Node::group([stage(preset), particles]),
-    ))
+    )
 }
 
 fn page_at(progress: f64) -> (usize, f64) {

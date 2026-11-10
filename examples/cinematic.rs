@@ -22,6 +22,7 @@ struct Args {
 fn artwork(context: &SceneContext<'_>) -> Node {
     let horizontal = context.sample(&Tween::new(90.0, 550.0, 4.seconds()));
     let emitter = Circle::new(Point::new(horizontal, 160.0), 22.0)
+        .expect("valid emitter")
         .fill(Color::rgb(255, 215, 150))
         .filter(Filter::ColorAdjust {
             exposure: 4.0,

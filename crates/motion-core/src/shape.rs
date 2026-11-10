@@ -10,20 +10,15 @@ pub use primitives::*;
 /// Logical geometry independent of paint and node placement.
 ///
 /// Custom geometry must keep path and bounds consistent and deterministic.
-/// Direct path conversion requires valid geometry; invalid raw rectangles panic
-/// there, while recording their filled nodes reports validation errors instead.
+/// Both queries report invalid geometry, such as a raw rectangle with nonfinite
+/// edges, as a [`ValidationError`] instead of panicking.
 pub trait Shape: Send + Sync {
-    /// Reports retained authoring errors before measuring or drawing.
-    fn validate(&self) -> Result<(), ValidationError> {
-        Ok(())
-    }
-
     /// Returns a checked path snapshot without f32 narrowing.
-    fn path(&self) -> Path2D;
+    fn path(&self) -> Result<Path2D, ValidationError>;
 
     /// Geometric bounds; defaults to the path's cached curve bounds.
-    fn bounding_box(&self) -> Rect {
-        self.path().bounding_box()
+    fn bounding_box(&self) -> Result<Rect, ValidationError> {
+        self.path().map(|path| path.bounding_box())
     }
 
     /// Exact rectangle equivalent, when available, for a rule-independent fast path.
@@ -68,26 +63,22 @@ pub trait Shape: Send + Sync {
 }
 
 impl Shape for Path2D {
-    fn validate(&self) -> Result<(), ValidationError> {
-        Path2D::validate(self)
+    fn path(&self) -> Result<Path2D, ValidationError> {
+        Ok(self.clone())
     }
 
-    fn path(&self) -> Path2D {
-        self.clone()
-    }
-
-    fn bounding_box(&self) -> Rect {
-        Path2D::bounding_box(self)
+    fn bounding_box(&self) -> Result<Rect, ValidationError> {
+        Ok(Path2D::bounding_box(self))
     }
 }
 
 impl Shape for Rect {
-    fn path(&self) -> Path2D {
-        Path2D::from_rect(*self).expect("Shape::path requires valid rectangle geometry")
+    fn path(&self) -> Result<Path2D, ValidationError> {
+        Path2D::from_rect(*self)
     }
 
-    fn bounding_box(&self) -> Rect {
-        *self
+    fn bounding_box(&self) -> Result<Rect, ValidationError> {
+        Ok(*self)
     }
 
     fn as_rect(&self) -> Option<Rect> {
@@ -151,42 +142,20 @@ impl<Geometry: Shape> Styled<Geometry> {
     }
 }
 
-impl Rect {
-    /// Styles this rectangle without declaring a separate layout bound.
-    ///
-    /// The geometry itself supplies Drawable::bounds.
-    pub fn fill(self, paint: impl Into<Paint>) -> Styled<Self> {
-        Shape::fill(self, paint)
-    }
-
-    /// Styles this rectangle with a outline and no implicit fill.
-    pub fn stroke(self, width: f64, paint: impl Into<Paint>) -> Styled<Self> {
-        Shape::stroke(self, width, paint)
-    }
-}
-
 impl<Geometry: Shape> Drawable for Styled<Geometry> {
-    fn try_bounds(&self, context: &DrawContext) -> Result<Rect, ValidationError> {
-        self.shape.validate()?;
-        Ok(self.bounds(context))
-    }
-
-    fn bounds(&self, _: &DrawContext) -> Rect {
-        let bounds = self.shape.bounding_box();
+    fn bounds(&self, _: &DrawContext) -> Result<Rect, ValidationError> {
+        let bounds = self.shape.bounding_box()?;
         if self.stroke.is_some() && validate_rect(bounds, "stroke", "bounds").is_ok() {
-            if self.stroke_style.validate("stroke").is_err() {
-                return Rect::new(f64::NAN, 0.0, 0.0, 0.0);
-            }
-            self.stroke_style.bounds(bounds)
+            self.stroke_style.validate("stroke")?;
+            Ok(self.stroke_style.bounds(bounds))
         } else {
-            bounds
+            Ok(bounds)
         }
     }
 
     fn draw(&self, _: &DrawContext, canvas: &mut Canvas<'_>) -> Result<(), ValidationError> {
-        self.shape.validate()?;
         if self.trim.is_some() || self.dash.is_some() {
-            let mut geometry = self.shape.path();
+            let mut geometry = self.shape.path()?;
             if let Some((start, end)) = self.trim {
                 geometry = geometry.try_trim(start, end)?;
             }

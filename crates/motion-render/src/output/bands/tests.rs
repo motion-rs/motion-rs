@@ -1,5 +1,6 @@
 use super::*;
 use crate::{RasterLimits, RenderPrepare};
+use motion_core::Shape;
 use motion_core::{
     Color, Filter, FilterOperation, MaskMode, Node, NodeModifiers, Point, Rect, Size,
     ValidationLimits, Vector2,

@@ -434,7 +434,6 @@ impl Path2D {
     }
 
     fn metrics(&self) -> Result<&Metrics, ValidationError> {
-        self.validate()?;
         self.data
             .metrics
             .get_or_init(|| Metrics::new(self).map(Arc::new))

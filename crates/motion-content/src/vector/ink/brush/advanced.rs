@@ -2,8 +2,8 @@
 
 use super::{BrushStroke, BrushStrokeBuilder, Config, invalid};
 use motion_core::{
-    Canvas, Duration, FillRule, NodeModifiers, Point, Rect, Shape, Time, Transform,
-    ValidationError, Vector2,
+    Canvas, Duration, FillRule, NodeModifiers, Point, Rect, Time, Transform, ValidationError,
+    Vector2,
 };
 use std::sync::Arc;
 
@@ -308,7 +308,6 @@ fn validate_input(samples: &[InputSample]) -> Result<(), ValidationError> {
 
 pub(super) fn validate(stroke: &Config) -> Result<(), ValidationError> {
     let options = &stroke.advanced;
-    stroke.path.validate()?;
     if !stroke.width.is_finite()
         || !(0.0..=512.0).contains(&stroke.width)
         || !stroke.aspect.is_finite()

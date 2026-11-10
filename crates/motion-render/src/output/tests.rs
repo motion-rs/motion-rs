@@ -1,5 +1,6 @@
 use super::*;
 use crate::raster::prepare::RenderPrepare;
+use motion_core::Shape;
 use motion_core::ValidationErrorKind;
 use motion_core::{Color, Node, NodeModifiers, Rect, Size, ValidationLimits};
 

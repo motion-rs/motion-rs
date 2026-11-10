@@ -76,6 +76,7 @@ impl Plan {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Shape;
     use crate::{Color, NodeModifiers, Rect};
 
     #[test]

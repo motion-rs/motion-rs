@@ -519,7 +519,7 @@ impl Text {
         }
         Ok(Arc::new(
             VectorTree::new(
-                self.try_bounds(context)?,
+                self.bounds(context)?,
                 VectorGroup {
                     children,
                     ..Default::default()

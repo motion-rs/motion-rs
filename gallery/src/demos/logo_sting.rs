@@ -105,7 +105,7 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
                     // A lime orbit sweeps around the forming monogram and leaves before the burst.
                     let head = window(0.2, 0.48, Easing::CubicInOut);
                     let tail = window(0.3, 0.52, Easing::CubicIn);
-                    let orbit = Circle::new(Point::new(480.0, 250.0), 112.0)
+                    let orbit = Circle::new(Point::new(480.0, 250.0), 112.0)?
                         .stroke(4.0, Color::from_hex(LIME))
                         .trim(tail, head);
                     let baseline = Rect::new(0.0, 0.0, 1.0, 2.0)

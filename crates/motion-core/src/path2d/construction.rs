@@ -16,20 +16,17 @@ impl Path2D {
         Ok(path)
     }
 
-    /// Builds a bounded polyline, retaining invalid-input diagnostics for compilation.
-    pub fn polyline(points: impl IntoIterator<Item = Point>) -> Self {
+    /// Builds a bounded polyline, rejecting nonfinite points and verb overflow.
+    pub fn polyline(points: impl IntoIterator<Item = Point>) -> Result<Self, ValidationError> {
         let mut path = Self::new();
         for (index, point) in points.into_iter().take(MAX_PATH_VERBS + 1).enumerate() {
             if index == 0 {
-                path.move_to(point);
+                path.try_move_to(point)?;
             } else {
-                path.line_to(point);
-            }
-            if path.data.error.is_some() {
-                break;
+                path.try_line_to(point)?;
             }
         }
-        path
+        Ok(path)
     }
 
     /// Imports SVG path data, not an XML document, without rasterizing geometry.

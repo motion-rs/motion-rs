@@ -1,12 +1,14 @@
 //! Built-in and custom particle presentation styles.
 
 use super::*;
-use motion_core::{Node, SceneContext};
+use motion_core::{Node, SceneContext, ValidationError};
 
-type CustomStyle = Arc<dyn Fn(&[Particle], &SceneContext<'_>) -> Node + Send + Sync>;
+type CustomStyle =
+    Arc<dyn Fn(&[Particle], &SceneContext<'_>) -> Result<Node, ValidationError> + Send + Sync>;
 
 /// particle presentation. Built-ins share an instance protocol; custom
-/// callbacks run on CPU and return ordinary content, never custom WGSL.
+/// callbacks run on CPU and return ordinary content or a validation error, never
+/// custom WGSL.
 #[derive(Clone)]
 pub enum ParticleStyle {
     /// Smooth analytic circles; radius multiplies particle.size.

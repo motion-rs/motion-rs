@@ -163,7 +163,7 @@ impl DrawContext {
     ) -> Result<Vec<DrawCommand>, ValidationError> {
         let mut state = ValidationState::new(limits)?;
         state.enter("drawable", 1)?;
-        validate_rect(drawable.try_bounds(self)?, "drawable", "bounds")?;
+        validate_rect(drawable.bounds(self)?, "drawable", "bounds")?;
         Canvas::new(&mut state, "drawable", 2).record(drawable, self)
     }
 
@@ -279,14 +279,8 @@ pub trait Drawable: Send + Sync {
         Ok(None)
     }
 
-    /// Local layout/ink bounds before node placement.
-    fn bounds(&self, context: &DrawContext) -> Rect;
-
-    /// Checked bounds for fallible content such as explicit-font paragraphs.
-    /// Existing geometry implementations may keep the infallible bounds method.
-    fn try_bounds(&self, context: &DrawContext) -> Result<Rect, ValidationError> {
-        Ok(self.bounds(context))
-    }
+    /// Local layout/ink bounds before node placement; invalid content is an error.
+    fn bounds(&self, context: &DrawContext) -> Result<Rect, ValidationError>;
 
     /// Real horizontal text baseline in local coordinates; geometry has none.
     fn baseline(&self, _context: &DrawContext) -> Option<f64> {

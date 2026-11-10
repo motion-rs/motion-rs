@@ -240,7 +240,7 @@ fn plan(
                 let has_commands = expanded.has_commands;
                 (Content::Children(vec![expanded]), bounds, has_commands)
             } else {
-                let bounds = drawable.try_bounds(context)?;
+                let bounds = drawable.bounds(context)?;
                 crate::drawing::validate_rect(bounds, &path, "bounds")?;
                 let commands =
                     Canvas::new(state, &path, depth + 1).record(drawable.as_ref(), context)?;
@@ -487,13 +487,14 @@ impl Plan {
 #[cfg(test)]
 mod deferred_content_tests {
     use super::*;
+    use crate::Shape;
     use crate::{Color, Drawable, NodeModifiers, Rect, Time, TimeLiteral};
 
     struct Deferred;
 
     impl Drawable for Deferred {
-        fn bounds(&self, _: &DrawContext) -> Rect {
-            Rect::default()
+        fn bounds(&self, _: &DrawContext) -> Result<Rect, ValidationError> {
+            Ok(Rect::default())
         }
 
         fn draw(&self, _: &DrawContext, _: &mut Canvas<'_>) -> Result<(), ValidationError> {

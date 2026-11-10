@@ -21,8 +21,16 @@ fn batch_data_topology_distinguishes_long_runs_from_isolated_pairs() -> motion_c
         let top = f64::from(index / 20) * 36.0;
         let bounds = Rect::new(left + 1.0, top + 1.0, left + 31.0, top + 35.0);
         Node::group([
-            Node::from(motion_core::RoundedRect::new(bounds, 3.0).fill(palette[0])),
-            Node::from(motion_core::Circle::new(bounds.center(), 5.0).fill(palette[2])),
+            Node::from(
+                motion_core::RoundedRect::new(bounds, 3.0)
+                    .unwrap()
+                    .fill(palette[0]),
+            ),
+            Node::from(
+                motion_core::Circle::new(bounds.center(), 5.0)
+                    .unwrap()
+                    .fill(palette[2]),
+            ),
         ])
         .opacity(0.4 + f64::from(index % 5) * 0.1)
     }));

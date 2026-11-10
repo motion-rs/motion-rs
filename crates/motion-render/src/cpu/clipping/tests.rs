@@ -70,13 +70,13 @@ fn generic_shapes_intersect_before_fractional_coverage_is_quantized() {
     struct Triangle;
 
     impl motion_core::Shape for Triangle {
-        fn path(&self) -> Path2D {
+        fn path(&self) -> Result<Path2D, motion_core::ValidationError> {
             let mut path = Path2D::new();
-            path.try_move_to(Point::ORIGIN).unwrap();
-            path.try_line_to(Point::new(1.0, 0.0)).unwrap();
-            path.try_line_to(Point::new(0.0, 1.0)).unwrap();
-            path.try_close().unwrap();
-            path
+            path.try_move_to(Point::ORIGIN)?;
+            path.try_line_to(Point::new(1.0, 0.0))?;
+            path.try_line_to(Point::new(0.0, 1.0))?;
+            path.try_close()?;
+            Ok(path)
         }
     }
     let inner = tile(1.0, 1.0, Color::WHITE).clip_with(Triangle, motion_core::ClipMode::Geometric);
@@ -147,7 +147,7 @@ fn generic_shape_intersections_respect_holes_concavity_and_self_crossings() {
         donut.try_close().unwrap();
     }
     for rule in [FillRule::NonZero, FillRule::EvenOdd] {
-        let mut clip = ShapeClip::new(&donut);
+        let mut clip = ShapeClip::new(&donut).unwrap();
         clip.rule = rule;
         let inner = tile(3.0, 1.0, Color::WHITE).clip_with(clip, motion_core::ClipMode::Geometric);
         let node = Node::group([inner]).clip_with(donut.clone(), motion_core::ClipMode::Geometric);
@@ -211,7 +211,7 @@ fn generic_shape_intersections_respect_holes_concavity_and_self_crossings() {
     );
     let crossing = outline(&[(0.0, 0.0), (1.0, 1.0), (0.0, 1.0), (1.0, 0.0)]);
     for rule in [FillRule::NonZero, FillRule::EvenOdd] {
-        let mut clip = ShapeClip::new(&crossing);
+        let mut clip = ShapeClip::new(&crossing).unwrap();
         clip.rule = rule;
         let node =
             Node::group([tile(1.0, 1.0, Color::WHITE)
@@ -278,12 +278,12 @@ fn generic_shapes_snapshot_once_without_measuring_clip_layout() {
     }
 
     impl motion_core::Shape for Counted {
-        fn path(&self) -> Path2D {
+        fn path(&self) -> Result<Path2D, motion_core::ValidationError> {
             self.calls.fetch_add(1, Ordering::SeqCst);
-            self.path.clone()
+            Ok(self.path.clone())
         }
 
-        fn bounding_box(&self) -> Rect {
+        fn bounding_box(&self) -> Result<Rect, motion_core::ValidationError> {
             panic!("clip layout must not be measured")
         }
     }
@@ -292,7 +292,7 @@ fn generic_shapes_snapshot_once_without_measuring_clip_layout() {
         calls: calls.clone(),
         path: outline(&[(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)]),
     };
-    let clip = ShapeClip::new(&shape as &dyn motion_core::Shape);
+    let clip = ShapeClip::new(&shape as &dyn motion_core::Shape).unwrap();
     assert_eq!(calls.load(Ordering::SeqCst), 1);
     shape.path.try_line_to(Point::new(1.0, 1.0)).unwrap();
     let original = tile(1.0, 1.0, Color::WHITE);
@@ -335,7 +335,7 @@ fn generic_shapes_snapshot_once_without_measuring_clip_layout() {
 #[test]
 fn generic_shape_transforms_follow_contain_mapping_and_preserve_layout() {
     let path = Path2D::from_rect(Rect::new(0.0, 0.0, 1.0, 2.0)).unwrap();
-    let mut clip = ShapeClip::new(&path);
+    let mut clip = ShapeClip::new(&path).unwrap();
     clip.transform = Transform::translate(1.0, 0.0);
     let node = tile(4.0, 2.0, Color::WHITE)
         .clip_with(clip, motion_core::ClipMode::Geometric)
@@ -366,7 +366,7 @@ fn generic_shape_transforms_follow_contain_mapping_and_preserve_layout() {
         assert_eq!(output.pixel(point.0, point.1), Some([0.0; 4]));
     }
     let triangle = outline(&[(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)]);
-    let mut clip = ShapeClip::new(&triangle);
+    let mut clip = ShapeClip::new(&triangle).unwrap();
     clip.transform = Transform::from_coefficients([1.0, 1.0, -1.0, 1.0, 1.0, 0.0]);
     let output = prepare(
         &tile(2.0, 2.0, Color::WHITE).clip_with(clip, motion_core::ClipMode::Geometric),
@@ -458,8 +458,8 @@ fn generic_shapes_keep_mask_domains_and_path_coverage_independent() {
 #[test]
 fn generic_shapes_validate_hidden_empty_edited_and_composed_geometry() {
     let size = PixelSize::new(1, 1);
-    let invalid = ShapeClip::from(Rect::new(f64::NAN, 0.0, 1.0, 1.0));
-    let mut invalid_transform = ShapeClip::new(&Path2D::new());
+    let invalid = ShapeClip::new(&Rect::new(f64::NAN, 0.0, 1.0, 1.0)).unwrap();
+    let mut invalid_transform = ShapeClip::new(&Path2D::new()).unwrap();
     invalid_transform.transform = Transform::translate(f64::INFINITY, 0.0);
     for clip in [invalid, invalid_transform] {
         for node in [
@@ -476,7 +476,7 @@ fn generic_shapes_validate_hidden_empty_edited_and_composed_geometry() {
             assert!(node.measure(ValidationLimits::default()).is_err());
         }
     }
-    let mut clip = ShapeClip::new(&Path2D::new());
+    let mut clip = ShapeClip::new(&Path2D::new()).unwrap();
     clip.transform = Transform::scale(2.0);
     let node = Node::empty()
         .clip_with(clip, motion_core::ClipMode::Geometric)
@@ -679,7 +679,7 @@ fn generic_shape_structural_depth_and_raster_budgets_are_shared_and_retryable() 
                 blend_mode: BlendMode::SourceOver,
                 clip: None,
                 rect_clip: None,
-                shape_clip: ShapeClip::new(&Path2D::new()),
+                shape_clip: ShapeClip::new(&Path2D::new()).unwrap(),
             });
         }
         for _ in 0..depth {

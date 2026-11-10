@@ -332,6 +332,7 @@ impl Plan {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use motion_core::Shape;
 
     #[test]
     fn batch_data_admission_keeps_pairs_separate_and_shares_triples() -> motion_core::Result {

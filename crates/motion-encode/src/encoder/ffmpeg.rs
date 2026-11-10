@@ -211,7 +211,7 @@ impl Encoder for FfmpegEncoder<'_> {
 #[cfg(all(test, feature = "ffmpeg"))]
 mod codec_tests {
     use super::*;
-    use motion_core::{Color, Node, NodeModifiers, Rect, Size, TimeLiteral, Timeline};
+    use motion_core::{Color, Node, NodeModifiers, Rect, Shape, Size, TimeLiteral, Timeline};
 
     #[test]
     #[ignore = "requires native FFmpeg with libx264"]

@@ -51,7 +51,7 @@ pub(super) fn attractor(parameters: DemoParameters) -> motion::Result<Study> {
             })
             .modifier(Drag::new(1.0)),
     );
-    study.guides = Circle::new(VIEWPORT.center(), 4.0)
+    study.guides = Circle::new(VIEWPORT.center(), 4.0)?
         .fill(Color::from_hex(0xf6b863))
         .into();
     Ok(study)
@@ -86,7 +86,7 @@ pub(super) fn radial(parameters: DemoParameters) -> motion::Result<Study> {
                 falloff,
             });
         guides.push(
-            Circle::new(center, 56.0)
+            Circle::new(center, 56.0)?
                 .fill(Color::from_hex(0x243b31))
                 .into(),
         );
@@ -301,7 +301,7 @@ pub(super) fn circle(parameters: DemoParameters) -> motion::Result<Study> {
         radius: 60.0,
         response: response(),
     }));
-    study.guides = Circle::new(center, 60.0)
+    study.guides = Circle::new(center, 60.0)?
         .fill(Color::from_hex(OBSTACLE))
         .into();
     Ok(study)
@@ -313,11 +313,12 @@ pub(super) fn polygon(parameters: DemoParameters) -> motion::Result<Study> {
         Point::new(256.0, 136.0),
         Point::new(384.0, 224.0),
     ]);
-    let mut path = Path2D::new();
-    path.move_to(vertices[0])
+    let path = Path2D::builder()
+        .move_to(vertices[0])
         .line_to(vertices[1])
         .line_to(vertices[2])
-        .close();
+        .close()
+        .build()?;
     let mut study = Study::new(
         falling(parameters, f64::from(parameters.count))
             .modifier(PolygonCollider::new(vertices, response())?),

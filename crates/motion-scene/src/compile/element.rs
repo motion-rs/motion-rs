@@ -401,7 +401,10 @@ impl ClipProp {
                 node.clip_with(Rect::new(left, top, right, bottom), mode)
             }
             Self::Circle(center, radius) => {
-                node.clip_with(Circle::new(point(center.at(time)), radius.at(time)), mode)
+                match Circle::new(point(center.at(time)), radius.at(time)) {
+                    Ok(circle) => node.clip_with(circle, mode),
+                    Err(error) => super::failure::failure(error),
+                }
             }
             Self::Path(path) => node.clip_with(path.clone(), mode),
         }

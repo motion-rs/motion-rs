@@ -2,6 +2,7 @@
 
 use crate::*;
 use motion_core::Result;
+use motion_core::Shape;
 #[cfg(feature = "ffmpeg")]
 use motion_core::{
     AssetStatus, Assets, AudioClip, Color, MotionBlur, NodeModifiers, Rect, ValidationError,

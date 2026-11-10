@@ -36,7 +36,7 @@ pub(super) fn image(ring: bool) -> Node {
 }
 
 pub(super) fn rectangle(bounds: Rect, color: Color) -> Node {
-    Node::from(RoundedRect::new(bounds, 8.0).fill(color))
+    Node::from(RoundedRect::new(bounds, 8.0).unwrap().fill(color))
 }
 
 pub(super) fn artwork(kind: &str, context: &SceneContext<'_>) -> Node {
@@ -64,7 +64,9 @@ pub(super) fn artwork_with_particles(
         let mut nodes = vec![Node::from(path.clone().stroke(2.0, Color::BLACK))];
         for index in 0..=32 {
             let (point, tangent) = path.try_point_at(index as f64 / 32.0).unwrap();
-            nodes.push(Node::from(Circle::new(point, 2.5).fill(Color::BLACK)));
+            nodes.push(Node::from(
+                Circle::new(point, 2.5).unwrap().fill(Color::BLACK),
+            ));
             let mut direction = Path2D::new();
             direction.try_move_to(point).unwrap();
             direction.try_line_to(point + tangent * 8.0).unwrap();

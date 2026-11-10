@@ -340,6 +340,7 @@ fn dust(point: [f64; 2], seed: u32, radius: f64, coverage: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use motion_core::Shape;
     use motion_core::{BlendMode, Node, NodeModifiers, Rect, Size, TimeLiteral};
     use motion_render::{Composition, Renderer};
 
