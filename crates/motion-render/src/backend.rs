@@ -1,7 +1,5 @@
 //! Observable native backend selection and startup parity contract.
 
-use motion_core::Result;
-
 /// A session's fixed rendering backend. Device loss after this decision is a
 /// failure, not a mid-export switch to a different pixel implementation.
 #[derive(Clone, Debug)]
@@ -39,26 +37,71 @@ pub enum Renderer {
     Gpu,
 }
 
-/// Native backend selection; explicit GPU never silently falls back.
+/// Requested native backend; explicit GPU never silently falls back.
+///
+/// This is the only way to choose a backend. [`Renderer`] is the outcome
+/// reported by [`BackendDecision`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum BackendPreference {
     /// Bounded CPU reference.
     #[default]
     Cpu,
     /// Explicit native GPU, without fallback.
-    Gpu,
+    Gpu {
+        /// Admits software adapters such as llvmpipe or WARP.
+        allow_software: bool,
+    },
     /// Validates a native GPU once, falling back only before the session starts.
-    Automatic,
+    Automatic {
+        /// Admits software adapters such as llvmpipe or WARP.
+        allow_software: bool,
+    },
 }
 
 impl BackendPreference {
-    /// Returns the initial session renderer, without probing device availability.
-    /// Automatic starts with CPU; session policy decides whether a GPU is admissible.
-    pub fn renderer(self) -> Result<crate::Renderer> {
+    /// Explicit GPU on hardware adapters only.
+    pub const fn gpu() -> Self {
+        Self::Gpu {
+            allow_software: false,
+        }
+    }
+
+    /// GPU on hardware adapters with a startup fallback to CPU.
+    pub const fn automatic() -> Self {
+        Self::Automatic {
+            allow_software: false,
+        }
+    }
+
+    /// Whether software GPU adapters are admitted; always false for CPU.
+    pub const fn allow_software(self) -> bool {
         match self {
-            Self::Cpu => Ok(crate::Renderer::Cpu),
-            Self::Gpu => Ok(crate::Renderer::Gpu),
-            Self::Automatic => Ok(crate::Renderer::Cpu),
+            Self::Cpu => false,
+            Self::Gpu { allow_software } | Self::Automatic { allow_software } => allow_software,
+        }
+    }
+
+    /// Sets the software adapter policy; CPU has none and is returned unchanged.
+    pub const fn with_software(self, allow_software: bool) -> Self {
+        match self {
+            Self::Cpu => Self::Cpu,
+            Self::Gpu { .. } => Self::Gpu { allow_software },
+            Self::Automatic { .. } => Self::Automatic { allow_software },
+        }
+    }
+
+    /// Whether a GPU may be used, strictly or after a startup check.
+    pub const fn wants_gpu(self) -> bool {
+        !matches!(self, Self::Cpu)
+    }
+}
+
+impl From<Renderer> for BackendPreference {
+    /// Requests exactly `renderer`; GPU is strict and hardware-only.
+    fn from(renderer: Renderer) -> Self {
+        match renderer {
+            Renderer::Cpu => Self::Cpu,
+            Renderer::Gpu => Self::gpu(),
         }
     }
 }
@@ -88,7 +131,7 @@ mod tests {
     fn automatic_precision_fallback_precedes_device_initialization() -> motion_core::Result<()> {
         use motion_core::NodeModifiers;
         let mut session = crate::Composition::new(4, 4)
-            .backend_preference(crate::BackendPreference::Automatic, false)
+            .backend(crate::BackendPreference::automatic())
             .frame_renderer(motion_core::Size::new(4.0, 4.0))?;
         session.render_frame(0, |_| {
             motion_core::Node::from(
@@ -112,7 +155,7 @@ mod tests {
     #[cfg(not(feature = "gpu"))]
     fn automatic_without_feature_falls_back_before_rendering() -> motion_core::Result<()> {
         let mut session = crate::Composition::new(4, 4)
-            .backend_preference(crate::BackendPreference::Automatic, false)
+            .backend(crate::BackendPreference::automatic())
             .frame_renderer(motion_core::Size::new(4.0, 4.0))?;
         session.render_frame(0, |_| motion_core::Node::empty())?;
         let decision = session.backend_decision().unwrap();

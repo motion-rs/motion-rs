@@ -224,14 +224,7 @@ impl FrameRenderer {
     /// Configured backend policy, without selecting or initializing a device.
     /// Automatic remains Automatic after its startup decision has been made.
     pub fn requested_backend(&self) -> crate::BackendPreference {
-        self.composition.backend_override.map_or(
-            if self.composition.renderer == crate::Renderer::Gpu {
-                crate::BackendPreference::Gpu
-            } else {
-                crate::BackendPreference::Cpu
-            },
-            |policy| policy.0,
-        )
+        self.composition.backend
     }
 }
 

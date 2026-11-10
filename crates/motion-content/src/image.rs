@@ -381,7 +381,9 @@ mod tests {
             #[cfg(feature = "gpu")]
             Renderer::Gpu,
         ] {
-            let composition = Composition::new(8, 8).frame_count(20).renderer(backend);
+            let composition = Composition::new(8, 8)
+                .frame_count(20)
+                .backend(backend.into());
             let mut actual = composition.frame_renderer(Size::new(8.0, 8.0))?;
             let mut manual = composition.frame_renderer(Size::new(8.0, 8.0))?;
             for (mode, expected) in [

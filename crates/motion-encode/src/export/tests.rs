@@ -24,7 +24,7 @@ fn native_main10_export_renders_display() -> motion_core::Result {
     let backends = [
         motion_render::BackendPreference::Cpu,
         #[cfg(feature = "gpu")]
-        motion_render::BackendPreference::Gpu,
+        motion_render::BackendPreference::gpu(),
     ];
     for (index, backend) in backends.into_iter().enumerate() {
         let destination = directory.path().join(format!("main10-{index}.mp4"));
@@ -80,7 +80,7 @@ fn parallel_worker_selection_respects_frames_memory_and_backend() {
     options.render.limits.max_bytes = u64::MAX;
     assert_eq!(render_workers(&options, 100, 1024, Some(&cpu)), 8);
     assert_eq!(render_workers(&options, 100, u64::MAX, Some(&cpu)), 1);
-    options.render.backend = motion_render::BackendPreference::Automatic;
+    options.render.backend = motion_render::BackendPreference::automatic();
     assert_eq!(render_workers(&options, 100, 1024, None), 1);
     assert_eq!(render_workers(&options, 100, 1024, Some(&cpu)), 8);
     assert_eq!(render_workers(&options, 100, 1024, Some(&gpu)), 1);
@@ -166,7 +166,7 @@ fn parallel_export_matches_serial_pixels_ntsc_ranges_and_progress() -> Result<()
     #[cfg(not(feature = "gpu"))]
     let backends = [
         motion_render::BackendPreference::Cpu,
-        motion_render::BackendPreference::Automatic,
+        motion_render::BackendPreference::automatic(),
     ];
     for format in [
         PixelFormat::SrgbRgba8 {
@@ -258,7 +258,7 @@ fn parallel_export_matches_serial_pixels_ntsc_ranges_and_progress() -> Result<()
         .workers(4);
     #[cfg(not(feature = "gpu"))]
     {
-        options.render.backend = motion_render::BackendPreference::Automatic;
+        options.render.backend = motion_render::BackendPreference::automatic();
     }
     let mut reference_renderer =
         composition(&changing, &options.render)?.frame_renderer(changing.size())?;
@@ -535,7 +535,7 @@ fn parallel_native_exports_match_serial_files_and_preserve_destinations() -> Res
     let reference = std::fs::read(&path)?;
     #[cfg(not(feature = "gpu"))]
     {
-        options.render.backend = motion_render::BackendPreference::Automatic;
+        options.render.backend = motion_render::BackendPreference::automatic();
     }
     for workers in [2, 4, 16] {
         options.path = directory.path().join(format!("workers-{workers}.mp4"));

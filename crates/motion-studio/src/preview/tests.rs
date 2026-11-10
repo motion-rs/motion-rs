@@ -131,7 +131,7 @@ fn start_export_job(
             u32::try_from(scene.composition.configured_frame_count()).map_err(io::Error::other)?,
         ),
         backend: if renderer == Renderer::Gpu {
-            motion_render::BackendPreference::Gpu
+            motion_render::BackendPreference::gpu()
         } else {
             motion_render::BackendPreference::Cpu
         },
@@ -179,7 +179,7 @@ fn shared_texture_preview_and_automatic_export_loss_preserve_transactions()
         PreviewSettings {
             scale: 50,
             transparent: true,
-            backend: Some(motion_render::BackendPreference::Automatic),
+            backend: Some(motion_render::BackendPreference::automatic()),
             ..Default::default()
         },
     );
@@ -215,7 +215,7 @@ fn shared_texture_preview_and_automatic_export_loss_preserve_transactions()
     let mut options = motion_encode::ExportOptions::new(&path);
     options.overwrite = true;
     options.render.gpu_context = Some(context);
-    options.render.backend = motion_render::BackendPreference::Automatic;
+    options.render.backend = motion_render::BackendPreference::automatic();
     let error = motion_encode::export(&timeline, &options, &motion_encode::NoProgress)
         .expect_err("lost device must abort export");
     assert_eq!(error.kind(), motion_core::ErrorKind::DeviceLost);
@@ -294,7 +294,7 @@ fn automatic_preview_rejects_gpu_plan_without_rejecting_cpu_frame() -> motion_co
         "GPU admission",
         motion_render::Composition::new(64, 64)
             .gpu_context(context)
-            .backend_preference(motion_render::BackendPreference::Automatic, false)
+            .backend(motion_render::BackendPreference::automatic())
             .raster_limits(limits)?,
         motion_core::Size::new(64.0, 64.0),
         |sample| {
@@ -308,7 +308,7 @@ fn automatic_preview_rejects_gpu_plan_without_rejecting_cpu_frame() -> motion_co
         },
     );
     let settings = PreviewSettings {
-        backend: Some(motion_render::BackendPreference::Automatic),
+        backend: Some(motion_render::BackendPreference::automatic()),
         ..PreviewSettings::default()
     };
     let mut automatic = PreviewRenderer::new(&scene, Renderer::Cpu)?;
@@ -324,7 +324,7 @@ fn automatic_preview_rejects_gpu_plan_without_rejecting_cpu_frame() -> motion_co
         composition: scene
             .composition
             .clone()
-            .backend_preference(motion_render::BackendPreference::Cpu, false),
+            .backend(motion_render::BackendPreference::Cpu),
         ..scene.clone()
     };
     let expected =
@@ -337,7 +337,7 @@ fn automatic_preview_rejects_gpu_plan_without_rejecting_cpu_frame() -> motion_co
     let mut inherited = PreviewRenderer::new(&scene, Renderer::Cpu)?;
     assert_eq!(
         inherited.renderer.requested_backend(),
-        motion_render::BackendPreference::Automatic
+        motion_render::BackendPreference::automatic()
     );
     assert_eq!(
         inherited
@@ -380,7 +380,7 @@ fn automatic_preview_rejects_gpu_plan_without_rejecting_cpu_frame() -> motion_co
         composition: scene
             .composition
             .clone()
-            .backend_preference(motion_render::BackendPreference::Gpu, false),
+            .backend(motion_render::BackendPreference::gpu()),
         ..scene
     };
     let error = PreviewRenderer::new(&explicit, Renderer::Gpu)?
@@ -388,7 +388,7 @@ fn automatic_preview_rejects_gpu_plan_without_rejecting_cpu_frame() -> motion_co
             &explicit,
             0,
             PreviewSettings {
-                backend: Some(motion_render::BackendPreference::Gpu),
+                backend: Some(motion_render::BackendPreference::gpu()),
                 ..settings
             },
         )
@@ -1447,7 +1447,7 @@ fn gpu_preview_seek_export_and_cancellation_preserve_worker_contracts() -> motio
     let mut software = composition.frame_renderer(size)?;
     let mut gpu = composition
         .clone()
-        .renderer(Renderer::Gpu)
+        .backend(Renderer::Gpu.into())
         .frame_renderer(size)?;
     gpu.render_frame(0, build)?;
     let adapter = gpu.gpu_info().expect("initialized GPU").clone();

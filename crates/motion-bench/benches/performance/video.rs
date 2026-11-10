@@ -41,7 +41,7 @@ pub(super) fn video_benchmark(
                     ExportOptions::new(&output)
                         .size(size)
                         .backend(if renderer == Renderer::Gpu {
-                            motion::BackendPreference::Gpu
+                            motion::BackendPreference::gpu()
                         } else {
                             motion::BackendPreference::Cpu
                         });

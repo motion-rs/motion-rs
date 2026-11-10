@@ -477,7 +477,7 @@ mod tests {
         let cpu = render_options(Some(std::path::Path::new(&font)))?.size(PixelSize::new(192, 108));
         let gpu = cpu
             .clone()
-            .backend(BackendPreference::Gpu)
+            .backend(BackendPreference::gpu())
             .gpu_context(motion::render::GpuContext::new()?);
         let project = project(cpu.clone())?;
         let mut cases = 0;

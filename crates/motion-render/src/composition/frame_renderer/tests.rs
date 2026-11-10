@@ -1,6 +1,6 @@
 use super::*;
-use crate::RenderContext;
 use crate::raster::prepare::RenderPrepare;
+use crate::{RenderContext, Renderer};
 use motion_core::ValidationErrorKind;
 use motion_core::{Color, Filter, NodeModifiers, Rect, ValidationLimits};
 
@@ -24,8 +24,11 @@ fn public_yuv10_output_uses_packing_and_preserves_unaligned_fallback() -> Result
             )
         };
         let base = Composition::new(width, 6).frame_rate(24).frame_count(2);
-        let mut cpu = base.clone().renderer(Renderer::Cpu).frame_renderer(size)?;
-        let mut gpu = base.renderer(Renderer::Gpu).frame_renderer(size)?;
+        let mut cpu = base
+            .clone()
+            .backend(Renderer::Cpu.into())
+            .frame_renderer(size)?;
+        let mut gpu = base.backend(Renderer::Gpu.into()).frame_renderer(size)?;
         let expected = cpu.render_output_at(Time::ZERO, Some(Color::BLACK), format, source)?;
         let actual = gpu.render_output_at(Time::ZERO, Some(Color::BLACK), format, source)?;
         assert_eq!(actual.format(), format);
@@ -671,7 +674,7 @@ fn cpu_invalid_configuration_and_index_fail_before_evaluation() -> Result {
 #[test]
 fn gpu_selection_is_explicit_and_lazy_without_a_device() -> Result {
     let selected = composition()
-        .renderer(Renderer::Gpu)
+        .backend(Renderer::Gpu.into())
         .frame_renderer(Size::new(8.0, 4.0));
     #[cfg(not(feature = "gpu"))]
     {
@@ -735,7 +738,7 @@ fn gpu_device_session_seek_budget_and_recovery_match_cpu() -> Result {
             .background(motion_core::Color::rgb(20, 40, 60));
         let mut cpu = composition.frame_renderer(Size::new(8.0, 4.0))?;
         let mut gpu = composition
-            .renderer(Renderer::Gpu)
+            .backend(Renderer::Gpu.into())
             .frame_renderer(Size::new(8.0, 4.0))?;
         assert!(gpu.gpu_info().is_none());
         let mut first = None;

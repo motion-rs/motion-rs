@@ -64,7 +64,7 @@ impl Calibration {
                 scene,
                 settings,
                 frame,
-                motion_render::BackendPreference::Gpu,
+                motion_render::BackendPreference::gpu(),
             );
             #[cfg(not(feature = "gpu"))]
             let gpu = None;
@@ -80,7 +80,7 @@ impl Calibration {
 fn decide(cpu: Option<Duration>, gpu: Option<Duration>, workers: u32) -> Choice {
     let throughput = cpu.map(|cpu| cpu / workers);
     let backend = if gpu.is_some_and(|gpu| throughput.is_none_or(|cpu| gpu < cpu)) {
-        motion_render::BackendPreference::Gpu
+        motion_render::BackendPreference::gpu()
     } else {
         motion_render::BackendPreference::Cpu
     };
@@ -111,13 +111,18 @@ fn measure(
             ((u64::from(size.height) * u64::from(settings.scale)) / 100).max(1) as u32,
         ))
         .ok()?
-        .backend_preference(backend, false)
+        .backend(backend)
         .quality(settings.quality);
     let scaled = StudioScene {
         composition,
         ..scene.clone()
     };
-    let mut renderer = PreviewRenderer::new(&scaled, backend.renderer().ok()?).ok()?;
+    let initial = if matches!(backend, motion_render::BackendPreference::Gpu { .. }) {
+        Renderer::Gpu
+    } else {
+        Renderer::Cpu
+    };
+    let mut renderer = PreviewRenderer::new(&scaled, initial).ok()?;
     let count = u32::try_from(scene.composition.configured_frame_count()).ok()?;
     if count == 0 {
         return None;
@@ -163,7 +168,7 @@ mod tests {
         );
         assert_eq!(
             decide(slow, fast, 1).backend,
-            motion_render::BackendPreference::Gpu
+            motion_render::BackendPreference::gpu()
         );
         assert_eq!(
             decide(fast, fast, 1).backend,
@@ -175,7 +180,7 @@ mod tests {
         );
         assert_eq!(
             decide(None, fast, 1).backend,
-            motion_render::BackendPreference::Gpu
+            motion_render::BackendPreference::gpu()
         );
         assert_eq!(
             decide(None, None, 1).backend,
@@ -189,7 +194,7 @@ mod tests {
         let gpu = Some(Duration::from_millis(30));
         assert_eq!(
             decide(cpu, gpu, 1).backend,
-            motion_render::BackendPreference::Gpu
+            motion_render::BackendPreference::gpu()
         );
         assert_eq!(
             decide(cpu, gpu, 5).backend,
@@ -197,7 +202,7 @@ mod tests {
         );
         assert_eq!(
             decide(Some(Duration::from_millis(400)), gpu, 5).backend,
-            motion_render::BackendPreference::Gpu
+            motion_render::BackendPreference::gpu()
         );
     }
 }

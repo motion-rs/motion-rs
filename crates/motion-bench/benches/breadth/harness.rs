@@ -44,7 +44,7 @@ pub(super) fn composition(
 ) -> motion::Result<Composition> {
     Ok(Composition::new(size.width as usize, size.height as usize)
         .frame_count(90)
-        .renderer(renderer)
+        .backend(renderer.into())
         .quality(motion::RenderQuality::Final)
         .render_context(render_context()?)
         .resources(resources.clone())

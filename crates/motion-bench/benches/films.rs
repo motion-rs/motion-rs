@@ -285,7 +285,7 @@ fn main() -> motion::Result {
         for backend in &backends {
             let mut selected = options.clone();
             selected.backend = if *backend == Renderer::Gpu {
-                BackendPreference::Gpu
+                BackendPreference::gpu()
             } else {
                 BackendPreference::Cpu
             };

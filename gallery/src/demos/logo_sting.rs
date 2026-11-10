@@ -190,7 +190,7 @@ mod tests {
                 assert_eq!(first.bytes(), replay.bytes());
                 #[cfg(feature = "gpu")]
                 {
-                    let gpu_options = options.clone().backend(BackendPreference::Gpu);
+                    let gpu_options = options.clone().backend(BackendPreference::gpu());
                     let gpu = render_still(&film, time, &gpu_options)?;
                     let difference = first
                         .bytes()

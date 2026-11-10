@@ -128,7 +128,7 @@ fn main() -> motion::Result {
     for &renderer in &renderers {
         let composition = Composition::new(size.width as usize, size.height as usize)
             .frame_count(90)
-            .renderer(renderer)
+            .backend(renderer.into())
             .quality(motion::RenderQuality::Final)
             .resources(resources.clone())
             .raster_limits(limits)?;

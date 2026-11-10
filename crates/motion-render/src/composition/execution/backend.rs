@@ -99,14 +99,8 @@ impl FrameExecution<'_> {
         if let Some(decision) = &self.backend {
             return Ok(decision.renderer);
         }
-        let (preference, allow_software) = self.composition.backend_override.unwrap_or((
-            if self.composition.renderer == Renderer::Gpu {
-                crate::BackendPreference::Gpu
-            } else {
-                crate::BackendPreference::Cpu
-            },
-            false,
-        ));
+        let preference = self.composition.backend;
+        let allow_software = preference.allow_software();
         if preference == crate::BackendPreference::Cpu {
             self.backend = Some(crate::BackendDecision {
                 renderer: Renderer::Cpu,
@@ -148,7 +142,7 @@ impl FrameExecution<'_> {
                 });
                 Ok(Renderer::Gpu)
             }
-            Err(error) if preference == crate::BackendPreference::Automatic => {
+            Err(error) if matches!(preference, crate::BackendPreference::Automatic { .. }) => {
                 self.gpu_reset();
                 self.backend = Some(crate::BackendDecision {
                     renderer: Renderer::Cpu,
@@ -205,19 +199,11 @@ impl FrameExecution<'_> {
             let preparation = prepared.stats();
             #[cfg(feature = "gpu")]
             let plan = {
-                let preference = self
-                    .composition
-                    .backend_override
-                    .map(|policy| policy.0)
-                    .unwrap_or(if self.composition.renderer == Renderer::Gpu {
-                        crate::BackendPreference::Gpu
-                    } else {
-                        crate::BackendPreference::Cpu
-                    });
+                let preference = self.composition.backend;
                 let requested = self
                     .backend
                     .as_ref()
-                    .map_or(preference != crate::BackendPreference::Cpu, |decision| {
+                    .map_or(preference.wants_gpu(), |decision| {
                         decision.renderer == Renderer::Gpu
                     });
                 let started = self
@@ -240,7 +226,10 @@ impl FrameExecution<'_> {
                         Ok(plan) => Some(plan),
                         Err(error)
                             if self.backend.is_none()
-                                && preference == crate::BackendPreference::Automatic =>
+                                && matches!(
+                                    preference,
+                                    crate::BackendPreference::Automatic { .. }
+                                ) =>
                         {
                             self.backend = Some(crate::BackendDecision {
                                 renderer: Renderer::Cpu,

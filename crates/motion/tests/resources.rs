@@ -23,7 +23,7 @@ mod resources {
             #[cfg(not(feature = "gpu"))]
             {
                 let error = motion::render::Composition::new(1, 1)
-                    .renderer(motion::Renderer::Gpu)
+                    .backend(motion::Renderer::Gpu.into())
                     .frame_renderer(motion::Size::new(1.0, 1.0))
                     .err()
                     .unwrap();

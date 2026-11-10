@@ -5,7 +5,8 @@
 BackendPreference::Cpu uses the scalar renderer. Gpu requires a supported native
 wgpu adapter; Automatic may choose CPU during startup policy checks and reports why.
 An explicit GPU request does not silently fall back after failure or device loss.
-Software GPU adapters require explicit permission.
+`Gpu` and `Automatic` carry `allow_software`; software GPU adapters require it to be true.
+`Renderer` only reports the backend that was actually used.
 
 GpuContext owns the device, queue, pipelines, device-loss monitor and submission
 serialization. Clones share that identity. Import an existing compatible device for

@@ -272,7 +272,7 @@ impl StudioApp {
                 scale: 50,
                 transparent: true,
                 backend: Some(if gpu_available {
-                    motion_render::BackendPreference::Automatic
+                    motion_render::BackendPreference::automatic()
                 } else {
                     motion_render::BackendPreference::Cpu
                 }),

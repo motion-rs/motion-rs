@@ -353,7 +353,7 @@ fn fractional_video_and_audio_keep_exact_rate_and_cleanup() -> Result {
 #[test]
 #[ignore = "requires native GPU and FFmpeg with libx264/AAC; no fonts or window"]
 fn gpu_fractional_video_and_audio_keep_exact_rate_and_cleanup() -> Result {
-    fractional_video_acceptance(BackendPreference::Gpu)
+    fractional_video_acceptance(BackendPreference::gpu())
 }
 
 #[cfg(feature = "ffmpeg")]

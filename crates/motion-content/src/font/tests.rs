@@ -80,7 +80,7 @@ fn explicit_font_gpu_matches_cpu_and_replays() -> motion_core::Result {
         .background(motion_core::Color::BLACK);
     let mut cpu = composition.frame_renderer(Size::new(128.0, 64.0))?;
     let mut gpu = composition
-        .renderer(Renderer::Gpu)
+        .backend(Renderer::Gpu.into())
         .frame_renderer(Size::new(128.0, 64.0))?;
     let build = |context: &motion_core::SceneContext<'_>| {
         row.clone()

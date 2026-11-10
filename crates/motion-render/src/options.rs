@@ -25,10 +25,8 @@ pub struct RenderOptions {
     /// Allows diagnostic resource placeholders instead of failing a frame.
     pub allow_missing_assets: bool,
 
-    /// Explicit backend; CPU is the default.
+    /// Explicit backend; CPU is the default. GPU requests carry their own software adapter policy.
     pub backend: BackendPreference,
-    /// Explicitly allows software adapters for CI/headless GPU validation.
-    pub allow_software_gpu: bool,
     /// Optional shared native device (for example Studio's eframe context).
     /// Does not select a backend.
     #[cfg(feature = "gpu")]
@@ -60,7 +58,6 @@ impl Default for RenderOptions {
             display: crate::DisplayTransform::default(),
             allow_missing_assets: false,
             backend: BackendPreference::Cpu,
-            allow_software_gpu: false,
             #[cfg(feature = "gpu")]
             gpu_context: None,
             resources: None,
@@ -130,12 +127,6 @@ impl RenderOptions {
     /// Selects the rendering backend.
     pub fn backend(mut self, backend: BackendPreference) -> Self {
         self.backend = backend;
-        self
-    }
-
-    /// Allows software GPU adapters for CI and headless validation.
-    pub fn allow_software_gpu(mut self, allow: bool) -> Self {
-        self.allow_software_gpu = allow;
         self
     }
 

@@ -534,9 +534,9 @@ impl eframe::App for StudioApp {
                                 ))
                                 .show_ui(ui, |ui| {
                                     for backend in [
-                                        motion_render::BackendPreference::Automatic,
+                                        motion_render::BackendPreference::automatic(),
                                         motion_render::BackendPreference::Cpu,
-                                        motion_render::BackendPreference::Gpu,
+                                        motion_render::BackendPreference::gpu(),
                                     ] {
                                         ui.add_enabled_ui(
                                             backend == motion_render::BackendPreference::Cpu

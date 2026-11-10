@@ -335,7 +335,7 @@ mod drawing {
                 .background(Color::BLACK);
             let mut cpu = composition.frame_renderer(Size::new(8.0, 8.0))?;
             let mut gpu = composition
-                .renderer(Renderer::Gpu)
+                .backend(Renderer::Gpu.into())
                 .frame_renderer(Size::new(8.0, 8.0))?;
             let build = |context: &motion::SceneContext<'_>| {
                 let index = context.time().to_frame(context.frame_rate());
@@ -513,7 +513,7 @@ mod drawing {
                 .background(Color::BLACK);
             let mut cpu = composition.frame_renderer(Size::new(8.0, 8.0))?;
             let mut gpu = composition
-                .renderer(Renderer::Gpu)
+                .backend(Renderer::Gpu.into())
                 .frame_renderer(Size::new(8.0, 8.0))?;
             let build = |context: &motion::SceneContext<'_>| {
                 let index = context.time().to_frame(context.frame_rate()) as usize;

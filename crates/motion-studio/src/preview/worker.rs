@@ -223,18 +223,20 @@ fn submit_preview(
                 ((u64::from(size.height) * u64::from(request.settings.scale)) / 100).max(1) as u32,
             ))?;
             if let Some(preference) = request.settings.backend {
-                scene.composition = scene.composition.backend_preference(preference, false);
+                scene.composition = scene.composition.backend(preference);
             }
             scene.composition = scene.composition.quality(request.settings.quality);
         }
-        let choice =
-            if request.settings.backend == Some(motion_render::BackendPreference::Automatic) {
-                Some(calibration.choose(source, request.settings, key.frame))
-            } else {
-                None
-            };
+        let choice = if matches!(
+            request.settings.backend,
+            Some(motion_render::BackendPreference::Automatic { .. })
+        ) {
+            Some(calibration.choose(source, request.settings, key.frame))
+        } else {
+            None
+        };
         if let Some(choice) = &choice {
-            scene.composition = scene.composition.backend_preference(choice.backend, false);
+            scene.composition = scene.composition.backend(choice.backend);
         }
         let mut renderer = PreviewRenderer::new(&scene, key.renderer)?;
         renderer.automatic = choice.is_some();

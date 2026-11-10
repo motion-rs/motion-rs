@@ -457,7 +457,7 @@ mod scenes {
                 assert_eq!(timeline.frame_count(), 20);
                 let mut session = Composition::new(64, 48)
                     .frame_count(24)
-                    .renderer(renderer)
+                    .backend(renderer.into())
                     .frame_renderer(size)?;
                 let mut replay = None;
                 let mut held = None;
@@ -1456,7 +1456,7 @@ mod scenes {
             for backend in backends {
                 let composition = Composition::new(64, 64)
                     .frame_count(10)
-                    .renderer(backend)
+                    .backend(backend.into())
                     .background(Color::WHITE);
                 let mut renderer = composition.frame_renderer(Size::new(64.0, 64.0))?;
                 let mut references = std::collections::BTreeMap::<u32, Vec<u32>>::new();

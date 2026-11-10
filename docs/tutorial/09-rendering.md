@@ -55,9 +55,12 @@ use motion::prelude::*;
 
 fn main() {
     let cpu = RenderOptions::default().backend(BackendPreference::Cpu);
-    let automatic = RenderOptions::default().backend(BackendPreference::Automatic);
-    let strict_gpu = RenderOptions::default().backend(BackendPreference::Gpu);
-    let _ = (cpu, automatic, strict_gpu);
+    let automatic = RenderOptions::default().backend(BackendPreference::automatic());
+    let strict_gpu = RenderOptions::default().backend(BackendPreference::gpu());
+    let ci_gpu = RenderOptions::default().backend(BackendPreference::Gpu {
+        allow_software: true,
+    });
+    let _ = (cpu, automatic, strict_gpu, ci_gpu);
 }
 ```
 

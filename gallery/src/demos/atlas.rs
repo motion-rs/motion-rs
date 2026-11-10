@@ -489,14 +489,14 @@ mod tests {
             .size(PixelSize::new(288, 162));
         let gpu = cpu
             .clone()
-            .backend(BackendPreference::Gpu)
+            .backend(BackendPreference::gpu())
             .gpu_context(motion::render::GpuContext::new()?);
         let system_cpu = crate::render_options(None)?
             .backend(BackendPreference::Cpu)
             .size(PixelSize::new(288, 162));
         let system_gpu = system_cpu
             .clone()
-            .backend(BackendPreference::Gpu)
+            .backend(BackendPreference::gpu())
             .gpu_context(motion::render::GpuContext::new()?);
         let project = crate::project(RenderOptions::default())?;
         for (id, _, pages) in cases() {

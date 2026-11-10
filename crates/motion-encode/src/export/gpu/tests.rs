@@ -136,7 +136,7 @@ fn ten_bit_gpu_export_matches_cpu_export_within_one_code_value() -> Result<()> {
     let mut outputs = Vec::new();
     for backend in [
         motion_render::BackendPreference::Cpu,
-        motion_render::BackendPreference::Gpu,
+        motion_render::BackendPreference::gpu(),
     ] {
         let mut options = ExportOptions::new("unused-ten-bit-gpu-export")
             .backend(backend)
@@ -253,7 +253,7 @@ fn automatic_backend_selecting_the_gpu_uses_the_pipeline() -> Result<()> {
         )
     });
     let mut options = ExportOptions::new("unused-automatic-output")
-        .backend(motion_render::BackendPreference::Automatic)
+        .backend(motion_render::BackendPreference::automatic())
         .workers(2);
     options.render.gpu_context = Some(motion_render::GpuContext::new()?);
     export_with_encoder(&timeline, &options, &NoProgress, Box::new(Discard))?;
@@ -282,7 +282,7 @@ fn gpu_export_pipeline_matches_linear_reference_and_cancels_transactionally() ->
         )
     });
     let mut options = ExportOptions::new("unused-gpu-pipeline-output")
-        .backend(motion_render::BackendPreference::Gpu)
+        .backend(motion_render::BackendPreference::gpu())
         .workers(2);
     options.render.limits.max_bytes = 16 * 1024 * 1024;
     let format = PixelFormat::Yuv420 { bit_depth: 8 };

@@ -139,26 +139,12 @@ pub fn export_with_encoder(
         return Ok(report);
     }
     cancelled(progress)?;
-    let first_pixels =
-        if options.render.backend != motion_render::BackendPreference::Gpu && options.workers > 1 {
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                render_frame(
-                    &mut renderer,
-                    timeline,
-                    &options,
-                    output_rate,
-                    format,
-                    first,
-                )
-            }))
-            .unwrap_or_else(|payload| {
-                Err(motion_core::Error::scene_panic(
-                    "export",
-                    first as u64,
-                    payload,
-                ))
-            })?
-        } else {
+    let first_pixels = if !matches!(
+        options.render.backend,
+        motion_render::BackendPreference::Gpu { .. }
+    ) && options.workers > 1
+    {
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             render_frame(
                 &mut renderer,
                 timeline,
@@ -166,8 +152,25 @@ pub fn export_with_encoder(
                 output_rate,
                 format,
                 first,
-            )?
-        };
+            )
+        }))
+        .unwrap_or_else(|payload| {
+            Err(motion_core::Error::scene_panic(
+                "export",
+                first as u64,
+                payload,
+            ))
+        })?
+    } else {
+        render_frame(
+            &mut renderer,
+            timeline,
+            &options,
+            output_rate,
+            format,
+            first,
+        )?
+    };
     let observed_peak = renderer
         .last_stats()
         .map_or(options.render.limits.max_bytes, |stats| stats.peak_bytes());

@@ -221,7 +221,7 @@ impl RenderSession {
     /// Automatic reports CPU here even after selecting GPU; use backend_decision
     /// for the actual startup choice and any fallback reason.
     pub fn renderer(&self) -> Renderer {
-        if self.options.backend == crate::BackendPreference::Gpu {
+        if matches!(self.options.backend, crate::BackendPreference::Gpu { .. }) {
             Renderer::Gpu
         } else {
             Renderer::Cpu

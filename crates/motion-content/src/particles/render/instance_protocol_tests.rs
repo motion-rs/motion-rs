@@ -87,7 +87,7 @@ fn compare_batches(style: ParticleStyle, renderer: Renderer) -> motion_core::Res
     .style(style);
     let mut session = Composition::new(192, 144)
         .frame_count(120)
-        .renderer(renderer)
+        .backend(renderer.into())
         .background(Color::BLACK)
         .frame_renderer(Size::new(192.0, 144.0))?;
     for mode in 0..3 {
@@ -267,7 +267,7 @@ fn per_style_blend_reaches_instance_upload_and_cpu_pixels() -> motion_core::Resu
     }
     let mut session = Composition::new(96, 72)
         .frame_count(30)
-        .renderer(Renderer::Cpu)
+        .backend(Renderer::Cpu.into())
         .background(Color::rgb(96, 96, 96))
         .frame_renderer(Size::new(96.0, 72.0))?;
     let frames = BLENDS

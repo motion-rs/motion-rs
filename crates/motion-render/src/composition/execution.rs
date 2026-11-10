@@ -258,12 +258,7 @@ impl FrameExecution<'_> {
         self.output_pool.trim(limits.max_bytes / 8);
         let started = self.timings.map(|_| std::time::Instant::now());
         let cpu = self.backend.as_ref().map_or_else(
-            || {
-                self.composition.backend_override.map_or(
-                    self.composition.renderer == Renderer::Cpu,
-                    |(preference, _)| preference == crate::BackendPreference::Cpu,
-                )
-            },
+            || self.composition.backend == crate::BackendPreference::Cpu,
             |decision| decision.renderer == Renderer::Cpu,
         );
         let display = self.composition.display.clone();
@@ -346,25 +341,25 @@ impl FrameExecution<'_> {
             && crate::gpu::Gpu::supports_packed_output(prepared.size(), format)
         {
             let started = self.timings.map(|_| std::time::Instant::now());
-            let plan =
-                match crate::gpu::Plan::new_packed(&prepared, limits, format) {
-                    Ok(plan) => Some(plan.with_display(&display, u64::from(index))?),
-                    Err(error)
-                        if self.backend.is_none()
-                            && self.composition.backend_override.is_some_and(
-                                |(preference, _)| preference == crate::BackendPreference::Automatic,
-                            ) =>
-                    {
-                        self.backend = Some(crate::BackendDecision {
-                            renderer: Renderer::Cpu,
-                            reason: Some(error.to_string()),
-                        });
-                        None
-                    }
-                    Err(error) => {
-                        return Err(motion_core::Error::from(error).at_frame(u64::from(index)));
-                    }
-                };
+            let plan = match crate::gpu::Plan::new_packed(&prepared, limits, format) {
+                Ok(plan) => Some(plan.with_display(&display, u64::from(index))?),
+                Err(error)
+                    if self.backend.is_none()
+                        && matches!(
+                            self.composition.backend,
+                            crate::BackendPreference::Automatic { .. }
+                        ) =>
+                {
+                    self.backend = Some(crate::BackendDecision {
+                        renderer: Renderer::Cpu,
+                        reason: Some(error.to_string()),
+                    });
+                    None
+                }
+                Err(error) => {
+                    return Err(motion_core::Error::from(error).at_frame(u64::from(index)));
+                }
+            };
             if let Some(started) = started {
                 self.timings.as_mut().expect("enabled timings").plan += started.elapsed();
             }
@@ -470,7 +465,7 @@ mod scene_output_tests {
     #[ignore = "requires native GPU; verifies frame-stage observations without latency assertions"]
     fn native_frame_stage_timings_preserve_output_and_logical_stats() -> motion_core::Result {
         let mut renderer = Composition::new(8, 8)
-            .renderer(Renderer::Gpu)
+            .backend(Renderer::Gpu.into())
             .frame_count(2)
             .frame_renderer(Size::new(8.0, 8.0))?;
         let build = |_: &SceneContext<'_>| {

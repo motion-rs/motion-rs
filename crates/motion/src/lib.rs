@@ -82,7 +82,7 @@
 //!
 //! Default Cargo features include `gpu`, content, native FFmpeg and Studio;
 //! library rendering selects CPU unless requested explicitly; the CLI defaults to Automatic.
-//! Native GPU composition uses Metal, Vulkan or DX12. `Renderer::Gpu` selects an
+//! Native GPU composition uses Metal, Vulkan or DX12. `BackendPreference::gpu()` selects an
 //! available native backend, including Metal on macOS. `studio` adds an egui
 //! workbench but does not open a window on import. Geometry-only rendering does
 //! not discover fonts; text requires an explicit font environment. Native video export

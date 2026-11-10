@@ -202,7 +202,7 @@ impl PreviewCoordinator {
             crate::playback::StudioClock::new(&scene.composition).map_err(io::Error::other)?;
         let cache = scene
             .composition
-            .studio_render_options(motion_render::BackendPreference::Automatic)
+            .studio_render_options(motion_render::BackendPreference::automatic())
             .cache
             .fork_partition(motion_core::CachePartition::Scene);
         scene.composition = scene.composition.clone().render_cache(cache);
@@ -506,7 +506,7 @@ impl CoordinatorRuntime {
                     ) {
                         self.scene
                             .composition
-                            .studio_render_options(motion_render::BackendPreference::Automatic)
+                            .studio_render_options(motion_render::BackendPreference::automatic())
                             .cache
                             .partition(motion_core::CachePartition::Scene)
                             .clear();

@@ -237,7 +237,7 @@ mod tests {
                 .frame_renderer(Size::new(48.0, 36.0))?;
             let mut gpu = Composition::new(48, 36)
                 .background(Color::from_hex(0x23272c))
-                .renderer(Renderer::Gpu)
+                .backend(Renderer::Gpu.into())
                 .frame_renderer(Size::new(48.0, 36.0))?;
             let build = |context: &SceneContext<'_>| {
                 Node::group([Node::from(

@@ -59,14 +59,13 @@ pub struct RenderArgs {
 
 impl RenderArgs {
     pub(super) fn apply(&self, mut options: RenderOptions) -> RenderOptions {
+        let allow_software = options.backend.allow_software() || self.allow_software_gpu;
         options.backend = self
             .backend
-            .map_or(crate::BackendPreference::Automatic, Backend::preference);
+            .map_or(crate::BackendPreference::automatic(), Backend::preference)
+            .with_software(allow_software);
         if let Some(size) = self.size {
             options.size = Some(size);
-        }
-        if self.allow_software_gpu {
-            options.allow_software_gpu = true;
         }
         options
     }
@@ -86,9 +85,9 @@ pub enum Backend {
 impl Backend {
     fn preference(self) -> crate::BackendPreference {
         match self {
-            Self::Automatic => crate::BackendPreference::Automatic,
+            Self::Automatic => crate::BackendPreference::automatic(),
             Self::Cpu => crate::BackendPreference::Cpu,
-            Self::Gpu => crate::BackendPreference::Gpu,
+            Self::Gpu => crate::BackendPreference::gpu(),
         }
     }
 }

@@ -240,7 +240,7 @@ impl PreviewRenderer {
         let mut frame_renderer = scene
             .composition
             .clone()
-            .renderer(renderer)
+            .backend(renderer.into())
             .allow_missing_assets(true)
             .frame_renderer(scene.definition.design_size)?;
         frame_renderer.enable_timings(true);
@@ -249,7 +249,7 @@ impl PreviewRenderer {
             #[cfg(feature = "gpu")]
             native_textures: scene
                 .composition
-                .studio_render_options(motion_render::BackendPreference::Automatic)
+                .studio_render_options(motion_render::BackendPreference::automatic())
                 .gpu_context
                 .is_some(),
             #[cfg(feature = "gpu")]
@@ -310,7 +310,7 @@ impl PreviewRenderer {
                     .render_cache(
                         scene
                             .composition
-                            .studio_render_options(motion_render::BackendPreference::Automatic)
+                            .studio_render_options(motion_render::BackendPreference::automatic())
                             .cache,
                     )
                     .with_assets(context.assets())
@@ -368,8 +368,10 @@ impl PreviewRenderer {
                 Err(error)
                     if (selecting || self.automatic)
                         && (self.automatic
-                            || self.renderer.requested_backend()
-                                == motion_render::BackendPreference::Automatic)
+                            || matches!(
+                                self.renderer.requested_backend(),
+                                motion_render::BackendPreference::Automatic { .. }
+                            ))
                         && error
                             .downcast_ref::<motion_core::ValidationError>()
                             .is_some_and(|error| {
@@ -382,8 +384,8 @@ impl PreviewRenderer {
                         .composition
                         .clone()
                         .output_size(motion_core::PixelSize::new(width, height))?
-                        .backend_preference(motion_render::BackendPreference::Cpu, false)
-                        .renderer(Renderer::Cpu)
+                        .backend(motion_render::BackendPreference::Cpu)
+                        .backend(Renderer::Cpu.into())
                         .allow_missing_assets(true);
                     self.renderer = cpu.frame_renderer(scene.definition.design_size)?;
                     self.admission_fallback = Some(error.to_string());

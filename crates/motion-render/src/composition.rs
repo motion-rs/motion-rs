@@ -1,7 +1,5 @@
 //! Deterministic scene compositions and rendering sessions.
 
-use crate::Renderer;
-
 use motion_core::Result;
 use std::io;
 
@@ -59,9 +57,8 @@ pub struct Composition {
     shutter_sampling: motion_core::ShutterSampling,
     allow_missing_assets: bool,
 
-    renderer: Renderer,
+    backend: crate::BackendPreference,
     context: crate::RenderContext,
-    backend_override: Option<(crate::BackendPreference, bool)>,
     #[cfg(feature = "gpu")]
     gpu_context: Option<crate::GpuContext>,
     resources: Option<motion_core::Assets>,
@@ -88,9 +85,8 @@ impl Composition {
             motion_blur: None,
             shutter_sampling: motion_core::ShutterSampling::default(),
             allow_missing_assets: false,
-            renderer: Renderer::Cpu,
+            backend: crate::BackendPreference::Cpu,
             context: crate::RenderContext::new(),
-            backend_override: None,
             #[cfg(feature = "gpu")]
             gpu_context: None,
             resources: None,
@@ -119,8 +115,7 @@ impl Composition {
         if let Some(size) = options.size {
             self.size = (size.width as usize, size.height as usize);
         }
-        self.renderer = options.backend.renderer()?;
-        self.backend_override = Some((options.backend, options.allow_software_gpu));
+        self.backend = options.backend;
         self.context = options.context.clone();
         self.raster_limits = options.limits;
         self.resources = options.resources.clone();
@@ -225,12 +220,17 @@ impl Composition {
         self
     }
 
-    /// Selects an initial renderer without initializing it. An explicit
-    /// [`Self::backend_preference`] takes precedence. Explicit GPU requests fail
-    /// on unsupported configurations rather than silently falling back to CPU.
-    pub fn renderer(mut self, renderer: Renderer) -> Self {
-        self.renderer = renderer;
+    /// Selects the requested backend without initializing it. Explicit GPU
+    /// requests fail on unsupported configurations rather than silently falling
+    /// back to CPU; software adapters require `allow_software`.
+    pub fn backend(mut self, backend: crate::BackendPreference) -> Self {
+        self.backend = backend;
         self
+    }
+
+    /// Backend requested for sessions created from this composition.
+    pub fn requested_backend(&self) -> crate::BackendPreference {
+        self.backend
     }
 
     /// Validated rational frame rate, without constructing scene content.
@@ -394,7 +394,8 @@ impl Composition {
         self
     }
 
-    /// Builds the same render policy for preview/export consumers.
+    /// Builds the same render policy for preview/export consumers. `backend` replaces
+    /// the requested backend; the software adapter policy of this composition is kept.
     pub fn studio_render_options(&self, backend: crate::BackendPreference) -> crate::RenderOptions {
         crate::RenderOptions {
             quality: self.quality,
@@ -405,8 +406,7 @@ impl Composition {
             blend_space: self.blend_space,
             display: self.display.clone(),
             allow_missing_assets: self.allow_missing_assets,
-            backend,
-            allow_software_gpu: self.backend_override.is_some_and(|policy| policy.1),
+            backend: backend.with_software(self.backend.allow_software()),
             #[cfg(feature = "gpu")]
             gpu_context: self.gpu_context.clone(),
             resources: self.resources.clone(),
@@ -420,16 +420,6 @@ impl Composition {
     /// Shares rendering caches without changing backend, viewport or output policy.
     pub fn render_cache(mut self, cache: crate::RenderCache) -> Self {
         self.render_cache = cache;
-        self
-    }
-
-    /// Sets backend/self-check policy. Software adapters require explicit opt-in.
-    pub fn backend_preference(
-        mut self,
-        preference: crate::BackendPreference,
-        allow_software: bool,
-    ) -> Self {
-        self.backend_override = Some((preference, allow_software));
         self
     }
 
@@ -519,7 +509,7 @@ impl Composition {
     /// ```
     pub fn frame_renderer(&self, design_size: Size) -> Result<FrameRenderer> {
         self.preflight()?;
-        if self.renderer == Renderer::Gpu && !cfg!(feature = "gpu") {
+        if matches!(self.backend, crate::BackendPreference::Gpu { .. }) && !cfg!(feature = "gpu") {
             return Err(motion_core::Error::GpuUnavailable(Box::new(
                 ValidationError::unsupported(
                     "composition",
@@ -534,17 +524,7 @@ impl Composition {
         Ok(FrameRenderer {
             composition: self.clone(),
             duration: self.checked_duration()?,
-            session: RenderSession::new(
-                design_size,
-                self.studio_render_options(self.backend_override.map_or(
-                    if self.renderer == Renderer::Gpu {
-                        crate::BackendPreference::Gpu
-                    } else {
-                        crate::BackendPreference::Cpu
-                    },
-                    |policy| policy.0,
-                )),
-            )?,
+            session: RenderSession::new(design_size, self.studio_render_options(self.backend))?,
         })
     }
 
