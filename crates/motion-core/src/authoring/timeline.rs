@@ -34,10 +34,12 @@ use crate::{
 };
 use std::{fmt, sync::Arc};
 
+mod soundtrack;
 #[cfg(test)]
 mod tests;
 mod track;
 
+pub use soundtrack::Soundtrack;
 pub use track::{Clip, Track, TrackBuilder};
 
 const MAX_TRACKS: usize = 256;
@@ -134,10 +136,8 @@ pub struct Timeline {
     inferred: Duration,
     explicit: Option<Duration>,
     adjustments: Arc<Vec<BoundaryAdjustment>>,
-    audio: Arc<Vec<crate::AudioClip>>,
+    soundtrack: Soundtrack,
     resolved_audio: Option<Arc<Vec<crate::AudioClip>>>,
-    master: crate::audio::Master,
-    audio_buses: Arc<Vec<crate::audio::AudioBus>>,
     errors: Arc<DeferredErrors>,
 }
 
@@ -168,36 +168,15 @@ impl Timeline {
             inferred: Time::ZERO,
             explicit: None,
             adjustments: Arc::new(Vec::new()),
-            audio: Arc::new(Vec::new()),
+            soundtrack: Soundtrack::default(),
             resolved_audio: None,
-            master: crate::audio::Master::default(),
-            audio_buses: Arc::new(Vec::new()),
             errors: Arc::default(),
         }
     }
 
     /// Validates every retained authoring diagnostic and nested scene before execution.
     pub fn validate(&self) -> crate::Result<()> {
-        self.master.validate()?;
-        if self.audio_buses.len() > 16 {
-            return Err(invalid("At most sixteen audio buses"));
-        }
-        for (index, bus) in self.audio_buses.iter().enumerate() {
-            crate::audio::Master {
-                gain_db: bus.gain_db,
-                ..Default::default()
-            }
-            .validate()?;
-            if bus.name.is_empty()
-                || bus.name.len() > 128
-                || bus.effects.len() > 16
-                || self.audio_buses[..index]
-                    .iter()
-                    .any(|other| other.name == bus.name)
-            {
-                return Err(invalid("Invalid or duplicate audio bus"));
-            }
-        }
+        self.soundtrack.validate()?;
         let mut errors = self.errors.as_slice().to_vec();
         for (track_index, track) in self.tracks.iter().enumerate() {
             for clip in track.clips.iter() {
@@ -228,15 +207,15 @@ impl Timeline {
 
     /// Sets optional master processing, shared by preview and export.
     pub fn master(mut self, master: crate::audio::Master) -> Self {
-        self.master = master;
+        self.soundtrack.master = master;
         self
     }
 
     /// Declares a named offline submix before the master.
     pub fn audio_bus(self, bus: crate::audio::AudioBus) -> Self {
         self.defer(|mut timeline| {
-            Arc::make_mut(&mut timeline.audio_buses).push(bus);
-            for clip in timeline.audio.as_ref().clone() {
+            Arc::make_mut(&mut timeline.soundtrack.buses).push(bus);
+            for clip in timeline.soundtrack.clips.as_ref().clone() {
                 if clip.unresolved_file() && clip.parameters().duration.is_none() {
                     continue;
                 }
@@ -246,14 +225,19 @@ impl Timeline {
         })
     }
 
+    /// Audio clips, buses and master settings declared on this timeline.
+    pub fn soundtrack(&self) -> &Soundtrack {
+        &self.soundtrack
+    }
+
     /// Immutable master settings at the audio execution boundary.
     pub fn audio_master(&self) -> crate::audio::Master {
-        self.master
+        self.soundtrack.master
     }
 
     /// Declared submixes in deterministic insertion order.
     pub fn audio_buses(&self) -> &[crate::audio::AudioBus] {
-        &self.audio_buses
+        &self.soundtrack.buses
     }
 
     /// Overrides output duration, deferring validation failures to execution.
@@ -291,22 +275,23 @@ impl Timeline {
     /// Adds audio without snapping its placement to the video grid. Audio
     /// extends inferred output to the next frame boundary, never trims its tail.
     pub fn try_audio(mut self, clip: crate::AudioClip) -> crate::Result<Self> {
-        if self.audio.len() >= 256 {
+        if self.soundtrack.clips.len() >= 256 {
             return Err(invalid("Timeline exceeds 256 audio clips"));
         }
         if clip.unresolved_file() && clip.parameters().duration.is_none() {
-            Arc::make_mut(&mut self.audio).push(clip);
+            Arc::make_mut(&mut self.soundtrack.clips).push(clip);
             return Ok(self);
         }
         self.inferred = self.inferred.max(self.audio_end(&clip)?);
-        Arc::make_mut(&mut self.audio).push(clip);
+        Arc::make_mut(&mut self.soundtrack.clips).push(clip);
         Ok(self)
     }
 
     fn audio_end(&self, clip: &crate::AudioClip) -> crate::Result<Time> {
         let mut end = clip.end()?;
         if let Some(bus) = self
-            .audio_buses
+            .soundtrack
+            .buses
             .iter()
             .find(|bus| Some(bus.name.as_str()) == clip.parameters().bus)
         {
@@ -478,7 +463,7 @@ impl Scene for Timeline {
         if let Some(clips) = &self.resolved_audio {
             return Ok(clips.as_ref().clone());
         }
-        let mut audio = self.audio.as_ref().clone();
+        let mut audio = self.soundtrack.clips.as_ref().clone();
         for track in self.tracks.iter() {
             for clip in track.clips.iter() {
                 let sources = if let Some(child) = clip.scene.audio_composition().filter(|child| {

@@ -306,3 +306,20 @@ fn construction_errors_limits_and_cow_snapshots_are_bounded() -> crate::Result {
     );
     Ok(())
 }
+
+#[test]
+fn soundtrack_exposes_declared_audio_and_master() {
+    let master = crate::Master {
+        gain_db: -3.0,
+        ..Default::default()
+    };
+    let timeline = Timeline::new(size(), 30)
+        .audio(crate::AudioClip::file("a.wav").duration(1.seconds()))
+        .audio_bus(crate::AudioBus::new("music"))
+        .master(master);
+    let soundtrack = timeline.soundtrack();
+    assert_eq!(soundtrack.clips().len(), 1);
+    assert_eq!(soundtrack.buses().len(), 1);
+    assert_eq!(soundtrack.master(), master);
+    assert_eq!(timeline.audio_master(), master);
+}

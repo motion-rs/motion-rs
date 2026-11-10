@@ -212,8 +212,8 @@ pub use motion_core::{
     LinearGradient, MaskMode, MotionBlur, Node, NodeModifiers, Paint, Path2D, Pivot, PixelSize,
     Point, Polygon, Polyline, Pose, Push, RadialGradient, Random, Rect, RegularPolygon,
     RenderQuality, Ring, RoundedRect, Row, Sampling, Scene, SceneContext, Shape, Side, Size,
-    Skeleton, Slide, Source, Spline, Spring, Star, StrokeStyle, Styled, SweepGradient, Time,
-    TimeLiteral, Timeline, Track, TrackBuilder, Transform, TransformComponents, Tween,
+    Skeleton, Slide, Soundtrack, Source, Spline, Spring, Star, StrokeStyle, Styled, SweepGradient,
+    Time, TimeLiteral, Timeline, Track, TrackBuilder, Transform, TransformComponents, Tween,
     ValidationError, Vector2, Wipe, ZoomBlur, animation, authoring, color, geometry, noise, path2d,
     sample_offsets, shape, time, try_camera,
 };
