@@ -1,24 +1,14 @@
-//! Brush material baking: paper textures, paint sampling and tiled distance-field material.
+//! Brush material baking: tiled distance-field material over a stroke's ink and paint.
 
-use super::super::{BrushStroke, Prepared, invalid};
+use super::super::{Config, Prepared, invalid};
 use super::geometry::{Sample, outline, rotated, samples};
 use crate::ImageAsset;
+use crate::vector::ink::paint::paint_sample;
 use motion_core::{GradientExtend, ImagePattern, Paint, Point, Rect, Transform, ValidationError};
 use std::sync::Arc;
 
 /// Segments per culling block in the material distance search.
 const MATERIAL_BLOCK: usize = 16;
-
-/// Repeating immutable paper height map sampled in local design coordinates.
-#[derive(Clone, Debug)]
-pub struct Paper {
-    /// Already resolved image; no implicit file loading during rendering.
-    pub texture: Arc<ImageAsset>,
-    /// Local design units per texel.
-    pub grain_scale: f64,
-    /// Coverage attenuation by the paper height, in 0..=1.
-    pub absorbency: f64,
-}
 
 pub(super) struct MaterialSegment {
     first: Sample,
@@ -65,88 +55,7 @@ impl MaterialSegment {
     }
 }
 
-fn image_sample(pattern: &ImagePattern, point: Point) -> Result<[f64; 4], ValidationError> {
-    let inverse = pattern
-        .transform
-        .inverse()
-        .ok_or_else(|| invalid("paint", "Noninvertible paint transform"))?;
-    let point = inverse.apply(point);
-    let width = pattern.image.width() as usize;
-    let height = pattern.image.height() as usize;
-    if pattern.decal
-        && (point.x < 0.0 || point.y < 0.0 || point.x >= width as f64 || point.y >= height as f64)
-    {
-        return Ok([0.0; 4]);
-    }
-    let horizontal = point.x - 0.5;
-    let vertical = point.y - 0.5;
-    let column = horizontal.floor();
-    let row = vertical.floor();
-    let fraction = [horizontal - column, vertical - row];
-    let address = |index: i64, length: usize| match pattern.extend {
-        GradientExtend::Pad => index.clamp(0, length as i64 - 1) as usize,
-        GradientExtend::Repeat => index.rem_euclid(length as i64) as usize,
-        GradientExtend::Reflect => {
-            let index = index.rem_euclid(length as i64 * 2) as usize;
-            if index >= length {
-                length * 2 - index - 1
-            } else {
-                index
-            }
-        }
-    };
-    let mut result = [0.0; 4];
-    for vertical in 0..2 {
-        for horizontal in 0..2 {
-            let weight = (if horizontal == 0 {
-                1.0 - fraction[0]
-            } else {
-                fraction[0]
-            }) * (if vertical == 0 {
-                1.0 - fraction[1]
-            } else {
-                fraction[1]
-            });
-            let texel = pattern.image.texel(
-                0,
-                address(column as i64 + horizontal, width),
-                address(row as i64 + vertical, height),
-            );
-            for channel in 0..4 {
-                result[channel] += f64::from(texel[channel]) * weight;
-            }
-        }
-    }
-    Ok(result)
-}
-
-pub(super) fn paint_sample(
-    paint: &Paint,
-    point: Point,
-    bounds: Rect,
-) -> Result<[f64; 4], ValidationError> {
-    let linear = match paint {
-        Paint::Solid(color) => color.to_linear_premultiplied(),
-        Paint::Linear(gradient) => gradient.sample(point, bounds)?,
-        Paint::Radial(gradient) => gradient.sample(point, bounds)?,
-        Paint::Sweep(gradient) => gradient.sample(point, bounds)?,
-        Paint::Pattern(pattern) => image_sample(pattern, point)?,
-        _ => return Err(invalid("paint", "Unsupported brush paint")),
-    };
-    let mut encoded = [0.0; 4];
-    encoded[3] = linear[3];
-    if linear[3] > 0.0 {
-        for channel in 0..3 {
-            encoded[channel] = motion_core::color::linear_to_srgb(linear[channel] / linear[3]);
-        }
-    }
-    Ok(encoded)
-}
-
-pub(super) fn material(
-    stroke: &BrushStroke,
-    bounds: Rect,
-) -> Result<Vec<Prepared>, ValidationError> {
+pub(super) fn material(stroke: &Config, bounds: Rect) -> Result<Vec<Prepared>, ValidationError> {
     let options = &stroke.advanced;
     let groups = samples(stroke, 1.0)?;
     let path = Arc::new(outline(stroke, &groups)?);
@@ -209,18 +118,14 @@ pub(super) fn material(
     if u64::from(columns) * u64::from(rows) > 256 {
         return Err(invalid("material_tiles", "At most 256 material tiles"));
     }
-    let paint = options.paint.clone().unwrap_or_else(|| stroke.color.into());
+    let paint = stroke.paint.clone();
     let paint_bounds = stroke.path.bounding_box();
     let solid = match &paint {
         Paint::Solid(_) => Some(paint_sample(&paint, Point::ORIGIN, paint_bounds)?),
         _ => None,
     };
-    let ink = stroke.ink.unwrap_or_default();
-    let paper = options.paper.as_ref().map(|paper| {
-        ImagePattern::from_asset(paper.texture.clone())
-            .transform(Transform::scale(paper.grain_scale))
-            .extend(GradientExtend::Repeat)
-    });
+    let ink = stroke.ink.clone().unwrap_or_default();
+    let paper = ink.paper_sampler();
     let mut tiles = Vec::new();
     for row in 0..rows {
         for column in 0..columns {
@@ -288,7 +193,7 @@ pub(super) fn material(
                             }
                         }
                     }
-                    let paper_point = options.paper_transform.apply(point);
+                    let paper_point = ink.paper_space(point);
                     let material = ink.sample((point.x, point.y), (paper_point.x, paper_point.y));
                     let load = stroke.load[0]
                         + (stroke.load[1] - stroke.load[0])
@@ -301,26 +206,16 @@ pub(super) fn material(
                         .shade(
                             material.coverage(nearest.0, 1.0),
                             nearest.0,
-                            (nearest.1, nearest.2 * options.anisotropy),
+                            (nearest.1, nearest.2 * ink.anisotropy),
                             load,
                         )
                         .clamp(0.0, 1.0);
-                    if let (Some(paper), Some(parameters)) = (&paper, &options.paper) {
-                        let sample = image_sample(paper, paper_point)?;
-                        let height = if sample[3] > 0.0 {
-                            (sample[0] * 0.2126 + sample[1] * 0.7152 + sample[2] * 0.0722)
-                                / sample[3]
-                        } else {
-                            0.0
-                        };
-                        alpha *= 1.0 - parameters.absorbency * height.clamp(0.0, 1.0);
+                    if let Some(paper) = &paper {
+                        alpha *= paper.factor(paper_point)?;
                     }
-                    if overlaps > 1 && options.build_up > 0.0 {
+                    if overlaps > 1 && ink.build_up > 0.0 {
                         alpha = 1.0
-                            - libm::pow(
-                                1.0 - alpha,
-                                1.0 + options.build_up * (overlaps - 1) as f64,
-                            );
+                            - libm::pow(1.0 - alpha, 1.0 + ink.build_up * (overlaps - 1) as f64);
                     }
                     let mut color = match solid {
                         Some(color) => color,
@@ -328,16 +223,16 @@ pub(super) fn material(
                     };
                     let rim = (1.0 - nearest.0.abs() / 2.0).clamp(0.0, 1.0);
                     let darken = 1.0
-                        - options.edge_darkening * rim
-                        - options.build_up * (1.0 - 1.0 / overlaps.max(1) as f64) * 0.5;
+                        - ink.edge_darkening * rim
+                        - ink.build_up * (1.0 - 1.0 / overlaps.max(1) as f64) * 0.5;
                     for channel in &mut color[..3] {
                         *channel *= darken;
                     }
-                    if options.height > 0.0 {
-                        let height = options.height
+                    if ink.height > 0.0 {
+                        let height = ink.height
                             * libm::sqrt((-nearest.0 / nearest.3.max(1e-12)).clamp(0.0, 1.0))
                             * load
-                            * (1.0 + options.build_up * overlaps.saturating_sub(1) as f64);
+                            * (1.0 + ink.build_up * overlaps.saturating_sub(1) as f64);
                         for channel in &mut color[..3] {
                             *channel = motion_core::color::linear_to_srgb(height);
                         }

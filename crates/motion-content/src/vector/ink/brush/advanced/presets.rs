@@ -1,10 +1,12 @@
 //! Composable brush presets that configure ordinary brush stroke builders.
 
-use super::super::{BrushStroke, Ink};
+use super::super::{BrushStroke, BrushStrokeBuilder, Ink};
 use super::NibMode;
-use motion_core::{Color, NodeModifiers, Path2D};
+use crate::vector::ink::Paper;
+use motion_core::{Color, NodeModifiers, Paint, Path2D, ValidationError};
 
-/// Composable brush geometry/material presets; all settings remain overridable.
+/// Composable brush geometry/material presets; all settings remain overridable on the returned
+/// builder.
 #[derive(Clone, Copy, Debug)]
 pub enum BrushPreset {
     /// Fine rounded ink pen.
@@ -30,15 +32,15 @@ pub enum BrushPreset {
 }
 
 impl BrushPreset {
-    /// Returns a normal BrushStroke builder with deterministic preset parameters.
-    pub fn stroke(self, path: Path2D, width: f64, color: Color) -> BrushStroke {
-        let stroke = BrushStroke::new(path, width, color);
+    /// Returns a normal [`BrushStrokeBuilder`] with deterministic preset parameters.
+    pub fn stroke(self, path: Path2D, width: f64, paint: impl Into<Paint>) -> BrushStrokeBuilder {
+        let stroke = BrushStroke::builder(path, width, paint);
         match self {
             Self::Pen => stroke.ink(Ink::new(0).edge_roughness(0.1)),
             Self::Marker | Self::Highlighter => stroke
                 .nib(0.3, 0.4)
                 .nib_mode(NibMode::Fixed(0.4))
-                .build_up(0.3),
+                .ink(Ink::new(0).build_up(0.3)),
             Self::Brush => stroke
                 .nib(0.5, 0.0)
                 .nib_mode(NibMode::FollowPath(0.0))
@@ -47,21 +49,27 @@ impl BrushPreset {
                 .sample_limit(64)
                 .speed_response(0.001)
                 .ink(Ink::new(0).dryness(0.25).fibers(0.8).bleed(1.0)),
-            Self::Chalk | Self::Charcoal => stroke.ink(
+            Self::Chalk | Self::Charcoal => {
+                stroke.ink(Ink::new(0).granulation(0.8).edge_roughness(1.0).paper(
+                    Paper::Procedural {
+                        seed: 1,
+                        strength: 0.7,
+                        scale: 1.0,
+                    },
+                ))
+            }
+            Self::Pencil => stroke.ink(Ink::new(0).granulation(0.4).paper(Paper::Procedural {
+                seed: 1,
+                strength: 0.5,
+                scale: 0.5,
+            })),
+            Self::Watercolor => stroke.ink(
                 Ink::new(0)
-                    .granulation(0.8)
-                    .edge_roughness(1.0)
-                    .paper(1, 0.7, 1.0),
+                    .bleed(4.0)
+                    .edge_pooling(0.7, 2.0)
+                    .granulation(0.2)
+                    .edge_darkening(0.3),
             ),
-            Self::Pencil => stroke.ink(Ink::new(0).granulation(0.4).paper(1, 0.5, 0.5)),
-            Self::Watercolor => stroke
-                .ink(
-                    Ink::new(0)
-                        .bleed(4.0)
-                        .edge_pooling(0.7, 2.0)
-                        .granulation(0.2),
-                )
-                .edge_darkening(0.3),
             Self::Calligraphy => stroke
                 .nib(0.2, 0.7)
                 .nib_mode(NibMode::Fixed(0.7))
@@ -72,9 +80,14 @@ impl BrushPreset {
     }
 
     /// Composes preset-specific opacity/blending/lighting after constructing its stroke.
-    pub fn node(self, path: Path2D, width: f64, color: Color) -> motion_core::Node {
-        let node = motion_core::Node::from(self.stroke(path, width, color));
-        match self {
+    pub fn node(
+        self,
+        path: Path2D,
+        width: f64,
+        paint: impl Into<Paint>,
+    ) -> Result<motion_core::Node, ValidationError> {
+        let node = motion_core::Node::from(self.stroke(path, width, paint).build()?);
+        Ok(match self {
             Self::Highlighter => node
                 .opacity(0.45)
                 .blend_mode(motion_core::BlendMode::Multiply),
@@ -92,6 +105,6 @@ impl BrushPreset {
                 tint: Color::WHITE,
             }),
             _ => node,
-        }
+        })
     }
 }

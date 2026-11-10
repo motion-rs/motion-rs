@@ -132,12 +132,17 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
         PAGES,
         move |page, progress, context| {
             let reveal = Easing::CubicInOut.apply((progress / 0.7).clamp(0.0, 1.0));
-            Ok(swatch(context, &path, page, reveal))
+            swatch(context, &path, page, reveal)
         },
     )
 }
 
-fn swatch(context: &SceneContext<'_>, path: &Path2D, index: usize, reveal: f64) -> Node {
+fn swatch(
+    context: &SceneContext<'_>,
+    path: &Path2D,
+    index: usize,
+    reveal: f64,
+) -> motion::Result<Node> {
     let preset = PRESETS[index];
     let dark = matches!(preset, BrushPreset::Neon);
     let paper = if dark { 0x171c1b } else { 0xffffff };
@@ -157,11 +162,12 @@ fn swatch(context: &SceneContext<'_>, path: &Path2D, index: usize, reveal: f64) 
         );
     }
     if reveal > 0.0 {
-        let stroke = context.memo(("brush-preset", index), || {
+        let stroke = context.try_cache(("brush-preset", index), || {
             preset_node(preset, path.clone(), NIB_WIDTH, preset_color(preset))
-        });
+        })?;
         nodes.push(
-            Node::group([stroke
+            Node::group([(*stroke)
+                .clone()
                 .pivot(Pivot::Point(Point::ORIGIN))
                 .scale(0.86)
                 .translate(35.0, 98.0)])
@@ -178,16 +184,22 @@ fn swatch(context: &SceneContext<'_>, path: &Path2D, index: usize, reveal: f64) 
         28.0,
         264.0,
     ));
-    Node::group(nodes)
+    Ok(Node::group(nodes))
 }
 
-fn preset_node(preset: BrushPreset, path: Path2D, width: f64, color: Color) -> Node {
+fn preset_node(
+    preset: BrushPreset,
+    path: Path2D,
+    width: f64,
+    color: Color,
+) -> motion::Result<Node> {
     let node = Node::from(
         preset
             .stroke(path, width, color)
-            .material_work_limit(MATERIAL_WORK_LIMIT),
+            .material_work_limit(MATERIAL_WORK_LIMIT)
+            .build()?,
     );
-    match preset {
+    Ok(match preset {
         BrushPreset::Marker => node.blend_mode(BlendMode::Multiply),
         BrushPreset::Watercolor => node.opacity(0.6).blend_mode(BlendMode::Multiply),
         BrushPreset::Highlighter => node.opacity(0.45).blend_mode(BlendMode::Multiply),
@@ -201,7 +213,7 @@ fn preset_node(preset: BrushPreset, path: Path2D, width: f64, color: Color) -> N
             tint: Color::WHITE,
         }),
         _ => node,
-    }
+    })
 }
 
 fn comparison_path() -> Path2D {
@@ -368,13 +380,13 @@ mod tests {
                     .build()?;
                 render_still(&timeline, 0.5.seconds(), &options)
             };
-            let expected = render(preset.node(path.clone(), NIB_WIDTH, preset_color(preset)))?;
+            let expected = render(preset.node(path.clone(), NIB_WIDTH, preset_color(preset))?)?;
             let actual = render(preset_node(
                 preset,
                 path.clone(),
                 NIB_WIDTH,
                 preset_color(preset),
-            ))?;
+            )?)?;
             assert_eq!(
                 actual.bytes(),
                 expected.bytes(),

@@ -1,10 +1,9 @@
 //! Brush reveal timing: recorded input fitting, smoothing and timed arc-length reveals.
 
-use super::super::BrushStroke;
-use super::super::invalid;
+use super::super::{BrushStroke, BrushStrokeBuilder, invalid};
 use super::geometry::subpaths;
 use super::{InputSample, validate_input};
-use motion_core::{Color, Duration, Path2D, Time, ValidationError};
+use motion_core::{Duration, Paint, Path2D, Time, ValidationError};
 
 /// Stateless arc timing with a monotone progress curve and pauses between subpaths.
 #[derive(Clone, Debug)]
@@ -28,12 +27,12 @@ impl BrushTiming {
     }
 }
 
-impl BrushStroke {
+impl BrushStrokeBuilder {
     /// Fits recorded positions with Catmull-Rom cubic segments and retains pressure/time.
     pub fn from_samples(
         samples: &[InputSample],
         width: f64,
-        color: Color,
+        paint: impl Into<Paint>,
     ) -> Result<Self, ValidationError> {
         validate_input(samples)?;
         let mut path = Path2D::new();
@@ -69,19 +68,21 @@ impl BrushStroke {
                 curve.push((amount, sample.pressure));
             }
         }
-        Ok(Self::new(path, width, color).configure(|options| {
-            options.input = samples.to_vec();
-            options.input_arcs = cumulative.iter().map(|arc| arc / total).collect();
-            options.pressure = curve;
-        }))
+        Ok(
+            BrushStroke::builder(path, width, paint).configure(|options| {
+                options.input = samples.to_vec();
+                options.input_arcs = cumulative.iter().map(|arc| arc / total).collect();
+                options.pressure = curve;
+            }),
+        )
     }
 
     /// Smooths a sampled path by a bounded symmetric kernel; no frame history is retained.
-    pub fn smooth(mut self, strength: f64) -> Result<Self, ValidationError> {
+    pub fn try_smooth(mut self, strength: f64) -> Result<Self, ValidationError> {
         if !strength.is_finite() || !(0.0..=1.0).contains(&strength) {
             return Err(invalid("smooth", "Require strength in 0..=1"));
         }
-        let paths = subpaths(&self.path)?;
+        let paths = subpaths(&self.config.path)?;
         let mut output = Path2D::new();
         for path in paths {
             let points = (0..=64)
@@ -103,14 +104,15 @@ impl BrushStroke {
                 }
             }
         }
-        self.path = output;
-        self.reset();
+        self.config.path = output;
         Ok(self)
     }
+}
 
+impl BrushStroke {
     /// Reveals a recorded stroke at its original local sample clock, including pauses.
     pub fn write_with(self, time: Time) -> Result<Self, ValidationError> {
-        let options = &self.advanced;
+        let options = &self.config.advanced;
         if options.input.is_empty() {
             return Err(invalid("timing", "Recorded timing requires from_samples"));
         }
@@ -160,7 +162,7 @@ impl BrushStroke {
                 "Invalid duration, pause or monotone curve",
             ));
         }
-        let paths = subpaths(&stroke.path)?;
+        let paths = subpaths(&stroke.config.path)?;
         let lengths = paths
             .iter()
             .map(Path2D::try_length)

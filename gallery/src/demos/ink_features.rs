@@ -3,7 +3,8 @@
 use super::atlas::{self, Page};
 use crate::{DemoMetadata, DemoParameters};
 use motion::ink::{
-    BrushCap, BrushStroke, BrushTiming, Ink, InputSample, NibMode, Paper, PigmentMix,
+    BrushCap, BrushStroke, BrushStrokeBuilder, BrushTiming, Ink, InputSample, NibMode, Paper,
+    PigmentMix,
 };
 use motion::prelude::*;
 use std::sync::Arc;
@@ -201,9 +202,13 @@ pub(super) const PAGES: &[Page] = &[
 
 pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
     let seed = parameters.seed as u32 ^ (parameters.seed >> 32) as u32;
-    let strokes = (0..PAGES.len())
+    let builders = (0..PAGES.len())
         .map(|page| configured(page, seed))
         .collect::<motion::Result<Vec<_>>>()?;
+    let strokes = builders
+        .iter()
+        .map(|builder| builder.clone().build())
+        .collect::<Result<Vec<_>, _>>()?;
     let recorded = recording()?;
     let timing = BrushTiming {
         duration: 2.8.seconds(),
@@ -215,17 +220,28 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
         let stroke = strokes[page].clone();
         let ink = match page {
             14 => Node::from(
-                stroke
+                builders[page]
+                    .clone()
                     .boil(3.0, 0.05, seed, (progress * 120.0) as u64)
+                    .build()?
                     .write(reveal),
             ),
-            15 => Node::from(stroke.wetness((progress * 4.0).seconds(), 10.0, 1.4.seconds())?),
+            15 => Node::from(
+                builders[page]
+                    .clone()
+                    .try_wetness((progress * 4.0).seconds(), 10.0, 1.4.seconds())?
+                    .build()?,
+            ),
             16 => Node::from(recorded.clone().write_with((progress * 4.0).seconds())?),
             17 => Node::from(stroke.write_timed((progress * 3.45).seconds(), &timing)?),
             18 => stroke.write(reveal).erase(atlas::specimen(progress)),
             19 => pigment(progress)?,
             20 => {
-                let relief = stroke.clone().height_map(2.0).write(reveal);
+                let relief = builders[page]
+                    .clone()
+                    .ink(Ink::new(0).height_map(2.0))
+                    .build()?
+                    .write(reveal);
                 Node::group([
                     Node::from(stroke.write(reveal)),
                     Node::from(relief)
@@ -248,8 +264,8 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
     })
 }
 
-fn configured(page: usize, seed: u32) -> motion::Result<BrushStroke> {
-    let base = BrushStroke::new(stroke_path(page), 28.0, Color::from_hex(0x167d71))
+fn configured(page: usize, seed: u32) -> motion::Result<BrushStrokeBuilder> {
+    let base = BrushStroke::builder(stroke_path(page), 28.0, Color::from_hex(0x167d71))
         .material_work_limit(MATERIAL_WORK);
     Ok(match page {
         0 => base.pressure_curve(vec![
@@ -281,9 +297,9 @@ fn configured(page: usize, seed: u32) -> motion::Result<BrushStroke> {
             .ink(Ink::new(seed).dryness(0.3).fibers(1.0)),
         8 => base.ink(Ink::new(seed).dryness(0.75).fibers(1.0)),
         9 => base.ink(Ink::new(seed).granulation(0.8).edge_roughness(3.0)),
-        10 => base.paper_texture(paper(seed)?),
-        11 => base.ink(Ink::new(seed).granulation(0.35)).build_up(0.8),
-        12 => base.edge_darkening(0.9).edge_anisotropy(3.0),
+        10 => base.ink(Ink::new(0).paper(paper(seed)?)),
+        11 => base.ink(Ink::new(seed).granulation(0.35).build_up(0.8)),
+        12 => base.ink(Ink::new(0).edge_darkening(0.9).edge_anisotropy(3.0)),
         13 => base.wobble(5.0, 0.06, seed),
         _ => base,
     })
@@ -326,7 +342,7 @@ fn paper(seed: u32) -> motion::Result<Paper> {
             pixels.extend_from_slice(&[value, value, value, 255]);
         }
     }
-    Ok(Paper {
+    Ok(Paper::Texture {
         texture: Arc::new(ImageAsset::from_rgba8(16, 16, pixels)?),
         grain_scale: 2.0,
         absorbency: 0.8,
@@ -349,10 +365,11 @@ fn recording() -> motion::Result<BrushStroke> {
         time: time.seconds(),
     });
     Ok(
-        BrushStroke::from_samples(&samples, 26.0, Color::from_hex(0x3564c4))?
+        BrushStrokeBuilder::from_samples(&samples, 26.0, Color::from_hex(0x3564c4))?
             .nib(0.35, 0.0)
             .nib_mode(NibMode::Tilt)
-            .material_work_limit(MATERIAL_WORK),
+            .material_work_limit(MATERIAL_WORK)
+            .build()?,
     )
 }
 

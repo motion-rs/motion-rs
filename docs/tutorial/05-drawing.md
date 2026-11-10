@@ -108,7 +108,7 @@ Prepared image paints directly reference immutable pixels; there is no separate 
 
 ## Extended Ink Brushes
 
-Enable `ink` and use `motion::ink`. `BrushStroke::new` is a thin constructor over the single bounded multistroke geometry and full-material implementation; builders such as `pressure_curve`, `caps`, `bristles` and `tiled_material` refine it at every render quality. Retain a stroke and clone it for each reveal rather than reconstructing it in every callback.
+Enable `ink` and use `motion::ink`. `BrushStroke::builder(path, width, paint)` starts a `BrushStrokeBuilder` over the single bounded multistroke geometry and full-material implementation; setters such as `pressure_curve`, `caps`, `bristles` and `tiled_material` refine it at every render quality, and `build()` validates it and returns an immutable `BrushStroke`. `BrushStroke::new(path, width, paint)` builds the default stroke directly. The color argument is any `Into<Paint>`: a `Color` still works, and gradients and image patterns are accepted. The baked material is cached on the built stroke only, so build once, retain the stroke and clone it for each reveal rather than reconstructing it in every callback.
 
 ```rust,no_run
 use motion::prelude::*;
@@ -118,11 +118,12 @@ fn main() -> motion::Result {
     let mut path = Path2D::new();
     path.try_move_to(Point::new(20.0, 30.0))?;
     path.try_line_to(Point::new(120.0, 70.0))?;
-    let stroke = BrushStroke::new(path, 8.0, Color::rgb(20, 150, 125))
+    let stroke = BrushStroke::builder(path, 8.0, Color::rgb(20, 150, 125))
         .pressure_curve(vec![(0.0, 0.2), (0.5, 1.5), (1.0, 0.1)])
         .nib_mode(NibMode::FollowPath(0.0))
         .bristles(5, 0.4, 0.1, 17)
-        .parallel_material(true);
+        .parallel_material(true)
+        .build()?;
     let _revealed = Node::from(stroke.clone().write(0.5));
     let _cursor = stroke.write(0.5).tip_node(Circle::new(Point::new(0.0, 0.0), 2.0).fill(Color::WHITE))?;
     let _letters = StrokeFont::new(20.0)?.strokes("MOTION", 1.0, Color::WHITE)?;
@@ -130,11 +131,11 @@ fn main() -> motion::Result {
 }
 ```
 
-`pressure`, `pressure_curve` and `pressure_from` use last-builder-wins semantics. `InputSample` records finite local positions, pressure 0..=4, tilt azimuth in radians and strictly increasing `Time` starting at zero (2..=512 samples). `from_samples` fits Catmull-Rom geometry; `write_with(time)` uses fitted arc/time mapping, preserving stationary pen pauses. `BrushTiming`/`write_timed` provide a monotone speed curve and pen-up interval for independent subpaths.
+`pressure`, `pressure_curve` and `pressure_from` use last-builder-wins semantics. `write(progress)` reveals from the start by original arc length and reuses the cached material; it differs from `Styled::trim`, which clips an interval of an ordinary stroke outline. `BrushCap` (`Round`, `Flat`, `Tapered`) shapes the pressure profile at the ends of a variable-width brush stroke, whereas `LineCap` (`Butt`, `Round`, `Square`) chooses the end geometry of a uniform `StrokeStyle` outline; they are independent. `InputSample` records finite local positions, pressure 0..=4, tilt azimuth in radians and strictly increasing `Time` starting at zero (2..=512 samples). `BrushStrokeBuilder::from_samples` fits Catmull-Rom geometry; `write_with(time)` uses fitted arc/time mapping, preserving stationary pen pauses. `BrushTiming`/`write_timed` provide a monotone speed curve and pen-up interval for independent subpaths.
 
-`BrushPreset` provides ten styles. `.stroke(path,width,color)` returns an editable brush; `.node` additionally applies the intended Multiply/opacity/Bloom composition. `paint` accepts color/gradient/image paint, `bristles` creates seeded fine tips, and `build_up`, anisotropy, rim darkening, `wobble`, frame-seeded `boil` and analytic `wetness` remain replayable. `tip`/`tip_node` expose the final subpath endpoint/tangent for cursor or emitter placement; `erase(content)` uses an inverted-alpha mask without a new backend blend mode.
+`BrushPreset` provides ten styles. `.stroke(path,width,paint)` returns an editable `BrushStrokeBuilder`; `.node` builds it and additionally applies the intended Multiply/opacity/Bloom composition. `paint` replaces the stroke's color with a color, gradient or image paint, `bristles` creates seeded fine tips, and `wobble`, frame-seeded `boil` and analytic `try_wetness` remain replayable. Ink-load profiles stay on the builder, while the material effects `build_up`, `edge_anisotropy`, `edge_darkening` and `height_map` are `Ink` settings. `tip`/`tip_node` expose the final subpath endpoint/tangent for cursor or emitter placement; `erase(content)` uses an inverted-alpha mask without a new backend blend mode.
 
-`Paper` uses a resolved caller-owned image, repeating height samples to attenuate coverage. Paper defaults to untransformed design coordinates; `paper_transform` must explicitly match enclosing node transforms for canvas-fixed paper. `height_map` emits a separate grayscale ridge/load drawable for `Optics::Relight` with `HeightFrom::Luma`; it does not add an independent height input to colored Relight. Composite the lighting layer with the colored brush when both are needed.
+One `Paper` enum serves both `BrushStroke` and `InkFill` through `Ink::paper`: `Paper::Procedural { seed, strength, scale }` is seeded noise, and `Paper::Texture { texture, grain_scale, absorbency }` uses a resolved caller-owned image whose repeating height samples attenuate coverage. Paper defaults to untransformed design coordinates; `Ink::paper_transform` must explicitly match enclosing node transforms for canvas-fixed paper. `InkFill` uses dryness, bleed, roughness, granulation, paper, pooling and `edge_darkening`; fibers, `build_up`, `edge_anisotropy` and `height_map` need stroke geometry and apply only to strokes. `Ink::height_map` makes a stroke emit a separate grayscale ridge/load drawable for `Optics::Relight` with `HeightFrom::Luma`; it does not add an independent height input to colored Relight. Composite the lighting layer with the colored brush when both are needed.
 
 `PigmentMix::KubelkaMunk.painting(strokes)` mixes only covered intersections using a six-band hand-authored reflectance approximation; it is not calibrated physical pigment or fluid simulation. `StrokeFont` uses original fourteen-segment uppercase/digit/plus/minus centerlines, maps lowercase to uppercase, supports spaces/newlines and rejects other glyphs. It performs no font outline skeleton extraction and needs no SVG/font resource.
 

@@ -103,7 +103,7 @@ separate Text nodes; unsupported combinations retain diagnostics.
 
 ## Ink, Diagram and Captions
 
-`BrushStroke` combines paths, independent tip dimensions, pressure, ink load and arc-length reveal. `InkFill` uses the same deterministic materials. Dry marks, paper, grain, bleeding, roughness and pooling are procedural coverage, not a physical fluid simulation.
+`BrushStroke` combines paths, independent tip dimensions, pressure, ink load and arc-length reveal; build it with `BrushStroke::builder(...).build()?`. Both `BrushStroke` and `InkFill` take a color, gradient or other `Paint`, and `InkFill` uses the same deterministic `Ink` materials and `Paper` (stroke-only effects such as fibers and build-up are ignored by fills). Dry marks, paper, grain, bleeding, roughness and pooling are procedural coverage, not a physical fluid simulation.
 
 Retain the configured full stroke and animate only the necessary reveal. Splitting a continuous stroke into many pieces to evade budgets can change pressure and material continuity.
 

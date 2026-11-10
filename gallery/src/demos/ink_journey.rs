@@ -5,7 +5,7 @@
 use super::{frame_seed, label};
 use crate::{DemoMetadata, DemoParameters};
 use motion::prelude::*;
-use motion::vector::ink::{BrushStroke, Ink};
+use motion::vector::ink::{BrushStroke, Ink, Paper};
 
 const PAPER: u32 = 0xe6d5ae;
 
@@ -45,7 +45,7 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
         .build()
 }
 
-fn frame(context: &SceneContext<'_>, parameters: DemoParameters) -> Node {
+fn frame(context: &SceneContext<'_>, parameters: DemoParameters) -> motion::Result<Node> {
     frame_mode::<true>(context, parameters)
 }
 
@@ -56,11 +56,11 @@ fn color(hex: u32) -> Color {
 fn frame_mode<const RETAIN_COMPLETE: bool>(
     context: &SceneContext<'_>,
     parameters: DemoParameters,
-) -> Node {
+) -> motion::Result<Node> {
     let progress = context.progress();
     let frame = frame_seed(context);
     let flicker = (context.random(("flicker", frame)) - 0.5) * 0.1;
-    let artwork = landscape::<RETAIN_COMPLETE>(context, parameters, progress);
+    let artwork = landscape::<RETAIN_COMPLETE>(context, parameters, progress)?;
     let layers = vec![
         paper(context),
         artwork,
@@ -68,7 +68,7 @@ fn frame_mode<const RETAIN_COMPLETE: bool>(
         dust(context, frame),
         light_leak(context),
     ];
-    Node::group(layers)
+    Ok(Node::group(layers)
         .clip_with(context.bounds(), ClipMode::Geometric)
         .filter(Filter::ColorAdjust {
             exposure: flicker,
@@ -81,7 +81,7 @@ fn frame_mode<const RETAIN_COMPLETE: bool>(
             strength: 0.6,
             roundness: 0.0,
         }))
-        .filter(Filter::grain(parameters.seed ^ frame, 0.05))
+        .filter(Filter::grain(parameters.seed ^ frame, 0.05)))
 }
 
 /// Aged stock: a warm center that burns to brown at the corners, with a deckle border.
@@ -111,35 +111,43 @@ fn landscape<const RETAIN_COMPLETE: bool>(
     context: &SceneContext<'_>,
     parameters: DemoParameters,
     progress: f64,
-) -> Node {
+) -> motion::Result<Node> {
     let ink = color(INK);
     let material = Ink::new(parameters.seed as u32)
         .dryness(0.1)
         .fibers(0.75)
         .granulation(0.2)
-        .paper(71, 0.2, 1.2)
+        .paper(Paper::Procedural {
+            seed: 71,
+            strength: 0.2,
+            scale: 1.2,
+        })
         .edge_pooling(0.22, 0.8);
     let mut strokes = Vec::new();
     for index in 0..6 {
         let path = context.cache(("landscape-ridge", index), || ridge(index));
         let reveal = ((progress - index as f64 * 0.075) / 0.43).clamp(0.0, 1.0);
         let complete = || {
-            BrushStroke::new((*path).clone(), 6.0 + index as f64 * 1.1, ink)
+            BrushStroke::builder((*path).clone(), 6.0 + index as f64 * 1.1, ink)
                 .pressure(0.2, 1.25, 0.15)
                 .nib(0.42, -0.35)
-                .ink(material)
+                .ink(material.clone())
                 .ink_load(1.0, 0.75)
                 .material_work_limit(64_000_000)
+                .build()
         };
         strokes.push(if RETAIN_COMPLETE && reveal == 1.0 {
-            context.memo(("landscape-complete", parameters.seed, index), complete)
+            let stroke =
+                context.try_cache(("landscape-complete", parameters.seed, index), complete)?;
+            Node::from((*stroke).clone())
         } else if RETAIN_COMPLETE {
             // The full-stroke material does not depend on reveal, and `write` keeps it, so
             // a retained stroke prepares the material once instead of on every frame.
-            let stroke = context.cache(("landscape-stroke", parameters.seed, index), complete);
+            let stroke =
+                context.try_cache(("landscape-stroke", parameters.seed, index), complete)?;
             Node::from((*stroke).clone().write(reveal))
         } else {
-            Node::from(complete().write(reveal))
+            Node::from(complete()?.write(reveal))
         });
     }
     for index in 0..7 {
@@ -197,8 +205,10 @@ fn landscape<const RETAIN_COMPLETE: bool>(
         .opacity((progress * 5.0).clamp(0.0, 1.0))
         .blend_mode(BlendMode::Multiply);
     let birds = flock(progress);
-    Node::group([sun, camera(context, Node::group(strokes), view), birds])
-        .clip_with(Rect::new(48.0, 92.0, 912.0, 442.0), ClipMode::Geometric)
+    Ok(
+        Node::group([sun, camera(context, Node::group(strokes), view), birds])
+            .clip_with(Rect::new(48.0, 92.0, 912.0, 442.0), ClipMode::Geometric),
+    )
 }
 
 fn ridge(index: usize) -> Path2D {
@@ -363,8 +373,10 @@ mod tests {
         let reference = Timeline::new(Size::new(960.0, 540.0), 30)
             .track(|track| {
                 track.push(
-                    (move |context: &SceneContext<'_>| frame_mode::<false>(context, parameters))
-                        .with_duration(8.seconds()),
+                    motion::scene(move |context: &SceneContext<'_>| {
+                        frame_mode::<false>(context, parameters)
+                    })
+                    .with_duration(8.seconds()),
                 )
             })
             .build()?;

@@ -3,8 +3,9 @@
 use super::super::{BrushStroke, Prepared, invalid};
 use super::bounds;
 use super::geometry::{outline, samples};
-use super::material::{material, paint_sample};
+use super::material::material;
 use crate::ImageAsset;
+use crate::vector::ink::paint::paint_sample;
 use motion_core::{
     Canvas, Color, DrawContext, Drawable, FillRule, ImagePattern, Paint, Path2D, PathVerb, Point,
     Rect, Transform, ValidationError,
@@ -186,7 +187,7 @@ impl Drawable for PigmentPainting {
                 let mut layers = Vec::new();
                 let mut work = 0_u64;
                 for stroke in &self.strokes {
-                    let path = outline(stroke, &samples(stroke, stroke.progress)?)?;
+                    let path = outline(&stroke.config, &samples(&stroke.config, stroke.progress)?)?;
                     work = work.saturating_add(
                         path.verbs().len() as u64 * u64::from(width) * u64::from(height),
                     );
@@ -196,7 +197,7 @@ impl Drawable for PigmentPainting {
                             "Pigment coverage exceeds evaluation allowance",
                         ));
                     }
-                    layers.push((path, material(stroke, self::bounds(stroke)?)?));
+                    layers.push((path, material(&stroke.config, self::bounds(stroke)?)?));
                 }
                 let mut pixels = Vec::with_capacity(width as usize * height as usize);
                 for row in 0..height {

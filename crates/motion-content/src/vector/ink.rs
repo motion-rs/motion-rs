@@ -1,23 +1,32 @@
 //! Deterministic ink materials and pressure-sensitive drawing.
 
+use motion_core::Transform;
 use std::io;
 
 mod brush;
 mod lettering;
+mod paint;
+mod paper;
 
 pub use lettering::StrokeFont;
 
 pub use brush::{
-    BrushCap, BrushPreset, BrushStroke, BrushTiming, InkFill, InputSample, NibMode, Paper,
-    PigmentMix, PigmentPainting,
+    BrushCap, BrushPreset, BrushStroke, BrushStrokeBuilder, BrushTiming, InkFill, InputSample,
+    NibMode, PigmentMix, PigmentPainting,
 };
+pub use paper::Paper;
+
+use paper::PaperSampler;
 
 type Point = (f64, f64);
 
 /// A deterministic ink material for strokes and even-odd path fills.
 ///
-/// [`BrushStroke::ink`] uses all effects. [`InkFill`] also uses
-/// bounded wash, rough edges and pooling; only directional fibers are stroke-only.
+/// [`BrushStrokeBuilder::ink`] uses all effects. [`InkFill`] uses dryness, bleed, roughness,
+/// granulation, paper, edge pooling and [`edge_darkening`](Self::edge_darkening). Directional
+/// [`fibers`](Self::fibers), [`build_up`](Self::build_up),
+/// [`edge_anisotropy`](Self::edge_anisotropy) and [`height_map`](Self::height_map) need stroke
+/// geometry (arc length, self-overlap or a nib) and are ignored by fills.
 ///
 /// The default is solid ink with seed zero and no dry gaps, feathering, roughness,
 /// granulation, directional fibers, paper imprint, or edge pooling. Parameters
@@ -25,7 +34,7 @@ type Point = (f64, f64);
 /// geometry, not previous frames. This is a bounded procedural wash, not a fluid
 /// or paper-fiber simulation. Both rendering backends share the CPU coverage.
 ///
-/// Builders store values; invalid settings are reported during rendering. Use a
+/// Builders store values; invalid settings are reported when a stroke is built or rendered. Use a
 /// stable seed and vary bleed or pigment settings explicitly with frame-local time.
 ///
 /// # Example
@@ -46,18 +55,19 @@ type Point = (f64, f64);
 ///     .bleed(4.0)
 ///     .edge_roughness(1.5)
 ///     .granulation(0.4)
-///     .paper(211, 0.45, 1.5)
+///     .paper(Paper::Procedural { seed: 211, strength: 0.45, scale: 1.5 })
 ///     .edge_pooling(0.6, 2.0);
 /// let path = Path2D::parse_svg("M0 0L60 0")?;
-/// let stroke = BrushStroke::new(path, 24.0, Color::from_hex(0x23272c))
+/// let stroke = BrushStroke::builder(path, 24.0, Color::from_hex(0x23272c))
 ///     .pressure(0.15, 1.2, 0.05)
 ///     .ink_load(1.0, 0.25)
-///     .ink(brush);
+///     .ink(brush)
+///     .build()?;
 /// # let _ = stroke;
 /// # Ok(())
 /// # }
 /// ```
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct Ink {
     pub(super) seed: u32,
     pub(super) dryness: f32,
@@ -65,8 +75,33 @@ pub struct Ink {
     pub(super) roughness: f32,
     pub(super) granulation: f32,
     fibers: f32,
-    paper: Option<(u32, f32, f32)>,
+    paper: Option<Paper>,
+    paper_transform: Transform,
     pooling: Option<(f32, f32)>,
+    pub(super) build_up: f64,
+    pub(super) edge_darkening: f64,
+    pub(super) anisotropy: f64,
+    pub(super) height: f64,
+}
+
+impl Default for Ink {
+    fn default() -> Self {
+        Self {
+            seed: 0,
+            dryness: 0.0,
+            bleed: 0.0,
+            roughness: 0.0,
+            granulation: 0.0,
+            fibers: 0.0,
+            paper: None,
+            paper_transform: Transform::IDENTITY,
+            pooling: None,
+            build_up: 0.0,
+            edge_darkening: 0.0,
+            anisotropy: 1.0,
+            height: 0.0,
+        }
+    }
 }
 
 impl Ink {
@@ -112,22 +147,34 @@ impl Ink {
 
     /// Blends axis-oriented dry gaps towards path-following fibers in `0..=1`.
     /// One uses full-path arc length and signed distance across the sampled
-    /// flattened segment. Requires dryness or depleted [`BrushStroke::ink_load`]
+    /// flattened segment. Requires dryness or depleted [`BrushStrokeBuilder::ink_load`]
     /// to expose gaps. Trim preserves the full-path phase. Changing geometry can
     /// change arc length; corners, closed seams, and crossings are not simulated
-    /// bristle transport. Zero retains the original local-axis texture.
+    /// bristle transport. Zero retains the original local-axis texture. Stroke-only.
     pub fn fibers(mut self, strength: f32) -> Self {
         self.fibers = strength;
         self
     }
 
-    /// Imprints seeded paper fibers into pigment coverage, not the background.
-    /// Strength must be in `0..=1`, scale finite and positive in output pixels.
-    /// Paper is sampled in canvas coordinates, so moving/scaling a layer does not
-    /// move the paper. Reuse seed and scale on fills and strokes for one sheet.
-    /// This attenuates alpha only; it is not a paper height or fluid simulation.
-    pub fn paper(mut self, seed: u32, strength: f32, scale: f32) -> Self {
-        self.paper = Some((seed, strength, scale));
+    /// Sets the paper sheet that attenuates pigment coverage, not the background.
+    ///
+    /// [`Paper::Procedural`] fibers are seeded noise (strength in `0..=1`, scale finite and
+    /// positive in paper-space pixels); [`Paper::Texture`] repeats a resolved height map and
+    /// attenuates by its luma. Either is sampled in paper space: local coordinates mapped by
+    /// [`paper_transform`](Self::paper_transform), which is the identity (untransformed design
+    /// space) by default. A layer that moves or scales keeps its paper fixed on the canvas only
+    /// when the transform equals the node transform. Reuse one `Paper` on fills and strokes for
+    /// one sheet. Setting a paper replaces the previous one. This attenuates alpha only; it is
+    /// not a paper height or fluid simulation.
+    pub fn paper(mut self, paper: Paper) -> Self {
+        self.paper = Some(paper);
+        self
+    }
+
+    /// Supplies the authored local-to-paper coordinates; the identity uses untransformed design
+    /// space. Must be finite.
+    pub fn paper_transform(mut self, transform: Transform) -> Self {
+        self.paper_transform = transform;
         self
     }
 
@@ -140,7 +187,34 @@ impl Ink {
         self
     }
 
-    pub(crate) fn padding(self) -> io::Result<f32> {
+    /// Darkens RGB near the geometric rim, in `0..=1`. Unlike pooling it changes color, not
+    /// alpha.
+    pub fn edge_darkening(mut self, strength: f64) -> Self {
+        self.edge_darkening = strength;
+        self
+    }
+
+    /// Adds density at stroke self-intersections using independent segment coverage, in
+    /// `0..=1`. Stroke-only.
+    pub fn build_up(mut self, strength: f64) -> Self {
+        self.build_up = strength;
+        self
+    }
+
+    /// Scales directional material coordinates; a positive ratio in `0.1..=10`. Stroke-only.
+    pub fn edge_anisotropy(mut self, ratio: f64) -> Self {
+        self.anisotropy = ratio;
+        self
+    }
+
+    /// Makes a stroke a grayscale rounded-ridge height drawable for
+    /// `Optics::Relight { height_from: Luma }`; strength in `0..=16`. Stroke-only.
+    pub fn height_map(mut self, strength: f64) -> Self {
+        self.height = strength;
+        self
+    }
+
+    pub(crate) fn padding(&self) -> io::Result<f32> {
         let padding = self.bleed + self.roughness;
         if ![
             self.dryness,
@@ -155,12 +229,8 @@ impl Ink {
             || !(0.0..=1.0).contains(&self.dryness)
             || !(0.0..=1.0).contains(&self.granulation)
             || !(0.0..=1.0).contains(&self.fibers)
-            || self.paper.is_some_and(|(_, strength, scale)| {
-                !strength.is_finite()
-                    || !(0.0..=1.0).contains(&strength)
-                    || !scale.is_finite()
-                    || scale <= 0.0
-            })
+            || self.paper.as_ref().is_some_and(|paper| !paper.is_valid())
+            || !self.paper_transform.is_finite()
             || self.pooling.is_some_and(|(strength, width)| {
                 !strength.is_finite()
                     || !(0.0..=1.0).contains(&strength)
@@ -169,22 +239,51 @@ impl Ink {
             })
             || self.bleed < 0.0
             || self.roughness < 0.0
+            || !self.build_up.is_finite()
+            || !(0.0..=1.0).contains(&self.build_up)
+            || !self.edge_darkening.is_finite()
+            || !(0.0..=1.0).contains(&self.edge_darkening)
+            || !self.anisotropy.is_finite()
+            || !(0.1..=10.0).contains(&self.anisotropy)
+            || !self.height.is_finite()
+            || !(0.0..=16.0).contains(&self.height)
         {
             return Err(invalid(
-                "Ink strengths must be in 0..=1, bleed/roughness nonnegative, and paper/pooling scales positive and finite",
+                "Ink strengths must be in 0..=1, bleed/roughness nonnegative, paper/pooling scales positive and finite, anisotropy in 0.1..=10 and height in 0..=16",
             ));
         }
         Ok(padding)
     }
 
+    /// Maps a local point into paper space.
+    fn paper_space(&self, point: motion_core::Point) -> motion_core::Point {
+        self.paper_transform.apply(point)
+    }
+
+    /// Prepares the texture paper, if any, once per baked material.
+    fn paper_sampler(&self) -> Option<PaperSampler> {
+        match &self.paper {
+            Some(Paper::Texture {
+                texture,
+                grain_scale,
+                absorbency,
+            }) => Some(PaperSampler::new(
+                texture.clone(),
+                *grain_scale,
+                *absorbency,
+            )),
+            _ => None,
+        }
+    }
+
     #[cfg(test)]
-    pub(super) fn has_fill_edges(self) -> bool {
+    pub(super) fn has_fill_edges(&self) -> bool {
         self.bleed > 0.0
             || self.roughness > 0.0
             || self.pooling.is_some_and(|(strength, _)| strength > 0.0)
     }
 
-    pub(super) fn sample(self, point: Point, canvas: Point) -> InkSample {
+    pub(super) fn sample(&self, point: Point, canvas: Point) -> InkSample {
         let dry = (self.dryness > 0.0).then(|| DrySample::new(point, self.seed));
         let mut density = dry.map_or(1.0, |dry| dry.coverage(f64::from(self.dryness)));
         let mut pigment = 1.0;
@@ -196,7 +295,12 @@ impl Ink {
             density *= factor;
             pigment *= factor;
         }
-        if let Some((seed, strength, scale)) = self.paper {
+        if let Some(Paper::Procedural {
+            seed,
+            strength,
+            scale,
+        }) = self.paper
+        {
             let paper = (canvas.0 / f64::from(scale), canvas.1 / f64::from(scale));
             let horizontal = noise((paper.0 * 0.08, paper.1 * 2.8), seed);
             let vertical = noise((paper.0 * 2.5, paper.1 * 0.12), seed.wrapping_add(101));
@@ -226,7 +330,12 @@ impl Ink {
             density,
             pigment,
             point,
-            ink: Some(self),
+            shade: Some(Shade {
+                seed: self.seed,
+                dryness: self.dryness,
+                fibers: self.fibers,
+                pooling: self.pooling,
+            }),
             dry,
         }
     }
@@ -239,8 +348,17 @@ pub(super) struct InkSample {
     density: f64,
     pigment: f64,
     point: Point,
-    ink: Option<Ink>,
+    shade: Option<Shade>,
     dry: Option<DrySample>,
+}
+
+/// The per-material constants that [`InkSample`] needs after sampling.
+#[derive(Clone, Copy)]
+struct Shade {
+    seed: u32,
+    dryness: f32,
+    fibers: f32,
+    pooling: Option<(f32, f32)>,
 }
 
 impl Default for InkSample {
@@ -251,7 +369,7 @@ impl Default for InkSample {
             density: 1.0,
             pigment: 1.0,
             point: (0.0, 0.0),
-            ink: None,
+            shade: None,
             dry: None,
         }
     }
@@ -268,8 +386,8 @@ impl InkSample {
     }
 
     fn pool_density(self, distance: f64) -> f64 {
-        self.ink
-            .and_then(|ink| ink.pooling)
+        self.shade
+            .and_then(|shade| shade.pooling)
             .map_or(1.0, |(strength, width)| {
                 let rim = (1.0 - (distance - self.edge).abs() / f64::from(width)).clamp(0.0, 1.0);
                 1.0 - f64::from(strength) * 0.45 * (1.0 - rim * rim)
@@ -294,16 +412,16 @@ impl InkSample {
             return 0.0;
         }
         let mut density = self.density;
-        if let Some(ink) = self.ink {
-            if ink.fibers > 0.0 || load < 1.0 {
-                let dryness = 1.0 - (1.0 - f64::from(ink.dryness)) * load;
+        if let Some(shade) = self.shade {
+            if shade.fibers > 0.0 || load < 1.0 {
+                let dryness = 1.0 - (1.0 - f64::from(shade.dryness)) * load;
                 let isotropic = self
                     .dry
-                    .unwrap_or_else(|| DrySample::new(self.point, ink.seed))
+                    .unwrap_or_else(|| DrySample::new(self.point, shade.seed))
                     .coverage(dryness);
-                let dry = if ink.fibers > 0.0 {
-                    let directional = dry_coverage(fiber, ink.seed, dryness);
-                    isotropic + (directional - isotropic) * f64::from(ink.fibers)
+                let dry = if shade.fibers > 0.0 {
+                    let directional = dry_coverage(fiber, shade.seed, dryness);
+                    isotropic + (directional - isotropic) * f64::from(shade.fibers)
                 } else {
                     isotropic
                 };
@@ -382,7 +500,11 @@ mod tests {
         let ink = Ink::new(17)
             .dryness(0.4)
             .granulation(0.6)
-            .paper(211, 0.7, 1.5);
+            .paper(Paper::Procedural {
+                seed: 211,
+                strength: 0.7,
+                scale: 1.5,
+            });
         for coverage in [0.0, 0.25, 0.5, 0.75, 1.0] {
             assert_eq!(neutral.fill_coverage(coverage), coverage);
             let first = ink.sample(point, point).fill_coverage(coverage);
@@ -391,7 +513,11 @@ mod tests {
             assert!(first >= 0.0 && first <= coverage);
         }
         assert!(ink.sample(point, point).fill_coverage(1.0) < 1.0);
-        let paper = Ink::new(17).paper(211, 0.7, 1.5);
+        let paper = Ink::new(17).paper(Paper::Procedural {
+            seed: 211,
+            strength: 0.7,
+            scale: 1.5,
+        });
         assert_eq!(
             paper.sample(point, point).fill_coverage(1.0),
             paper.sample((90.0, 12.0), point).fill_coverage(1.0)
@@ -415,7 +541,11 @@ mod tests {
 
     #[test]
     fn paper_is_canvas_anchored_and_pooling_keeps_a_darker_rim() {
-        let paper = Ink::new(17).paper(211, 0.7, 1.5);
+        let paper = Ink::new(17).paper(Paper::Procedural {
+            seed: 211,
+            strength: 0.7,
+            scale: 1.5,
+        });
         let canvas = (13.5, 24.5);
         assert_eq!(
             paper.sample((0.0, 0.0), canvas).density,
@@ -424,7 +554,11 @@ mod tests {
         assert_eq!(
             paper.sample((0.0, 0.0), canvas).density,
             Ink::new(99)
-                .paper(211, 0.7, 1.5)
+                .paper(Paper::Procedural {
+                    seed: 211,
+                    strength: 0.7,
+                    scale: 1.5
+                })
                 .sample((0.0, 0.0), canvas)
                 .density
         );

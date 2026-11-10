@@ -27,7 +27,8 @@
 //!
 //! [`Path2D`] and [`StrokeStyle`] provide vector commands; `ink::Ink` adds deterministic
 //! directional dry gaps, soft spreading, rough edges, paper imprint and pigment
-//! pooling through `ink::BrushStroke` and `ink::InkFill`. Pressure and ink-load profiles
+//! pooling through `ink::BrushStroke` (configured with `ink::BrushStrokeBuilder`) and
+//! `ink::InkFill`; `ink::Paper` selects procedural or texture paper. Pressure and ink-load profiles
 //! are sampled in full arc length.
 //! [`Animation`] and [`Keyframes`] are analytic, clock-free samplers, not playback
 //! tasks. [`Snapshot`] is opaque RGB; [`Bitmap`] stills preserve alpha.

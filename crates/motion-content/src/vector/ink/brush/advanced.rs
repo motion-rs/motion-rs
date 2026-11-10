@@ -1,8 +1,8 @@
 //! Advanced brush strokes: nib modes, recorded input, extended options, validation and drawing.
 
-use super::{BrushStroke, invalid};
+use super::{BrushStroke, BrushStrokeBuilder, Config, invalid};
 use motion_core::{
-    Canvas, Duration, FillRule, NodeModifiers, Paint, Point, Rect, Shape, Time, Transform,
+    Canvas, Duration, FillRule, NodeModifiers, Point, Rect, Shape, Time, Transform,
     ValidationError, Vector2,
 };
 use std::sync::Arc;
@@ -15,7 +15,6 @@ mod presets;
 mod tests;
 mod timing;
 
-pub use material::Paper;
 pub use pigment::{PigmentMix, PigmentPainting};
 pub use presets::BrushPreset;
 pub use timing::BrushTiming;
@@ -34,7 +33,12 @@ pub enum NibMode {
     Tilt,
 }
 
-/// Analytic pressure treatment at the stroke endpoints.
+/// Analytic pressure treatment at the endpoints of a variable-width [`BrushStroke`].
+///
+/// This is not [`LineCap`](motion_core::LineCap): `LineCap` picks the end geometry (butt, round
+/// or square) of a uniform-width [`StrokeStyle`](motion_core::StrokeStyle) outline, whereas
+/// `BrushCap` shapes how the nib imprint and pressure end a brush stroke. `Round` resembles
+/// `LineCap::Round`, `Flat` resembles `Butt`, and `Tapered` has no `LineCap` counterpart.
 #[derive(Clone, Copy, Debug)]
 pub enum BrushCap {
     /// Full rounded nib imprint.
@@ -80,19 +84,12 @@ pub(super) struct Options {
     input_arcs: Vec<f64>,
     speed_response: f64,
     wobble: Option<(f64, f64, u32)>,
-    paint: Option<Paint>,
     bristles: usize,
     spread: f64,
     jitter: f64,
     seed: u32,
     tile_size: u32,
     parallel: bool,
-    paper: Option<Paper>,
-    build_up: f64,
-    edge_darkening: f64,
-    anisotropy: f64,
-    height: f64,
-    paper_transform: Transform,
 }
 
 impl Default for Options {
@@ -107,19 +104,12 @@ impl Default for Options {
             input_arcs: Vec::new(),
             speed_response: 0.0,
             wobble: None,
-            paint: None,
             bristles: 1,
             spread: 0.0,
             jitter: 0.0,
             seed: 0,
             tile_size: 2048,
             parallel: false,
-            paper: None,
-            build_up: 0.0,
-            edge_darkening: 0.0,
-            anisotropy: 1.0,
-            height: 0.0,
-            paper_transform: Transform::IDENTITY,
         }
     }
 }
@@ -137,10 +127,9 @@ impl Options {
     }
 }
 
-impl BrushStroke {
-    fn configure(mut self, configure: impl FnOnce(&mut Options)) -> Self {
-        configure(&mut self.advanced);
-        self.reset();
+impl BrushStrokeBuilder {
+    pub(super) fn configure(mut self, configure: impl FnOnce(&mut Options)) -> Self {
+        configure(&mut self.config.advanced);
         self
     }
 
@@ -180,11 +169,6 @@ impl BrushStroke {
         self.configure(|options| options.speed_response = response)
     }
 
-    /// Replaces solid stroke color with a spatial Paint, before material attenuation.
-    pub fn paint(self, paint: impl Into<Paint>) -> Self {
-        self.configure(|options| options.paint = Some(paint.into()))
-    }
-
     /// Splits the stroke into 1..=64 seeded offset bristles.
     pub fn bristles(self, count: usize, spread: f64, jitter: f64, seed: u32) -> Self {
         self.configure(|options| {
@@ -205,48 +189,51 @@ impl BrushStroke {
         self.configure(|options| options.parallel = enabled)
     }
 
-    /// Samples a resolved local-coordinate paper height map.
-    pub fn paper_texture(self, paper: Paper) -> Self {
-        self.configure(|options| options.paper = Some(paper))
-    }
-
-    /// Supplies the authored local-to-canvas paper coordinates; identity uses untransformed design space.
-    /// Keep this equal to the enclosing node transform when paper must stay fixed on the canvas.
-    pub fn paper_transform(self, transform: Transform) -> Self {
-        self.configure(|options| options.paper_transform = transform)
-    }
-
-    /// Adds density at self-intersections using independent segment coverage.
-    pub fn build_up(self, strength: f64) -> Self {
-        self.configure(|options| options.build_up = strength)
-    }
-
-    /// Darkens RGB near the geometric rim, in 0..=1.
-    pub fn edge_darkening(self, strength: f64) -> Self {
-        self.configure(|options| options.edge_darkening = strength)
-    }
-
-    /// Scales directional material coordinates; a positive ratio in 0.1..=10.
-    pub fn edge_anisotropy(self, ratio: f64) -> Self {
-        self.configure(|options| options.anisotropy = ratio)
-    }
-
-    /// Produces a grayscale rounded-ridge height drawable for `Optics::Relight { height_from:Luma }`.
-    pub fn height_map(self, strength: f64) -> Self {
-        self.configure(|options| options.height = strength)
-    }
-
     /// Seeded analytic path displacement. Reuse seed for stable texture; change it for boil.
     pub fn wobble(self, amplitude: f64, frequency: f64, seed: u32) -> Self {
         self.configure(|options| options.wobble = Some((amplitude, frequency, seed)))
     }
 
+    /// Seeded two-frame boil; frame order never contributes history.
+    pub fn boil(self, amplitude: f64, frequency: f64, seed: u32, frame: u64) -> Self {
+        self.wobble(
+            amplitude,
+            frequency,
+            seed ^ motion_core::noise::hash32((frame / 2) as u32),
+        )
+    }
+
+    /// Analytic absorption: the material depends on age, not previous frames.
+    pub fn try_wetness(
+        self,
+        age: Duration,
+        radius: f32,
+        drying: Duration,
+    ) -> Result<Self, ValidationError> {
+        if age < Time::ZERO || drying <= Time::ZERO || !radius.is_finite() || radius < 0.0 {
+            return Err(invalid(
+                "wetness",
+                "Invalid age, wash radius or drying duration",
+            ));
+        }
+        let extent = f64::from(radius) * (1.0 - libm::exp(-age.as_seconds() / drying.as_seconds()));
+        let ink = self
+            .config
+            .ink
+            .clone()
+            .unwrap_or_default()
+            .bleed(extent as f32);
+        Ok(self.ink(ink))
+    }
+}
+
+impl BrushStroke {
     /// Evaluates the reveal endpoint and tangent, suitable for a user-authored cursor or emitter.
     pub fn tip(&self) -> Result<(Point, Vector2), ValidationError> {
-        let options = &self.advanced;
+        let options = &self.config.advanced;
         if self.progress > 0.0 {
-            validate(self)?;
-            let groups = samples(self, self.progress)?;
+            self.validate()?;
+            let groups = samples(&self.config, self.progress)?;
             let tips: Vec<_> = groups
                 .iter()
                 .rev()
@@ -262,7 +249,7 @@ impl BrushStroke {
                 return Ok((point, sample.tangent));
             }
         }
-        self.path.try_point_at(self.progress)
+        self.config.path.try_point_at(self.progress)
     }
 
     /// Positions a user-authored cursor at the deterministic reveal endpoint.
@@ -286,31 +273,12 @@ impl BrushStroke {
         )
     }
 
-    /// Seeded two-frame boil; frame order never contributes history.
-    pub fn boil(self, amplitude: f64, frequency: f64, seed: u32, frame: u64) -> Self {
-        self.wobble(
-            amplitude,
-            frequency,
-            seed ^ motion_core::noise::hash32((frame / 2) as u32),
-        )
-    }
-
-    /// Analytic absorption: the material depends on age, not previous frames.
-    pub fn wetness(
-        self,
-        age: Duration,
-        radius: f32,
-        drying: Duration,
-    ) -> Result<Self, ValidationError> {
-        if age < Time::ZERO || drying <= Time::ZERO || !radius.is_finite() || radius < 0.0 {
-            return Err(invalid(
-                "wetness",
-                "Invalid age, wash radius or drying duration",
-            ));
+    fn validate(&self) -> Result<(), ValidationError> {
+        validate(&self.config)?;
+        if !self.progress.is_finite() || !(0.0..=1.0).contains(&self.progress) {
+            return Err(invalid("progress", "Require reveal progress in 0..=1"));
         }
-        let extent = f64::from(radius) * (1.0 - libm::exp(-age.as_seconds() / drying.as_seconds()));
-        let ink = self.ink.unwrap_or_default().bleed(extent as f32);
-        Ok(self.ink(ink))
+        Ok(())
     }
 }
 
@@ -338,25 +306,14 @@ fn validate_input(samples: &[InputSample]) -> Result<(), ValidationError> {
     Ok(())
 }
 
-fn validate(stroke: &BrushStroke) -> Result<(), ValidationError> {
+pub(super) fn validate(stroke: &Config) -> Result<(), ValidationError> {
     let options = &stroke.advanced;
-    if !options.height.is_finite() || !(0.0..=16.0).contains(&options.height) {
-        return Err(invalid("height", "Require finite height in 0..=16"));
-    }
-    if !options.paper_transform.is_finite() {
-        return Err(invalid(
-            "paper_transform",
-            "Paper coordinates must be finite",
-        ));
-    }
     stroke.path.validate()?;
     if !stroke.width.is_finite()
         || !(0.0..=512.0).contains(&stroke.width)
         || !stroke.aspect.is_finite()
         || !(f64::MIN_POSITIVE..=1.0).contains(&stroke.aspect)
         || !stroke.angle.is_finite()
-        || !stroke.progress.is_finite()
-        || !(0.0..=1.0).contains(&stroke.progress)
         || stroke.material_work_limit == 0
         || stroke
             .pressure
@@ -375,12 +332,6 @@ fn validate(stroke: &BrushStroke) -> Result<(), ValidationError> {
         || !(0.0..=1.0).contains(&options.jitter)
         || !options.speed_response.is_finite()
         || !(0.0..=1.0).contains(&options.speed_response)
-        || !options.build_up.is_finite()
-        || !(0.0..=1.0).contains(&options.build_up)
-        || !options.edge_darkening.is_finite()
-        || !(0.0..=1.0).contains(&options.edge_darkening)
-        || !options.anisotropy.is_finite()
-        || !(0.1..=10.0).contains(&options.anisotropy)
     {
         return Err(invalid(
             "extended",
@@ -434,18 +385,8 @@ fn validate(stroke: &BrushStroke) -> Result<(), ValidationError> {
     }) {
         return Err(invalid("wobble", "Invalid wobble amplitude or frequency"));
     }
-    if options.paper.as_ref().is_some_and(|paper| {
-        !paper.grain_scale.is_finite()
-            || paper.grain_scale <= 0.0
-            || !paper.absorbency.is_finite()
-            || !(0.0..=1.0).contains(&paper.absorbency)
-    }) {
-        return Err(invalid("paper", "Invalid paper scale or absorbency"));
-    }
-    if let Some(paint) = &options.paint {
-        paint.validate()?;
-    }
-    if let Some(ink) = stroke.ink {
+    stroke.paint.validate()?;
+    if let Some(ink) = &stroke.ink {
         ink.padding()
             .map_err(|error| invalid("ink", &error.to_string()))?;
     }
@@ -453,14 +394,16 @@ fn validate(stroke: &BrushStroke) -> Result<(), ValidationError> {
 }
 
 pub(super) fn bounds(stroke: &BrushStroke) -> Result<Rect, ValidationError> {
-    validate(stroke)?;
-    let options = &stroke.advanced;
-    let padding = stroke
+    stroke.validate()?;
+    let config = &stroke.config;
+    let options = &config.advanced;
+    let padding = config
         .ink
+        .as_ref()
         .map_or(Ok(0.0), |ink| ink.padding().map(f64::from))
         .map_err(|error| invalid("ink", &error.to_string()))?;
-    Ok(stroke.path.bounding_box().inset(
-        -(stroke.width * 2.0
+    Ok(config.path.bounding_box().inset(
+        -(config.width * 2.0
             + padding
             + options.spread
             + options.wobble.map_or(0.0, |value| value.0)
@@ -470,24 +413,23 @@ pub(super) fn bounds(stroke: &BrushStroke) -> Result<Rect, ValidationError> {
 
 pub(super) fn draw(stroke: &BrushStroke, canvas: &mut Canvas<'_>) -> Result<(), ValidationError> {
     let bounds = bounds(stroke)?;
-    let groups = samples(stroke, stroke.progress)?;
-    let path = Arc::new(outline(stroke, &groups)?);
-    if stroke.progress == 0.0 || stroke.width == 0.0 {
+    let config = &stroke.config;
+    let groups = samples(config, stroke.progress)?;
+    let path = Arc::new(outline(config, &groups)?);
+    if stroke.progress == 0.0 || config.width == 0.0 {
         return Ok(());
     }
-    let options = &stroke.advanced;
-    let paint = options.paint.clone().unwrap_or_else(|| stroke.color.into());
-    if stroke.ink.is_none()
-        && options.paper.is_none()
-        && options.build_up == 0.0
-        && options.edge_darkening == 0.0
-        && options.height == 0.0
-    {
-        return canvas.fill_path(path, Transform::IDENTITY, paint, FillRule::NonZero);
+    if config.ink.is_none() {
+        return canvas.fill_path(
+            path,
+            Transform::IDENTITY,
+            config.paint.clone(),
+            FillRule::NonZero,
+        );
     }
     let full = stroke
         .full_material
-        .get_or_init(|| material(stroke, bounds))
+        .get_or_init(|| material(config, bounds))
         .as_ref()
         .map_err(Clone::clone)?;
     for tile in full {

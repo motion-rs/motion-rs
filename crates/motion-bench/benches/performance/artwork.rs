@@ -6,7 +6,7 @@ use motion::particles::{Orbit, ParticleStyle, ParticleTrajectory};
 use motion::prelude::*;
 use motion::render::{MorphPath, SceneCache};
 use motion::svg::SvgAsset;
-use motion::vector::ink::{BrushStroke, Ink, InkFill};
+use motion::vector::ink::{BrushStroke, Ink, InkFill, Paper};
 use std::sync::{Arc, OnceLock};
 
 pub(super) fn image(ring: bool) -> Node {
@@ -115,16 +115,22 @@ pub(super) fn artwork_with_particles(
     }
     if kind == "ink-long-stroke" {
         let path = Path2D::parse_svg("M20 240C150 230 200 30 330 90S490 310 620 120").unwrap();
-        return BrushStroke::new(path, 8.0, Color::BLACK)
+        return BrushStroke::builder(path, 8.0, Color::BLACK)
             .ink(
                 Ink::new(17)
                     .granulation(0.3)
                     .dryness(0.2)
-                    .paper(71, 0.2, 1.2),
+                    .paper(Paper::Procedural {
+                        seed: 71,
+                        strength: 0.2,
+                        scale: 1.2,
+                    }),
             )
             .material_work_limit(100_000_000)
             .pressure(0.08, 1.1, 0.06)
             .ink_load(1.0, 0.3)
+            .build()
+            .unwrap()
             .into();
     }
     if kind == "text-parts" {
@@ -165,7 +171,11 @@ pub(super) fn artwork_with_particles(
         let ink = || {
             Ink::new(17)
                 .granulation(0.4)
-                .paper(211, 0.35, 1.5)
+                .paper(Paper::Procedural {
+                    seed: 211,
+                    strength: 0.35,
+                    scale: 1.5,
+                })
                 .bleed(3.0)
                 .edge_roughness(0.7)
                 .edge_pooling(0.5, 2.0)
@@ -179,15 +189,20 @@ pub(super) fn artwork_with_particles(
                     .fill(Color::BLACK),
             ),
             "fill" => Node::from(path().fill(Color::BLACK)),
-            "stroke" => {
-                Node::from(BrushStroke::new(path(), 9.0, Color::BLACK).pressure(0.2, 1.2, 0.05))
-            }
+            "stroke" => Node::from(
+                BrushStroke::builder(path(), 9.0, Color::BLACK)
+                    .pressure(0.2, 1.2, 0.05)
+                    .build()
+                    .unwrap(),
+            ),
             "ink-fill" => Node::from(InkFill::new(path(), Color::BLACK, ink())),
             "ink-stroke" => Node::from(
-                BrushStroke::new(path(), 9.0, Color::BLACK)
+                BrushStroke::builder(path(), 9.0, Color::BLACK)
                     .pressure(0.2, 1.2, 0.05)
                     .ink_load(0.95, 0.2)
-                    .ink(ink().dryness(0.5).fibers(1.0)),
+                    .ink(ink().dryness(0.5).fibers(1.0))
+                    .build()
+                    .unwrap(),
             ),
             "image" => image(false),
             "image-alpha" => image(true).opacity(0.65),

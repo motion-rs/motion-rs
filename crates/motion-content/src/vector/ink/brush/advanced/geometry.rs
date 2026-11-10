@@ -1,6 +1,6 @@
 //! Brush stroke geometry: subpath splitting, pressure evaluation, nib sampling and outlines.
 
-use super::super::{BrushStroke, invalid};
+use super::super::{Config, invalid};
 use super::{BrushCap, NibMode};
 use motion_core::{Path2D, PathVerb, Point, ValidationError, Vector2};
 
@@ -42,7 +42,7 @@ pub(super) struct Sample {
     pub(super) angle: f64,
 }
 
-fn pressure(stroke: &BrushStroke, amount: f64) -> Result<f64, ValidationError> {
+fn pressure(stroke: &Config, amount: f64) -> Result<f64, ValidationError> {
     let options = &stroke.advanced;
     let value = if let Some(function) = &options.function {
         function.0(amount)
@@ -71,10 +71,7 @@ fn pressure(stroke: &BrushStroke, amount: f64) -> Result<f64, ValidationError> {
     Ok(value)
 }
 
-pub(super) fn samples(
-    stroke: &BrushStroke,
-    progress: f64,
-) -> Result<Vec<Vec<Sample>>, ValidationError> {
+pub(super) fn samples(stroke: &Config, progress: f64) -> Result<Vec<Vec<Sample>>, ValidationError> {
     let options = &stroke.advanced;
     let paths = subpaths(&stroke.path)?;
     let lengths = paths
@@ -192,12 +189,10 @@ pub(super) fn rotated(horizontal: f64, vertical: f64, angle: f64) -> Vector2 {
     )
 }
 
-pub(super) fn outline(
-    stroke: &BrushStroke,
-    groups: &[Vec<Sample>],
-) -> Result<Path2D, ValidationError> {
+pub(super) fn outline(stroke: &Config, groups: &[Vec<Sample>]) -> Result<Path2D, ValidationError> {
     let padding = stroke
         .ink
+        .as_ref()
         .map_or(Ok(0.0), |ink| ink.padding().map(f64::from))
         .map_err(|error| invalid("ink", &error.to_string()))?;
     let mut path = Path2D::new();

@@ -1,7 +1,9 @@
 //! Original geometric fourteen-segment single-line glyphs; no bundled font assets.
 
 use super::BrushStroke;
-use motion_core::{Color, Path2D, Point, ValidationError};
+#[cfg(test)]
+use motion_core::Color;
+use motion_core::{Paint, Path2D, Point, ValidationError};
 
 /// Bounded single-line Latin lettering built from original segment geometry.
 #[derive(Clone, Copy, Debug)]
@@ -24,7 +26,7 @@ impl StrokeFont {
         &self,
         text: &str,
         width: f64,
-        color: Color,
+        paint: impl Into<Paint>,
     ) -> Result<Vec<BrushStroke>, ValidationError> {
         if text.chars().count() > 256
             || !width.is_finite()
@@ -35,6 +37,7 @@ impl StrokeFont {
                 "Require <=256 characters and positive finite width <=512",
             ));
         }
+        let paint = paint.into();
         let segments = [
             [[0.0, 0.0], [1.0, 0.0]],
             [[1.0, 0.0], [1.0, 0.5]],
@@ -78,7 +81,7 @@ impl StrokeFont {
                 path.try_move_to(point(first))?;
                 path.try_line_to(point(second))?;
             }
-            result.push(BrushStroke::new(path, width, color));
+            result.push(BrushStroke::new(path, width, paint.clone()));
             column += 1.0;
         }
         Ok(result)
