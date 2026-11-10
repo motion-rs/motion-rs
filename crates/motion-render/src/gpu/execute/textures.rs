@@ -36,7 +36,7 @@ pub(super) struct EncodedLinear {
 struct BatchUploads<'a> {
     context: &'a GpuContext,
     staging: Option<&'a wgpu::Buffer>,
-    mapped: Option<wgpu::BufferViewMut<'a>>,
+    mapped: Option<wgpu::BufferViewMut>,
     offset: u64,
 }
 
@@ -55,7 +55,11 @@ impl BatchUploads<'_> {
             .context
             .working_buffer(label, bytes.len() as u64, usage);
         let end = self.offset + bytes.len() as u64;
-        self.mapped.as_mut().unwrap()[self.offset as usize..end as usize].copy_from_slice(bytes);
+        self.mapped
+            .as_mut()
+            .unwrap()
+            .slice(self.offset as usize..end as usize)
+            .copy_from_slice(bytes);
         encoder.copy_buffer_to_buffer(staging, self.offset, &buffer, 0, bytes.len() as u64);
         self.offset = end;
         buffer
@@ -394,7 +398,9 @@ impl Gpu {
             staging: staging.as_ref(),
             mapped: staging
                 .as_ref()
-                .map(|buffer| buffer.slice(..).get_mapped_range_mut()),
+                .map(|buffer| buffer.slice(..).get_mapped_range_mut())
+                .transpose()
+                .map_err(|error| motion_core::Error::Gpu(Box::new(error)))?,
             offset: 0,
         };
         let mut uniforms = step.parameters;
@@ -555,6 +561,7 @@ impl Gpu {
                 label: Some("Ordered SourceOver and Plus"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &output,
+                    depth_slice: None,
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: if accumulating {
@@ -568,6 +575,7 @@ impl Gpu {
                 depth_stencil_attachment: None,
                 timestamp_writes: None,
                 occlusion_query_set: None,
+                multiview_mask: None,
             });
             pass.set_viewport(0.0, 0.0, size.width as f32, size.height as f32, 0.0, 1.0);
             pass.set_scissor_rect(0, 0, size.width, size.height);
@@ -611,7 +619,10 @@ impl Gpu {
         } else {
             (u64::from(count) * 48).max(16)
         };
-        let limit_bytes = u64::from(self.device.limits().max_storage_buffer_binding_size)
+        let limit_bytes = self
+            .device
+            .limits()
+            .max_storage_buffer_binding_size
             .min(self.device.limits().max_buffer_size);
         if initial > limit_bytes {
             return Err(ValidationError::limit(

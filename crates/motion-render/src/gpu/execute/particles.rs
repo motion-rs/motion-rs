@@ -50,13 +50,16 @@ impl Gpu {
             .map_async(wgpu::MapMode::Read, move |result| {
                 let _ = sender.send(result);
             });
-        self.device.poll(wgpu::Maintain::Wait);
+        wait_for_gpu(&self.device, None)?;
         self.loss.check()?;
         receiver
             .recv()
             .map_err(|error| motion_core::Error::Gpu(Box::new(error)))?
             .map_err(|error| motion_core::Error::Gpu(Box::new(error)))?;
-        let mapped = buffer.slice(..).get_mapped_range();
+        let mapped = buffer
+            .slice(..)
+            .get_mapped_range()
+            .map_err(|error| motion_core::Error::Gpu(Box::new(error)))?;
         let result = std::array::from_fn(|index| {
             u32::from_le_bytes(
                 mapped[index * 4..index * 4 + 4]

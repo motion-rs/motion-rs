@@ -151,7 +151,7 @@ mod tests {
             .lease(&context, 8, 4)
             .expect("an empty ring leases a slot");
         assert_eq!(slot.format(), wgpu::TextureFormat::Rgba8Unorm);
-        context
+        let validation_scope = context
             .device()
             .push_error_scope(wgpu::ErrorFilter::Validation);
         let _view = slot.create_view(&wgpu::TextureViewDescriptor {
@@ -159,7 +159,7 @@ mod tests {
             ..Default::default()
         });
         // Native error scopes resolve without waiting, so one poll suffices.
-        let mut scope = std::pin::pin!(context.device().pop_error_scope());
+        let mut scope = std::pin::pin!(validation_scope.pop());
         let mut task = std::task::Context::from_waker(std::task::Waker::noop());
         let std::task::Poll::Ready(error) = scope.as_mut().poll(&mut task) else {
             panic!("the validation scope should already be resolved");

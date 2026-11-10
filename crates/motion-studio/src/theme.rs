@@ -85,6 +85,25 @@ fn rounded(radius: u8) -> CornerRadius {
     CornerRadius::same(radius)
 }
 
+/// Default text fonts with the regular Phosphor font as the first fallback.
+pub(crate) fn font_definitions() -> egui::FontDefinitions {
+    let mut fonts = egui::FontDefinitions::default();
+    fonts.font_data.insert(
+        "phosphor".into(),
+        egui::FontData::from_static(egui_phosphor::Variant::Regular.font_bytes()).into(),
+    );
+    let proportional = fonts
+        .families
+        .entry(egui::FontFamily::Proportional)
+        .or_default();
+    proportional.insert(proportional.len().min(1), "phosphor".into());
+    let named = proportional.clone();
+    fonts
+        .families
+        .insert(egui::FontFamily::Name("phosphor".into()), named);
+    fonts
+}
+
 /// Applies colors, spacing and typography. Safe to call repeatedly for theme switches.
 pub(crate) fn apply(context: &egui::Context, dark: bool) {
     let colors = palette(dark);
@@ -149,7 +168,7 @@ pub(crate) fn apply(context: &egui::Context, dark: bool) {
     visuals.widgets.active.bg_stroke = Stroke::NONE;
     visuals.slider_trailing_fill = true;
     context.set_visuals(visuals);
-    context.style_mut(|style| {
+    context.global_style_mut(|style| {
         style.spacing.item_spacing = egui::vec2(8.0, 6.0);
         style.spacing.button_padding = egui::vec2(10.0, 4.0);
         style.spacing.interact_size = egui::vec2(36.0, 26.0);
@@ -238,9 +257,11 @@ pub(crate) fn segmented_control(
     let inset = 2.0;
     let inner = track.shrink(inset);
     let width = inner.width() / segments.len() as f32;
-    let position =
-        ui.ctx()
-            .animate_value_with_time(ui.id().with("segment-thumb"), selected as f32, 0.25);
+    let position = ui.ctx().animate_value_with_time(
+        ui.scope_id().with("segment-thumb"),
+        selected as f32,
+        0.25,
+    );
     let cell_at = |slot: f32| {
         egui::Rect::from_min_size(
             egui::pos2(inner.left() + width * slot, inner.top()),
@@ -254,7 +275,11 @@ pub(crate) fn segmented_control(
     for (index, (icon, label)) in segments.iter().enumerate() {
         let cell = cell_at(index as f32);
         let response = ui
-            .interact(cell, ui.id().with(("segment", index)), egui::Sense::click())
+            .interact(
+                cell,
+                ui.scope_id().with(("segment", index)),
+                egui::Sense::click(),
+            )
             .on_hover_text(*label);
         if index != selected && response.hovered() {
             ui.painter().rect_filled(cell, rounded(7), track_fill);

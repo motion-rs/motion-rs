@@ -206,9 +206,7 @@ impl StudioApp {
         clock: StudioClock,
         persist_session: bool,
     ) -> io::Result<Self> {
-        let mut fonts = egui::FontDefinitions::default();
-        egui_phosphor::add_to_fonts(&mut fonts, egui_phosphor::Variant::Regular);
-        context.egui_ctx.set_fonts(fonts);
+        context.egui_ctx.set_fonts(crate::theme::font_definitions());
         crate::theme::apply(&context.egui_ctx, true);
         #[cfg(feature = "gpu")]
         let mut scene = scene;

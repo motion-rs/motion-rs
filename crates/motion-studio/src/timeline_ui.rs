@@ -157,7 +157,8 @@ fn tick_label(frame: u32, fps: u32, step: u32) -> String {
 }
 
 impl StudioApp {
-    pub fn timeline_panel(&mut self, context: &egui::Context) {
+    pub fn timeline_panel(&mut self, ui: &mut egui::Ui) {
+        let context = &ui.ctx().clone();
         let rows = self.inspection.timeline_view.tracks.len() as f32;
         let audio = if self.scene.definition.audio_timeline.is_some() {
             WAVE_HEIGHT
@@ -165,15 +166,15 @@ impl StudioApp {
             0.0
         };
         let content = RULER_HEIGHT + rows * ROW_HEIGHT + audio + CACHE_HEIGHT + 4.0 + 56.0;
-        egui::TopBottomPanel::bottom("timeline")
+        egui::Panel::bottom("timeline")
             .resizable(true)
-            .default_height(content.clamp(120.0, 380.0))
-            .height_range(120.0..=380.0)
+            .default_size(content.clamp(120.0, 380.0))
+            .size_range(120.0..=380.0)
             .frame(
-                egui::Frame::side_top_panel(&context.style())
+                egui::Frame::side_top_panel(&context.global_style())
                     .inner_margin(egui::Margin::symmetric(12, 8)),
             )
-            .show(context, |ui| {
+            .show(ui, |ui| {
                 self.transport_bar(ui);
                 ui.add_space(4.0);
                 egui::ScrollArea::vertical()

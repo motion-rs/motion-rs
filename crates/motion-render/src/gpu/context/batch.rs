@@ -10,11 +10,7 @@ mod layer_format_tests {
             let adapter = instance
                 .request_adapter(&wgpu::RequestAdapterOptions::default())
                 .await
-                .ok_or_else(|| {
-                    motion_core::Error::GpuUnavailable(Box::new(std::io::Error::other(
-                        "No native adapter for layer capability test",
-                    )))
-                })?;
+                .map_err(|error| motion_core::Error::GpuUnavailable(Box::new(error)))?;
             let info = crate::gpu::adapter_info(&adapter)?;
             for format in [
                 wgpu::TextureFormat::Rgba32Float,

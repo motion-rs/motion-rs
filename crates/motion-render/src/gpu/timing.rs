@@ -137,7 +137,11 @@ impl TimestampRecorder {
                 .map_err(|error| motion_core::Error::Gpu(Box::new(error)))?
                 .map_err(|error| motion_core::Error::Gpu(Box::new(error)))?;
         }
-        let mapped = self.readback.slice(..).get_mapped_range();
+        let mapped = self
+            .readback
+            .slice(..)
+            .get_mapped_range()
+            .map_err(|error| motion_core::Error::Gpu(Box::new(error)))?;
         let result = (|| {
             let mut ticks = [0; QUERY_COUNT as usize];
             for (target, bytes) in ticks.iter_mut().zip(mapped.as_chunks::<8>().0) {
@@ -226,7 +230,7 @@ mod tests {
             assert!(handle.get().is_none());
             return Ok(());
         };
-        context
+        let validation_scope = context
             .device
             .push_error_scope(wgpu::ErrorFilter::Validation);
         let mut encoder = context.device.create_command_encoder(&Default::default());
@@ -237,10 +241,8 @@ mod tests {
         let submission = context.queue.submit(Some(encoder.finish()));
         recorder.map();
         assert!(handle.get().is_none());
-        context
-            .device
-            .poll(wgpu::Maintain::WaitForSubmissionIndex(submission));
-        assert!(pollster::block_on(context.device.pop_error_scope()).is_none());
+        super::super::wait_for_gpu(&context.device, Some(submission))?;
+        assert!(pollster::block_on(validation_scope.pop()).is_none());
         let completed = recorder.finish()?;
         let timings = completed.1;
         TimestampRecorder::publish(Some(completed));

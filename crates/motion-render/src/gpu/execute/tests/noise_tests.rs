@@ -99,9 +99,9 @@ fn read_samples(context: &GpuContext, words: &[[u32; 8]]) -> motion_core::Result
         .map_async(wgpu::MapMode::Read, move |result| {
             sender.send(result).unwrap();
         });
-    context.device.poll(wgpu::Maintain::Wait);
+    wait_for_gpu(&context.device, None)?;
     receiver.recv().unwrap().unwrap();
-    let mapped = readback.slice(..).get_mapped_range();
+    let mapped = readback.slice(..).get_mapped_range().unwrap();
     let samples = bytemuck::cast_slice::<u8, [u32; 28]>(&mapped).to_vec();
     drop(mapped);
     readback.unmap();

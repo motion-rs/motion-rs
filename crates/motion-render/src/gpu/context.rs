@@ -17,7 +17,7 @@ pub(super) fn timestamp_features(available: wgpu::Features) -> wgpu::Features {
 impl Plan {
     pub(super) fn validate_device(&self, limits: &wgpu::Limits) -> Result<(), ValidationError> {
         let coverage_bytes = self.coverage.len() as u64 * 4;
-        if coverage_bytes > u64::from(limits.max_storage_buffer_binding_size)
+        if coverage_bytes > limits.max_storage_buffer_binding_size
             || coverage_bytes > limits.max_buffer_size
         {
             return Err(device_error(
@@ -26,7 +26,7 @@ impl Plan {
             ));
         }
         let raster_bytes = u64::from(self.size.width) * u64::from(self.size.height) * 16;
-        if raster_bytes > u64::from(limits.max_storage_buffer_binding_size)
+        if raster_bytes > limits.max_storage_buffer_binding_size
             || raster_bytes > limits.max_buffer_size
         {
             return Err(device_error(
@@ -43,7 +43,7 @@ impl Plan {
             ));
         }
         if self.steps.iter().any(|step| {
-            step.data.len() as u64 * 4 > u64::from(limits.max_storage_buffer_binding_size)
+            step.data.len() as u64 * 4 > limits.max_storage_buffer_binding_size
                 || step.data.len() as u64 * 4 > limits.max_buffer_size
         }) {
             return Err(device_error(
@@ -56,7 +56,9 @@ impl Plan {
                 let tiles =
                     ParticleTiles::new(step.parameters.image_bounds(2), step.data[0] as u32)?;
                 if tiles.bytes
-                    > u64::from(limits.max_storage_buffer_binding_size).min(limits.max_buffer_size)
+                    > limits
+                        .max_storage_buffer_binding_size
+                        .min(limits.max_buffer_size)
                     || tiles.tiles.div_ceil(64) > limits.max_compute_workgroups_per_dimension
                 {
                     return Err(device_error(
@@ -100,11 +102,7 @@ impl GpuContext {
                     ..Default::default()
                 })
                 .await
-                .ok_or_else(|| {
-                    motion_core::Error::GpuUnavailable(Box::new(std::io::Error::other(
-                        "No compatible native GPU adapter",
-                    )))
-                })?;
+                .map_err(|error| motion_core::Error::GpuUnavailable(Box::new(error)))?;
             let info = crate::gpu::adapter_info(&adapter)?;
             let format = adapter.get_texture_format_features(wgpu::TextureFormat::Rgba32Float);
             let hardware_fills = adapter
@@ -117,19 +115,17 @@ impl GpuContext {
                     .flags
                     .contains(wgpu::TextureFormatFeatureFlags::BLENDABLE);
             let (device, queue) = adapter
-                .request_device(
-                    &wgpu::DeviceDescriptor {
-                        label: Some("Motion PreparedFrame compute"),
-                        required_features: if hardware_fills {
-                            wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES
-                        } else {
-                            wgpu::Features::empty()
-                        } | timestamp_features(adapter.features()),
-                        required_limits: wgpu::Limits::default(),
-                        memory_hints: wgpu::MemoryHints::MemoryUsage,
-                    },
-                    None,
-                )
+                .request_device(&wgpu::DeviceDescriptor {
+                    label: Some("Motion PreparedFrame compute"),
+                    required_features: if hardware_fills {
+                        wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES
+                    } else {
+                        wgpu::Features::empty()
+                    } | timestamp_features(adapter.features()),
+                    required_limits: wgpu::Limits::default(),
+                    memory_hints: wgpu::MemoryHints::MemoryUsage,
+                    ..Default::default()
+                })
                 .await
                 .map_err(|error| motion_core::Error::GpuUnavailable(Box::new(error)))?;
             Self::from_device(device, queue, info, hardware_fills)
@@ -277,8 +273,8 @@ impl GpuContext {
     ) -> motion_core::Result<Self> {
         pollster::block_on(async move {
             let loss = crate::gpu::DeviceMonitor::new(&device);
-            device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
-            device.push_error_scope(wgpu::ErrorFilter::Validation);
+            let memory_scope = device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
+            let validation_scope = device.push_error_scope(wgpu::ErrorFilter::Validation);
             let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: Some("Motion linear compute"),
                 source: wgpu::ShaderSource::Wgsl(textures::shader_source().into()),
@@ -311,8 +307,8 @@ impl GpuContext {
             });
             let textures =
                 std::sync::Arc::new(TexturePipelines::new(&device, &shader, hardware_fills));
-            let validation = device.pop_error_scope().await;
-            let memory = device.pop_error_scope().await;
+            let validation = validation_scope.pop().await;
+            let memory = memory_scope.pop().await;
             if let Some(error) = validation {
                 return Err(motion_core::Error::GpuUnavailable(Box::new(error)));
             }
@@ -356,8 +352,8 @@ impl GpuContext {
 
     fn warm_up(&self) -> motion_core::Result<()> {
         let _submission = self.acquire_submission()?;
-        self.device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
-        self.device.push_error_scope(wgpu::ErrorFilter::Validation);
+        let memory_scope = self.device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
+        let validation_scope = self.device.push_error_scope(wgpu::ErrorFilter::Validation);
         self.alpha_thresholds();
         self.packing_pipeline();
         self.present_check_pipeline();
@@ -374,10 +370,9 @@ impl GpuContext {
                 label: Some("Motion context warm-up"),
             });
         let submission = self.queue.submit([encoder.finish()]);
-        self.device
-            .poll(wgpu::Maintain::WaitForSubmissionIndex(submission));
-        let validation = pollster::block_on(self.device.pop_error_scope());
-        let memory = pollster::block_on(self.device.pop_error_scope());
+        wait_for_gpu(&self.device, Some(submission))?;
+        let validation = pollster::block_on(validation_scope.pop());
+        let memory = pollster::block_on(memory_scope.pop());
         self.loss.check()?;
         if let Some(error) = validation.or(memory) {
             return Err(motion_core::Error::GpuUnavailable(Box::new(error)));
@@ -667,7 +662,7 @@ impl GpuContext {
                     primitive: Default::default(),
                     depth_stencil: None,
                     multisample: Default::default(),
-                    multiview: None,
+                    multiview_mask: None,
                     cache: None,
                 })
         })

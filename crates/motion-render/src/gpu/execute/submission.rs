@@ -30,8 +30,8 @@ impl Gpu {
         let context = self.context.clone();
         let _submission = context.acquire_submission()?;
         plan.validate_device(&self.device.limits())?;
-        self.device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
-        self.device.push_error_scope(wgpu::ErrorFilter::Validation);
+        let memory_scope = self.device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
+        let validation_scope = self.device.push_error_scope(wgpu::ErrorFilter::Validation);
         let encoded = self.encode_texture(&plan);
         let super::textures::EncodedTexture {
             mut encoder,
@@ -45,9 +45,9 @@ impl Gpu {
         } = match encoded {
             Ok(encoded) => encoded,
             Err(error) => {
-                self.device.poll(wgpu::Maintain::Wait);
-                let _ = pollster::block_on(self.device.pop_error_scope());
-                let _ = pollster::block_on(self.device.pop_error_scope());
+                wait_for_gpu(&self.device, None)?;
+                let _ = pollster::block_on(validation_scope.pop());
+                let _ = pollster::block_on(memory_scope.pop());
                 return Err(error);
             }
         };
@@ -206,8 +206,8 @@ impl Gpu {
             packed_output: packed,
             status: status_readback,
             completion,
-            validation: Box::pin(self.device.pop_error_scope()),
-            memory: Box::pin(self.device.pop_error_scope()),
+            validation: Box::pin(validation_scope.pop()),
+            memory: Box::pin(memory_scope.pop()),
             size,
             format,
             limits: plan.limits,
@@ -244,8 +244,8 @@ impl Gpu {
         let context = self.context.clone();
         let _submission = context.acquire_submission()?;
         plan.validate_device(&self.device.limits())?;
-        self.device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
-        self.device.push_error_scope(wgpu::ErrorFilter::Validation);
+        let memory_scope = self.device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
+        let validation_scope = self.device.push_error_scope(wgpu::ErrorFilter::Validation);
         let encoded = self.encode(&plan);
         let super::textures::EncodedLinear {
             mut encoder,
@@ -257,9 +257,9 @@ impl Gpu {
         } = match encoded {
             Ok(encoded) => encoded,
             Err(error) => {
-                self.device.poll(wgpu::Maintain::Wait);
-                let _ = pollster::block_on(self.device.pop_error_scope());
-                let _ = pollster::block_on(self.device.pop_error_scope());
+                wait_for_gpu(&self.device, None)?;
+                let _ = pollster::block_on(validation_scope.pop());
+                let _ = pollster::block_on(memory_scope.pop());
                 return Err(error);
             }
         };
@@ -314,8 +314,8 @@ impl Gpu {
             readback,
             status: status_readback,
             completion,
-            validation: Box::pin(self.device.pop_error_scope()),
-            memory: Box::pin(self.device.pop_error_scope()),
+            validation: Box::pin(validation_scope.pop()),
+            memory: Box::pin(memory_scope.pop()),
             raster_width: plan.size.width,
             output_bounds: frame.output_bounds,
             stats,
@@ -378,13 +378,13 @@ impl Gpu {
         })?;
         self.loss.check()?;
         plan.validate_device(&self.device.limits())?;
-        self.device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
-        self.device.push_error_scope(wgpu::ErrorFilter::Validation);
+        let memory_scope = self.device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
+        let validation_scope = self.device.push_error_scope(wgpu::ErrorFilter::Validation);
         let result = self.submit(frame, &plan);
-        self.device.poll(wgpu::Maintain::Wait);
+        wait_for_gpu(&self.device, None)?;
         self.loss.check()?;
-        let validation = pollster::block_on(self.device.pop_error_scope());
-        let memory = pollster::block_on(self.device.pop_error_scope());
+        let validation = pollster::block_on(validation_scope.pop());
+        let memory = pollster::block_on(memory_scope.pop());
         if let Some(error) = memory {
             return Err(motion_core::Error::Gpu(Box::new(error)));
         }
@@ -454,8 +454,8 @@ impl Gpu {
         })?;
         self.loss.check()?;
         plan.validate_device(&self.device.limits())?;
-        self.device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
-        self.device.push_error_scope(wgpu::ErrorFilter::Validation);
+        let memory_scope = self.device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
+        let validation_scope = self.device.push_error_scope(wgpu::ErrorFilter::Validation);
         let result = (|| -> motion_core::Result<_> {
             let super::textures::EncodedTexture {
                 mut encoder,
@@ -550,6 +550,7 @@ impl Gpu {
                     label: Some("external texture pass"),
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                         view: &view,
+                        depth_slice: None,
                         resolve_target: None,
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
@@ -559,6 +560,7 @@ impl Gpu {
                     depth_stencil_attachment: None,
                     timestamp_writes: None,
                     occlusion_query_set: None,
+                    multiview_mask: None,
                 });
                 pass.set_pipeline(pipeline);
                 pass.set_bind_group(0, &bindings, &[]);
@@ -587,8 +589,8 @@ impl Gpu {
                 });
             Ok((submission, readback, receiver, working, timestamps))
         })();
-        let validation = Box::pin(self.device.pop_error_scope());
-        let memory = Box::pin(self.device.pop_error_scope());
+        let validation = Box::pin(validation_scope.pop());
+        let memory = Box::pin(memory_scope.pop());
         if let Some(started) = started {
             self.encode_time = started.elapsed();
         }
@@ -608,7 +610,7 @@ impl Gpu {
                 })
             }
             Err(error) => {
-                self.device.poll(wgpu::Maintain::Wait);
+                wait_for_gpu(&self.device, None)?;
                 let _ = pollster::block_on(validation);
                 let _ = pollster::block_on(memory);
                 Err(error)
@@ -676,7 +678,7 @@ impl Gpu {
             self.encode_time = started.elapsed();
         }
         let completed = self.timing.as_ref().map(|_| std::time::Instant::now());
-        self.device.poll(wgpu::Maintain::Wait);
+        wait_for_gpu(&self.device, None)?;
         self.loss.check()?;
         let result = (|| {
             for _ in 0..2 {
@@ -685,7 +687,10 @@ impl Gpu {
                     .map_err(|error| motion_core::Error::Gpu(Box::new(error)))?
                     .map_err(|error| motion_core::Error::Gpu(Box::new(error)))?;
             }
-            let status = status_readback.slice(..).get_mapped_range();
+            let status = status_readback
+                .slice(..)
+                .get_mapped_range()
+                .map_err(|error| motion_core::Error::Gpu(Box::new(error)))?;
             if status.iter().any(|byte| *byte != 0) {
                 return Err(ValidationError::invalid(
                     "gpu.compute",
@@ -694,7 +699,10 @@ impl Gpu {
                 )
                 .into());
             }
-            let mapped = readback.slice(..).get_mapped_range();
+            let mapped = readback
+                .slice(..)
+                .get_mapped_range()
+                .map_err(|error| motion_core::Error::Gpu(Box::new(error)))?;
             let pixels = super::pending::linear_pixels(
                 &mapped,
                 frame.size.width,

@@ -184,12 +184,12 @@ fn external_texture_formats_guard_bands_and_rejections_match_cpu() -> motion_cor
                 .map_async(wgpu::MapMode::Read, move |result| {
                     sender.send(result).unwrap();
                 });
-            context.device().poll(wgpu::Maintain::Wait);
+            wait_for_gpu(context.device(), None)?;
             receiver
                 .recv()
                 .unwrap()
                 .map_err(|error| motion_core::Error::Gpu(Box::new(error)))?;
-            let mapped = buffer.slice(..).get_mapped_range();
+            let mapped = buffer.slice(..).get_mapped_range().unwrap();
             let mut actual = mapped
                 .chunks_exact(pitch as usize)
                 .flat_map(|row| row[..size.width as usize * bpp as usize].iter().copied())
@@ -257,8 +257,18 @@ fn completed_staging_is_reused_without_aliasing_inflight_uploads() -> motion_cor
     let second = context.staging_buffer(256);
     assert_ne!(first, second);
     assert_eq!(context.pooled_working_bytes(), 0);
-    first.slice(..).get_mapped_range_mut().fill(17);
-    second.slice(..).get_mapped_range_mut().fill(34);
+    first
+        .slice(..)
+        .get_mapped_range_mut()
+        .unwrap()
+        .slice(..)
+        .fill(17);
+    second
+        .slice(..)
+        .get_mapped_range_mut()
+        .unwrap()
+        .slice(..)
+        .fill(34);
     first.unmap();
     second.unmap();
     let readback = context.device.create_buffer(&wgpu::BufferDescriptor {
@@ -271,9 +281,7 @@ fn completed_staging_is_reused_without_aliasing_inflight_uploads() -> motion_cor
     encoder.copy_buffer_to_buffer(&first, 0, &readback, 0, 256);
     encoder.copy_buffer_to_buffer(&second, 0, &readback, 256, 256);
     let submission = context.queue.submit(Some(encoder.finish()));
-    context
-        .device
-        .poll(wgpu::Maintain::WaitForSubmissionIndex(submission));
+    wait_for_gpu(&context.device, Some(submission))?;
     context.return_working(
         WorkingLease {
             buffers: vec![first.clone(), second.clone()],
@@ -287,7 +295,7 @@ fn completed_staging_is_reused_without_aliasing_inflight_uploads() -> motion_cor
         .map_async(wgpu::MapMode::Read, move |result| {
             let _ = sender.send(result);
         });
-    context.device.poll(wgpu::Maintain::Wait);
+    wait_for_gpu(&context.device, None)?;
     receiver.recv().unwrap().unwrap();
     assert_eq!(context.pooled_working_bytes(), 512);
     let reused_first = context.staging_buffer(256);
@@ -296,9 +304,19 @@ fn completed_staging_is_reused_without_aliasing_inflight_uploads() -> motion_cor
     assert!(reused_second == first || reused_second == second);
     assert_ne!(reused_first, reused_second);
     assert_eq!(context.pooled_working_bytes(), 0);
-    reused_first.slice(..).get_mapped_range_mut().fill(51);
-    reused_second.slice(..).get_mapped_range_mut().fill(68);
-    let mapped = readback.slice(..).get_mapped_range();
+    reused_first
+        .slice(..)
+        .get_mapped_range_mut()
+        .unwrap()
+        .slice(..)
+        .fill(51);
+    reused_second
+        .slice(..)
+        .get_mapped_range_mut()
+        .unwrap()
+        .slice(..)
+        .fill(68);
+    let mapped = readback.slice(..).get_mapped_range().unwrap();
     assert!(mapped[..256].iter().all(|byte| *byte == 17));
     assert!(mapped[256..].iter().all(|byte| *byte == 34));
     drop(mapped);
@@ -313,7 +331,7 @@ fn completed_staging_is_reused_without_aliasing_inflight_uploads() -> motion_cor
         512,
     );
     context.working_pool.lock().unwrap().trim(0);
-    context.device.poll(wgpu::Maintain::Wait);
+    wait_for_gpu(&context.device, None)?;
     assert_eq!(context.pooled_working_bytes(), 0);
     let pending = context.staging_buffer(256);
     pending.unmap();
@@ -344,7 +362,7 @@ fn completed_staging_is_reused_without_aliasing_inflight_uploads() -> motion_cor
     );
     assert_eq!(context.pooled_working_bytes(), 128);
     context.working_pool.lock().unwrap().trim(0);
-    context.device.poll(wgpu::Maintain::Wait);
+    wait_for_gpu(&context.device, None)?;
     assert_eq!(context.pooled_working_bytes(), 0);
     Ok(())
 }
@@ -448,14 +466,12 @@ fn async_textures_keep_inflight_uploads_distinct_and_recover_after_drop() -> mot
             .map_async(wgpu::MapMode::Read, move |result| {
                 let _ = sender.send(result);
             });
-        context
-            .device
-            .poll(wgpu::Maintain::WaitForSubmissionIndex(submission));
+        wait_for_gpu(&context.device, Some(submission))?;
         receiver
             .recv()
             .map_err(|error| motion_core::Error::Gpu(Box::new(error)))?
             .map_err(|error| motion_core::Error::Gpu(Box::new(error)))?;
-        let mapped = buffer.slice(..).get_mapped_range();
+        let mapped = buffer.slice(..).get_mapped_range().unwrap();
         for row in 0..4 {
             for column in 0..4 {
                 assert_eq!(
@@ -555,12 +571,12 @@ fn shared_context_texture_target_self_check_and_device_loss_are_real() -> motion
         .map_async(wgpu::MapMode::Read, move |result| {
             sender.send(result).unwrap();
         });
-    context.device().poll(wgpu::Maintain::Wait);
+    wait_for_gpu(context.device(), None)?;
     receiver
         .recv()
         .unwrap()
         .map_err(|error| motion_core::Error::Gpu(Box::new(error)))?;
-    let mapped = readback.slice(..).get_mapped_range();
+    let mapped = readback.slice(..).get_mapped_range().unwrap();
     let actual = mapped
         .as_chunks::<256>()
         .0
@@ -597,7 +613,7 @@ fn shared_context_texture_target_self_check_and_device_loss_are_real() -> motion
         crate::Renderer::Gpu
     );
     context.device().destroy();
-    context.device().poll(wgpu::Maintain::Wait);
+    let _ = wait_for_gpu(context.device(), None);
     let error = first
         .render_frame(1, |_| node.clone())
         .err()

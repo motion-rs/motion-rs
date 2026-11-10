@@ -185,10 +185,7 @@ impl Viewer {
                 dark,
                 context.load_texture(
                     "checkerboard",
-                    egui::ColorImage {
-                        size: [2, 2],
-                        pixels: vec![a, b, b, a],
-                    },
+                    egui::ColorImage::new([2, 2], vec![a, b, b, a]),
                     egui::TextureOptions::NEAREST_REPEAT,
                 ),
             ));
@@ -392,14 +389,15 @@ fn stat(ui: &mut egui::Ui, name: &str, value: &str) {
 }
 
 impl crate::app::StudioApp {
-    pub(crate) fn preview_panel(&mut self, context: &egui::Context) {
-        let colors = theme::palette(context.style().visuals.dark_mode);
+    pub(crate) fn preview_panel(&mut self, ui: &mut egui::Ui) {
+        let context = &ui.ctx().clone();
+        let colors = theme::palette(context.global_style().visuals.dark_mode);
         egui::CentralPanel::default()
             .frame(
-                egui::Frame::central_panel(&context.style())
+                egui::Frame::central_panel(&context.global_style())
                     .inner_margin(egui::Margin::symmetric(12, 8)),
             )
-            .show(context, |ui| {
+            .show(ui, |ui| {
                 self.inspection
                     .viewer
                     .tools(ui, context, self.preview_pixels.as_ref());
@@ -431,7 +429,7 @@ impl crate::app::StudioApp {
     }
 
     fn preview_canvas(&mut self, ui: &mut egui::Ui, context: &egui::Context) {
-        let colors = theme::palette(context.style().visuals.dark_mode);
+        let colors = theme::palette(context.global_style().visuals.dark_mode);
         let available = ui.available_size().max(egui::vec2(1.0, 1.0));
         let (area, response) = ui.allocate_exact_size(available, egui::Sense::click_and_drag());
         ui.set_clip_rect(area.intersect(ui.clip_rect()));

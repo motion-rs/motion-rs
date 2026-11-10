@@ -158,7 +158,7 @@ fn idle_prefetch_is_serial_and_thumbnails_never_replace_main_reply() -> motion_c
 #[test]
 fn thumbnail_cache_is_independent_small_and_entry_bounded() {
     let mut cache = ThumbnailCache::default();
-    let image = ColorImage::new([320, 180], eframe::egui::Color32::WHITE);
+    let image = ColorImage::filled([320, 180], eframe::egui::Color32::WHITE);
     for frame in 0..140 {
         cache.insert(
             PreviewKey {

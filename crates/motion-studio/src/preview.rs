@@ -537,7 +537,7 @@ impl PreviewSubmission {
                 #[cfg(not(test))]
                 let image = {
                     let _ = context;
-                    ColorImage::new([1, 1], Color32::TRANSPARENT)
+                    ColorImage::filled([1, 1], Color32::TRANSPARENT)
                 };
                 Ok(PreviewImage {
                     backend,
@@ -653,12 +653,21 @@ fn texture_image_for_test(
         .map_async(wgpu::MapMode::Read, move |result| {
             let _ = sender.send(result);
         });
-    context.device().poll(wgpu::Maintain::Wait);
+    context
+        .device()
+        .poll(wgpu::PollType::Wait {
+            submission_index: None,
+            timeout: Some(std::time::Duration::from_secs(60)),
+        })
+        .map_err(|error| io::Error::other(error.to_string()))?;
     receiver
         .recv()
         .map_err(|error| io::Error::other(error.to_string()))?
         .map_err(|error| io::Error::other(error.to_string()))?;
-    let mapped = buffer.slice(..).get_mapped_range();
+    let mapped = buffer
+        .slice(..)
+        .get_mapped_range()
+        .map_err(|error| io::Error::other(error.to_string()))?;
     let bytes = mapped
         .chunks_exact(pitch as usize)
         .flat_map(|row| row[..texture.width() as usize * 4].iter().copied())

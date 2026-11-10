@@ -6,6 +6,8 @@ use motion_core::Result;
 use std::io;
 use std::sync::Arc;
 
+const GPU_WAIT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
+
 /// Creates a Metal/Vulkan/DX12 instance for an explicit GPU request.
 /// Rejects CPU renderer requests and unsupported browser targets before requesting an adapter.
 pub fn instance(renderer: Renderer) -> Result<wgpu::Instance> {
@@ -22,9 +24,9 @@ pub fn instance(renderer: Renderer) -> Result<wgpu::Instance> {
             )));
         }
     };
-    Ok(wgpu::Instance::new(&wgpu::InstanceDescriptor {
+    Ok(wgpu::Instance::new(wgpu::InstanceDescriptor {
         backends,
-        ..Default::default()
+        ..wgpu::InstanceDescriptor::new_without_display_handle()
     }))
 }
 
@@ -39,11 +41,7 @@ pub async fn adapter(
             ..Default::default()
         })
         .await
-        .ok_or_else(|| {
-            motion_core::Error::GpuUnavailable(Box::new(io::Error::other(
-                "No compatible native GPU adapter found",
-            )))
-        })
+        .map_err(|error| motion_core::Error::GpuUnavailable(Box::new(error)))
 }
 
 /// Reads adapter identity and rejects unsupported backend families without initializing a device.
@@ -72,6 +70,19 @@ pub fn info_from_adapter(info: wgpu::AdapterInfo) -> Result<GpuInfo> {
         driver: info.driver,
         driver_info: info.driver_info,
     })
+}
+
+pub(super) fn wait_for_gpu(
+    device: &wgpu::Device,
+    submission: Option<wgpu::SubmissionIndex>,
+) -> Result {
+    device
+        .poll(wgpu::PollType::Wait {
+            submission_index: submission,
+            timeout: Some(GPU_WAIT_TIMEOUT),
+        })
+        .map_err(|error| motion_core::Error::Gpu(Box::new(error)))?;
+    Ok(())
 }
 
 #[derive(Clone, Debug)]

@@ -193,7 +193,7 @@ fn gpu_device_loss_callback_diagnostics() -> motion_core::Result {
     let mut gpu = Gpu::new()?;
     let info = gpu.info().clone();
     gpu.device.destroy();
-    gpu.device.poll(wgpu::Maintain::Wait);
+    let _ = wait_for_gpu(&gpu.device, None);
     let frame = prepared(tile());
     let plan = Plan::new(&frame, RasterLimits::default())?;
     let error = gpu.render(&frame, plan).unwrap_err().at_frame(4);

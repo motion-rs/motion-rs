@@ -368,7 +368,7 @@ fn timestamp_capabilities_need_only_pass_level_queries() {
     for available in [
         wgpu::Features::TIMESTAMP_QUERY,
         wgpu::Features::TIMESTAMP_QUERY | wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS,
-        wgpu::Features::TIMESTAMP_QUERY | wgpu::Features::PUSH_CONSTANTS,
+        wgpu::Features::TIMESTAMP_QUERY | wgpu::Features::IMMEDIATES,
     ] {
         assert_eq!(
             super::super::context::timestamp_features(available),
@@ -922,6 +922,7 @@ fn native_present_checks_nonfinite_inside_and_outside_crop() -> motion_core::Res
                         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                                 view: &target_view,
+                                depth_slice: None,
                                 resolve_target: None,
                                 ops: wgpu::Operations {
                                     load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
@@ -942,9 +943,9 @@ fn native_present_checks_nonfinite_inside_and_outside_crop() -> motion_core::Res
                         .map_async(wgpu::MapMode::Read, move |result| {
                             let _ = sender.send(result);
                         });
-                    context.device.poll(wgpu::Maintain::Wait);
+                    wait_for_gpu(&context.device, None)?;
                     receiver.recv().unwrap().unwrap();
-                    let mapped = readback.slice(..).get_mapped_range();
+                    let mapped = readback.slice(..).get_mapped_range().unwrap();
                     let failure = u32::from_le_bytes(mapped[..4].try_into().unwrap());
                     let expected = (!value.is_finite() && (index == 1 || scan))
                         || (linear && index == 1 && value.abs() > 65504.0);
@@ -1758,9 +1759,9 @@ fn packed_output_checks_nonfinite_texture_outside_crop() -> motion_core::Result 
                     .map_async(wgpu::MapMode::Read, move |result| {
                         sender.send(result).unwrap();
                     });
-                gpu.device.poll(wgpu::Maintain::Wait);
+                wait_for_gpu(&gpu.device, None)?;
                 receiver.recv().unwrap().unwrap();
-                let mapped = readback.slice(..).get_mapped_range();
+                let mapped = readback.slice(..).get_mapped_range().unwrap();
                 let flags = u32::from_le_bytes(mapped[..4].try_into().unwrap());
                 assert_eq!(flags, u32::from(scan_outside && !value.is_finite()));
                 drop(mapped);
@@ -1816,9 +1817,9 @@ fn packed_output_checks_nonfinite_texture_outside_crop() -> motion_core::Result 
                         .map_async(wgpu::MapMode::Read, move |result| {
                             sender.send(result).unwrap();
                         });
-                    gpu.device.poll(wgpu::Maintain::Wait);
+                    wait_for_gpu(&gpu.device, None)?;
                     receiver.recv().unwrap().unwrap();
-                    let mapped = readback.slice(..).get_mapped_range();
+                    let mapped = readback.slice(..).get_mapped_range().unwrap();
                     let flags = u32::from_le_bytes(mapped[..4].try_into().unwrap());
                     assert_eq!(flags, u32::from(!value.is_finite()));
                     drop(mapped);

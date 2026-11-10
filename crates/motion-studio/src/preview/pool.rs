@@ -78,7 +78,7 @@ impl ThumbnailCache {
             };
             self.bytes -= old.1.pixels.len() * 4;
         }
-        let mut thumbnail = ColorImage::new([width, height], eframe::egui::Color32::TRANSPARENT);
+        let mut thumbnail = ColorImage::filled([width, height], eframe::egui::Color32::TRANSPARENT);
         for row in 0..height {
             for column in 0..width {
                 thumbnail.pixels[row * width + column] =

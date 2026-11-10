@@ -240,7 +240,7 @@ impl StudioApp {
     }
 
     pub(crate) fn shortcuts(&mut self, context: &egui::Context) {
-        if context.wants_keyboard_input() {
+        if context.egui_wants_keyboard_input() {
             return;
         }
         let total = self.clock.frame_count();

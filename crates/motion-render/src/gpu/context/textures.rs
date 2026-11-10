@@ -31,10 +31,7 @@ impl TexturePipelines {
                 module: shader,
                 entry_point: Some(entry),
                 compilation_options: wgpu::PipelineCompilationOptions {
-                    constants: &std::collections::HashMap::from([(
-                        "PARTICLE_TILES".to_owned(),
-                        tiled,
-                    )]),
+                    constants: &[("PARTICLE_TILES", tiled)],
                     ..Default::default()
                 },
                 cache: None,
@@ -48,11 +45,11 @@ impl TexturePipelines {
                     module: shader,
                     entry_point: Some("texture_vertex"),
                     compilation_options: Default::default(),
-                    buffers: &[wgpu::VertexBufferLayout {
+                    buffers: &[Some(wgpu::VertexBufferLayout {
                         array_stride: 16,
                         step_mode: wgpu::VertexStepMode::Instance,
                         attributes: &wgpu::vertex_attr_array![0 => Float32x4],
-                    }],
+                    })],
                 },
                 fragment: Some(wgpu::FragmentState {
                     module: shader,
@@ -67,7 +64,7 @@ impl TexturePipelines {
                 primitive: Default::default(),
                 depth_stencil: None,
                 multisample: Default::default(),
-                multiview: None,
+                multiview_mask: None,
                 cache: None,
             })
         };

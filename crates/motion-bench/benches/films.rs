@@ -160,12 +160,21 @@ fn texture_playback(
             .map_async(wgpu::MapMode::Read, move |result| {
                 let _ = sender.send(result);
             });
-        context.device().poll(wgpu::Maintain::Wait);
+        context
+            .device()
+            .poll(wgpu::PollType::Wait {
+                submission_index: None,
+                timeout: Some(std::time::Duration::from_secs(60)),
+            })
+            .map_err(|error| support::invalid(error.to_string()))?;
         receiver
             .recv()
             .map_err(|error| support::invalid(error.to_string()))?
             .map_err(|error| support::invalid(error.to_string()))?;
-        let mapped = readback.slice(..).get_mapped_range();
+        let mapped = readback
+            .slice(..)
+            .get_mapped_range()
+            .map_err(|error| support::invalid(error.to_string()))?;
         let pixels = mapped
             .chunks_exact(pitch as usize)
             .flat_map(|row| row[..size.width as usize * 4].iter().copied())

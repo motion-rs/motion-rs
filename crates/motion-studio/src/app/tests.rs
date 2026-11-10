@@ -35,7 +35,10 @@ fn loop_shortcut_preserves_transport_and_respects_keyboard_focus() -> motion_cor
         let anchor = playing.then_some((std::time::Instant::now(), 42));
         app.playback.transport.anchor = anchor;
         for looping in [true, false] {
-            let _ = context.run(loop_input(), |context| app.shortcuts(context));
+            context
+                .run_ui(loop_input(), |ui| app.shortcuts(ui.ctx()))
+                .textures_delta
+                .clear();
             assert_eq!(app.playback.transport.looping, looping);
             assert_eq!(app.playback.transport.frame, 42);
             assert_eq!(app.playback.transport.anchor, anchor);
@@ -44,14 +47,18 @@ fn loop_shortcut_preserves_transport_and_respects_keyboard_focus() -> motion_cor
     }
     let anchor = app.playback.transport.anchor;
     let mut text = String::new();
-    let _ = context.run(loop_input(), |context| {
-        egui::CentralPanel::default().show(context, |ui| {
-            ui.text_edit_singleline(&mut text).request_focus();
-            assert!(context.wants_keyboard_input());
-            assert!(context.input(|input| input.key_pressed(egui::Key::L)));
-            app.shortcuts(context);
-        });
-    });
+    context
+        .run_ui(loop_input(), |ui| {
+            let context = &ui.ctx().clone();
+            egui::CentralPanel::default().show(ui, |ui| {
+                ui.text_edit_singleline(&mut text).request_focus();
+                assert!(context.egui_wants_keyboard_input());
+                assert!(context.input(|input| input.key_pressed(egui::Key::L)));
+                app.shortcuts(context);
+            });
+        })
+        .textures_delta
+        .clear();
     assert!(!app.playback.transport.looping);
     assert_eq!(app.playback.transport.frame, 42);
     assert_eq!(app.playback.transport.anchor, anchor);
@@ -83,7 +90,7 @@ fn scene_status_and_sidebar_use_window_edges_without_preview_heading() -> motion
         app.preview_state.pending = false;
         app.preview_state.displayed = Some(key);
         let mut frame = eframe::Frame::_new_kittest();
-        let output = context.run(
+        let mut output = context.run_ui(
             egui::RawInput {
                 screen_rect: Some(egui::Rect::from_min_size(
                     egui::Pos2::ZERO,
@@ -91,8 +98,8 @@ fn scene_status_and_sidebar_use_window_edges_without_preview_heading() -> motion
                 )),
                 ..Default::default()
             },
-            |context| {
-                app.update(context, &mut frame);
+            |ui| {
+                app.ui(ui, &mut frame);
                 assert!(app.preview_state.is_requested(key, app.preview_settings));
                 assert!(
                     !app.preview_state.pending,
@@ -100,6 +107,7 @@ fn scene_status_and_sidebar_use_window_edges_without_preview_heading() -> motion
                 );
             },
         );
+        output.textures_delta.clear();
         let text: Vec<_> = output
             .shapes
             .iter()
@@ -226,7 +234,7 @@ fn single_scene_workbench_layout_and_queue_are_bounded_without_devices() -> moti
         for tab in 0..4 {
             app.inspection.inspector_tab = tab;
             app.inspection.output_visible = Some(true);
-            let output = context.run(
+            let mut output = context.run_ui(
                 egui::RawInput {
                     screen_rect: Some(egui::Rect::from_min_size(
                         egui::Pos2::ZERO,
@@ -234,12 +242,13 @@ fn single_scene_workbench_layout_and_queue_are_bounded_without_devices() -> moti
                     )),
                     ..Default::default()
                 },
-                |context| {
+                |ui| {
                     app.close_when_idle = false;
-                    app.update(context, &mut frame);
+                    app.ui(ui, &mut frame);
                     app.pause();
                 },
             );
+            output.textures_delta.clear();
             assert!(!output.shapes.is_empty());
             for shape in &output.shapes {
                 if let egui::Shape::Text(text) = &shape.shape {
@@ -445,7 +454,10 @@ fn settle(app: &mut StudioApp, context: &egui::Context, done: impl Fn(&StudioApp
             "reload did not finish: {:?}",
             app.reload_status
         );
-        let _ = context.run(Default::default(), |context| app.poll_reload(context));
+        context
+            .run_ui(Default::default(), |ui| app.poll_reload(ui.ctx()))
+            .textures_delta
+            .clear();
         std::thread::sleep(std::time::Duration::from_millis(30));
     }
 }
@@ -536,7 +548,10 @@ fn scenes_without_a_reload_source_are_never_watched() -> motion_core::Result<()>
     );
     let clock = StudioClock::new(&scene.composition)?;
     let mut app = StudioApp::with_persistence(&creation, scene, clock, false)?;
-    let _ = context.run(Default::default(), |context| app.poll_reload(context));
+    context
+        .run_ui(Default::default(), |ui| app.poll_reload(ui.ctx()))
+        .textures_delta
+        .clear();
     assert!(app.reload.is_none() && app.reload_status.is_none());
     Ok(())
 }

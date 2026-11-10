@@ -62,23 +62,24 @@ fn preview_status(
 }
 
 impl StudioApp {
-    pub(crate) fn timeline(&mut self, context: &egui::Context) {
-        self.timeline_panel(context);
+    pub(crate) fn timeline(&mut self, ui: &mut egui::Ui) {
+        self.timeline_panel(ui);
     }
 
-    pub(crate) fn export_panel(&mut self, context: &egui::Context) {
-        let defaults = sidebar_defaults(context.input(|input| input.screen_rect().width()));
+    pub(crate) fn export_panel(&mut self, ui: &mut egui::Ui) {
+        let context = &ui.ctx().clone();
+        let defaults = sidebar_defaults(context.input(|input| input.viewport_rect().width()));
         if !self.inspection.output_visible.unwrap_or(defaults.1) {
             return;
         }
-        egui::SidePanel::right("output")
-            .default_width(252.0)
-            .width_range(240.0..=340.0)
+        egui::Panel::right("output")
+            .default_size(252.0)
+            .size_range(240.0..=340.0)
             .frame(
-                egui::Frame::side_top_panel(&context.style())
+                egui::Frame::side_top_panel(&context.global_style())
                     .inner_margin(egui::Margin::symmetric(12, 10)),
             )
-            .show(context, |ui| self.export_contents(ui, context));
+            .show(ui, |ui| self.export_contents(ui, context));
     }
 
     fn export_contents(&mut self, ui: &mut egui::Ui, context: &egui::Context) {
@@ -443,7 +444,8 @@ impl StudioApp {
 }
 
 impl eframe::App for StudioApp {
-    fn update(&mut self, context: &egui::Context, _frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        let context = &ui.ctx().clone();
         self.poll_workers(context);
         self.poll_reload(context);
         if context.input(|input| input.viewport().close_requested()) {
@@ -463,14 +465,14 @@ impl eframe::App for StudioApp {
         }
         self.advance_transport();
         self.shortcuts(context);
-        egui::TopBottomPanel::top("header")
+        egui::Panel::top("header")
             .frame(
-                egui::Frame::side_top_panel(&context.style())
+                egui::Frame::side_top_panel(&context.global_style())
                     .inner_margin(egui::Margin::symmetric(12, 6)),
             )
-            .show(context, |ui| {
+            .show(ui, |ui| {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let width = context.input(|input| input.screen_rect().width());
+                    let width = context.input(|input| input.viewport_rect().width());
                     let defaults = sidebar_defaults(width);
                     let output = self.inspection.output_visible.unwrap_or(defaults.1);
                     if sidebar_toggle(
@@ -576,7 +578,7 @@ impl eframe::App for StudioApp {
                                     self.playback.transport.starting = starting;
                                 }
                             }
-                            let dark = context.style().visuals.dark_mode;
+                            let dark = context.global_style().visuals.dark_mode;
                             if theme::icon_toggle(
                                 ui,
                                 if dark { icons::SUN } else { icons::MOON },
@@ -607,13 +609,13 @@ impl eframe::App for StudioApp {
                     );
                 });
             });
-        egui::TopBottomPanel::bottom("status")
-            .exact_height(28.0)
+        egui::Panel::bottom("status")
+            .exact_size(28.0)
             .frame(
-                egui::Frame::side_top_panel(&context.style())
+                egui::Frame::side_top_panel(&context.global_style())
                     .inner_margin(egui::Margin::symmetric(8, 3)),
             )
-            .show(context, |ui| {
+            .show(ui, |ui| {
                 preview_status(
                     ui,
                     &self.observations.backend_status,
@@ -621,9 +623,9 @@ impl eframe::App for StudioApp {
                     self.preview_state.pending,
                 );
             });
-        self.timeline(context);
-        self.export_panel(context);
-        self.preview_panel(context);
+        self.timeline(ui);
+        self.export_panel(ui);
+        self.preview_panel(ui);
         self.request_preview();
         if self.playback.transport.playing() {
             context.request_repaint_after(Duration::from_millis(16));
@@ -649,7 +651,7 @@ mod tests {
         pointer: Option<egui::Pos2>,
     ) -> (egui::Response, egui::FullOutput) {
         let mut response = None;
-        let output = context.run(
+        let mut output = context.run_ui(
             egui::RawInput {
                 screen_rect: Some(egui::Rect::from_min_size(
                     egui::Pos2::ZERO,
@@ -658,14 +660,14 @@ mod tests {
                 events: pointer.into_iter().map(egui::Event::PointerMoved).collect(),
                 ..Default::default()
             },
-            |context| {
-                egui::TopBottomPanel::bottom("status")
-                    .exact_height(28.0)
+            |ui| {
+                egui::Panel::bottom("status")
+                    .exact_size(28.0)
                     .frame(
-                        egui::Frame::side_top_panel(&context.style())
+                        egui::Frame::side_top_panel(ui.style())
                             .inner_margin(egui::Margin::symmetric(8, 3)),
                     )
-                    .show(context, |ui| {
+                    .show(ui, |ui| {
                         response = Some(preview_status(
                             ui,
                             "GPU (Apple M3) with a deliberately long backend diagnostic",
@@ -675,6 +677,7 @@ mod tests {
                     });
             },
         );
+        output.textures_delta.clear();
         (response.unwrap(), output)
     }
 
@@ -695,8 +698,15 @@ mod tests {
     fn status_counter_rect_and_id_stay_stable_during_playback() {
         for width in [360.0, 800.0, 1440.0] {
             let context = egui::Context::default();
-            let mut fonts = egui::FontDefinitions::default();
-            egui_phosphor::add_to_fonts(&mut fonts, egui_phosphor::Variant::Regular);
+            let fonts = theme::font_definitions();
+            assert_eq!(
+                fonts.families[&egui::FontFamily::Proportional][1],
+                "phosphor"
+            );
+            assert_eq!(
+                fonts.families[&egui::FontFamily::Name("phosphor".into())],
+                fonts.families[&egui::FontFamily::Proportional],
+            );
             context.set_fonts(fonts);
             let (first, _) = render_status(&context, width, None, false, None);
             for (frame, pending) in [

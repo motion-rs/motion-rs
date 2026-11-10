@@ -202,7 +202,10 @@ fn shared_texture_preview_and_automatic_export_loss_preserve_transactions()
             move |sample: &motion_core::SceneContext<'_>| {
                 if sample.time().to_frame(sample.frame_rate()) == 1 {
                     loss.device().destroy();
-                    loss.device().poll(wgpu::Maintain::Wait);
+                    let _ = loss.device().poll(wgpu::PollType::Wait {
+                        submission_index: None,
+                        timeout: Some(std::time::Duration::from_secs(60)),
+                    });
                 }
                 motion_core::Node::from(sample.bounds().fill(motion_core::Color::WHITE))
             },
@@ -450,7 +453,7 @@ fn preview_cache_budget_parsing_and_shared_pixel_charge() {
     }
     let image = PreviewImage {
         backend: String::new(),
-        image: Arc::new(ColorImage::new([8, 4], Color32::WHITE)),
+        image: Arc::new(ColorImage::filled([8, 4], Color32::WHITE)),
         nodes: Arc::from([]),
         stats: None,
         timings: None,
@@ -466,7 +469,7 @@ fn preview_cache_retains_long_cycles_and_evicts_by_bytes() -> motion_core::Resul
     use std::sync::atomic::{AtomicUsize, Ordering};
     let bytes = PreviewImage {
         backend: String::new(),
-        image: Arc::new(ColorImage::new([8, 4], Color32::WHITE)),
+        image: Arc::new(ColorImage::filled([8, 4], Color32::WHITE)),
         nodes: Arc::from([]),
         stats: None,
         timings: None,
@@ -1744,7 +1747,7 @@ fn preview_mailbox_coalesces_requests_and_rejects_stale_results() {
     assert_eq!(newest.key.frame, 90);
     assert!(mailbox.publish(
         newest,
-        Ok(Arc::new(ColorImage::new([1, 1], Color32::WHITE)))
+        Ok(Arc::new(ColorImage::filled([1, 1], Color32::WHITE)))
     ));
     assert_eq!(mailbox.reply.take().unwrap().key.frame, 90);
     mailbox.stopping = true;
@@ -1765,12 +1768,12 @@ fn preview_pixels_keep_rgb_channels_and_opaque_alpha() {
 }
 
 fn color_image(snapshot: Snapshot) -> ColorImage {
-    ColorImage {
-        size: [snapshot.width(), snapshot.height()],
-        pixels: snapshot
+    ColorImage::new(
+        [snapshot.width(), snapshot.height()],
+        snapshot
             .pixels()
             .iter()
             .map(|pixel| Color32::from_rgb((pixel >> 16) as u8, (pixel >> 8) as u8, *pixel as u8))
             .collect(),
-    }
+    )
 }

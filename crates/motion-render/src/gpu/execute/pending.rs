@@ -59,7 +59,10 @@ impl PendingTextureFrame {
 
     /// Polls only for completion; a ready frame still requires finish for errors.
     pub fn is_ready(&mut self) -> motion_core::Result<bool> {
-        self.context.device.poll(wgpu::Maintain::Poll);
+        self.context
+            .device
+            .poll(wgpu::PollType::Poll)
+            .map_err(|error| motion_core::Error::Gpu(Box::new(error)))?;
         self.context.loss.check()?;
         if !self.mapped {
             match self.completion.try_recv() {
@@ -77,9 +80,7 @@ impl PendingTextureFrame {
 
     /// Waits for this submission and verifies status, validation and device health.
     pub fn finish(mut self) -> motion_core::Result<()> {
-        self.context
-            .device
-            .poll(wgpu::Maintain::WaitForSubmissionIndex(self.submission));
+        wait_for_gpu(&self.context.device, Some(self.submission))?;
         self.context.loss.check()?;
         if !self.mapped {
             self.completion
@@ -95,6 +96,7 @@ impl PendingTextureFrame {
             .readback
             .slice(..)
             .get_mapped_range()
+            .map_err(|error| motion_core::Error::Gpu(Box::new(error)))?
             .iter()
             .any(|byte| *byte != 0);
         self.readback.unmap();
@@ -137,9 +139,7 @@ impl PendingLinearFrame {
         self,
     ) -> motion_core::Result<(LinearFrame, u64, wgpu::Buffer, wgpu::Buffer)> {
         let _submission = self.context.acquire_submission()?;
-        self.context
-            .device
-            .poll(wgpu::Maintain::WaitForSubmissionIndex(self.submission));
+        wait_for_gpu(&self.context.device, Some(self.submission))?;
         self.context.loss.check()?;
         let validation = pollster::block_on(self.validation);
         let memory = pollster::block_on(self.memory);
@@ -153,7 +153,11 @@ impl PendingLinearFrame {
                 .map_err(|error| motion_core::Error::Gpu(Box::new(error)))?;
         }
         let result = (|| {
-            let status = self.status.slice(..).get_mapped_range();
+            let status = self
+                .status
+                .slice(..)
+                .get_mapped_range()
+                .map_err(|error| motion_core::Error::Gpu(Box::new(error)))?;
             if status.iter().any(|byte| *byte != 0) {
                 return Err(ValidationError::invalid(
                     "gpu.pending",
@@ -162,7 +166,11 @@ impl PendingLinearFrame {
                 )
                 .into());
             }
-            let mapped = self.readback.slice(..).get_mapped_range();
+            let mapped = self
+                .readback
+                .slice(..)
+                .get_mapped_range()
+                .map_err(|error| motion_core::Error::Gpu(Box::new(error)))?;
             let pixels = linear_pixels(
                 &mapped,
                 self.raster_width,
@@ -225,9 +233,7 @@ impl PendingOutputFrame {
         wgpu::Buffer,
     )> {
         let _submission = self.context.acquire_submission()?;
-        self.context
-            .device
-            .poll(wgpu::Maintain::WaitForSubmissionIndex(self.submission));
+        wait_for_gpu(&self.context.device, Some(self.submission))?;
         self.context.loss.check()?;
         let validation = pollster::block_on(self.validation);
         let memory = pollster::block_on(self.memory);
@@ -241,7 +247,11 @@ impl PendingOutputFrame {
                 .map_err(|error| motion_core::Error::Gpu(Box::new(error)))?;
         }
         let result = (|| {
-            let status = self.status.slice(..).get_mapped_range();
+            let status = self
+                .status
+                .slice(..)
+                .get_mapped_range()
+                .map_err(|error| motion_core::Error::Gpu(Box::new(error)))?;
             let status = u32::from_le_bytes(status[..4].try_into().unwrap());
             if status & 1 != 0 {
                 return Err(ValidationError::invalid(
@@ -259,7 +269,11 @@ impl PendingOutputFrame {
                 )
                 .into());
             }
-            let mapped = self.readback.slice(..).get_mapped_range();
+            let mapped = self
+                .readback
+                .slice(..)
+                .get_mapped_range()
+                .map_err(|error| motion_core::Error::Gpu(Box::new(error)))?;
             match self.format {
                 crate::PixelFormat::SrgbRgba8 { premultiplied } => {
                     crate::FrameBuffer::from_rgba8_storage(

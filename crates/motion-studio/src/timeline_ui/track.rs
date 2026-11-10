@@ -26,7 +26,7 @@ impl StudioApp {
             let longest = image.size[0].max(image.size[1]).max(160);
             let width = (image.size[0] * 160 / longest).max(1);
             let height = (image.size[1] * 160 / longest).max(1);
-            let mut preview = egui::ColorImage::new([width, height], Color32::TRANSPARENT);
+            let mut preview = egui::ColorImage::filled([width, height], Color32::TRANSPARENT);
             for row in 0..height {
                 for column in 0..width {
                     preview.pixels[row * width + column] =
@@ -80,7 +80,7 @@ impl StudioApp {
 
         let seek = ui.interact(
             egui::Rect::from_min_max(ruler.min, egui::pos2(area.right(), area.bottom())),
-            ui.id().with("playhead"),
+            ui.scope_id().with("playhead"),
             egui::Sense::click_and_drag(),
         );
         self.playback.scrub_dragging = seek.dragged();
@@ -124,7 +124,7 @@ impl StudioApp {
             let response = ui
                 .interact(
                     handle,
-                    ui.id().with(("range-handle", which)),
+                    ui.scope_id().with(("range-handle", which)),
                     egui::Sense::drag(),
                 )
                 .on_hover_cursor(egui::CursorIcon::ResizeHorizontal)
@@ -202,7 +202,7 @@ impl StudioApp {
                 );
                 let response = ui.interact(
                     rect,
-                    ui.id().with(("clip", index, id)),
+                    ui.scope_id().with(("clip", index, id)),
                     egui::Sense::hover(),
                 );
                 let fill = colors.clip[index % colors.clip.len()];
@@ -332,8 +332,12 @@ impl StudioApp {
                         egui::FontId::proportional(11.0),
                         colors.error,
                     );
-                    ui.interact(lane, ui.id().with("waveform-error"), egui::Sense::hover())
-                        .on_hover_text(error);
+                    ui.interact(
+                        lane,
+                        ui.scope_id().with("waveform-error"),
+                        egui::Sense::hover(),
+                    )
+                    .on_hover_text(error);
                     if !self.inspection.timeline_view.waveform_reported {
                         if self.observations.diagnostics.len() == 128 {
                             self.observations.diagnostics.pop_front();
@@ -378,7 +382,11 @@ impl StudioApp {
                 colors.cache,
             );
         }
-        let cache_response = ui.interact(cache, ui.id().with("cache-lane"), egui::Sense::hover());
+        let cache_response = ui.interact(
+            cache,
+            ui.scope_id().with("cache-lane"),
+            egui::Sense::hover(),
+        );
         if let Some(point) = cache_response.hover_pos() {
             let frame = frame_at(ruler, point, total);
             if self.inspection.timeline_view.cache_contains(frame) {
@@ -443,7 +451,7 @@ impl StudioApp {
                     egui::pos2(x, ruler.bottom() - 6.0),
                     egui::vec2(10.0, 10.0),
                 ),
-                ui.id().with(("cue", frame, name)),
+                ui.scope_id().with(("cue", frame, name)),
                 egui::Sense::hover(),
             )
             .on_hover_text(format!("{name} / frame {frame}"));

@@ -9,38 +9,37 @@ use std::time::Duration as StdDuration;
 fn color_of(data: &egui::ImageData) -> egui::ColorImage {
     match data {
         egui::ImageData::Color(image) => (**image).clone(),
-        egui::ImageData::Font(font) => egui::ColorImage {
-            size: font.size,
-            pixels: font.srgba_pixels(None).collect(),
-        },
     }
 }
 
 fn rasterize(
-    output: &egui::FullOutput,
+    output: &mut egui::FullOutput,
     textures: &mut HashMap<egui::TextureId, egui::ColorImage>,
     context: &egui::Context,
     width: usize,
     height: usize,
     scale: f32,
 ) -> Vec<[f32; 4]> {
-    for (id, delta) in &output.textures_delta.set {
-        let patch = color_of(&delta.image);
-        match delta.pos {
-            None => {
-                textures.insert(*id, patch);
-            }
-            Some([x, y]) => {
-                let target = textures.get_mut(id).expect("patched texture");
-                for row in 0..patch.size[1] {
-                    for column in 0..patch.size[0] {
-                        target.pixels[(y + row) * target.size[0] + x + column] =
-                            patch.pixels[row * patch.size[0] + column];
+    for (id, deltas) in &output.textures_delta.set {
+        for delta in deltas {
+            let patch = color_of(&delta.image);
+            match delta.pos {
+                None => {
+                    textures.insert(*id, patch);
+                }
+                Some([x, y]) => {
+                    let target = textures.get_mut(id).expect("patched texture");
+                    for row in 0..patch.size[1] {
+                        for column in 0..patch.size[0] {
+                            target.pixels[(y + row) * target.size[0] + x + column] =
+                                patch.pixels[row * patch.size[0] + column];
+                        }
                     }
                 }
             }
         }
     }
+    output.textures_delta.clear();
     let mut frame = vec![[0.1, 0.1, 0.1, 1.0]; width * height];
     for primitive in context.tessellate(output.shapes.clone(), scale) {
         let egui::epaint::Primitive::Mesh(mesh) = primitive.primitive else {
@@ -190,7 +189,7 @@ fn dump_workbench_png() -> motion_core::Result<()> {
         let mut last = None;
         let deadline = Instant::now() + StdDuration::from_secs(20);
         while Instant::now() < deadline {
-            let output = context.run(
+            let mut output = context.run_ui(
                 egui::RawInput {
                     screen_rect: Some(egui::Rect::from_min_size(
                         egui::Pos2::ZERO,
@@ -198,11 +197,11 @@ fn dump_workbench_png() -> motion_core::Result<()> {
                     )),
                     ..Default::default()
                 },
-                |context| app.update(context, &mut frame),
+                |ui| app.ui(ui, &mut frame),
             );
             let ready = app.texture.is_some();
             last = Some(rasterize(
-                &output,
+                &mut output,
                 &mut textures,
                 &context,
                 width,
@@ -212,7 +211,7 @@ fn dump_workbench_png() -> motion_core::Result<()> {
             // Keep applying deltas for later passes
             if ready {
                 std::thread::sleep(StdDuration::from_millis(200));
-                let output = context.run(
+                let mut output = context.run_ui(
                     egui::RawInput {
                         screen_rect: Some(egui::Rect::from_min_size(
                             egui::Pos2::ZERO,
@@ -220,10 +219,10 @@ fn dump_workbench_png() -> motion_core::Result<()> {
                         )),
                         ..Default::default()
                     },
-                    |context| app.update(context, &mut frame),
+                    |ui| app.ui(ui, &mut frame),
                 );
                 last = Some(rasterize(
-                    &output,
+                    &mut output,
                     &mut textures,
                     &context,
                     width,

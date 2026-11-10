@@ -326,7 +326,7 @@ mod tests {
                     2
                 ],
             };
-            let _output = context.run(
+            let mut output = context.run_ui(
                 egui::RawInput {
                     screen_rect: Some(egui::Rect::from_min_size(
                         egui::Pos2::ZERO,
@@ -334,8 +334,8 @@ mod tests {
                     )),
                     ..Default::default()
                 },
-                |context| {
-                    egui::CentralPanel::default().show(context, |ui| {
+                |ui| {
+                    egui::CentralPanel::default().show(ui, |ui| {
                         egui::ScrollArea::vertical().show(ui, |ui| {
                             let available = ui.available_width();
                             let message = settings.show(ui, 86400.0);
@@ -345,6 +345,7 @@ mod tests {
                     });
                 },
             );
+            output.textures_delta.clear();
         }
     }
 
