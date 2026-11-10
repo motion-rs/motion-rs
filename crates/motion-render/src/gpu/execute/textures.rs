@@ -1,6 +1,9 @@
 //! Texture working images with one output-boundary resolve.
 
 use super::*;
+use uploads::BatchUploads;
+
+mod uploads;
 
 /// Plan steps or batches recorded into one command encoder before it is submitted.
 const PASSES_PER_SUBMISSION: usize = 64;
@@ -31,39 +34,6 @@ pub(super) struct EncodedLinear {
     pub(super) stats: LinearRenderStats,
     pub(super) working: WorkingLease,
     pub(super) timestamps: Option<super::super::timing::TimestampRecorder>,
-}
-
-struct BatchUploads<'a> {
-    context: &'a GpuContext,
-    staging: Option<&'a wgpu::Buffer>,
-    mapped: Option<wgpu::BufferViewMut>,
-    offset: u64,
-}
-
-impl BatchUploads<'_> {
-    fn upload(
-        &mut self,
-        label: &str,
-        bytes: &[u8],
-        usage: wgpu::BufferUsages,
-        encoder: &mut wgpu::CommandEncoder,
-    ) -> wgpu::Buffer {
-        let Some(staging) = self.staging else {
-            return self.context.upload_buffer(label, bytes, usage);
-        };
-        let buffer = self
-            .context
-            .working_buffer(label, bytes.len() as u64, usage);
-        let end = self.offset + bytes.len() as u64;
-        self.mapped
-            .as_mut()
-            .unwrap()
-            .slice(self.offset as usize..end as usize)
-            .copy_from_slice(bytes);
-        encoder.copy_buffer_to_buffer(staging, self.offset, &buffer, 0, bytes.len() as u64);
-        self.offset = end;
-        buffer
-    }
 }
 
 impl Gpu {
@@ -390,7 +360,25 @@ impl Gpu {
         let accumulating = slots[step.first] == slots[range.end];
         let bounds = step.parameters.image_bounds(2);
         let size = image_size(bounds);
-        let bytes = Plan::batch_upload_bytes(&plan.steps[range.clone()]);
+        let device_limits = self.device.limits();
+        let shared_data_bytes = plan
+            .texture_data_bytes(
+                range.start,
+                device_limits.max_buffer_size,
+                device_limits.min_storage_buffer_offset_alignment,
+            )
+            .filter(|_| {
+                plan.steps[range.clone()].iter().all(|step| {
+                    step.data.len() as u64 * size_of::<f32>() as u64
+                        <= device_limits.max_storage_buffer_binding_size
+                })
+            });
+        let data_payload_bytes = plan.steps[range.clone()]
+            .iter()
+            .map(|step| step.data.len() as u64 * size_of::<f32>() as u64)
+            .sum::<u64>();
+        let padding = shared_data_bytes.map_or(0, |bytes| bytes - data_payload_bytes);
+        let bytes = Plan::batch_upload_bytes(&plan.steps[range.clone()]) + padding;
         let staging = (bytes <= self.device.limits().max_buffer_size)
             .then(|| self.context.staging_buffer(bytes));
         let mut uploads = BatchUploads {
@@ -453,33 +441,67 @@ impl Gpu {
         draws.try_reserve_exact(range.len()).map_err(|_| {
             ValidationError::limit("gpu.batch", "max_bytes", "Could not reserve batch bindings")
         })?;
-        for step in &plan.steps[range.clone()] {
+        let shared_vertices = uploads.upload_vertices(&plan.steps[range.clone()], encoder);
+        if let Some(vertices) = &shared_vertices {
+            working.push(vertices.clone());
+        }
+        let shared_parameters =
+            uploads.upload_uniforms(&plan.steps[range.clone()], deferred, encoder);
+        if let Some(parameters) = &shared_parameters {
+            working.push(parameters.clone());
+        }
+        let shared_data =
+            uploads.upload_data(&plan.steps[range.clone()], shared_data_bytes, encoder);
+        if let Some(data) = &shared_data {
+            working.push(data.clone());
+        }
+        let mut data_offset = 0u64;
+        for (index, step) in plan.steps[range.clone()].iter().enumerate() {
             let mut uniforms = step.parameters;
             uniforms.flags.second_deferred = u32::from(deferred[step.second]);
-            let parameters = uploads.upload(
-                "Batch source",
-                bytemuck::bytes_of(&uniforms),
-                wgpu::BufferUsages::UNIFORM,
-                encoder,
-            );
-            let data = uploads.upload(
-                "Batch coverage",
-                bytemuck::cast_slice(&step.data),
-                wgpu::BufferUsages::STORAGE,
-                encoder,
-            );
-            let rectangle = step.parameters.rectangle();
-            let vertices = uploads.upload(
-                "Batch instances",
-                if step.quads.is_empty() {
-                    bytemuck::cast_slice(&rectangle)
-                } else {
-                    bytemuck::cast_slice(&step.quads)
-                },
-                wgpu::BufferUsages::VERTEX,
-                encoder,
-            );
-            working.extend([parameters.clone(), data.clone(), vertices.clone()]);
+            let parameters = if let Some(parameters) = &shared_parameters {
+                parameters.clone()
+            } else {
+                let parameters = uploads.upload(
+                    "Batch source",
+                    bytemuck::bytes_of(&uniforms),
+                    wgpu::BufferUsages::UNIFORM,
+                    encoder,
+                );
+                working.push(parameters.clone());
+                parameters
+            };
+            let data = if let Some(data) = &shared_data {
+                data_offset = data_offset.div_ceil(u64::from(Plan::BATCH_DATA_ALIGNMENT))
+                    * u64::from(Plan::BATCH_DATA_ALIGNMENT);
+                data.clone()
+            } else {
+                let data = uploads.upload(
+                    "Batch coverage",
+                    bytemuck::cast_slice(&step.data),
+                    wgpu::BufferUsages::STORAGE,
+                    encoder,
+                );
+                working.push(data.clone());
+                data
+            };
+            let vertices = if let Some(vertices) = &shared_vertices {
+                vertices.clone()
+            } else {
+                let rectangle = step.parameters.rectangle();
+                let vertices = uploads.upload(
+                    "Batch instances",
+                    if step.quads.is_empty() {
+                        bytemuck::cast_slice(&rectangle)
+                    } else {
+                        bytemuck::cast_slice(&step.quads)
+                    },
+                    wgpu::BufferUsages::VERTEX,
+                    encoder,
+                );
+                working.push(vertices.clone());
+                vertices
+            };
             let plus = step.parameters.operation.code == GpuOp::Composite as u32
                 && step.parameters.operation.kind != 0;
             let pipeline = &blends[usize::from(plus)];
@@ -490,11 +512,29 @@ impl Gpu {
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
-                        resource: parameters.as_entire_binding(),
+                        resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                            buffer: &parameters,
+                            offset: if shared_parameters.is_some() {
+                                index as u64 * size_of::<GpuUniforms>() as u64
+                            } else {
+                                0
+                            },
+                            size: wgpu::BufferSize::new(size_of::<GpuUniforms>() as u64),
+                        }),
                     },
                     wgpu::BindGroupEntry {
                         binding: 4,
-                        resource: data.as_entire_binding(),
+                        resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                            buffer: &data,
+                            offset: if shared_data.is_some() {
+                                data_offset
+                            } else {
+                                0
+                            },
+                            size: wgpu::BufferSize::new(
+                                step.data.len() as u64 * size_of::<f32>() as u64,
+                            ),
+                        }),
                     },
                     wgpu::BindGroupEntry {
                         binding: 5,
@@ -510,6 +550,12 @@ impl Gpu {
                     },
                 ],
             });
+            #[cfg(test)]
+            self.batch_bind_groups_encoded
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            if shared_data.is_some() {
+                data_offset += step.data.len() as u64 * size_of::<f32>() as u64;
+            }
             draws.push((
                 usize::from(plus),
                 group,
@@ -585,11 +631,19 @@ impl Gpu {
                 pass.set_vertex_buffer(0, vertices.slice(..));
                 pass.draw(0..6, 0..1);
             }
+            let mut vertex_offset = 0;
             for (blend, group, vertices, count) in &draws {
+                let start = if shared_vertices.is_some() {
+                    vertex_offset
+                } else {
+                    0
+                };
+                let end = start + u64::from(*count) * size_of::<[f32; 4]>() as u64;
                 pass.set_pipeline(&blends[*blend]);
                 pass.set_bind_group(0, group, &[]);
-                pass.set_vertex_buffer(0, vertices.slice(..));
+                pass.set_vertex_buffer(0, vertices.slice(start..end));
                 pass.draw(0..6, 0..*count);
+                vertex_offset = end;
             }
         }
         #[cfg(test)]

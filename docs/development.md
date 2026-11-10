@@ -103,3 +103,22 @@ same-backend seek replay. Audio fixtures inspect actual decoded samples and timi
 video fixtures decode frame counts and metadata. No test should invoke ffmpeg/ffprobe
 executables. Native-window interaction, real output devices and other platforms need
 separate validation. Current gaps and acceptance criteria are in [the plan](plan.md).
+
+## Frame timing diagnostics
+
+The breadth benchmark accepts `MOTION_BENCH_TIMINGS=1` to collect per-frame host
+stage observations and available GPU timestamps. This is separate from
+`MOTION_BENCH_STAGES`, which measures selected CPU pipeline stages. Timing
+diagnostics require `MOTION_BENCH_ITERATIONS=1`, exclude warmups from the recorded
+stage arrays, and are disabled by default. Use a separate `MOTION_BENCH_OUTPUT`
+directory; do not treat instrumented wall times as optimization acceptance runs.
+Normal reports retain their original metrics when this switch is disabled.
+
+Host encoding includes command encoding/submission; host readback includes
+completion waits, mapping and extraction. Device intervals overlap these host
+observations and must not be added to them. Preserve all raw device values, but
+flag an interval longer than its enclosing frame wall time as untrusted. Plausible
+values alone do not establish timestamp correctness. Instrumentation payload is
+reported separately from logical raster budgets and is not a physical-memory
+measurement. Check free space before building heavyweight optional features, and
+do not delete frozen benchmark artifacts to make room without an explicit decision.

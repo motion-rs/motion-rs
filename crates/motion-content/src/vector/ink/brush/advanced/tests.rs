@@ -6,6 +6,87 @@ use motion_core::TimeLiteral;
 use motion_render::RenderPrepare;
 
 #[test]
+fn solid_paint_samples_are_position_independent_bits() -> Result<(), ValidationError> {
+    let bounds = Rect::new(-20.0, -10.0, 50.0, 40.0);
+    for color in [
+        Color::TRANSPARENT,
+        Color::BLACK,
+        Color::WHITE,
+        Color::from_hex(0x4080c0).with_alpha(0.37),
+        Color::from_rgb_float(4.0, 0.001, 0.5).with_alpha(0.8),
+    ] {
+        let paint = Paint::from(color);
+        let expected = super::material::paint_sample(&paint, Point::ORIGIN, bounds)?;
+        for point in [
+            Point::new(-19.5, -9.5),
+            Point::new(49.5, 39.5),
+            Point::new(1e12, -1e12),
+        ] {
+            let actual = super::material::paint_sample(&paint, point, bounds)?;
+            assert_eq!(actual.map(f64::to_bits), expected.map(f64::to_bits));
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn prepared_material_segments_match_original_measurement_bits() -> Result<(), ValidationError> {
+    for aspect in [1.0, 0.42, 0.01] {
+        let stroke = BrushStroke::new(
+            Path2D::parse_svg("M0 0C10 30 40 -10 50 20")?,
+            8.0,
+            Color::BLACK,
+        )
+        .pressure(0.2, 1.25, 0.15)
+        .nib(aspect, -0.35)
+        .nib_mode(NibMode::FollowPath(0.2));
+        for group in samples(&stroke, 1.0)? {
+            for pair in group.windows(2) {
+                for (first, second) in [(pair[0], pair[1]), (pair[0], pair[0])] {
+                    let segment = super::material::MaterialSegment::new(first, second);
+                    for point in [
+                        Point::ORIGIN,
+                        Point::new(20.5, 10.5),
+                        Point::new(1e150, -1e150),
+                    ] {
+                        let delta = second.point - first.point;
+                        let square = delta.x * delta.x + delta.y * delta.y;
+                        let offset = point - first.point;
+                        let amount = if square > 0.0 {
+                            ((offset.x * delta.x + offset.y * delta.y) / square).clamp(0.0, 1.0)
+                        } else {
+                            0.0
+                        };
+                        let center = first.point + delta * amount;
+                        let offset = point - center;
+                        let angle = first.angle + (second.angle - first.angle) * amount;
+                        let local = super::geometry::rotated(offset.x, offset.y, -angle);
+                        let radius = first.radius + (second.radius - first.radius) * amount;
+                        let expected = [
+                            libm::sqrt(local.x * local.x + local.y * local.y / (aspect * aspect))
+                                - radius,
+                            first.arc + (second.arc - first.arc) * amount,
+                            offset.x * first.tangent.y - offset.y * first.tangent.x,
+                            radius,
+                        ];
+                        let actual = segment.measure(point, aspect);
+                        assert_eq!(
+                            [actual.0, actual.1, actual.2, actual.3].map(f64::to_bits),
+                            expected.map(f64::to_bits)
+                        );
+                    }
+                }
+            }
+        }
+    }
+    assert!(
+        std::mem::size_of::<super::material::MaterialSegment>()
+            <= std::mem::size_of::<(super::geometry::Sample, super::geometry::Sample)>()
+    );
+    Ok(())
+}
+
+#[test]
 fn pressure_follow_path_multi_subpaths_and_validation() {
     let stroke = BrushStroke::new(
         Path2D::parse_svg("M0 0L40 0M80 0L80 40").unwrap(),

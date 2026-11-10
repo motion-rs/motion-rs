@@ -11,6 +11,33 @@
   },
   "series": [
     {
+      "id": "gpu-packed-plan-960x540-m3",
+      "title": "Packed planning / 960x540 / Apple M3",
+      "steps": [
+        {
+          "label": "00 pre-packed control",
+          "runs": ["target/performance/gpu-packed-plan-20261109-01/seed-control"],
+          "change": "Frozen pre-packed control 2fbf7fe0806cb00f retains prior Brush, GPU batching and R10 changes identically to the candidate.",
+          "verification": "Exact references, configuration and frozen executable verified. source-verification.json and comparison.json retained under target/performance/gpu-packed-plan-20261109-01.",
+          "notes": "Descriptive seed only; acceptance uses six independent alternating pairs. Same original particle-garden frame 203 fixture fails gpu.pack/max_bytes under the unchanged default allowance. No resolution, seed, count or quality changes."
+        },
+        {
+          "label": "01 dedicated packed planning",
+          "change": "Candidate 1901302572ce73ef reserves packed output before optional batching, omits unused float readback/CPU LinearFrame charges and retains three packed payloads, RGBA32F working textures and conservative compatibility. Exactly six renderer runtime source differences from control.",
+          "verification": "Six alternating AB/BA pairs, 101 samples, two warmups and one iteration at 960x540, CPU+GPU nodes-1k/nodes-10k/layers-wide; all optional modes and diagnostics disabled. Six records and seven exact references per run; matched configuration/environment/adapter, stable fingerprints, nonoverlapping intervals and all 444 embedded source hashes verified. CPU logical metrics identical; GPU metrics stable per role. Renderer: 255 ordinary and 65 native GPU tests pass. Current original particle frame 203 passes CPU/GPU tolerance and exact replay; control rejection retained. Post-freeze bounded packed export wiring has six passing GPU export tests and renderer/encode Clippy; this cohort does not measure export throughput.",
+          "notes": "GPU logical peak falls 16,588,832 B and work 1,036,800 units per case, including host Plan metadata changes. GPU 10k-node paired P50 +6.09% [0.24,12.23]; 1k-node +1.21% [-9.98,8.78] and wide-layer -1.50% [-5.46,4.20] uncertain. All CPU P50 and all six P95 intervals cross zero; retain every negative/outlier result in comparison.json. Particle-garden frame 203 now admits at peak 242,187,508 B/work 16,469,827,347 under unchanged default limits. Accept budget capacity, not general speed, RSS, physical GPU memory, export/films or cross-device gains. Frozen pairs precede additive bounded-plan API and export-only wiring, verified separately without claiming they were benchmarked.",
+          "pairs": [
+            {"order": "control-first", "control": "target/performance/gpu-packed-plan-20261109-01/pairs/01-control", "candidate": "target/performance/gpu-packed-plan-20261109-01/pairs/01-candidate"},
+            {"order": "candidate-first", "control": "target/performance/gpu-packed-plan-20261109-01/pairs/02-control", "candidate": "target/performance/gpu-packed-plan-20261109-01/pairs/02-candidate"},
+            {"order": "control-first", "control": "target/performance/gpu-packed-plan-20261109-01/pairs/03-control", "candidate": "target/performance/gpu-packed-plan-20261109-01/pairs/03-candidate"},
+            {"order": "candidate-first", "control": "target/performance/gpu-packed-plan-20261109-01/pairs/04-control", "candidate": "target/performance/gpu-packed-plan-20261109-01/pairs/04-candidate"},
+            {"order": "control-first", "control": "target/performance/gpu-packed-plan-20261109-01/pairs/05-control", "candidate": "target/performance/gpu-packed-plan-20261109-01/pairs/05-candidate"},
+            {"order": "candidate-first", "control": "target/performance/gpu-packed-plan-20261109-01/pairs/06-control", "candidate": "target/performance/gpu-packed-plan-20261109-01/pairs/06-candidate"}
+          ]
+        }
+      ]
+    },
+    {
       "id": "current-engine-640x360-m3",
       "title": "Engine / 640x360 / Apple M3",
       "steps": [
@@ -124,6 +151,224 @@
           ]
         }
       ]
+    },
+    {
+      "id": "gpu-shared-vertices-640x360-m3",
+      "title": "GPU shared instance vertices / focused breadth / 640x360 / Apple M3",
+      "steps": [
+        {
+          "label": "00 focused control",
+          "runs": ["target/performance/gpu-vertices-1794195844/control-seed"],
+          "change": "Unmodified HEAD 3f94f4d5aed9c29a85cc81c5077bb2946bdd2b4a built from git archive in an isolated Cargo target. Frozen executable c746ff2d6aaf2813; wgpu 30.0.1 and eframe 0.37.0 are already present in both sources.",
+          "verification": "Control and candidate seed reports passed exact reference bytes, checksum, environment, configuration and executable validation. Both used release opt-level 3, identical default+gpu benchmark features, two warmups, 101 samples and one iteration. The source comparison found only four changed GPU implementation/test files; all other captured sources matched.",
+          "notes": "The seed is a descriptive baseline only. Fresh causal controls are the six alternating pairs below. This is a separate breadth workload with CPU/GPU nodes-1k, nodes-10k and layers-wide at 640x360, Arial fingerprint 2a7b70f9cc41bb6b and unchanged 1 GiB/20-billion-work limits. Scaling, stages, sequences, microbenchmarks, cold sessions, video and films are disabled. Do not compare against the old Noto Sans performance series. Historical raw reports are missing, so the complete performance document cannot currently be regenerated; old history is retained. This new series is validated independently."
+        },
+        {
+          "label": "01 shared instance vertices",
+          "change": "Hardware draw batches share one instance vertex buffer, retaining local instance indices, ordered draw calls and per-draw fallback when the combined payload exceeds the device limit. Candidate frozen executable 73f06969aae5ed1d. Runtime changes are gpu/execute/textures.rs and the checked byte-size helper in gpu/plan/textures.rs; the other two changed files contain tests.",
+          "verification": "Six alternating AB/BA pairs, 12 independent processes, six records and seven reference artifacts per run. Raw quantiles, exact reference pixels/checksums, environment/configuration/adapter, fixed executable fingerprints and nonoverlapping order pass benches/report.cjs validation. Every embedded candidate source hash matched current files; changed control hashes matched git show HEAD. The implementation previously passed 59 GPU regressions including native fixtures, renderer all-feature tests and Clippy. Full provenance, settings, P50/P95 bootstrap estimates and raw run paths are retained in target/performance/gpu-vertices-1794195844/pairs/step.json. Formal paired runs took 862.255541 seconds.",
+          "notes": "GPU warm-frame P50 medians: nodes-1k 14.803 -> 10.830 ms, paired improvement 27.01% [26.25,27.27]; nodes-10k 223.272 -> 174.245 ms, 22.10% [21.51,22.49]; layers-wide 66.125 -> 60.422 ms, 8.94% [7.23,9.34]. All three GPU P95 intervals are also positive. All CPU P50/P95 estimates are uncertain, including negative point estimates for nodes-10k; the individual layers-wide GPU P95 pair at -0.987655% is retained. Reported timings are medians across six runs, while improvements are medians of paired relative changes with 2000 deterministic bootstrap resamples. This is Apple M3/Metal warm-frame evidence only, not a full-suite, 1080p, Studio FPS, RSS or cross-device result; GPU remains slower than CPU for these cases.",
+          "pairs": [
+            {"order": "control-first", "control": "target/performance/gpu-vertices-1794195844/pairs/01-control", "candidate": "target/performance/gpu-vertices-1794195844/pairs/01-candidate"},
+            {"order": "candidate-first", "control": "target/performance/gpu-vertices-1794195844/pairs/02-control", "candidate": "target/performance/gpu-vertices-1794195844/pairs/02-candidate"},
+            {"order": "control-first", "control": "target/performance/gpu-vertices-1794195844/pairs/03-control", "candidate": "target/performance/gpu-vertices-1794195844/pairs/03-candidate"},
+            {"order": "candidate-first", "control": "target/performance/gpu-vertices-1794195844/pairs/04-control", "candidate": "target/performance/gpu-vertices-1794195844/pairs/04-candidate"},
+            {"order": "control-first", "control": "target/performance/gpu-vertices-1794195844/pairs/05-control", "candidate": "target/performance/gpu-vertices-1794195844/pairs/05-candidate"},
+            {"order": "candidate-first", "control": "target/performance/gpu-vertices-1794195844/pairs/06-control", "candidate": "target/performance/gpu-vertices-1794195844/pairs/06-candidate"}
+          ]
+        },
+        {
+          "label": "02 shared uniform records",
+          "change": "Share contiguous GpuUniforms records in one per-batch buffer using static 256-byte binding ranges. Preserve the per-draw path when device uniform alignment is incompatible or the total exceeds max_buffer_size. Move upload helpers into gpu/execute/textures/uploads.rs to keep the executor below 800 lines. Control is the previous shared-vertex executable 73f06969aae5ed1d; candidate is 8afae8d0db639a07, not a comparison against the original pre-vertex executable.",
+          "verification": "Six fresh alternating AB/BA pairs, 12 independent processes, six CPU/GPU records and seven reference artifacts per run. Raw quantiles, exact references/checksums, matched environment/configuration/adapter, fixed executable fingerprints and nonoverlapping execution order pass the report generator. All embedded candidate source hashes matched current files; the incremental change set is five GPU implementation/test files, including the new upload module. Native assertions verify one shared uniform buffer plus the backdrop per batch, and offline tests cover exact sizes, empty payloads and 16/64/256/512/zero alignment. All 59 GPU regressions, renderer all-feature tests, Clippy and structure checks passed. Full descriptor and run paths: target/performance/gpu-uniforms-1794198935/pairs/step.json. Formal paired elapsed time is 313.211784 seconds.",
+          "notes": "The same Apple M3/Metal, 640x360, release, Arial, two-warmup/101-sample/one-iteration settings and unchanged limits are retained; scaling, stages, sequences, micro, cold, video and films remain disabled. GPU warm-frame P50 nodes-1k 10.980 -> 7.138 ms, paired incremental improvement 34.60% [34.20,36.13]; nodes-10k 175.449 -> 93.805 ms, 46.54% [46.14,46.83]; layers-wide 60.391 -> 60.345 ms, uncertain 0.23% [-1.04,1.04]. Node P95 intervals improve; wide-layer P95 is uncertain 1.79% [-4.43,4.28], retaining a -9.267776% individual pair. All CPU P50/P95 estimates are uncertain. Do not add these percentages to prior improvements or claim full-suite, 1080p, Studio FPS, RSS or cross-device gains. Historical raw files remain missing, so only this focused series can be validated independently; old history is preserved.",
+          "pairs": [
+            {"order": "control-first", "control": "target/performance/gpu-uniforms-1794198935/pairs/01-control", "candidate": "target/performance/gpu-uniforms-1794198935/pairs/01-candidate"},
+            {"order": "candidate-first", "control": "target/performance/gpu-uniforms-1794198935/pairs/02-control", "candidate": "target/performance/gpu-uniforms-1794198935/pairs/02-candidate"},
+            {"order": "control-first", "control": "target/performance/gpu-uniforms-1794198935/pairs/03-control", "candidate": "target/performance/gpu-uniforms-1794198935/pairs/03-candidate"},
+            {"order": "candidate-first", "control": "target/performance/gpu-uniforms-1794198935/pairs/04-control", "candidate": "target/performance/gpu-uniforms-1794198935/pairs/04-candidate"},
+            {"order": "control-first", "control": "target/performance/gpu-uniforms-1794198935/pairs/05-control", "candidate": "target/performance/gpu-uniforms-1794198935/pairs/05-candidate"},
+            {"order": "candidate-first", "control": "target/performance/gpu-uniforms-1794198935/pairs/06-control", "candidate": "target/performance/gpu-uniforms-1794198935/pairs/06-candidate"}
+          ]
+        },
+        {
+          "label": "03 shared unit data (withdrawn)",
+          "decision": "Withdrawn after the independent same-binary replication failed to reproduce the initial wide-layer gain. The current runtime is restored to shared vertices and uniforms only. Both frozen measurement cohorts remain historical evidence; no rollback timing run is claimed.",
+          "change": "Share a single immutable [1.0] storage payload within each frame across compute steps and hardware batch draws. Keep non-unit coverage/kernel uploads, shader arithmetic, binding layouts, staging size/offsets, admission and in-flight ownership unchanged. Frozen control is the previous shared-uniform executable 8afae8d0db639a07; candidate is 8bb1effc025c21cb. Exactly three captured sources changed: gpu/execute/textures.rs, gpu/execute/textures/uploads.rs and gpu/execute/tests.rs.",
+          "verification": "Six fresh alternating AB/BA pairs, 12 independent nonoverlapping processes, six CPU/GPU records and seven reference artifacts per run. Configuration, environment, adapter, executable fingerprints, exact reference pixels/checksums and raw quantiles pass benches/report.cjs validation. Every embedded candidate source hash matched disk and the incremental three-file difference was verified before timing. The current native hardware_fill_batches_preserve_rgba_tolerance_boundaries_and_pooling test passed with actual shared-unit buffer counts and unchanged output assertions. Prior implementation validation passed all 60 GPU regressions, renderer all-feature tests, Clippy and structure checks. Descriptor and all P50/P95 estimates: target/performance/gpu-unit-data-1794200875/pairs/step.json. Paired elapsed time 474.285552 seconds, including between-run checks/analysis; active benchmark execution 290.712698 seconds.",
+          "notes": "Settings match the existing focused Apple M3/Metal release 640x360 series: two warmups, 101 samples, one iteration, Arial fingerprint 2a7b70f9cc41bb6b and unchanged 1 GiB/20-billion-work limits, with scaling/stages/sequences/micro/cold/video/films disabled. GPU P50 medians: nodes-1k 7.892 -> 7.502 ms, uncertain paired 5.05% [-2.03,12.17]; nodes-10k 99.027 -> 97.767 ms, uncertain 1.68% [-1.83,23.18]; layers-wide 65.296 -> 62.558 ms, positive 6.62% [0.68,14.15]. Every GPU P95 and CPU P50/P95 interval crosses zero. Preserve all negative pairs, including first-pair GPU nodes-1k P50 -6.648011%, nodes-10k -4.163095% and layers-wide -0.195382%. The third control had large GPU tail spikes; a between-run snapshot showed load averages 44.41/18.86/9.27 with active VS Code helpers and WindowServer, but no recorded thermal/performance warning. No process was changed and no run was excluded. This supports limited wide-layer P50 evidence, not a stable isolated speedup; an idle-system replication is needed for a stronger claim. Do not combine with prior percentages or infer full-suite, Studio FPS, RSS or cross-device gains. Original history remains intact; missing older raw data prevents whole-history report regeneration.",
+          "pairs": [
+            {"order": "control-first", "control": "target/performance/gpu-unit-data-1794200875/pairs/01-control", "candidate": "target/performance/gpu-unit-data-1794200875/pairs/01-candidate"},
+            {"order": "candidate-first", "control": "target/performance/gpu-unit-data-1794200875/pairs/02-control", "candidate": "target/performance/gpu-unit-data-1794200875/pairs/02-candidate"},
+            {"order": "control-first", "control": "target/performance/gpu-unit-data-1794200875/pairs/03-control", "candidate": "target/performance/gpu-unit-data-1794200875/pairs/03-candidate"},
+            {"order": "candidate-first", "control": "target/performance/gpu-unit-data-1794200875/pairs/04-control", "candidate": "target/performance/gpu-unit-data-1794200875/pairs/04-candidate"},
+            {"order": "control-first", "control": "target/performance/gpu-unit-data-1794200875/pairs/05-control", "candidate": "target/performance/gpu-unit-data-1794200875/pairs/05-candidate"},
+            {"order": "candidate-first", "control": "target/performance/gpu-unit-data-1794200875/pairs/06-control", "candidate": "target/performance/gpu-unit-data-1794200875/pairs/06-candidate"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "gpu-batch-data-640x360-m3",
+      "title": "Aligned GPU operation data experiment / CPU+GPU breadth 640x360 / Apple M3 Metal",
+      "steps": [
+        {
+          "label": "00 frozen shared-vertex/uniform control",
+          "runs": ["target/performance/gpu-batch-data-1794207226/control-seed"],
+          "change": "Fresh diagnostics-disabled seed from frozen executable a5af4ad809327b8e, which contains the same diagnostic-capable benchmark recorder as the candidate and the restored shared-vertex/uniform runtime without withdrawn unit-data sharing.",
+          "verification": "Seed configuration, environment, adapter, executable fingerprints, checksums and all seven reference artifacts match the candidate seed. All 444 embedded candidate source hashes matched disk before timing; exactly nine GPU implementation/test files differ from control, with the benchmark recorder and all other captured sources unchanged.",
+          "notes": "Descriptive seed only; causal controls are the six fresh pairs below. Separate series, not a comparison against the withdrawn unit-data candidate or a pooled earlier cohort. Apple M3/Metal, macOS aarch64, release opt-level 3, identical default+gpu features, CPU/GPU nodes-1k/nodes-10k/layers-wide at 640x360, Arial 2a7b70f9cc41bb6b, two warmups/101 samples/one iteration and unchanged 1 GiB/20-billion-work limits. MOTION_BENCH_TIMINGS=0; scaling/stages/sequences/micro/cold/video/films are disabled. No GPU timestamp or CPU stack sample supplies a causal estimate."
+        },
+        {
+          "label": "01 aligned binding-4 aggregation (experimental)",
+          "decision": "Preserve the original unrestricted candidate and complete cohort, but do not accept that policy as a general optimization: node GPU P50/P95 improve while wide-layer GPU P50/P95 regress, and CPU nodes-1k P50 has an off-target regression. No selective policy was part of this cohort. The current runtime policy is superseded by the separately tested minimum-three-draw experiment; neither its runs nor its estimates are pooled here, and no rollback timing is claimed.",
+          "change": "Aggregate original operation-data records in one admitted buffer per eligible hardware batch with 256-byte starts, exact original binding sizes and no final padding. Add transactional metadata/padding bytes and initialization/transfer work admission; retain per-draw fallback on admission/allocation/device incompatibility. Mapped staging emits one copy; queue fallback retains per-record writes. No unit-data deduplication, dynamic-offset binding reuse, shader/ABI/arithmetic changes or cache-cap increase. Candidate ca16d61c6933c5f8 versus control a5af4ad809327b8e; nine GPU implementation/test files differ.",
+          "verification": "All 61 GPU regressions passed with native ignored tests enabled, including forced per-draw exact-byte parity, real data-buffer/copy/byte/bind-group counter deltas, HDR/tolerance/replay/output/in-flight checks and exact required/optional byte/work boundaries. Renderer all-feature tests passed (250 library, 2 and 5 integration, 7 doc tests; 43 ordinary ignored tests, native GPU slice separately executed). Production all-target all-feature Clippy and structure checks passed. Six alternating AB/BA pairs, 12 unique nonoverlapping processes, six records and seven references per run pass raw quantile, executable, configuration/environment/adapter, exact reference/checksum and diagnostics-disabled metric validation. All 12 runs preserve their seed resource metrics. Descriptor, source verification and detailed generator output: target/performance/gpu-batch-data-1794207226/pairs/step.json, source-verification.json and details.md. Active execution 218.713104 seconds, paired span 222.489129 seconds. Existing unrelated expect/docs/whole-workspace formatter blockers are not repaired.",
+          "notes": "GPU P50 run medians: nodes-1k 7.330 -> 3.943 ms, paired +46.90% [41.64,48.60]; nodes-10k 94.631 -> 34.831 ms, +63.11% [62.08,65.99]; layers-wide 61.278 -> 62.877 ms, -1.40% [-3.31,-0.66]. GPU P95 medians: 7.976 -> 4.564 ms, +43.98% [34.33,57.53]; 96.530 -> 37.363 ms, +62.25% [53.49,64.69]; wide 64.207 -> 73.625 ms, -17.68% [-25.29,-2.09]. CPU nodes-1k P50 2.237 -> 2.289 ms, -2.38% [-5.88,-1.40]; other CPU P50/P95 intervals cross zero. Preserve all individual negative changes and tail outliers, including CPU nodes-1k pair-six P95 -94.09% and GPU wide pair-three P95 -27.61%, without attributing off-target CPU changes to GPU code. Native five-frame RGBA max difference is 0; one fixture has 64->1 data-buffer acquisitions/copies, 93288->106308 data bytes (13020 padding), unchanged 64 bind groups and exact fallback/replay bytes. Formal GPU logical peak/work deltas are +439600 B/+111896 for 1k, +4399600 B/+1119896 for 10k, +92832 B/+24804 for wide; CPU costs are unchanged. Logical costs include Plan metadata and padding, not driver allocations or RSS. Bootstrap uses 2000 deterministic resamples of six paired changes; do not add prior percentages, claim a general accepted speedup or infer 1080p/Studio/film/cross-device/memory benefits. Older missing raw history remains preserved and blocks whole-history regeneration; this cohort is validated independently.",
+          "pairs": [
+            {"order": "control-first", "control": "target/performance/gpu-batch-data-1794207226/pairs/01-control", "candidate": "target/performance/gpu-batch-data-1794207226/pairs/01-candidate"},
+            {"order": "candidate-first", "control": "target/performance/gpu-batch-data-1794207226/pairs/02-control", "candidate": "target/performance/gpu-batch-data-1794207226/pairs/02-candidate"},
+            {"order": "control-first", "control": "target/performance/gpu-batch-data-1794207226/pairs/03-control", "candidate": "target/performance/gpu-batch-data-1794207226/pairs/03-candidate"},
+            {"order": "candidate-first", "control": "target/performance/gpu-batch-data-1794207226/pairs/04-control", "candidate": "target/performance/gpu-batch-data-1794207226/pairs/04-candidate"},
+            {"order": "control-first", "control": "target/performance/gpu-batch-data-1794207226/pairs/05-control", "candidate": "target/performance/gpu-batch-data-1794207226/pairs/05-candidate"},
+            {"order": "candidate-first", "control": "target/performance/gpu-batch-data-1794207226/pairs/06-control", "candidate": "target/performance/gpu-batch-data-1794207226/pairs/06-candidate"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "gpu-batch-data-min3-640x360-m3",
+      "title": "Minimum-three-draw GPU data experiment / CPU+GPU breadth 640x360 / Apple M3 Metal",
+      "steps": [
+        {
+          "label": "00 original shared-vertex/uniform control",
+          "runs": ["target/performance/gpu-batch-data-1794207226/control-seed"],
+          "change": "Reuse the descriptive original diagnostics-disabled seed and frozen executable a5af4ad809327b8e; fresh causal controls are the six new invocations below, not old cohort timings or unrestricted candidate ca16d61c6933c5f8.",
+          "verification": "Original control and new candidate seed pass exact reference/checksum, configuration/environment/adapter and frozen executable validation. All 444 candidate embedded source hashes match disk. Exactly nine GPU implementation/test files differ from original control, with all benchmark/other captured sources unchanged. Relative to the unrestricted candidate, only gpu/plan/textures.rs, gpu/tests.rs and gpu/execute/tests.rs differ; production selection changes in the first file, others are focused assertions.",
+          "notes": "Separate original-control cohort, not an incremental timing comparison against the unrestricted candidate and not a pooled replication. Same Apple M3/Metal macOS aarch64 release opt-level 3, default+gpu features, CPU/GPU nodes-1k/nodes-10k/layers-wide at 640x360, Arial 2a7b70f9cc41bb6b, two warmups/101 samples/one iteration and 1 GiB/20-billion-work limits. MOTION_BENCH_TIMINGS=0, scaling/stages/sequences/micro/cold/video/films disabled. Older missing raw reports still block whole-history regeneration; available cohorts are validated independently."
+        },
+        {
+          "label": "01 minimum-three-draw aggregation (experimental)",
+          "decision": "Retain the three-draw trial policy and its evidence, without claiming regression-free general acceptance. GPU node P50/P95 gains are retained and wide-layer P50/P95 intervals cross zero, so the prior regression is not reproduced in this separate cohort. CPU 1k-node P50 still has an unexplained off-target regression. No direct unrestricted-versus-selected paired experiment, universal break-even threshold, process-memory benefit or cross-device acceptance is established.",
+          "change": "Add BATCH_DATA_MIN_DRAWS=3 to optional data admission, keeping one/two-draw operation data separate so aggregation removes at least two buffers/copies. Vertex/uniform batches, shaders, record sizes, padding arithmetic, pool caps and draw order are unchanged. No scene-name or payload-value policy, dynamic offsets or unit-data deduplication. New candidate f1656e1d71376e80 is paired against original control a5af4ad809327b8e. Layout metadata/work are still charged for short-only frames; their padding is not charged or uploaded.",
+          "verification": "Exact benchmark-topology test passes: 1k has one 1000-draw run/1001 steps and 215784 B potential padding; 10k one 10000-draw run/10001 steps and 2159784 B; wide has 200 two-draw runs/801 steps and 43200 B potential padding, now no admitted data aggregates. The two/three-draw boundary and transactional byte/work tests pass. Native 400-layer test has 400 pairs, 1200 separate data-buffer acquisitions/copies and 1200 bind groups, max RGBA difference 0 and byte-identical replay; long fixture preserves 64->1 buffers/copies with 13020 B padding and 64 groups, all five RGBA differences 0, exact replay/forced fallback. All 63 native GPU regressions, renderer all-feature tests (252 library, 2 and 5 integration, 7 docs, 43 ordinary ignored), production all-feature/all-target Clippy and structure pass. Six fresh alternating AB/BA pairs, 12 independent nonoverlapping processes, six records/seven references per run, matched frozen sources/binaries/configuration/environment/adapter and exact pixels/checksums/raw quantiles pass. All 12 records match seed resource metrics and omit diagnostic_timings. Evidence root: target/performance/gpu-batch-data-min3-1794208537; pairs/step.json, source-verification.json, comparison.json and generated details.md. Active execution 215.378593 seconds, paired span 219.205045 seconds. Existing unrelated global expect/docs/formatter blockers remain.",
+          "notes": "GPU P50 run medians: 1k 7.279 -> 3.855 ms, paired +47.00% [45.34,48.27]; 10k 95.315 -> 31.885 ms, +66.56% [66.31,66.68]; wide 61.792 -> 61.957 ms, uncertain +0.10% [-1.12,1.07]. GPU P95: 8.844 -> 4.133 ms, +50.45% [43.39,54.21]; 101.423 -> 33.122 ms, +66.68% [64.91,67.94]; wide 66.296 -> 64.549 ms, uncertain +1.25% [-7.92,10.21]. CPU 1k P50 2.240 -> 2.279 ms, -1.92% [-2.43,-0.88]; every other CPU P50/P95 interval crosses zero. All negative pairs/outliers remain, including CPU 10k pair-three P95 -506.18%, CPU wide pair-two P95 -58.72%, GPU wide pair-one P50 -1.93% and pair-three P95 -9.74%; no unexplained CPU causal attribution or sample removal. GPU logical peak/work deltas versus original are +439600 B/+111896 for 1k, +4399600 B/+1119896 for 10k, +6432 B/+3204 for wide; CPU costs unchanged. Wide padding is eliminated, but per-step layout and Plan size remain. Deterministic 2000-resample bootstrap of six paired changes; medians of run quantiles differ from median paired percentages. Do not add prior gains, pool cohorts, infer direct causal threshold gains or claim all >=3-draw batches, isolated-idle, full-suite, larger-resolution, Studio/film, RSS or cross-device success.",
+          "pairs": [
+            {"order": "control-first", "control": "target/performance/gpu-batch-data-min3-1794208537/pairs/01-control", "candidate": "target/performance/gpu-batch-data-min3-1794208537/pairs/01-candidate"},
+            {"order": "candidate-first", "control": "target/performance/gpu-batch-data-min3-1794208537/pairs/02-control", "candidate": "target/performance/gpu-batch-data-min3-1794208537/pairs/02-candidate"},
+            {"order": "control-first", "control": "target/performance/gpu-batch-data-min3-1794208537/pairs/03-control", "candidate": "target/performance/gpu-batch-data-min3-1794208537/pairs/03-candidate"},
+            {"order": "candidate-first", "control": "target/performance/gpu-batch-data-min3-1794208537/pairs/04-control", "candidate": "target/performance/gpu-batch-data-min3-1794208537/pairs/04-candidate"},
+            {"order": "control-first", "control": "target/performance/gpu-batch-data-min3-1794208537/pairs/05-control", "candidate": "target/performance/gpu-batch-data-min3-1794208537/pairs/05-candidate"},
+            {"order": "candidate-first", "control": "target/performance/gpu-batch-data-min3-1794208537/pairs/06-control", "candidate": "target/performance/gpu-batch-data-min3-1794208537/pairs/06-candidate"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "gpu-unit-data-retest-640x360-m3",
+      "title": "Shared unit data replication / CPU+GPU breadth 640x360 / Apple M3 Metal",
+      "steps": [
+        {
+          "label": "00 frozen shared-uniform control",
+          "runs": ["target/performance/gpu-uniforms-1794198935/candidate-seed"],
+          "change": "Historical shared-uniform seed with frozen executable 8afae8d0db639a07, used only as a descriptive anchor for this independent replication. It is the same control binary as the first shared-unit cohort, not the preceding shared-unit candidate.",
+          "verification": "Frozen executable, configuration and exact references/checksums passed validation against candidate seed target/performance/gpu-unit-data-1794200875/candidate-seed, executable 8bb1effc025c21cb. No compilation or implementation/test edits were made for the replication.",
+          "notes": "Fresh causal controls are the six pairs below. This is a separate series because it repeats the original control/candidate comparison, not a new optimization over the shared-unit executable. Do not pool its runs with the first noisy cohort or delete the old evidence. Older historical raw data remains unavailable, so validate the two available GPU series independently."
+        },
+        {
+          "label": "01 independent same-binary replication (withdrawn)",
+          "decision": "The experiment is withdrawn, not its measurements. Retain all pairs, estimates and negative results from this replication and the first cohort. The current runtime retains shared vertices and uniforms without shared unit data; physical memory and rollback timing were not measured.",
+          "change": "Repeat the shared-unit comparison with identical frozen binaries: control 8afae8d0db639a07 and candidate 8bb1effc025c21cb. No source change or new build; only fresh independent benchmark processes and a separate artifact directory.",
+          "verification": "Six alternating AB/BA pairs, 12 unique nonoverlapping processes, six CPU/GPU records and seven reference artifacts per run. Raw quantiles, exact reference pixels/checksums, environment/configuration/adapter and both frozen fingerprints pass benches/report.cjs validation. Complete descriptor, estimates and run paths: target/performance/gpu-unit-retest-1794202001/pairs/step.json. Paired elapsed time 404.352012 seconds including between-run analysis; active benchmark execution 263.398826 seconds.",
+          "notes": "Same Apple M3/Metal release 640x360, two warmups, 101 samples, one iteration, Arial fingerprint 2a7b70f9cc41bb6b and unchanged 1 GiB/20-billion-work limits; scaling/stages/sequences/micro/cold/video/films remain disabled. GPU P50 medians: nodes-1k 7.343 -> 7.250 ms, paired 1.93% [0.29,6.05], positive; nodes-10k 94.590 -> 94.290 ms, 0.38% [-0.73,1.48], uncertain; layers-wide 63.099 -> 63.171 ms, -1.25% [-8.47,3.45], uncertain. All CPU P50/P95 and GPU P95 estimates are uncertain. The first cohort's wide-layer +6.62% interval did not replicate. Retain the third candidate's wide-layer P50 -14.568510% and P95 -45.656758%, every other negative pair and both cohorts. Pre-run load averages 5.92/5.99/6.46 fell to 3.97/4.35/5.43 at the end; Dart, VS Code, Xcode and WindowServer remained active, with no recorded thermal/performance warning. This is lower observed load, not a verified idle environment. Do not average the cohorts, claim a stable wide-layer gain or infer full-suite, 1080p, Studio FPS, RSS or cross-device benefits.",
+          "pairs": [
+            {"order": "control-first", "control": "target/performance/gpu-unit-retest-1794202001/pairs/01-control", "candidate": "target/performance/gpu-unit-retest-1794202001/pairs/01-candidate"},
+            {"order": "candidate-first", "control": "target/performance/gpu-unit-retest-1794202001/pairs/02-control", "candidate": "target/performance/gpu-unit-retest-1794202001/pairs/02-candidate"},
+            {"order": "control-first", "control": "target/performance/gpu-unit-retest-1794202001/pairs/03-control", "candidate": "target/performance/gpu-unit-retest-1794202001/pairs/03-candidate"},
+            {"order": "candidate-first", "control": "target/performance/gpu-unit-retest-1794202001/pairs/04-control", "candidate": "target/performance/gpu-unit-retest-1794202001/pairs/04-candidate"},
+            {"order": "control-first", "control": "target/performance/gpu-unit-retest-1794202001/pairs/05-control", "candidate": "target/performance/gpu-unit-retest-1794202001/pairs/05-candidate"},
+            {"order": "candidate-first", "control": "target/performance/gpu-unit-retest-1794202001/pairs/06-control", "candidate": "target/performance/gpu-unit-retest-1794202001/pairs/06-candidate"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "r10-area-scratch-960x540-m3",
+      "title": "R10 polygon area scratch / CPU breadth 960x540 / Apple M3",
+      "steps": [
+        {
+          "label": "00 pre-R10 focused control",
+          "runs": ["target/performance/r10-area-scratch-20261109-01/seed-control"],
+          "change": "Fresh pre-R10 source snapshot with frozen executable fa9ee33bbf02da27. Only the three polygon area-scratch runtime files are restored to HEAD; all other dirty runtime/benchmark/test files match the candidate snapshot.",
+          "verification": "Both optimized frozen seeds pass raw quantile, exact reference/checksum and configuration/environment/adapter validation; logical preparation/render/output metrics are identical. Source manifests differ only in raster/coverage_cache.rs, raster/polygon.rs and raster/polygon/sweep.rs. Independent control build storage avoids shared-target contamination; both frozen source trees are retained.",
+          "notes": "Descriptive seed only; causal estimates use six fresh pairs below. Apple M3, macOS aarch64, Rust 1.99.1, release opt-level 3, default features without GPU/FFmpeg/films, explicit Arial, 960x540 Final. Cases: gradient-linear, clip-path, path-complex, nodes-10k; two warmups, 101 samples and one iteration. CPU stages enabled, diagnostics/scaling/sequences/micro/cold-session/video disabled; unchanged 1 GiB/20-billion-work policy. Stage prepare bypasses the coverage cache, while warm frames retain session caches. No isolated-idle, RSS, GUI or full-film claim. Older missing raw reports still block whole-history regeneration."
+        },
+        {
+          "label": "01 bounded band-area reuse",
+          "decision": "Retain the implementation and evidence for its measured complex-path cold-preparation benefit, not regression-free general acceptance. Warm-frame and off-target regressions remain unresolved; this cohort does not establish cross-frame session reuse gains or performance of remaining active-edge/intersection scratch proposals.",
+          "change": "Reuse polygon band-area allocation across bands and session coverage-cache misses, clearing and zero-initializing each admitted band. Idle capacity is capped at 1 MiB per session and oversized storage is discarded after success or failure. PreparedFrame layout, integration order, coverage cache keys and logical byte/work admission remain unchanged. Candidate 76337114bfd629a9 versus control fa9ee33bbf02da27; other Brush/GPU/worktree changes are identical in both snapshots.",
+          "verification": "Six alternating AB/BA pairs, 12 independent nonoverlapping optimized processes, 28 records and five exact reference artifacts per run. All 101 raw samples, quantiles, checksums, reference bytes, frozen source/executable fingerprints and configuration/environment/adapter match; all logical metrics equal control. Deterministic 2000-resample paired bootstrap estimates every P50/P95. Runtime validation: 254 all-feature renderer library tests, translated_curve_bands_match_gpu_pixels_and_exact_replay with --ignored, all-feature/all-target Clippy, structure and scoped whitespace checks pass. Evidence: target/performance/r10-area-scratch-20261109-01/source-verification.json, comparison.json and pairs/step.json. Current user-edited tests are preserved, not reverted. Existing unrelated documentation link failure remains.",
+          "notes": "Cold path-complex prepare P50 run medians 104.987 -> 100.610 ms, paired +4.17% [1.86,4.82]; P95 +4.46% [1.81,5.33]. Cold clip-path P50 +0.59% [-2.76,0.72] and nodes-10k +0.39% [-0.18,0.84] are uncertain. Warm path-complex P50 1.801 -> 1.807 ms, -0.29% [-0.38,-0.12]; warm gradient-linear -0.23% [-1.71,-0.002] also regresses. Warm clip-path/nodes-10k and all four warm P95 intervals cross zero. Off-target P50 regressions include gradient-linear prepare/linear -0.14% each and path-complex fresh/hot compile -5.40%/-4.86%; no causal attribution to scratch code is established. Preserve all 28 case/phase outcomes and every individual paired change, including positive off-target results, in comparison.json and generated details. Medians of run quantiles are not ratios used to compute paired estimates; no pooling, cross-case average, sample filtering, generic speedup, RSS, films, Studio FPS or cross-device acceptance. Whole-history report regeneration remains blocked by older unavailable raw artifacts.",
+          "pairs": [
+            {"order": "control-first", "control": "target/performance/r10-area-scratch-20261109-01/pairs/01-control", "candidate": "target/performance/r10-area-scratch-20261109-01/pairs/01-candidate"},
+            {"order": "candidate-first", "control": "target/performance/r10-area-scratch-20261109-01/pairs/02-control", "candidate": "target/performance/r10-area-scratch-20261109-01/pairs/02-candidate"},
+            {"order": "control-first", "control": "target/performance/r10-area-scratch-20261109-01/pairs/03-control", "candidate": "target/performance/r10-area-scratch-20261109-01/pairs/03-candidate"},
+            {"order": "candidate-first", "control": "target/performance/r10-area-scratch-20261109-01/pairs/04-control", "candidate": "target/performance/r10-area-scratch-20261109-01/pairs/04-candidate"},
+            {"order": "control-first", "control": "target/performance/r10-area-scratch-20261109-01/pairs/05-control", "candidate": "target/performance/r10-area-scratch-20261109-01/pairs/05-candidate"},
+            {"order": "candidate-first", "control": "target/performance/r10-area-scratch-20261109-01/pairs/06-control", "candidate": "target/performance/r10-area-scratch-20261109-01/pairs/06-candidate"}
+          ]
+        }
+      ]
+    }
+  ],
+  "diagnostics": [
+    {
+      "id": "gpu-stages-640x360-m3-1794204328",
+      "date": "2026-11-09",
+      "performance_acceptance": false,
+      "executable_fingerprint": "a5af4ad809327b8e",
+      "runs": [
+        "target/performance/gpu-stage-profile-1794204328/01",
+        "target/performance/gpu-stage-profile-1794204328/02",
+        "target/performance/gpu-stage-profile-1794204328/03"
+      ],
+      "configuration": "GPU-only breadth on Apple M3/Metal, release, 640x360, nodes-1k/nodes-10k/layers-wide, Arial 2a7b70f9cc41bb6b, two warmups, 101 samples and one iteration. MOTION_BENCH_TIMINGS=1; scaling, CPU stages, sequences, micro, cold, video and films are disabled. Limits remain 1 GiB and 20 billion work units.",
+      "verification": "Three independent runs share one frozen executable and matching configuration. All 909 stage samples are retained; warmups are excluded. Reference GPU PPM bytes and original logical resource metrics match the frozen shared-uniform candidate. A timestamp-disabled 10k-node run with the same executable preserves the original metric shape, exact pixels and replay. GPU and non-GPU breadth Clippy pass; all-feature tests are blocked by ENOSPC while building optional dependencies. Structure and whitespace checks pass.",
+      "host_medians": [
+        {"case": "nodes-1k", "frames": 303, "wall_ms": 7.767375, "encode_ms": 3.853834, "readback_ms": 2.598584, "encode_percent": 49.798617090023235, "readback_percent": 33.07647998124844, "invalid_gpu_frames": 113},
+        {"case": "nodes-10k", "frames": 303, "wall_ms": 97.607167, "encode_ms": 54.273542, "readback_ms": 31.569333, "encode_percent": 55.589657822725044, "readback_percent": 32.394438353637916, "invalid_gpu_frames": 294},
+        {"case": "layers-wide", "frames": 303, "wall_ms": 62.8535, "encode_ms": 30.371333, "readback_ms": 29.091416, "encode_percent": 48.26382364026697, "readback_percent": 46.35903739546857, "invalid_gpu_frames": 242}
+      ],
+      "cpu_stack": {
+        "run": "target/performance/gpu-stage-profile-1794204328/cpu-stack",
+        "artifact": "target/performance/gpu-stage-profile-1794204328/cpu-sample.txt",
+        "duration_seconds": 3,
+        "interval_ms": 1,
+        "timings_enabled": false,
+        "notes": "The warm-frame stack includes working_buffer -> Metal buffer creation and bind-group creation; TextureView creation is smaller in this sample. The sampler also includes startup and replay, so stack weights are not causal speedup estimates or whole-run CPU percentages. Its single-process physical footprint has no matched control and is not a memory-saving result."
+      },
+      "decision": "Investigate per-draw data/coverage buffer acquisition and binding overhead before assuming TextureView reuse is the best third optimization. Do not reinstate withdrawn unit-data sharing or claim a new speedup. Device intervals longer than their enclosing measured frame are untrusted; preserve them without filtering, and resolve timestamp reliability before GPU-stage attribution. Host readback includes GPU waits and is not a separate GPU execution duration. Host medians pool all 303 samples per case; percentages are medians of per-frame ratios, not ratios or sums of stage medians. No isolated-idle, cross-device or RSS claim is made."
+    },
+    {
+      "id": "gpu-draw-resource-assessment-1794205404",
+      "date": "2026-11-09",
+      "performance_acceptance": false,
+      "executable_fingerprint": "a5af4ad809327b8e",
+      "runs": [
+        "target/performance/gpu-data-assessment-1794205404/nodes-1k",
+        "target/performance/gpu-data-assessment-1794205404/layers-wide"
+      ],
+      "configuration": "Supplemental timestamp-disabled CPU sampling with the existing frozen GPU-only breadth executable on Apple M3/Metal, release, 640x360 and Arial 2a7b70f9cc41bb6b. Each sampler runs for three seconds at a one-millisecond requested interval. nodes-1k uses 501 benchmark samples to keep the process alive through sampling; layers-wide uses 101. Both use two warmups and one iteration, unchanged 1 GiB/20-billion-work limits, and disable scaling, CPU stages, sequences, micro, cold, video and films. The previous timestamp-disabled nodes-10k CPU stack is reused, not resampled.",
+      "verification": "Both supplemental reports validate against raw measurements and retain exact GPU PPM bytes and original logical resource metrics from the frozen shared-uniform candidate. Their executable fingerprint matches the three earlier stage runs. Existing same-backend seek replay passes. No rendering implementation, shader, benchmark source or cache limit is changed for this assessment; no build directory is recreated.",
+      "stack_samples": [
+        {"case": "nodes-1k", "artifact": "target/performance/gpu-data-assessment-1794205404/nodes-1k-sample.txt", "warm_recorder_weight": 1755, "texture_encoding_weight": 664, "buffer_creation_weight": 330, "bind_group_creation_weight": 229, "texture_view_creation_weight": 40},
+        {"case": "nodes-10k", "artifact": "target/performance/gpu-stage-profile-1794204328/cpu-sample.txt", "warm_recorder_weight": 958, "texture_encoding_weight": 486, "buffer_creation_weight": 284, "bind_group_creation_weight": 143, "texture_view_creation_weight": 21},
+        {"case": "layers-wide", "artifact": "target/performance/gpu-data-assessment-1794205404/layers-wide-sample.txt", "warm_recorder_weight": 1157, "texture_encoding_weight": 740, "buffer_creation_weight": 204, "bind_group_creation_weight": 40, "texture_view_creation_weight": 8}
+      ],
+      "stack_method": "Parse the sample call graph and select warm record_frame subtrees, then their first encode_texture nodes. Sum the first matching creation nodes per branch so nested API wrappers are not counted twice. These are inclusive stack-sample weights, not API call counts, exact CPU percentages or stage milliseconds. Warmups remain within the recorder subtree; startup and replay outside it are excluded. Sampling changes wall times, so these runs are not causal optimization comparisons. Wider-layer encoding also contains other costs; resource weights do not explain its entire latency.",
+      "source_assessment": "Binding 10 references shared frame strips/spans/alpha uploaded at most once per frame. Each hardware draw separately uploads its binding-4 operation data, obtains a buffer through working_buffer, encodes one copy when staging is available, creates a source TextureView and creates a bind group. Pool lookup is exact size/usage under a mutex with a linear scan; the idle cap is 512 buffers including staging, at most one quarter of the frame allowance and 64 MiB. Bind groups are not pooled. In serial frame encoding with no concurrent pool replenishment, N distinct simultaneously retained draw-data buffers can consume at most 512 preexisting idle buffers, so at least max(0, N - 512) require fresh allocation; other resources and size mismatches can make this worse. This is a bound, not a measured cache-hit count.",
+      "packing_tradeoff": "An eligible per-batch aligned data buffer could reduce N buffer acquisitions/leases to one and N staging-copy commands to one without rewriting payload words or shader arithmetic. It still needs N bind groups because the existing static uniform offset differs per draw. Storage binding offsets must satisfy the device alignment and expose the original record size. A direct-coverage descriptor has ten f32 words (40 bytes); for the illustrative case of 10000 such records and 256-byte alignment, separate payloads total 400000 bytes while a tightly tailed aligned buffer spans 2559784 bytes. The additional 2159784 bytes, plus corresponding staging padding, require admission or fallback. Actual per-case payload histograms were not measured. Larger payloads, conditional packets, kernels, binding limits and in-flight isolation must remain valid.",
+      "decision": "Buffer creation is a defensible first prototype target for node-heavy scenes, with bind-group overhead as a separate second target. Do not simply enlarge the idle object cap or reinstate unit-data deduplication. Test aligned binding-4 aggregation independently before attempting explicit dynamic-offset layouts and per-frame bind-group reuse by source/layout/record-size compatibility. Preserve bounded fallbacks and exact pixels; require an uninstrumented frozen AB/BA comparison before retaining an optimization. Current data establish hotspot evidence, not an isolated timing or physical-memory benefit."
     }
   ],
   "reset": {

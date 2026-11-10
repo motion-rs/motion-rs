@@ -316,7 +316,10 @@ fn film(context: &SceneContext<'_>, seed: u64) -> motion::Result<Node> {
         let divider = split_position(t);
         let mut parts = vec![
             display(picture.clone()),
-            picture.clip_with(Rect::new(0.0, 0.0, divider, HEIGHT), ClipMode::Geometric),
+            picture.clip_with(
+                Rect::new(0.0, 0.0, divider.max(0.0), HEIGHT),
+                ClipMode::Geometric,
+            ),
             Rect::new(divider - 1.0, 0.0, divider + 1.0, HEIGHT)
                 .fill(Color::WHITE.with_alpha(0.85))
                 .into(),
@@ -455,6 +458,37 @@ mod tests {
         assert!(lut.apply([0.0; 3], input).iter().all(|value| *value < 0.01));
         let graded = bake_look(1.0)?.apply([0.5; 3], input);
         assert!(graded[0] > graded[2], "highlights lean warm");
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "requires explicit MOTION_TEST_FONT; full-size CPU wipe boundary/replay"]
+    fn split_wipe_renders_and_replays_exactly() -> motion::Result {
+        let font = std::env::var_os("MOTION_TEST_FONT")
+            .ok_or_else(|| std::io::Error::other("Set MOTION_TEST_FONT"))?;
+        let options = crate::render_options(Some(std::path::Path::new(&font)))?
+            .size(PixelSize::new(960, 540))
+            .backend(BackendPreference::Cpu);
+        let timeline = timeline(DemoParameters {
+            seconds: 8,
+            seed: 20261027,
+            ..DemoParameters::default()
+        })?;
+        for frame in [57, 58, 59, 60] {
+            let seconds = f64::from(frame) / 30.0;
+            if matches!(frame, 58 | 59) {
+                assert!(split_position(seconds) + 1.0 < 0.0);
+            }
+            let time = Time::from_seconds(seconds);
+            let actual = render_still(&timeline, time, &options)?;
+            let replay = render_still(&timeline, time, &options)?;
+            assert_eq!(actual.bytes().len(), 960 * 540 * 4);
+            assert_eq!(
+                actual.bytes(),
+                replay.bytes(),
+                "wipe replay at frame {frame}"
+            );
+        }
         Ok(())
     }
 

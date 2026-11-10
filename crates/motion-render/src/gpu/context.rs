@@ -230,7 +230,7 @@ impl GpuContext {
                                 )
                             })?;
                     }
-                    let plan = Plan::new(frame, remaining)?;
+                    let plan = Plan::new_packed(frame, remaining, format)?;
                     let replacement = renderer.submit_output(frame, plan, format)?.finish()?;
                     *target = replacement;
                     return Ok(());
@@ -333,6 +333,14 @@ impl GpuContext {
                 color_image_buffers_encoded: Default::default(),
                 #[cfg(test)]
                 hardware_plus_encoded: Default::default(),
+                #[cfg(test)]
+                batch_data_buffers_encoded: Default::default(),
+                #[cfg(test)]
+                batch_data_copies_encoded: Default::default(),
+                #[cfg(test)]
+                batch_data_bytes_encoded: Default::default(),
+                #[cfg(test)]
+                batch_bind_groups_encoded: Default::default(),
                 textures,
                 present_shader: Default::default(),
                 present_check: Default::default(),

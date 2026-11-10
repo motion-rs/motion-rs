@@ -91,7 +91,7 @@ pub(super) fn render(
         ))
     })
     .map_err(|error| error.at_frame(range.start as u64))?;
-    let plan = motion_render::gpu::Plan::new(&first, limits)
+    let plan = motion_render::gpu::Plan::new_packed(&first, limits, format)
         .and_then(|plan| plan.with_display(&options.render.display, range.start as u64))
         .map_err(|error| motion_core::Error::from(error).at_frame(range.start as u64))?;
     let peak = plan
@@ -144,10 +144,11 @@ pub(super) fn render(
                         )
                         .and_then(|(frame, mut limits)| {
                             limits.max_bytes = options.render.limits.max_bytes;
-                            let plan = motion_render::gpu::Plan::new_with_planning_limit(
+                            let plan = motion_render::gpu::Plan::new_packed_with_planning_limit(
                                 &frame,
                                 limits,
                                 preparation_bytes,
+                                format,
                             )?
                             .with_display(&options.render.display, frame_index as u64)?;
                             let charge = plan.packed_stats(frame.size(), format)?.peak_bytes;
@@ -215,7 +216,7 @@ pub(super) fn render(
                 ))
             })
             .map_err(|error| error.at_frame(index as u64))?;
-            let plan = motion_render::gpu::Plan::new(&frame, limits)
+            let plan = motion_render::gpu::Plan::new_packed(&frame, limits, format)
                 .map_err(|error| motion_core::Error::from(error).at_frame(index as u64))?;
             queue
                 .submit_output(&frame, plan, format)

@@ -225,7 +225,18 @@ impl FrameExecution<'_> {
                     .filter(|_| requested)
                     .map(|_| std::time::Instant::now());
                 let plan = if requested {
-                    match crate::gpu::Plan::new(&prepared, limits) {
+                    let planned = if packed {
+                        crate::gpu::Plan::new_packed(
+                            &prepared,
+                            limits,
+                            crate::PixelFormat::SrgbRgba8 {
+                                premultiplied: false,
+                            },
+                        )
+                    } else {
+                        crate::gpu::Plan::new(&prepared, limits)
+                    };
+                    match planned {
                         Ok(plan) => Some(plan),
                         Err(error)
                             if self.backend.is_none()
@@ -263,6 +274,14 @@ impl FrameExecution<'_> {
                     {
                         let plan = if let Some(plan) = plan {
                             plan
+                        } else if packed {
+                            crate::gpu::Plan::new_packed(
+                                &prepared,
+                                limits,
+                                crate::PixelFormat::SrgbRgba8 {
+                                    premultiplied: false,
+                                },
+                            )?
                         } else {
                             crate::gpu::Plan::new(&prepared, limits)?
                         };

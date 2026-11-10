@@ -10,6 +10,9 @@ mod sparse;
 mod steps;
 mod textures;
 
+/// Packed storage, mapped readback and owned CPU output coexist until completion.
+const PACKED_PAYLOAD_COPIES: u64 = 3;
+
 fn lut_word_count(lut: Option<&motion_core::Lut3d>) -> usize {
     17 + lut.map_or(0, |lut| {
         (lut.data().len() + lut.shaper().map_or(0, |shaper| shaper.data().len())) * 3
@@ -65,6 +68,26 @@ impl Plan {
         Self::new_with_planning_limit(frame, limits, limits.max_bytes)
     }
 
+    /// Plans a supported packed output without unused floating-point readback storage.
+    /// Packed storage, mapped readback and CPU planes are admitted before optional batching.
+    pub fn new_packed(
+        frame: &PreparedFrame,
+        limits: RasterLimits,
+        format: crate::PixelFormat,
+    ) -> Result<Self, ValidationError> {
+        Self::new_for_output(frame, limits, limits.max_bytes, Some(format))
+    }
+
+    /// Bounds packed planning separately while retaining the full submission allowance.
+    pub fn new_packed_with_planning_limit(
+        frame: &PreparedFrame,
+        limits: RasterLimits,
+        max_bytes: u64,
+        format: crate::PixelFormat,
+    ) -> Result<Self, ValidationError> {
+        Self::new_for_output(frame, limits, max_bytes, Some(format))
+    }
+
     /// Bounds logical planning costs separately from the frame's submission allowance.
     /// Device/staging reservations are included conservatively in the planning charge.
     pub fn new_with_planning_limit(
@@ -72,11 +95,20 @@ impl Plan {
         limits: RasterLimits,
         max_bytes: u64,
     ) -> Result<Self, ValidationError> {
+        Self::new_for_output(frame, limits, max_bytes, None)
+    }
+
+    fn new_for_output(
+        frame: &PreparedFrame,
+        limits: RasterLimits,
+        max_bytes: u64,
+        packed: Option<crate::PixelFormat>,
+    ) -> Result<Self, ValidationError> {
         let planning_limits = RasterLimits {
             max_bytes: limits.max_bytes.min(max_bytes),
             ..limits
         };
-        let budget = Self::admit(frame, planning_limits)?;
+        let budget = Self::admit(frame, planning_limits, packed)?;
         let mut planner = Planner {
             frame,
             steps: Vec::new(),
@@ -122,6 +154,7 @@ impl Plan {
         } = walker;
         let output = layers.pop().expect("root").image;
         let mut plan = Self::finish(planner, output, frame.size, planning_limits)?;
+        plan.packed_output = packed.map(|format| (frame.size(), format));
         plan.limits = limits;
         Ok(plan)
     }
@@ -196,7 +229,11 @@ impl Plan {
     }
 
     /// Admits the fixed costs of a frame (plan, staging, output, readback) and builds the budget.
-    fn admit(frame: &PreparedFrame, limits: RasterLimits) -> Result<Budget, ValidationError> {
+    fn admit(
+        frame: &PreparedFrame,
+        limits: RasterLimits,
+        packed: Option<crate::PixelFormat>,
+    ) -> Result<Budget, ValidationError> {
         let count = u64::from(frame.size.width) * u64::from(frame.size.height);
         let mut budget = Budget::new(frame.size, limits)?;
         if count > u64::from(u32::MAX)
@@ -213,17 +250,24 @@ impl Plan {
             frame.stats.retained_bytes + size_of::<Plan>() as u64,
             "gpu.plan",
         )?;
-        budget.bytes(
-            count.checked_mul(16).ok_or_else(|| {
-                ValidationError::limit("gpu.plan", "max_bytes", "GPU staging size overflow")
-            })? + 8,
-            "gpu.staging",
-        )?;
-        budget.bytes(
-            frame.output_bounds.pixels() * 16 + size_of::<LinearFrame>() as u64,
-            "gpu.output",
-        )?;
-        budget.work(count + frame.output_bounds.pixels(), "gpu.readback")?;
+        if let Some(format) = packed {
+            budget.bytes(8, "gpu.staging")?;
+            let resources = packed_resources(frame.size(), format)?;
+            budget.bytes(resources.peak_bytes, "gpu.pack")?;
+            budget.work(resources.work, "gpu.pack")?;
+        } else {
+            budget.bytes(
+                count.checked_mul(16).ok_or_else(|| {
+                    ValidationError::limit("gpu.plan", "max_bytes", "GPU staging size overflow")
+                })? + 8,
+                "gpu.staging",
+            )?;
+            budget.bytes(
+                frame.output_bounds.pixels() * 16 + size_of::<LinearFrame>() as u64,
+                "gpu.output",
+            )?;
+            budget.work(count + frame.output_bounds.pixels(), "gpu.readback")?;
+        }
         let _count = usize::try_from(count).map_err(|_| {
             ValidationError::limit(
                 "gpu.plan",
@@ -322,6 +366,12 @@ impl Plan {
             (planner.steps.len() as u64 * 6 + 8) * size_of::<wgpu::Buffer>() as u64 + 32,
             "gpu.leases",
         )?;
+        let texture_data_sizes = Self::admit_batch_data(
+            &planner.steps,
+            &last_uses,
+            &texture_blends,
+            &mut planner.budget,
+        );
         let stats = LinearRenderStats {
             peak_bytes: planner.budget.peak_bytes(),
             work: planner.budget.work_done(),
@@ -330,6 +380,7 @@ impl Plan {
             size,
             display: [0; 32],
             lut_data: vec![0.0; 34],
+            packed_output: None,
             limits,
             output,
             steps: planner.steps,
@@ -341,6 +392,7 @@ impl Plan {
             compute_texture_sizes,
             texture_blends,
             texture_bounded,
+            texture_data_sizes,
             stats,
         })
     }
@@ -369,21 +421,22 @@ impl Plan {
                 "Output size/format requires linear fallback",
             ));
         }
-        let count = u64::from(size.width) * u64::from(size.height);
-        let packed_bytes = match format {
-            crate::PixelFormat::Yuv420 { bit_depth: 8 } => count * 3 / 2,
-            crate::PixelFormat::Yuv420 { bit_depth: 10 } => count * 3,
-            _ => count * 4,
+        let resources = if let Some(output) = self.packed_output {
+            if output != (size, format) {
+                return Err(ValidationError::invalid(
+                    "gpu.pack",
+                    "format",
+                    "Packed plan output does not match the requested size/format",
+                ));
+            }
+            LinearRenderStats::default()
+        } else {
+            packed_resources(size, format)?
         };
-        let extra = packed_bytes * 3
-            + (size_of::<PendingOutputFrame>()
-                + size_of::<crate::FrameBuffer>()
-                + 3 * size_of::<crate::PixelPlane>()
-                + 32) as u64;
         let peak_bytes = self
             .stats
             .peak_bytes
-            .checked_add(extra)
+            .checked_add(resources.peak_bytes)
             .filter(|bytes| *bytes <= self.limits.max_bytes)
             .ok_or_else(|| {
                 ValidationError::limit(
@@ -395,7 +448,7 @@ impl Plan {
         let work = self
             .stats
             .work
-            .checked_add(crate::FrameBuffer::conversion_work(size, format))
+            .checked_add(resources.work)
             .filter(|work| *work <= self.limits.max_work)
             .ok_or_else(|| {
                 ValidationError::limit(
@@ -406,6 +459,33 @@ impl Plan {
             })?;
         Ok(LinearRenderStats { peak_bytes, work })
     }
+}
+
+fn packed_resources(
+    size: PixelSize,
+    format: crate::PixelFormat,
+) -> Result<LinearRenderStats, ValidationError> {
+    if size.width == 0 || size.height == 0 || !Gpu::supports_packed_output(size, format) {
+        return Err(ValidationError::invalid(
+            "gpu.pack",
+            "format",
+            "Output size/format requires linear fallback",
+        ));
+    }
+    let count = u64::from(size.width) * u64::from(size.height);
+    let packed_bytes = match format {
+        crate::PixelFormat::Yuv420 { bit_depth: 8 } => count * 3 / 2,
+        crate::PixelFormat::Yuv420 { bit_depth: 10 } => count * 3,
+        _ => count * 4,
+    };
+    Ok(LinearRenderStats {
+        peak_bytes: packed_bytes * PACKED_PAYLOAD_COPIES
+            + (size_of::<PendingOutputFrame>()
+                + size_of::<crate::FrameBuffer>()
+                + 3 * size_of::<crate::PixelPlane>()
+                + 32) as u64,
+        work: crate::FrameBuffer::conversion_work(size, format),
+    })
 }
 
 #[cfg(test)]

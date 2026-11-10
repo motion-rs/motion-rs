@@ -32,6 +32,25 @@ impl PreparedFrame {
         budget: &mut Budget,
         path: &str,
     ) -> Result<(), ValidationError> {
+        self.polygon_path_with_scratch(
+            geometry,
+            transform,
+            rule,
+            tolerance,
+            &mut Vec::new(),
+            &mut RasterScope::new(budget, path),
+        )
+    }
+
+    pub(super) fn polygon_path_with_scratch(
+        &mut self,
+        geometry: &motion_core::Path2D,
+        transform: Transform,
+        rule: FillRule,
+        tolerance: f64,
+        areas: &mut Vec<f64>,
+        scope: &mut RasterScope<'_>,
+    ) -> Result<(), ValidationError> {
         let coefficients = transform.coefficients().map(f64::to_bits);
         if let Some(normalized) =
             super::coverage_cache::cache_transform(geometry.verbs(), coefficients, self.size)
@@ -46,8 +65,8 @@ impl PreparedFrame {
                 Transform::from_coefficients(normalized),
                 rule,
                 tolerance,
-                budget,
-                path,
+                areas,
+                scope,
             )?;
             for strip in &mut self.strips[strips..] {
                 strip.x += dx;
@@ -60,7 +79,7 @@ impl PreparedFrame {
             }
             return Ok(());
         }
-        self.polygon_path_raw(geometry, transform, rule, tolerance, budget, path)
+        self.polygon_path_raw(geometry, transform, rule, tolerance, areas, scope)
     }
 
     fn polygon_path_raw(
@@ -69,9 +88,10 @@ impl PreparedFrame {
         transform: Transform,
         rule: FillRule,
         tolerance: f64,
-        budget: &mut Budget,
-        path: &str,
+        areas: &mut Vec<f64>,
+        scope: &mut RasterScope<'_>,
     ) -> Result<(), ValidationError> {
+        let (budget, path) = (&mut *scope.budget, scope.path);
         if let Some(bounds) = geometry.axis_aligned_rectangle() {
             let [xx, yx, xy, yy, _, _] = transform.coefficients();
             if (xy == 0.0 && yx == 0.0) || (xx == 0.0 && yy == 0.0) {
@@ -85,13 +105,13 @@ impl PreparedFrame {
                 }
             }
         }
-        self.polygon(
+        self.polygon_with_scratch(
             geometry.verbs().iter().copied(),
             transform,
             rule,
             tolerance,
-            budget,
-            path,
+            areas,
+            scope,
         )
     }
 
@@ -104,6 +124,26 @@ impl PreparedFrame {
         budget: &mut Budget,
         path: &str,
     ) -> Result<(), ValidationError> {
+        self.polygon_with_scratch(
+            verbs,
+            transform,
+            rule,
+            tolerance,
+            &mut Vec::new(),
+            &mut RasterScope::new(budget, path),
+        )
+    }
+
+    fn polygon_with_scratch(
+        &mut self,
+        verbs: impl Iterator<Item = PathVerb>,
+        transform: Transform,
+        rule: FillRule,
+        tolerance: f64,
+        areas: &mut Vec<f64>,
+        scope: &mut RasterScope<'_>,
+    ) -> Result<(), ValidationError> {
+        let (budget, path) = (&mut *scope.budget, scope.path);
         let edges = path_edges(verbs, transform, tolerance, budget, path)?;
         let mut bounds = Rect::new(
             f64::INFINITY,
@@ -120,7 +160,14 @@ impl PreparedFrame {
         }
         let pixels = pixel_bounds(bounds, self.size);
         if !pixels.is_empty() {
-            sweep::rasterize(self, &edges, pixels, rule, budget, path)?;
+            sweep::rasterize_with_scratch(
+                self,
+                &edges,
+                pixels,
+                rule,
+                areas,
+                &mut RasterScope::new(budget, path),
+            )?;
         }
         budget.release((edges.len() * size_of::<Edge>()) as u64);
         Ok(())
@@ -234,6 +281,17 @@ fn scratch<Value>(
     budget: &mut Budget,
     path: &str,
 ) -> Result<Vec<Value>, ValidationError> {
+    let mut values = Vec::new();
+    reuse_scratch(&mut values, count, budget, path)?;
+    Ok(values)
+}
+
+fn reuse_scratch<Value>(
+    values: &mut Vec<Value>,
+    count: u64,
+    budget: &mut Budget,
+    path: &str,
+) -> Result<(), ValidationError> {
     let bytes = count
         .checked_mul(size_of::<Value>() as u64)
         .ok_or_else(|| ValidationError::limit(path, "max_bytes", "Scratch storage overflow"))?;
@@ -241,11 +299,11 @@ fn scratch<Value>(
     let count = usize::try_from(count).map_err(|_| {
         ValidationError::limit(path, "max_bytes", "Scratch exceeds addressable storage")
     })?;
-    let mut values = Vec::new();
+    values.clear();
     values.try_reserve_exact(count).map_err(|_| {
         ValidationError::limit(path, "max_bytes", "Could not reserve geometry scratch")
     })?;
-    Ok(values)
+    Ok(())
 }
 
 fn sort_work(count: usize, budget: &mut Budget, path: &str) -> Result<(), ValidationError> {

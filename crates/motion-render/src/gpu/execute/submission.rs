@@ -16,7 +16,7 @@ impl Gpu {
     }
 
     /// Submits RGBA8 or aligned 8/10-bit YUV output and reads back only packed bytes.
-    /// The original conservative plan allowance remains in force.
+    /// Accepts dedicated packed plans or conservative linear plans with extra packing charges.
     pub fn submit_output(
         &mut self,
         frame: &PreparedFrame,
@@ -239,6 +239,14 @@ impl Gpu {
         frame: &PreparedFrame,
         plan: Plan,
     ) -> motion_core::Result<PendingLinearFrame> {
+        if plan.packed_output.is_some() {
+            return Err(motion_core::ValidationError::invalid(
+                "gpu.output",
+                "format",
+                "Packed plans cannot submit floating-point readback",
+            )
+            .into());
+        }
         self.begin_timings();
         let started = self.timing.as_ref().map(|_| std::time::Instant::now());
         let context = self.context.clone();
@@ -413,6 +421,14 @@ impl Gpu {
         texture: &wgpu::Texture,
         format: crate::PixelFormat,
     ) -> motion_core::Result<PendingTextureFrame> {
+        if plan.packed_output.is_some() {
+            return Err(motion_core::ValidationError::invalid(
+                "gpu.output",
+                "format",
+                "Packed readback plans cannot submit external textures",
+            )
+            .into());
+        }
         self.begin_timings();
         let started = self.timing.as_ref().map(|_| std::time::Instant::now());
         let linear = match (format, texture.format()) {

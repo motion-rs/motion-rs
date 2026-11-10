@@ -98,6 +98,7 @@ impl<'edges> EdgeSweep<'edges> {
     }
 }
 
+#[cfg(test)]
 pub(crate) fn rasterize(
     frame: &mut PreparedFrame,
     edges: &[Edge],
@@ -106,6 +107,25 @@ pub(crate) fn rasterize(
     budget: &mut Budget,
     path: &str,
 ) -> Result<(), ValidationError> {
+    rasterize_with_scratch(
+        frame,
+        edges,
+        pixels,
+        rule,
+        &mut Vec::new(),
+        &mut RasterScope::new(budget, path),
+    )
+}
+
+pub(super) fn rasterize_with_scratch(
+    frame: &mut PreparedFrame,
+    edges: &[Edge],
+    pixels: PixelRect,
+    rule: FillRule,
+    areas: &mut Vec<f64>,
+    scope: &mut RasterScope<'_>,
+) -> Result<(), ValidationError> {
+    let (budget, path) = (&mut *scope.budget, scope.path);
     let left = pixels.left / 4 * 4;
     let right = (u64::from(pixels.right).div_ceil(4) * 4).min(u64::from(frame.size.width)) as u32;
     let mut row = pixels.top / 4 * 4;
@@ -119,7 +139,7 @@ pub(crate) fn rasterize(
         }
         let count = u64::from(right - left) * u64::from(height);
         budget.work(count, path)?;
-        let mut areas = scratch::<f64>(count, budget, path)?;
+        reuse_scratch(areas, count, budget, path)?;
         areas.resize(count as usize, 0.0);
         for vertical in row..row + height {
             integrate_row(
@@ -137,7 +157,7 @@ pub(crate) fn rasterize(
         #[cfg(test)]
         diagnostics::band(&active, row, height);
         frame.polygon_band(
-            &mut areas,
+            areas,
             Band { row, left, right },
             height,
             &mut RasterScope::new(budget, path),

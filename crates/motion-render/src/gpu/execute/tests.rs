@@ -1506,13 +1506,189 @@ fn hardware_fill_batches_preserve_rgba_tolerance_boundaries_and_pooling() -> mot
         for premultiplied in [false, true] {
             let format = crate::PixelFormat::SrgbRgba8 { premultiplied };
             let expected = crate::FrameBuffer::from_linear(&outputs[index], format, limits)?;
-            let actual = gpu
-                .submit_output(frame, Plan::new(frame, limits)?, format)?
-                .finish()?;
+            let plan = Plan::new(frame, limits)?;
+            let mut position = 0;
+            let mut batches = 0;
+            let mut uniform_buffers = 0;
+            let mut unshared_vertex_buffers = 0;
+            let mut unshared_uniform_buffers = 0;
+            let mut vertex_bytes = 0;
+            let mut uniform_bytes = 0;
+            let mut staging_bytes = 0;
+            let mut data_buffers = 0u64;
+            let mut data_copies = 0u64;
+            let mut data_bytes = 0u64;
+            let mut data_payload_bytes = 0u64;
+            let mut bind_groups = 0u64;
+            while position < plan.steps.len() {
+                let range = plan.texture_run(position);
+                if plan.texture_blend(position) {
+                    assert!(
+                        Plan::batch_vertex_bytes(
+                            &plan.steps[range.clone()],
+                            context.device.limits().max_buffer_size,
+                        )
+                        .is_some()
+                    );
+                    assert!(
+                        Plan::batch_uniform_bytes(
+                            &plan.steps[range.clone()],
+                            context.device.limits().max_buffer_size,
+                            context.device.limits().min_uniform_buffer_offset_alignment,
+                        )
+                        .is_some()
+                    );
+                    batches += 1;
+                    uniform_buffers += 2;
+                    unshared_vertex_buffers += range.len() + 1;
+                    unshared_uniform_buffers += range.len() + 1;
+                    vertex_bytes += size_of::<[f32; 4]>() as u64
+                        * (1 + plan.steps[range.clone()]
+                            .iter()
+                            .map(|step| step.quads.len().max(1) as u64)
+                            .sum::<u64>());
+                    uniform_bytes += (range.len() as u64 + 1) * size_of::<GpuUniforms>() as u64;
+                    let payload = plan.steps[range.clone()]
+                        .iter()
+                        .map(|step| step.data.len() as u64 * size_of::<f32>() as u64)
+                        .sum::<u64>();
+                    let shared = plan.texture_data_bytes(
+                        position,
+                        context.device.limits().max_buffer_size,
+                        context.device.limits().min_storage_buffer_offset_alignment,
+                    );
+                    let bytes = shared.unwrap_or(payload);
+                    let count = if shared.is_some() {
+                        1
+                    } else {
+                        range.len() as u64
+                    };
+                    let staging =
+                        Plan::batch_upload_bytes(&plan.steps[range.clone()]) + bytes - payload;
+                    data_buffers += count;
+                    data_copies += if staging <= context.device.limits().max_buffer_size {
+                        count
+                    } else {
+                        0
+                    };
+                    data_bytes += bytes;
+                    data_payload_bytes += payload;
+                    bind_groups += range.len() as u64;
+                    staging_bytes += staging;
+                } else {
+                    uniform_buffers += 1;
+                    unshared_uniform_buffers += 1;
+                    uniform_bytes += size_of::<GpuUniforms>() as u64;
+                }
+                position = range.end;
+            }
+            let counters = || {
+                [
+                    context.batch_data_buffers_encoded.load(Ordering::Relaxed),
+                    context.batch_data_copies_encoded.load(Ordering::Relaxed),
+                    context.batch_data_bytes_encoded.load(Ordering::Relaxed),
+                    context.batch_bind_groups_encoded.load(Ordering::Relaxed),
+                ]
+            };
+            let before = counters();
+            let pending = gpu.submit_output(frame, plan, format)?;
+            assert_eq!(
+                std::array::from_fn::<_, 4, _>(|index| counters()[index] - before[index]),
+                [data_buffers, data_copies, data_bytes, bind_groups]
+            );
+            assert!(data_buffers < bind_groups);
+            assert_eq!(
+                pending
+                    .working
+                    .buffers
+                    .iter()
+                    .filter(|buffer| buffer.usage().contains(wgpu::BufferUsages::VERTEX))
+                    .count(),
+                batches * 2,
+                "frame {index}: expected one backdrop and one shared instance buffer per batch",
+            );
+            assert_eq!(
+                pending
+                    .working
+                    .buffers
+                    .iter()
+                    .filter(|buffer| buffer.usage().contains(wgpu::BufferUsages::UNIFORM))
+                    .count(),
+                uniform_buffers,
+                "frame {index}: expected one backdrop and one shared uniform buffer per batch",
+            );
+            assert_eq!(
+                pending
+                    .working
+                    .buffers
+                    .iter()
+                    .filter(|buffer| buffer.usage().contains(wgpu::BufferUsages::VERTEX))
+                    .map(wgpu::Buffer::size)
+                    .sum::<u64>(),
+                vertex_bytes,
+                "frame {index}: sharing must preserve the original vertex payload bytes",
+            );
+            assert_eq!(
+                pending
+                    .working
+                    .buffers
+                    .iter()
+                    .filter(|buffer| buffer.usage().contains(wgpu::BufferUsages::UNIFORM))
+                    .map(wgpu::Buffer::size)
+                    .sum::<u64>(),
+                uniform_bytes,
+                "frame {index}: sharing must preserve uniform payload bytes without padding",
+            );
+            assert_eq!(
+                pending
+                    .working
+                    .buffers
+                    .iter()
+                    .filter(|buffer| buffer.usage().contains(wgpu::BufferUsages::MAP_WRITE))
+                    .map(wgpu::Buffer::size)
+                    .sum::<u64>(),
+                staging_bytes,
+                "frame {index}: shared uploads must keep the original staging allocation",
+            );
+            assert!(unshared_vertex_buffers > batches * 2);
+            assert!(unshared_uniform_buffers > uniform_buffers);
+            if !premultiplied {
+                eprintln!(
+                    "batch_data_frame={index} buffers={bind_groups}->{data_buffers} copies={bind_groups}->{data_copies} payload_bytes={data_payload_bytes} allocated_bytes={data_bytes} padding_bytes={} bind_groups={bind_groups}",
+                    data_bytes - data_payload_bytes
+                );
+                eprintln!(
+                    "batch_resources_frame={index} vertex_buffers={unshared_vertex_buffers}->{} uniform_buffers={unshared_uniform_buffers}->{uniform_buffers} vertex_bytes={vertex_bytes} uniform_bytes={uniform_bytes} staging_bytes={staging_bytes} lease_capacity={}",
+                    batches * 2,
+                    pending.working.buffers.capacity(),
+                );
+            }
+            let actual = pending.finish()?;
             let replay = gpu
                 .submit_output(frame, Plan::new(frame, limits)?, format)?
                 .finish()?;
             assert_eq!(actual, replay);
+            if index == 0 && !premultiplied {
+                let mut fallback = Plan::new(frame, limits)?;
+                let start = fallback
+                    .texture_data_sizes
+                    .iter()
+                    .position(|bytes| *bytes != 0)
+                    .unwrap();
+                let bytes = fallback.texture_data_sizes[start];
+                assert_eq!(fallback.texture_data_bytes(start, bytes, 256), Some(bytes));
+                assert!(fallback.texture_data_bytes(start, bytes - 1, 256).is_none());
+                assert!(fallback.texture_data_bytes(start, u64::MAX, 0).is_none());
+                assert!(fallback.texture_data_bytes(start, u64::MAX, 512).is_none());
+                fallback.texture_data_sizes.clear();
+                let before = counters();
+                let separate = gpu.submit_output(frame, fallback, format)?.finish()?;
+                assert_eq!(
+                    std::array::from_fn::<_, 4, _>(|index| counters()[index] - before[index]),
+                    [bind_groups, bind_groups, data_payload_bytes, bind_groups]
+                );
+                assert_eq!(separate, actual);
+            }
             assert!(
                 actual.planes()[0]
                     .bytes()
@@ -1623,6 +1799,103 @@ fn packed_output_yuv_depth_alignment_and_budget() -> motion_core::Result {
             crate::PixelFormat::Yuv420 { bit_depth }
         ));
     }
+    Ok(())
+}
+
+#[test]
+fn dedicated_packed_plans_remove_only_unused_linear_readback_charges() -> motion_core::Result {
+    let limits = RasterLimits::default();
+    let size = PixelSize::new(960, 540);
+    let frame = motion_core::Node::empty()
+        .compile(
+            motion_core::Size::new(960.0, 540.0),
+            size,
+            ValidationLimits::default(),
+        )?
+        .prepare(ValidationLimits::default(), limits)?;
+    let conservative = Plan::new(&frame, limits)?;
+    for format in [
+        crate::PixelFormat::SrgbRgba8 {
+            premultiplied: false,
+        },
+        crate::PixelFormat::SrgbRgba8 {
+            premultiplied: true,
+        },
+        crate::PixelFormat::Yuv420 { bit_depth: 8 },
+        crate::PixelFormat::Yuv420 { bit_depth: 10 },
+    ] {
+        let packed = Plan::new_packed(&frame, limits, format)?;
+        let previous = conservative.packed_stats(size, format)?;
+        assert_eq!(
+            previous.peak_bytes - packed.stats.peak_bytes,
+            u64::from(size.width) * u64::from(size.height) * 32 + size_of::<LinearFrame>() as u64
+        );
+        assert_eq!(
+            previous.work - packed.stats.work,
+            u64::from(size.width) * u64::from(size.height) * 2
+        );
+        assert_eq!(packed.packed_stats(size, format)?, packed.stats);
+        let exact = RasterLimits {
+            max_bytes: packed.stats.peak_bytes,
+            max_work: packed.stats.work,
+            ..limits
+        };
+        assert_eq!(Plan::new_packed(&frame, exact, format)?.stats, packed.stats);
+        let required = RasterLimits {
+            max_bytes: exact.max_bytes
+                - packed.texture_data_sizes.len() as u64 * size_of::<u64>() as u64,
+            max_work: exact.max_work - packed.steps.len() as u64 * 4,
+            ..exact
+        };
+        let fallback = Plan::new_packed(&frame, required, format)?;
+        assert!(fallback.texture_data_sizes.is_empty());
+        assert_eq!(fallback.stats.peak_bytes, required.max_bytes);
+        assert_eq!(fallback.stats.work, required.max_work);
+        assert!(
+            Plan::new_packed(
+                &frame,
+                RasterLimits {
+                    max_bytes: required.max_bytes - 1,
+                    ..required
+                },
+                format
+            )
+            .is_err()
+        );
+        assert!(
+            Plan::new_packed(
+                &frame,
+                RasterLimits {
+                    max_work: required.max_work - 1,
+                    ..required
+                },
+                format
+            )
+            .is_err()
+        );
+        assert!(conservative.packed_stats(size, format)?.peak_bytes > exact.max_bytes);
+        assert!(
+            packed
+                .packed_stats(PixelSize::new(952, 540), format)
+                .is_err()
+        );
+        let different = match format {
+            crate::PixelFormat::SrgbRgba8 { premultiplied } => crate::PixelFormat::SrgbRgba8 {
+                premultiplied: !premultiplied,
+            },
+            _ => crate::PixelFormat::SrgbRgba8 {
+                premultiplied: false,
+            },
+        };
+        assert!(packed.packed_stats(size, different).is_err());
+    }
+    let eight = Plan::new_packed(&frame, limits, crate::PixelFormat::Yuv420 { bit_depth: 8 })?;
+    let ten = Plan::new_packed(&frame, limits, crate::PixelFormat::Yuv420 { bit_depth: 10 })?;
+    assert_eq!(
+        ten.stats.peak_bytes - eight.stats.peak_bytes,
+        u64::from(size.width) * u64::from(size.height) * 3 / 2 * 3
+    );
+    assert!(Plan::new_packed(&frame, limits, crate::PixelFormat::Yuv420 { bit_depth: 9 }).is_err());
     Ok(())
 }
 
@@ -1832,6 +2105,75 @@ fn packed_output_checks_nonfinite_texture_outside_crop() -> motion_core::Result 
 }
 
 #[test]
+#[ignore = "requires native GPU; compares dedicated and conservative packed plans and tight budgets"]
+fn dedicated_packed_plans_preserve_bytes_crop_replay_and_tight_admission() -> motion_core::Result {
+    let mut gpu = Gpu::new()?;
+    let limits = RasterLimits::default();
+    let mut frame = motion_core::Node::from(
+        motion_core::Rect::new(3.25, 4.5, 87.75, 58.25).fill(motion_core::Color::rgb(190, 40, 125)),
+    )
+    .compile(
+        motion_core::Size::new(96.0, 64.0),
+        PixelSize::new(96, 64),
+        ValidationLimits::default(),
+    )?
+    .with_background(Some(motion_core::Color::BLACK))
+    .prepare(ValidationLimits::default(), limits)?;
+    for cropped in [false, true] {
+        if cropped {
+            frame.output_bounds = PixelRect {
+                left: 3,
+                top: 4,
+                right: 83,
+                bottom: 52,
+            };
+        }
+        for format in [
+            crate::PixelFormat::SrgbRgba8 {
+                premultiplied: false,
+            },
+            crate::PixelFormat::SrgbRgba8 {
+                premultiplied: true,
+            },
+            crate::PixelFormat::Yuv420 { bit_depth: 8 },
+            crate::PixelFormat::Yuv420 { bit_depth: 10 },
+        ] {
+            let legacy = Plan::new(&frame, limits)?;
+            let expected = gpu.render_output(&frame, legacy, format)?;
+            let dedicated = Plan::new_packed(&frame, limits, format)?;
+            let exact = RasterLimits {
+                max_bytes: dedicated.stats.peak_bytes,
+                ..limits
+            };
+            let pending =
+                gpu.submit_output(&frame, Plan::new_packed(&frame, exact, format)?, format)?;
+            let transferred = pending.readback_bytes();
+            let actual = pending.finish()?;
+            assert_eq!(actual, expected);
+            assert_eq!(
+                transferred,
+                actual
+                    .planes()
+                    .iter()
+                    .map(|plane| plane.bytes().len() as u64)
+                    .sum::<u64>()
+            );
+            assert_eq!(
+                gpu.render_output(&frame, Plan::new_packed(&frame, exact, format)?, format)?,
+                expected
+            );
+            let legacy = Plan::new(&frame, limits)?;
+            assert!(legacy.packed_stats(frame.size(), format)?.peak_bytes > exact.max_bytes);
+            assert!(
+                gpu.submit_linear(&frame, Plan::new_packed(&frame, limits, format)?)
+                    .is_err()
+            );
+        }
+    }
+    Ok(())
+}
+
+#[test]
 #[ignore = "requires native GPU; checks ten-bit blocks, crop origins, precision and replay without timings"]
 fn packed_yuv10_gpu_output_preserves_layout_and_replay() -> motion_core::Result {
     use motion_core::{Color, LinearGradient, Node, Point, Rect, Size};
@@ -1902,7 +2244,7 @@ fn packed_yuv10_gpu_output_preserves_layout_and_replay() -> motion_core::Result 
                         origin: [frame.output_bounds.left, frame.output_bounds.top],
                     },
                 )?;
-                let plan = Plan::new(&frame, limits)?.with_display(&display, 7)?;
+                let plan = Plan::new_packed(&frame, limits, format)?.with_display(&display, 7)?;
                 let pending = gpu.submit_output(&frame, plan, format)?;
                 let bytes = u64::from(frame.size().width) * u64::from(frame.size().height) * 3;
                 assert_eq!(pending.readback_bytes(), bytes);
@@ -2286,6 +2628,8 @@ fn strip_copy_rectangles_preserve_origins_gaps_and_unaligned_rows() -> motion_co
 #[test]
 #[ignore = "requires native GPU; hundreds of layers must be submitted incrementally and complete"]
 fn hundreds_of_layers_complete_and_match_cpu() -> motion_core::Result {
+    use std::sync::atomic::Ordering;
+
     let limits = RasterLimits::default();
     let layers = (0..400u32).map(|index| {
         let left = f64::from(index % 20) * 16.0 + 1.0;
@@ -2312,9 +2656,40 @@ fn hundreds_of_layers_complete_and_match_cpu() -> motion_core::Result {
         .prepare(ValidationLimits::default(), limits)?;
     let expected = frame.render_linear(limits)?.to_srgb_rgba8(false, limits)?;
     let mut gpu = Gpu::new()?;
-    let actual = gpu
-        .render(&frame, Plan::new(&frame, limits)?)?
-        .to_srgb_rgba8(false, limits)?;
+    let plan = Plan::new(&frame, limits)?;
+    assert!(plan.texture_data_sizes.iter().all(|bytes| *bytes == 0));
+    let mut position = 0;
+    let mut draws = 0;
+    let mut pairs = 0;
+    while position < plan.steps.len() {
+        let range = plan.texture_run(position);
+        assert!(range.len() < Plan::BATCH_DATA_MIN_DRAWS);
+        pairs += usize::from(range.len() == 2);
+        if plan.texture_blend(position) {
+            draws += range.len() as u64;
+        }
+        position = range.end;
+    }
+    assert_eq!(pairs, 400);
+    let counters = |gpu: &Gpu| {
+        [
+            gpu.context
+                .batch_data_buffers_encoded
+                .load(Ordering::Relaxed),
+            gpu.context
+                .batch_data_copies_encoded
+                .load(Ordering::Relaxed),
+            gpu.context
+                .batch_bind_groups_encoded
+                .load(Ordering::Relaxed),
+        ]
+    };
+    let before = counters(&gpu);
+    let actual = gpu.render(&frame, plan)?.to_srgb_rgba8(false, limits)?;
+    assert_eq!(
+        std::array::from_fn::<_, 3, _>(|index| counters(&gpu)[index] - before[index]),
+        [draws; 3]
+    );
     let maximum = actual
         .pixels()
         .iter()
@@ -2323,6 +2698,13 @@ fn hundreds_of_layers_complete_and_match_cpu() -> motion_core::Result {
         .max()
         .unwrap();
     assert!(maximum <= 2, "maximum difference {maximum}");
+    let replay = gpu
+        .render(&frame, Plan::new(&frame, limits)?)?
+        .to_srgb_rgba8(false, limits)?;
+    assert_eq!(actual, replay);
+    eprintln!(
+        "short_batch_pairs={pairs} data_buffers={draws} data_copies={draws} bind_groups={draws} max_rgba_difference={maximum}"
+    );
     Ok(())
 }
 

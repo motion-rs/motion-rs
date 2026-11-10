@@ -5,6 +5,100 @@ use motion_core::ValidationErrorKind;
 use motion_core::{Color, Node, NodeModifiers, Rect, Shape, Size, ValidationLimits};
 
 #[test]
+fn batch_data_topology_distinguishes_long_runs_from_isolated_pairs() -> motion_core::Result {
+    let limits = RasterLimits {
+        max_bytes: 1 << 30,
+        max_work: 20_000_000_000,
+        ..RasterLimits::default()
+    };
+    let palette = [
+        Color::from_hex(0x178b79),
+        Color::from_hex(0x327fc1),
+        Color::from_hex(0xf47762),
+    ];
+    let wide = Node::group((0..200u32).map(|index| {
+        let left = f64::from(index % 20) * 32.0;
+        let top = f64::from(index / 20) * 36.0;
+        let bounds = Rect::new(left + 1.0, top + 1.0, left + 31.0, top + 35.0);
+        Node::group([
+            Node::from(motion_core::RoundedRect::new(bounds, 3.0).fill(palette[0])),
+            Node::from(motion_core::Circle::new(bounds.center(), 5.0).fill(palette[2])),
+        ])
+        .opacity(0.4 + f64::from(index % 5) * 0.1)
+    }));
+    let nodes = |count: u32| {
+        let columns = (f64::from(count) * 16.0 / 9.0).sqrt().ceil() as u32;
+        let rows = count.div_ceil(columns);
+        let width = 640.0 / f64::from(columns);
+        let height = 360.0 / f64::from(rows);
+        Node::group((0..count).map(|index| {
+            let left = f64::from(index % columns) * width;
+            let top = f64::from(index / columns) * height;
+            Rect::new(left, top, left + width * 0.7, top + height * 0.7)
+                .fill(palette[index as usize % palette.len()])
+        }))
+    };
+    for (node, expected_draws, expected_batches) in [
+        (nodes(1_000), 1_000, 1),
+        (nodes(10_000), 10_000, 1),
+        (wide, 2, 200),
+    ] {
+        let frame = node
+            .compile(
+                Size::new(640.0, 360.0),
+                PixelSize::new(640, 360),
+                ValidationLimits::default(),
+            )?
+            .prepare(ValidationLimits::default(), limits)?;
+        let plan = Plan::new(&frame, limits)?;
+        let mut histogram = std::collections::BTreeMap::new();
+        let mut padding = 0;
+        let mut position = 0;
+        while position < plan.steps.len() {
+            let range = plan.texture_run(position);
+            if range.len() > 1 {
+                assert!(plan.texture_blend(position));
+                *histogram.entry(range.len()).or_insert(0usize) += 1;
+                let payload = plan.steps[range.clone()]
+                    .iter()
+                    .map(|step| step.data.len() as u64 * size_of::<f32>() as u64)
+                    .sum::<u64>();
+                let bytes = Plan::batch_data_bytes(
+                    &plan.steps[range.clone()],
+                    u64::MAX,
+                    Plan::BATCH_DATA_ALIGNMENT,
+                )
+                .unwrap();
+                padding += bytes - payload;
+            }
+            position = range.end;
+        }
+        assert_eq!(
+            histogram,
+            std::collections::BTreeMap::from([(expected_draws, expected_batches)])
+        );
+        let admitted = plan
+            .texture_data_sizes
+            .iter()
+            .filter(|bytes| **bytes != 0)
+            .count();
+        assert_eq!(
+            admitted,
+            if expected_draws >= Plan::BATCH_DATA_MIN_DRAWS {
+                expected_batches
+            } else {
+                0
+            }
+        );
+        eprintln!(
+            "batch_data_topology={histogram:?} steps={} padding_bytes={padding}",
+            plan.steps.len()
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn image_lifetimes_keep_sources_and_final_output_until_their_last_read() {
     let frame = prepared(tile());
     let mut budget = Budget::new(frame.size, RasterLimits::default()).unwrap();
@@ -321,12 +415,30 @@ fn gpu_plan_exact_budgets_are_retryable_and_device_limits_are_explicit() {
     );
     let unchanged = frame.clone();
     let plan = Plan::new(&frame, RasterLimits::default()).unwrap();
+    let padding = plan
+        .texture_data_sizes
+        .iter()
+        .enumerate()
+        .filter(|(_, bytes)| **bytes != 0)
+        .map(|(position, bytes)| {
+            let payload = plan.steps[plan.texture_run(position)]
+                .iter()
+                .map(|step| step.data.len() as u64 * size_of::<f32>() as u64)
+                .sum::<u64>();
+            bytes - payload
+        })
+        .sum::<u64>();
+    let metadata = plan.texture_data_sizes.len() as u64;
     let limits = RasterLimits {
-        max_bytes: plan.stats.peak_bytes,
-        max_work: plan.stats.work,
+        max_bytes: plan.stats.peak_bytes - metadata * size_of::<u64>() as u64 - padding * 2,
+        max_work: plan.stats.work - metadata * 4 - padding / size_of::<f32>() as u64 * 2,
         ..RasterLimits::default()
     };
     assert!(Plan::new(&frame, limits).is_ok());
+    let fallback = Plan::new(&frame, limits).unwrap();
+    assert!(fallback.texture_data_sizes.is_empty());
+    assert_eq!(fallback.stats.peak_bytes, limits.max_bytes);
+    assert_eq!(fallback.stats.work, limits.max_work);
     for (limits, field) in [
         (
             RasterLimits {
@@ -381,7 +493,11 @@ fn gpu_plan_exact_budgets_are_retryable_and_device_limits_are_explicit() {
     }
     assert!(plan.validate_device(&wgpu::Limits::default()).is_ok());
     assert_eq!(frame, unchanged);
-    assert_eq!(Plan::new(&frame, limits).unwrap().stats, plan.stats);
+    assert_eq!(Plan::new(&frame, limits).unwrap().stats, fallback.stats);
+    assert_eq!(
+        Plan::new(&frame, RasterLimits::default()).unwrap().stats,
+        plan.stats
+    );
 }
 
 #[test]

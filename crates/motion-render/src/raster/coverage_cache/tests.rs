@@ -4,6 +4,112 @@ use motion_core::{
     ValidationLimits,
 };
 
+#[test]
+fn polygon_area_scratch_reuses_cold_frames_without_changing_pixels_or_admission() {
+    let size = PixelSize::new(96, 96);
+    let geometry = Arc::new(
+        Path2D::parse_svg("M12 12Q18 5 28 14C35 19 29 29 22 31L12 25Z M17 17L17 23L23 22Z")
+            .unwrap(),
+    );
+    let mut cache = CoverageCache::default();
+    let mut allocation = std::ptr::null();
+    for (index, rule) in [FillRule::NonZero, FillRule::EvenOdd, FillRule::NonZero]
+        .into_iter()
+        .enumerate()
+    {
+        cache.shared.clear();
+        let source = DisplayList {
+            output_size: size,
+            background: None,
+            commands: vec![DrawCommand::Fill {
+                path: geometry.clone(),
+                transform: Transform::translate(index as f64 * 0.25, 0.0),
+                paint: Color::WHITE.into(),
+                rule,
+            }],
+        };
+        let expected = source
+            .prepare(ValidationLimits::default(), RasterLimits::default())
+            .unwrap();
+        let exact = RasterLimits {
+            max_bytes: expected.stats().peak_bytes,
+            max_work: expected.stats().work,
+            ..RasterLimits::default()
+        };
+        compare(
+            &cached(&source, &mut cache, exact, 1.0 / 256.0).unwrap(),
+            &expected,
+        );
+        assert!(cache.polygon_areas.is_empty());
+        assert!(cache.polygon_areas.capacity() > 0);
+        if index == 0 {
+            allocation = cache.polygon_areas.as_ptr();
+        } else {
+            assert_eq!(cache.polygon_areas.as_ptr(), allocation);
+        }
+        for limits in [
+            RasterLimits {
+                max_bytes: exact.max_bytes - 1,
+                ..exact
+            },
+            RasterLimits {
+                max_work: exact.max_work - 1,
+                ..exact
+            },
+        ] {
+            cache.shared.clear();
+            let actual = cached(&source, &mut cache, limits, 1.0 / 256.0).unwrap_err();
+            let fresh = source
+                .prepare(ValidationLimits::default(), limits)
+                .unwrap_err();
+            assert_eq!(
+                (actual.kind, actual.field, actual.path),
+                (fresh.kind, fresh.field, fresh.path)
+            );
+            assert!(cache.polygon_areas.is_empty());
+            cache.shared.clear();
+            compare(
+                &cached(&source, &mut cache, exact, 1.0 / 256.0).unwrap(),
+                &expected,
+            );
+        }
+        cache
+            .polygon_areas
+            .resize(cache.polygon_areas.capacity(), f64::NAN);
+    }
+    assert!(CoverageCache::default().polygon_areas.capacity() == 0);
+}
+
+#[test]
+fn polygon_area_scratch_discards_oversized_idle_storage_even_after_failure() {
+    let source = list(PixelSize::new(16, 16), Color::WHITE);
+    let mut cache = CoverageCache::default();
+    for limits in [
+        RasterLimits::default(),
+        RasterLimits {
+            max_work: 1,
+            ..RasterLimits::default()
+        },
+    ] {
+        cache.polygon_areas = vec![f64::NAN; MAX_POLYGON_SCRATCH_BYTES / size_of::<f64>() + 1];
+        let mut frame = source
+            .prepare(ValidationLimits::default(), RasterLimits::default())
+            .unwrap();
+        let mut budget = Budget::new(source.output_size, limits).unwrap();
+        let geometry = Path2D::parse_svg("M1 1L14 2L4 14Z").unwrap();
+        let result = cache.rasterize_path(
+            &mut frame,
+            &geometry,
+            Transform::IDENTITY,
+            FillRule::NonZero,
+            1.0 / 256.0,
+            &mut RasterScope::new(&mut budget, "test"),
+        );
+        assert_eq!(result.is_ok(), limits.max_work != 1);
+        assert_eq!(cache.polygon_areas.capacity(), 0);
+    }
+}
+
 #[cfg(feature = "gpu")]
 #[test]
 #[ignore = "requires native GPU; checks translated coverage without timing"]

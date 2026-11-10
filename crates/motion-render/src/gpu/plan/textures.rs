@@ -39,6 +39,140 @@ fn accumulation_slot(
 }
 
 impl Plan {
+    /// Canonical byte alignment for shared storage records; stricter devices use per-draw data.
+    pub(in crate::gpu) const BATCH_DATA_ALIGNMENT: u32 = 256;
+
+    /// Minimum draw count for aggregation to remove at least two data buffers and copies.
+    pub(in crate::gpu) const BATCH_DATA_MIN_DRAWS: usize = 3;
+
+    pub(in crate::gpu) fn admit_batch_data(
+        steps: &[Step],
+        last: &[usize],
+        blends: &[bool],
+        budget: &mut Budget,
+    ) -> Vec<u64> {
+        let mut admitted = Budget::resume(
+            budget.limits,
+            budget.live_bytes(),
+            budget.peak_bytes(),
+            budget.work_done(),
+        );
+        let mut sizes = Vec::new();
+        if admitted
+            .bytes(
+                steps.len() as u64 * size_of::<u64>() as u64,
+                "gpu.batch_data_layout",
+            )
+            .is_err()
+            || admitted
+                .work(steps.len() as u64 * 4, "gpu.batch_data_layout")
+                .is_err()
+            || sizes.try_reserve_exact(steps.len()).is_err()
+        {
+            return sizes;
+        }
+        sizes.resize(steps.len(), 0);
+        let mut position = 0;
+        while position < steps.len() {
+            let range = run(steps, last, blends, position);
+            if blends[position]
+                && range.len() >= Self::BATCH_DATA_MIN_DRAWS
+                && let Some(bytes) = Self::batch_data_bytes(
+                    &steps[range.clone()],
+                    wgpu::Limits::default().max_buffer_size,
+                    Self::BATCH_DATA_ALIGNMENT,
+                )
+            {
+                let payload = steps[range.clone()]
+                    .iter()
+                    .map(|step| step.data.len() as u64 * size_of::<f32>() as u64)
+                    .sum::<u64>();
+                let padding = bytes - payload;
+                let mut trial = Budget::resume(
+                    admitted.limits,
+                    admitted.live_bytes(),
+                    admitted.peak_bytes(),
+                    admitted.work_done(),
+                );
+                if trial.bytes(padding * 2, "gpu.batch_data_padding").is_ok()
+                    && trial
+                        .work(
+                            padding / size_of::<f32>() as u64 * 2,
+                            "gpu.batch_data_padding",
+                        )
+                        .is_ok()
+                {
+                    sizes[position] = bytes;
+                    admitted = trial;
+                }
+            }
+            position = range.end;
+        }
+        *budget = admitted;
+        sizes
+    }
+
+    pub(in crate::gpu) fn texture_data_bytes(
+        &self,
+        position: usize,
+        maximum: u64,
+        alignment: u32,
+    ) -> Option<u64> {
+        if alignment == 0 || !Self::BATCH_DATA_ALIGNMENT.is_multiple_of(alignment) {
+            return None;
+        }
+        self.texture_data_sizes
+            .get(position)
+            .copied()
+            .filter(|bytes| *bytes != 0 && *bytes <= maximum)
+    }
+
+    pub(in crate::gpu) fn batch_data_bytes(
+        steps: &[Step],
+        maximum: u64,
+        alignment: u32,
+    ) -> Option<u64> {
+        if steps.len() < 2 || alignment < 4 || !alignment.is_power_of_two() {
+            return None;
+        }
+        let alignment = u64::from(alignment);
+        steps
+            .iter()
+            .try_fold(0u64, |total, step| {
+                let bytes = (step.data.len() as u64).checked_mul(size_of::<f32>() as u64)?;
+                if bytes == 0 {
+                    return None;
+                }
+                let start = total.checked_add(alignment - 1)? / alignment * alignment;
+                start.checked_add(bytes)
+            })
+            .filter(|bytes| *bytes <= maximum)
+    }
+
+    pub(in crate::gpu) fn batch_uniform_bytes(
+        steps: &[Step],
+        maximum: u64,
+        alignment: u32,
+    ) -> Option<u64> {
+        let stride = size_of::<GpuUniforms>() as u64;
+        if alignment == 0 || !stride.is_multiple_of(u64::from(alignment)) {
+            return None;
+        }
+        (steps.len() as u64)
+            .checked_mul(stride)
+            .filter(|bytes| !steps.is_empty() && *bytes <= maximum)
+    }
+
+    pub(in crate::gpu) fn batch_vertex_bytes(steps: &[Step], maximum: u64) -> Option<u64> {
+        let stride = size_of::<[f32; 4]>() as u64;
+        steps
+            .iter()
+            .try_fold(0u64, |total, step| {
+                total.checked_add((step.quads.len().max(1) as u64).checked_mul(stride)?)
+            })
+            .filter(|bytes| !steps.is_empty() && *bytes <= maximum)
+    }
+
     pub(in crate::gpu) fn batch_upload_bytes(steps: &[Step]) -> u64 {
         272 + steps
             .iter()
@@ -198,6 +332,100 @@ impl Plan {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn batch_data_admission_keeps_pairs_separate_and_shares_triples() -> motion_core::Result {
+        for (count, packed, peak, work) in [(2, 0, 16, 8), (3, 552, 888, 228)] {
+            let steps = (0..count)
+                .map(|index| Step {
+                    first: index,
+                    second: 0,
+                    parameters: GpuUniforms::default(),
+                    data: vec![1.0; 10],
+                    quads: Vec::new(),
+                })
+                .collect::<Vec<_>>();
+            let mut budget = Budget::new(PixelSize::new(1, 1), RasterLimits::default())?;
+            let sizes = Plan::admit_batch_data(
+                &steps,
+                &(0..=count).collect::<Vec<_>>(),
+                &vec![true; count],
+                &mut budget,
+            );
+            assert_eq!(sizes[0], packed);
+            assert!(sizes[1..].iter().all(|bytes| *bytes == 0));
+            assert_eq!(budget.peak_bytes(), peak);
+            assert_eq!(budget.work_done(), work);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn batch_data_admission_falls_back_without_partial_padding_charges() -> motion_core::Result {
+        let steps = [10, 1, 3]
+            .into_iter()
+            .enumerate()
+            .map(|(index, words)| Step {
+                first: index,
+                second: 0,
+                parameters: GpuUniforms::default(),
+                data: vec![1.0; words],
+                quads: Vec::new(),
+            })
+            .collect::<Vec<_>>();
+        for (maximum, work, expected, peak) in
+            [(960, 246, 524, 960), (959, 246, 0, 24), (960, 245, 0, 24)]
+        {
+            let mut budget = Budget::new(
+                PixelSize::new(1, 1),
+                RasterLimits {
+                    max_bytes: maximum,
+                    max_work: work,
+                    ..RasterLimits::default()
+                },
+            )?;
+            let sizes = Plan::admit_batch_data(&steps, &[0, 1, 2, 3], &[true; 3], &mut budget);
+            assert_eq!(sizes, [expected, 0, 0]);
+            assert_eq!(budget.peak_bytes(), peak);
+            assert_eq!(budget.work_done(), if expected == 0 { 12 } else { 246 });
+        }
+        let mut budget = Budget::new(
+            PixelSize::new(1, 1),
+            RasterLimits {
+                max_bytes: 23,
+                ..RasterLimits::default()
+            },
+        )?;
+        assert!(Plan::admit_batch_data(&steps, &[0, 1, 2, 3], &[true; 3], &mut budget).is_empty());
+        assert_eq!(budget.peak_bytes(), 0);
+        Ok(())
+    }
+
+    #[test]
+    fn batch_data_layout_preserves_record_lengths_and_limits() {
+        let mut steps = [10, 1, 3].map(|words| Step {
+            first: 0,
+            second: 0,
+            parameters: GpuUniforms::default(),
+            data: vec![1.0; words],
+            quads: Vec::new(),
+        });
+        for (alignment, bytes) in [(4, 56), (16, 76), (64, 140), (256, 524)] {
+            assert_eq!(
+                Plan::batch_data_bytes(&steps, bytes, alignment),
+                Some(bytes)
+            );
+            assert_eq!(Plan::batch_data_bytes(&steps, bytes - 1, alignment), None);
+        }
+        assert_eq!(Plan::BATCH_DATA_ALIGNMENT, 256);
+        for alignment in [0, 1, 2, 3, 12] {
+            assert_eq!(Plan::batch_data_bytes(&steps, u64::MAX, alignment), None);
+        }
+        assert_eq!(Plan::batch_data_bytes(&[], u64::MAX, 256), None);
+        assert_eq!(Plan::batch_data_bytes(&steps[..1], u64::MAX, 256), None);
+        steps[1].data.clear();
+        assert_eq!(Plan::batch_data_bytes(&steps, u64::MAX, 256), None);
+    }
 
     #[test]
     fn accumulation_rejects_retained_sources_deferred_alpha_and_domain_changes()

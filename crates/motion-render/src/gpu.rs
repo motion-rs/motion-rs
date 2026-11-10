@@ -75,9 +75,11 @@ pub struct Plan {
     compute_texture_sizes: Vec<PixelSize>,
     texture_blends: Vec<bool>,
     texture_bounded: Vec<bool>,
+    texture_data_sizes: Vec<u64>,
 
     display: [u32; 32],
     lut_data: Vec<f32>,
+    packed_output: Option<(PixelSize, crate::PixelFormat)>,
 
     limits: RasterLimits,
 
@@ -140,6 +142,14 @@ pub struct GpuContext {
     color_image_buffers_encoded: std::sync::Arc<std::sync::atomic::AtomicUsize>,
     #[cfg(test)]
     hardware_plus_encoded: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    #[cfg(test)]
+    batch_data_buffers_encoded: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    #[cfg(test)]
+    batch_data_copies_encoded: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    #[cfg(test)]
+    batch_data_bytes_encoded: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    #[cfg(test)]
+    batch_bind_groups_encoded: std::sync::Arc<std::sync::atomic::AtomicU64>,
 }
 
 /// Serialized execution session sharing a device, queue and pipelines.

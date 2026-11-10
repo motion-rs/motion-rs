@@ -12,6 +12,9 @@ use std::sync::Arc;
 #[cfg(test)]
 mod tests;
 
+/// Maximum idle polygon area storage retained by one session, in bytes.
+const MAX_POLYGON_SCRATCH_BYTES: usize = 1024 * 1024;
+
 #[derive(Clone)]
 struct Entry {
     hash: u64,
@@ -72,6 +75,7 @@ impl Hash for ContentKey {
 pub(crate) struct CoverageCache {
     shared: Arc<motion_core::SceneCache>,
     pub(super) paints: super::paint::TableCache,
+    polygon_areas: Vec<f64>,
 }
 
 impl Default for CoverageCache {
@@ -151,6 +155,7 @@ impl CoverageCache {
                 .partition(motion_core::CachePartition::Coverage)
                 .clone(),
             paints: super::paint::TableCache::new(cache),
+            polygon_areas: Vec::new(),
         }
     }
 
@@ -171,6 +176,30 @@ impl CoverageCache {
 
     pub(crate) fn retained_bytes(&self) -> u64 {
         self.shared.retained_bytes() as u64
+    }
+
+    fn rasterize_path(
+        &mut self,
+        frame: &mut PreparedFrame,
+        geometry: &Path2D,
+        transform: Transform,
+        rule: FillRule,
+        tolerance: f64,
+        scope: &mut RasterScope<'_>,
+    ) -> Result<(), ValidationError> {
+        let result = frame.polygon_path_with_scratch(
+            geometry,
+            transform,
+            rule,
+            tolerance,
+            &mut self.polygon_areas,
+            scope,
+        );
+        self.polygon_areas.clear();
+        if self.polygon_areas.capacity() > MAX_POLYGON_SCRATCH_BYTES / size_of::<f64>() {
+            self.polygon_areas = Vec::new();
+        }
+        result
     }
 
     pub(super) fn lookup(
@@ -228,7 +257,7 @@ impl CoverageCache {
                 let result = restore(frame, entry, budget, path, coverage.1, coverage.2);
                 return result;
             }
-            return frame.polygon_path(geometry, transform, rule, tolerance, budget, path);
+            return self.rasterize_path(frame, geometry, transform, rule, tolerance, scope);
         }
         let strips = frame.strips.len();
         let spans = frame.spans.len();
@@ -236,7 +265,14 @@ impl CoverageCache {
         let bytes = budget.live_bytes();
         let work = budget.work_done();
         let previous_peak = budget.reset_peak();
-        let result = frame.polygon_path(geometry, transform, rule, tolerance, budget, path);
+        let result = self.rasterize_path(
+            frame,
+            geometry,
+            transform,
+            rule,
+            tolerance,
+            &mut RasterScope::new(budget, path),
+        );
         let peak = budget.peak_bytes().saturating_sub(bytes);
         budget.merge_peak(previous_peak);
         result?;

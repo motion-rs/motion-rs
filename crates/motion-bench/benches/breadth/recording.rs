@@ -1,5 +1,6 @@
 //! Breadth benchmark recorders for warm frames, memory-tracked frames, sequential and
-//! random-seek playback, and per-stage CPU pipeline timings.
+//! random-seek playback, and per-stage CPU pipeline timings. MOTION_BENCH_TIMINGS=1
+//! adds diagnostic host/device observations to warm frames, with one iteration per sample.
 
 use super::harness::{checksum, limits};
 use super::scenes::artwork;
@@ -17,24 +18,73 @@ pub(super) fn record_frame(
     settings: &support::Settings,
 ) -> motion::Result {
     use serde_json::json;
+    let observe = std::env::var("MOTION_BENCH_TIMINGS").unwrap_or_default() == "1";
+    if observe && settings.iterations != 1 {
+        return Err(invalid(
+            "Frame timing diagnostics require one iteration per sample",
+        ));
+    }
+    session.enable_timings(observe);
+    let mut observations = Vec::new();
     let measured = support::measure_output(
-        || session.render_frame(45, |context| artwork(case, context)),
-        |snapshot| checksum(snapshot.pixels()),
+        || {
+            let snapshot = session.render_frame(45, |context| artwork(case, context))?;
+            Ok((snapshot, session.timings()))
+        },
+        |(snapshot, timings)| {
+            if let Some(timings) = timings {
+                observations.push(timings);
+            }
+            checksum(snapshot.pixels())
+        },
         settings,
         settings.iterations,
     )?;
     let stats = *session.last_stats().expect("render stats");
-    report.record(
-        format!("{name}/warm-frame"),
-        measured,
-        json!({
-            "adapter": format!("{:?}", session.gpu_info()),
-            "peak_bytes": stats.peak_bytes(), "work": stats.work(),
-            "prepare_retained_bytes": stats.preparation.retained_bytes,
-            "prepare_work": stats.preparation.work,
-            "linear_peak_bytes": stats.linear.peak_bytes, "linear_work": stats.linear.work,
-        }),
-    )
+    let mut metrics = json!({
+        "adapter": format!("{:?}", session.gpu_info()),
+        "peak_bytes": stats.peak_bytes(), "work": stats.work(),
+        "prepare_retained_bytes": stats.preparation.retained_bytes,
+        "prepare_work": stats.preparation.work,
+        "linear_peak_bytes": stats.linear.peak_bytes, "linear_work": stats.linear.work,
+    });
+    if observe {
+        if observations.len() != settings.warmups + settings.samples {
+            return Err(invalid("Missing diagnostic frame observations"));
+        }
+        metrics["diagnostic_timings"] = json!({
+            "unit": "microseconds", "warmups_excluded": true,
+            "performance_acceptance": false,
+            "samples": observations.into_iter().skip(settings.warmups)
+                .map(|timings| {
+                    #[cfg(feature = "gpu")]
+                    let gpu = timings.gpu.map(|gpu| json!({
+                        "composition": gpu.composition.as_secs_f64() * 1e6,
+                        "output": gpu.output.as_secs_f64() * 1e6,
+                        "readback_copy": gpu.readback_copy.as_secs_f64() * 1e6,
+                        "instrumentation_bytes": gpu.instrumentation_bytes,
+                    }));
+                    #[cfg(not(feature = "gpu"))]
+                    let gpu: Option<serde_json::Value> = None;
+                    json!({
+                        "evaluation": timings.evaluation.as_secs_f64() * 1e6,
+                        "compile": timings.compile.as_secs_f64() * 1e6,
+                        "coverage": timings.coverage.as_secs_f64() * 1e6,
+                        "plan": timings.plan.as_secs_f64() * 1e6,
+                        "encode": timings.encode.as_secs_f64() * 1e6,
+                        "composition": timings.composition.as_secs_f64() * 1e6,
+                        "output": timings.output.as_secs_f64() * 1e6,
+                        "fused_output": timings.fused_output,
+                        "readback": timings.readback.as_secs_f64() * 1e6,
+                        "snapshot": timings.snapshot.as_secs_f64() * 1e6,
+                        "upload": timings.upload.as_secs_f64() * 1e6,
+                        "submission": timings.submission.as_secs_f64() * 1e6,
+                        "gpu": gpu,
+                    })
+                }).collect::<Vec<_>>(),
+        });
+    }
+    report.record(format!("{name}/warm-frame"), measured, metrics)
 }
 
 /// Measures `render_output_at` as straight RGBA8, the adaptive-band path, and requires

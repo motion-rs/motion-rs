@@ -1,7 +1,7 @@
 //! Brush material baking: paper textures, paint sampling and tiled distance-field material.
 
 use super::super::{BrushStroke, Prepared, invalid};
-use super::geometry::{outline, rotated, samples};
+use super::geometry::{Sample, outline, rotated, samples};
 use crate::ImageAsset;
 use motion_core::{GradientExtend, ImagePattern, Paint, Point, Rect, Transform, ValidationError};
 use std::sync::Arc;
@@ -18,6 +18,51 @@ pub struct Paper {
     pub grain_scale: f64,
     /// Coverage attenuation by the paper height, in 0..=1.
     pub absorbency: f64,
+}
+
+pub(super) struct MaterialSegment {
+    first: Sample,
+    delta: motion_core::Vector2,
+    square: f64,
+    angle_delta: f64,
+    radius_delta: f64,
+    arc_delta: f64,
+}
+
+impl MaterialSegment {
+    pub(super) fn new(first: Sample, second: Sample) -> Self {
+        let delta = second.point - first.point;
+        Self {
+            first,
+            delta,
+            square: delta.x * delta.x + delta.y * delta.y,
+            angle_delta: second.angle - first.angle,
+            radius_delta: second.radius - first.radius,
+            arc_delta: second.arc - first.arc,
+        }
+    }
+
+    pub(super) fn measure(&self, point: Point, aspect: f64) -> (f64, f64, f64, f64) {
+        let offset = point - self.first.point;
+        let amount = if self.square > 0.0 {
+            ((offset.x * self.delta.x + offset.y * self.delta.y) / self.square).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        let center = self.first.point + self.delta * amount;
+        let offset = point - center;
+        let angle = self.first.angle + self.angle_delta * amount;
+        let local = rotated(offset.x, offset.y, -angle);
+        let radius = self.first.radius + self.radius_delta * amount;
+        let distance =
+            libm::sqrt(local.x * local.x + local.y * local.y / (aspect * aspect)) - radius;
+        (
+            distance,
+            self.first.arc + self.arc_delta * amount,
+            offset.x * self.first.tangent.y - offset.y * self.first.tangent.x,
+            radius,
+        )
+    }
 }
 
 fn image_sample(pattern: &ImagePattern, point: Point) -> Result<[f64; 4], ValidationError> {
@@ -107,12 +152,17 @@ pub(super) fn material(
     let path = Arc::new(outline(stroke, &groups)?);
     let segments: Vec<_> = groups
         .iter()
-        .flat_map(|group| group.windows(2).map(|pair| (pair[0], pair[1])))
+        .flat_map(|group| {
+            group
+                .windows(2)
+                .map(|pair| MaterialSegment::new(pair[0], pair[1]))
+        })
         .collect();
     // Boxes widened by the widest radius bound the distance from below, so blocks of
     // far segments are skipped without changing the nearest result or the overlap count.
-    let boxes: Vec<_> = segments
+    let boxes: Vec<_> = groups
         .iter()
+        .flat_map(|group| group.windows(2).map(|pair| (pair[0], pair[1])))
         .map(|(first, second)| {
             (
                 [
@@ -160,6 +210,11 @@ pub(super) fn material(
         return Err(invalid("material_tiles", "At most 256 material tiles"));
     }
     let paint = options.paint.clone().unwrap_or_else(|| stroke.color.into());
+    let paint_bounds = stroke.path.bounding_box();
+    let solid = match &paint {
+        Paint::Solid(_) => Some(paint_sample(&paint, Point::ORIGIN, paint_bounds)?),
+        _ => None,
+    };
     let ink = stroke.ink.unwrap_or_default();
     let paper = options.paper.as_ref().map(|paper| {
         ImagePattern::from_asset(paper.texture.clone())
@@ -187,31 +242,7 @@ pub(super) fn material(
                         let vertical = (bounds.0[1] - point.y).max(point.y - bounds.1[1]).max(0.0);
                         libm::hypot(horizontal, vertical) - bounds.2
                     };
-                    let measure = |index: usize| {
-                        let (first, second) = &segments[index];
-                        let delta = second.point - first.point;
-                        let square = delta.x * delta.x + delta.y * delta.y;
-                        let offset = point - first.point;
-                        let amount = if square > 0.0 {
-                            ((offset.x * delta.x + offset.y * delta.y) / square).clamp(0.0, 1.0)
-                        } else {
-                            0.0
-                        };
-                        let center = first.point + delta * amount;
-                        let offset = point - center;
-                        let angle = first.angle + (second.angle - first.angle) * amount;
-                        let local = rotated(offset.x, offset.y, -angle);
-                        let radius = first.radius + (second.radius - first.radius) * amount;
-                        let distance = libm::sqrt(
-                            local.x * local.x + local.y * local.y / (stroke.aspect * stroke.aspect),
-                        ) - radius;
-                        (
-                            distance,
-                            first.arc + (second.arc - first.arc) * amount,
-                            offset.x * first.tangent.y - offset.y * first.tangent.x,
-                            radius,
-                        )
-                    };
+                    let measure = |index: usize| segments[index].measure(point, stroke.aspect);
                     // The best block seeds the nearest distance, so ties still resolve to the
                     // lowest segment index and skipping becomes effective immediately.
                     let mut nearest = (f64::INFINITY, 0.0, 0.0, 0.0);
@@ -291,7 +322,10 @@ pub(super) fn material(
                                 1.0 + options.build_up * (overlaps - 1) as f64,
                             );
                     }
-                    let mut color = paint_sample(&paint, point, stroke.path.bounding_box())?;
+                    let mut color = match solid {
+                        Some(color) => color,
+                        None => paint_sample(&paint, point, paint_bounds)?,
+                    };
                     let rim = (1.0 - nearest.0.abs() / 2.0).clamp(0.0, 1.0);
                     let darken = 1.0
                         - options.edge_darkening * rim

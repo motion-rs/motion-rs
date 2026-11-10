@@ -33,14 +33,38 @@ fn bounded_planning_retains_full_submission_limits_without_a_device() -> Result<
     let packed = bounded.packed_stats(frame.size(), format)?;
     assert!(packed.peak_bytes > peak);
     assert_eq!(packed, plan.packed_stats(frame.size(), format)?);
-    let error = motion_render::gpu::Plan::new_with_planning_limit(&frame, limits, peak - 1)
+    let mut minimum = 1;
+    let mut maximum = peak;
+    while minimum < maximum {
+        let middle = minimum + (maximum - minimum) / 2;
+        if motion_render::gpu::Plan::new_with_planning_limit(&frame, limits, middle).is_ok() {
+            maximum = middle;
+        } else {
+            minimum = middle + 1;
+        }
+    }
+    assert!(motion_render::gpu::Plan::new_with_planning_limit(&frame, limits, minimum).is_ok());
+    let error = motion_render::gpu::Plan::new_with_planning_limit(&frame, limits, minimum - 1)
         .err()
-        .expect("one byte below planning peak must fail");
+        .expect("one byte below minimum planning allowance must fail");
     assert_eq!(
         error.kind,
         motion_core::ValidationErrorKind::StructuralLimit
     );
     assert_eq!(error.field, "max_bytes");
+    let dedicated = motion_render::gpu::Plan::new_packed(&frame, limits, format)?;
+    let bounded = motion_render::gpu::Plan::new_packed_with_planning_limit(
+        &frame,
+        limits,
+        dedicated.stats.peak_bytes,
+        format,
+    )?;
+    assert_eq!(bounded.stats, dedicated.stats);
+    assert_eq!(bounded.packed_stats(frame.size(), format)?, dedicated.stats);
+    assert!(
+        motion_render::gpu::Plan::new_packed_with_planning_limit(&frame, limits, 1, format)
+            .is_err()
+    );
     assert!(renderer.selected_gpu_context()?.is_none());
     Ok(())
 }

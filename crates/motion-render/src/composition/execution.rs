@@ -347,7 +347,7 @@ impl FrameExecution<'_> {
         {
             let started = self.timings.map(|_| std::time::Instant::now());
             let plan =
-                match crate::gpu::Plan::new(&prepared, limits) {
+                match crate::gpu::Plan::new_packed(&prepared, limits, format) {
                     Ok(plan) => Some(plan.with_display(&display, u64::from(index))?),
                     Err(error)
                         if self.backend.is_none()

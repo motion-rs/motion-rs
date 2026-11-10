@@ -86,6 +86,39 @@ mod tests {
             .position(|step| step.parameters.operation.code == GpuOp::Fill as u32)
             .unwrap();
         assert_eq!(plan.texture_run(start).len(), 3);
+        let steps = &plan.steps[plan.texture_run(start)];
+        let bytes = steps
+            .iter()
+            .map(|step| step.quads.len().max(1) as u64 * size_of::<[f32; 4]>() as u64)
+            .sum();
+        assert_eq!(Plan::batch_vertex_bytes(steps, bytes), Some(bytes));
+        assert_eq!(Plan::batch_vertex_bytes(steps, bytes - 1), None);
+        assert_eq!(Plan::batch_vertex_bytes(&[], u64::MAX), None);
+        let uniform_bytes = steps.len() as u64 * size_of::<GpuUniforms>() as u64;
+        for alignment in [16, 64, 256] {
+            assert_eq!(
+                Plan::batch_uniform_bytes(steps, uniform_bytes, alignment),
+                Some(uniform_bytes),
+            );
+        }
+        assert_eq!(
+            Plan::batch_uniform_bytes(steps, uniform_bytes - 1, 256),
+            None
+        );
+        assert_eq!(Plan::batch_uniform_bytes(steps, uniform_bytes, 512), None);
+        assert_eq!(Plan::batch_uniform_bytes(steps, uniform_bytes, 0), None);
+        assert_eq!(Plan::batch_uniform_bytes(&[], u64::MAX, 256), None);
+        let quads = std::mem::take(&mut plan.steps[start].quads);
+        let rectangle_bytes = size_of::<[f32; 4]>() as u64;
+        assert_eq!(
+            Plan::batch_vertex_bytes(&plan.steps[start..start + 1], rectangle_bytes),
+            Some(rectangle_bytes),
+        );
+        assert_eq!(
+            Plan::batch_vertex_bytes(&plan.steps[start..start + 1], rectangle_bytes - 1),
+            None,
+        );
+        plan.steps[start].quads = quads;
         // Every image of a chain of bounded fills is known to be finite, so no check pass is needed.
         assert!(
             plan.texture_bounded[start..=start + 3]
@@ -116,7 +149,35 @@ mod tests {
             max_bytes: plan.stats.peak_bytes - 1,
             ..limits
         };
-        assert!(Plan::new(&frame, constrained).is_err());
+        let fallback = Plan::new(&frame, constrained)?;
+        assert!(fallback.stats.peak_bytes < plan.stats.peak_bytes);
+        let original = Plan::new(&frame, limits)?;
+        let padding = original
+            .texture_data_sizes
+            .iter()
+            .enumerate()
+            .filter(|(_, bytes)| **bytes != 0)
+            .map(|(position, bytes)| {
+                let payload = original.steps[original.texture_run(position)]
+                    .iter()
+                    .map(|step| step.data.len() as u64 * size_of::<f32>() as u64)
+                    .sum::<u64>();
+                bytes - payload
+            })
+            .sum::<u64>();
+        let required = original.stats.peak_bytes
+            - original.texture_data_sizes.len() as u64 * size_of::<u64>() as u64
+            - padding * 2;
+        assert!(
+            Plan::new(
+                &frame,
+                RasterLimits {
+                    max_bytes: required - 1,
+                    ..limits
+                }
+            )
+            .is_err()
+        );
         Ok(())
     }
 }

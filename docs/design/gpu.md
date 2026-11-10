@@ -199,6 +199,84 @@ waiting or adding device polling to the upload path. Dropped or failed submissio
 do not return their in-flight staging to this cache. Bindings and draw order are
 unchanged; this reuse does not establish a frame-latency or allocation-free claim.
 
+Instance rectangles within a hardware batch share one vertex buffer. Each draw
+binds its own contiguous byte slice and uses local instance indices, preserving
+the original quad order and shader inputs. The backdrop retains its separate
+rectangle buffer; parameter and coverage bindings remain per draw. Uploads write
+directly into staging or the shared buffer without a concatenated host array.
+Parameter records also share one buffer when their 256-byte stride satisfies the
+device's minimum uniform offset alignment and the full payload fits one buffer.
+Each binding exposes exactly one record through a static byte offset and size;
+there are no dynamic offsets or changes to the uniform or shader layout. Larger
+required alignment or an oversized payload retains separate per-draw uniforms,
+without extra padding or a new byte/work charge. The backdrop keeps its own
+uniform record. Tests check both vertex and uniform lease counts and exact-size,
+empty-payload and incompatible-alignment fallback selection.
+When the complete instance payload exceeds the device's buffer-size limit, the
+batch retains separate per-draw vertex buffers. Working leases keep either form
+alive until successful completion. Shader arithmetic, binding layouts, uniform
+ABI and vertex/uniform payload charges remain unchanged. Native batch tests
+verify the shared-buffer count together with output tolerance and exact replay;
+these checks do not establish a measured timing gain.
+
+The experimental operation-data path aggregates binding 4 separately only for
+hardware runs with at least three draws. One- and two-draw runs retain per-draw
+data, so an admitted aggregate removes at least two buffers and staging copies.
+This is a topology-based trial gate, not a scene-name or payload-value special case.
+Planning
+admits an eight-byte size entry and four layout work units per step, then tries
+each eligible batch transactionally. Record starts are aligned to 256 bytes; the
+last record has no trailing padding. Each binding retains the original record
+length and local payload offsets. Padding adds its full span to both the working
+buffer and staging admission, with one work unit per padded f32 word for
+initialization and another for transfer. Metadata allocation/admission failure
+disables aggregation without committing its costs; failed padding admission
+leaves that batch on per-draw buffers without partial padding charges. Device
+alignment and buffer-size incompatibility also retain the per-draw path, and
+ordinary per-record storage-binding validation still applies.
+Mapped staging zeroes gaps and encodes one operation-data copy per shared batch.
+Without staging, the queue still writes each original record separately. There
+is no payload deduplication or special handling of `[1.0]`, and no dynamic offsets
+or bind-group reuse. Shared data remains owned by the pending submission. Layout
+metadata/work remain admitted even when every run is below the selection threshold;
+short-run fallback avoids padding costs, not all planning overhead.
+
+For an eligible batch with N draws and Q uploaded instance records, vertex sharing
+reduces vertex buffers from N to one while retaining 16Q payload bytes. Uniform
+sharing reduces uniform buffers from N to one while retaining 256N payload bytes.
+Together they remove 2(N - 1) working-buffer leases and, with mapped staging,
+2(N - 1) buffer-copy commands. Buffer acquisition calls decrease, but fresh
+allocations depend on pool hits. The non-staging path still writes each original
+record through the queue. Operation-data aggregation additionally removes
+N - 1 data-buffer acquisitions/leases and staging copies for each admitted batch,
+but increases its data/staging span by the alignment padding. Backdrop uploads,
+per-draw bind groups, texture capacities and draw calls remain unchanged.
+
+Working-lease reservation and per-draw binding metadata are unchanged; fewer
+active leases do not imply smaller reserved host containers. Conservative
+vertex/uniform charges are unchanged; operation-data layout and padding are
+charged separately. Exact-size pooling can retain a different
+mix of buffers under the same byte and object caps, so idle retained bytes need
+not decrease. In-flight submissions still own independent buffers. Native tests
+assert unchanged vertex/uniform/original-data payload totals, admitted padding,
+reduced data-buffer/copy counts, unchanged bind-group counts, exact replay and
+forced per-draw fallback parity. These are not measurements of driver allocation
+overhead, physical GPU memory or process RSS.
+
+The original unrestricted aligned-data cohort improves node-heavy GPU P50/P95
+but regresses wide-layer GPU P50/P95 on Apple M3/Metal. A separate six-pair
+diagnostics-disabled AB/BA cohort tests the three-draw gate against the same
+original shared-vertex/uniform control, not against that regressed candidate.
+Node GPU P50 improves by 47.00% and 66.56%; wide-layer P50/P95 intervals cross zero,
+so the earlier wide-layer regression is not reproduced in this cohort. CPU 1k-node
+P50 still regresses by 1.92%. The current policy remains experimental, not accepted
+as a regression-free general optimization. Logical peak bytes/work still increase;
+the wide-layer increase drops from 92,832 bytes/24,804 units to 6,432 bytes/3,204 units.
+Both complete cohorts, including negative pairs and tail outliers, are retained
+separately in [the performance history](../performance-runs.json). This does not
+isolate the threshold's causal effect, prove all three-draw workloads profitable,
+or establish cross-device, overall speedup or physical-memory benefits.
+
 ## Stage Observations
 
 `RenderSession::enable_timings` enables separate host observations for evaluation,
@@ -242,6 +320,27 @@ or speedup acceptance.
 ceiling. Packed output uses `Plan::packed_stats` to include output/readback resources
 and validate work before submission. Queues still admit at most three frames and
 reject excess aggregate bytes before executing a plan.
+
+Dedicated packed plans reserve output resources before optional batch-data padding.
+They omit unused RGBA32F mapped readback and CPU `LinearFrame` reservations, but retain
+actual RGBA32F working/output-boundary textures. Packed storage, mapped readback and
+owned CPU output coexist, so all three payloads remain charged, alongside status and
+output metadata. Output size/format are fixed by planning; submission cannot charge
+them twice or reuse a packed plan for floating-point readback or external textures.
+Conservative plans remain compatible with packed submission and retain their float
+reservations. Both modes include the extra host plan metadata, not physical memory.
+
+Memory output and GPU exports use dedicated packed planning. Export workers retain
+their independent construction allowance and full submission limits. Required packed
+resources cannot be displaced by optional batching; optional layout fallback remains
+transactional. Six diagnostics-disabled pairs at 960x540 on Apple M3 reduce GPU logical
+peak by 16,588,832 bytes per breadth case. Only the 10k-node GPU P50 interval excludes
+zero (+6.09% [0.24,12.23]); all CPU P50 and all P95 intervals remain uncertain. The
+unchanged particle-garden frame 203 now passes the default allowance and exact replay,
+where the frozen control fails at `gpu.pack`. This is budget-capacity evidence, not
+physical GPU-memory, RSS, general speed or export-throughput acceptance. Full results
+and the separately validated post-freeze export wiring are retained in
+[the performance history](../performance-runs.json).
 
 GPU exports, explicit or an Automatic request whose startup selection chose the GPU,
 prepare and submit the first selected frame normally. Its
