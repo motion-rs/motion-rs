@@ -57,7 +57,7 @@ pub struct Project {
     name: String,
     entries: Vec<Entry>,
     options: RenderOptions,
-    errors: Vec<Arc<crate::Error>>,
+    errors: motion_core::deferred::DeferredErrors,
 }
 
 impl Default for Project {
@@ -73,7 +73,7 @@ impl Project {
             name: name.into(),
             entries: Vec::new(),
             options: RenderOptions::default(),
-            errors: Vec::new(),
+            errors: Default::default(),
         }
     }
 
@@ -84,7 +84,7 @@ impl Project {
 
     /// Reports all deferred registration failures without invoking factories.
     pub fn validate(&self) -> Result<()> {
-        let mut errors = self.errors.clone();
+        let mut errors = self.errors.as_slice().to_vec();
         if self.name.trim().is_empty() || self.name.len() > 256 {
             errors.push(Arc::new(invalid("Project name requires 1..=256 bytes")));
         }
@@ -367,9 +367,7 @@ impl Project {
         match operation(self) {
             Ok(value) => value,
             Err(error) => {
-                if previous.errors.len() < 1024 {
-                    previous.errors.push(Arc::new(error));
-                }
+                previous.errors.record(error);
                 previous
             }
         }

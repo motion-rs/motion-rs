@@ -18,6 +18,7 @@ pub mod audio;
 pub mod authoring;
 pub mod budget;
 pub mod color;
+pub mod deferred;
 pub mod display_list;
 pub mod drawing;
 pub mod error;

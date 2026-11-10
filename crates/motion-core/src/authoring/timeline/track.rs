@@ -2,7 +2,8 @@
 
 use super::{BoundaryAdjustment, BoundaryEdge, MAX_CLIPS, Scene, add_time, align, on_track};
 use crate::authoring::{scene, transition};
-use crate::{Duration, Error, FrameRate, SceneContext, Time};
+use crate::deferred::DeferredErrors;
+use crate::{Duration, Error, FrameRate, Node, SceneContext, Time};
 use std::{fmt, sync::Arc};
 
 /// One immutable, positive-duration scene occurrence.
@@ -93,6 +94,46 @@ impl Track {
             .checked_sub(1)?;
         self.clips.get(index).filter(|clip| time < clip.end())
     }
+
+    /// Renders the active clip at the context time, composing an incoming
+    /// transition with its predecessor; `None` in gaps.
+    pub fn render(&self, context: &SceneContext<'_>) -> Option<Node> {
+        let index = self
+            .clips
+            .partition_point(|clip| clip.start <= context.time())
+            .checked_sub(1)?;
+        let clip = &self.clips[index];
+        if context.time() >= clip.end() {
+            return None;
+        }
+        let render = |clip: &Clip| {
+            context.during(clip.start, clip.duration, |local| clip.scene.render(local))
+        };
+        let node = if let Some(transition) = clip
+            .transition_in
+            .as_ref()
+            .filter(|transition| context.time() < clip.start + transition.duration)
+        {
+            let outgoing = render(&self.clips[index - 1]);
+            let incoming = render(clip);
+            let animation = crate::Tween::new(0.0f64, 1.0, transition.duration)
+                .easing(transition.effect.easing());
+            let progress = crate::Animation::sample(&animation, context.time() - clip.start);
+            if progress.is_finite() {
+                let local = context
+                    .shifted(clip.start)
+                    .with_clip_duration(transition.duration);
+                transition
+                    .effect
+                    .compose(progress.clamp(0.0, 1.0), outgoing, incoming, &local)
+            } else {
+                transition::failure("easing", "Transition easing must produce finite progress")
+            }
+        } else {
+            render(clip)
+        };
+        Some(Node::group([node]))
+    }
 }
 
 /// Fluent scheduler with deferred diagnostics and immediate try_* alternatives.
@@ -104,18 +145,16 @@ pub struct TrackBuilder {
     pub(super) cursor: Time,
     pub(super) adjustments: Vec<BoundaryAdjustment>,
     pub(super) pending: Option<Arc<dyn transition::Transition>>,
-    pub(super) errors: Vec<Arc<Error>>,
+    pub(super) errors: DeferredErrors,
 }
 
 impl TrackBuilder {
     fn defer(mut self, operation: impl FnOnce(&mut Self) -> crate::Result<()>) -> Self {
-        if let Err(error) = operation(&mut self)
-            && self.errors.len() < 1024
-        {
-            self.errors.push(Arc::new(on_track(
+        if let Err(error) = operation(&mut self) {
+            self.errors.record(on_track(
                 self.index,
                 format!("clip[{}]: {error}", self.clips.len()),
-            )));
+            ));
         }
         self
     }
@@ -364,7 +403,7 @@ impl TrackBuilder {
 
     pub(super) fn finish(mut self) -> crate::Result<(Track, Vec<BoundaryAdjustment>)> {
         if !self.errors.is_empty() {
-            return Err(Error::BuildErrors(self.errors));
+            return Err(Error::BuildErrors(self.errors.into_vec()));
         }
         if self.pending.is_some() {
             return Err(on_track(

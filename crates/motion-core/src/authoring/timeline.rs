@@ -27,6 +27,7 @@
 //! ```
 
 use super::Scene;
+use crate::deferred::DeferredErrors;
 use crate::{
     Color, Duration, Error, FrameRate, Node, NodeModifiers, SceneContext, Size, TICKS_PER_SECOND,
     Time,
@@ -137,7 +138,7 @@ pub struct Timeline {
     resolved_audio: Option<Arc<Vec<crate::AudioClip>>>,
     master: crate::audio::Master,
     audio_buses: Arc<Vec<crate::audio::AudioBus>>,
-    errors: Arc<Vec<Arc<Error>>>,
+    errors: Arc<DeferredErrors>,
 }
 
 impl Timeline {
@@ -146,15 +147,7 @@ impl Timeline {
         match operation(self) {
             Ok(value) => value,
             Err(error) => {
-                let errors = Arc::make_mut(&mut previous.errors);
-                if errors.len() < 1024 {
-                    match error {
-                        Error::BuildErrors(values) => {
-                            errors.extend(values.into_iter().take(1024 - errors.len()))
-                        }
-                        error => errors.push(Arc::new(error)),
-                    }
-                }
+                Arc::make_mut(&mut previous.errors).record(error);
                 previous
             }
         }
@@ -179,7 +172,7 @@ impl Timeline {
             resolved_audio: None,
             master: crate::audio::Master::default(),
             audio_buses: Arc::new(Vec::new()),
-            errors: Arc::new(Vec::new()),
+            errors: Arc::default(),
         }
     }
 
@@ -205,7 +198,7 @@ impl Timeline {
                 return Err(invalid("Invalid or duplicate audio bus"));
             }
         }
-        let mut errors = self.errors.as_ref().clone();
+        let mut errors = self.errors.as_slice().to_vec();
         for (track_index, track) in self.tracks.iter().enumerate() {
             for clip in track.clips.iter() {
                 if let Err(error) = clip.scene.validate() {
@@ -305,17 +298,7 @@ impl Timeline {
             Arc::make_mut(&mut self.audio).push(clip);
             return Ok(self);
         }
-        let end = self.audio_end(&clip)?;
-        let frame = end.to_frame(self.rate);
-        let boundary = Time::checked_from_frame(frame, self.rate)
-            .ok_or_else(|| invalid("Audio end exceeds frame clock"))?;
-        let end = if boundary < end {
-            Time::checked_from_frame(frame + 1, self.rate)
-                .ok_or_else(|| invalid("Audio end exceeds frame clock"))?
-        } else {
-            boundary
-        };
-        self.inferred = self.inferred.max(end);
+        self.inferred = self.inferred.max(self.audio_end(&clip)?);
         Arc::make_mut(&mut self.audio).push(clip);
         Ok(self)
     }
@@ -342,15 +325,20 @@ impl Timeline {
         if end.as_seconds() > 86400.0 {
             return Err(invalid("Audio end exceeds 24 hours"));
         }
+        self.ceil_to_frame(end)
+    }
+
+    /// Smallest frame boundary at or after `end`.
+    fn ceil_to_frame(&self, end: Time) -> crate::Result<Time> {
         let frame = end.to_frame(self.rate);
         let boundary = Time::checked_from_frame(frame, self.rate)
             .ok_or_else(|| invalid("Audio end exceeds frame clock"))?;
-        Ok(if boundary < end {
+        if boundary < end {
             Time::checked_from_frame(frame + 1, self.rate)
-                .ok_or_else(|| invalid("Audio end exceeds frame clock"))?
+                .ok_or_else(|| invalid("Audio end exceeds frame clock"))
         } else {
-            boundary
-        })
+            Ok(boundary)
+        }
     }
 
     /// Atomically builds one track; all tracks together admit at most 16384
@@ -369,7 +357,7 @@ impl Timeline {
             cursor: Time::ZERO,
             adjustments: Vec::new(),
             pending: None,
-            errors: Vec::new(),
+            errors: DeferredErrors::default(),
         };
         let builder = build(builder)?;
         if builder.index != self.tracks.len() || builder.rate != self.rate {
@@ -465,15 +453,7 @@ impl Timeline {
             .collect::<crate::Result<Vec<_>>>()?;
         let mut timeline = self.clone();
         for clip in &clips {
-            let end = timeline.audio_end(clip)?;
-            let frame = end.to_frame(timeline.rate);
-            let mut boundary = Time::checked_from_frame(frame, timeline.rate)
-                .ok_or_else(|| invalid("Audio end exceeds frame clock"))?;
-            if boundary < end {
-                boundary = Time::checked_from_frame(frame + 1, timeline.rate)
-                    .ok_or_else(|| invalid("Audio end exceeds frame clock"))?;
-            }
-            timeline.inferred = timeline.inferred.max(boundary);
+            timeline.inferred = timeline.inferred.max(timeline.audio_end(clip)?);
         }
         timeline.resolved_audio = Some(Arc::new(clips));
         Ok(timeline)
@@ -539,46 +519,10 @@ impl Scene for Timeline {
         let background = self
             .background
             .map(|color| Node::from(self.size.to_rect().fill(color)));
-        let clips = self.tracks.iter().filter_map(|track| {
-            let index = track
-                .clips
-                .partition_point(|clip| clip.start <= context.time())
-                .checked_sub(1)?;
-            let clip = &track.clips[index];
-            if context.time() >= clip.end() {
-                return None;
-            }
-            let render = |clip: &Clip| {
-                context.during(clip.start, clip.duration, |local| clip.scene.render(local))
-            };
-            let node = if let Some(transition) = clip
-                .transition_in
-                .as_ref()
-                .filter(|transition| context.time() < clip.start + transition.duration)
-            {
-                let outgoing = render(&track.clips[index - 1]);
-                let incoming = render(clip);
-                let animation = crate::Tween::new(0.0f64, 1.0, transition.duration)
-                    .easing(transition.effect.easing());
-                let progress = crate::Animation::sample(&animation, context.time() - clip.start);
-                if progress.is_finite() {
-                    let local = context
-                        .shifted(clip.start)
-                        .with_clip_duration(transition.duration);
-                    transition
-                        .effect
-                        .compose(progress.clamp(0.0, 1.0), outgoing, incoming, &local)
-                } else {
-                    super::transition::failure(
-                        "easing",
-                        "Transition easing must produce finite progress",
-                    )
-                }
-            } else {
-                render(clip)
-            };
-            Some(Node::group([node]))
-        });
+        let clips = self
+            .tracks
+            .iter()
+            .filter_map(|track| track.render(&context));
         let node = Node::group(background.into_iter().chain(clips));
         if parent_size == self.size {
             return if nested {
