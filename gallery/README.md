@@ -1,13 +1,22 @@
 # Motion Gallery
 
-A small program of finished motion studies. Each entry is an eight-second film,
-not a feature comparison panel. Every film owns its metadata, visual composition
-and timeline in one source file; its module comment describes the combined features.
+A program of motion studies, with narrative films and animation, rendering, content and audio references.
+Each entry defaults to eight seconds. Every film owns its metadata, visual composition
+and timeline in its source module; its module comment describes the combined features.
 
 ```sh
 cargo run -p motion-gallery --bin motion-gallery -- list
 cargo run -p motion-gallery --bin motion-gallery -- still type-in-motion --time 4 --font /path/to/font.ttf --output type.png
+cargo run -p motion-gallery --bin motion-gallery -- still animation-atlas --time 0.6 --size 1920x1080 --output atlas.png
 cargo run --release -p motion-gallery --features studio,gpu --bin motion-gallery -- studio --demo type-in-motion
+cargo run --release -p motion-gallery --features studio,gpu --bin motion-gallery -- studio --demo animation-atlas --params '{"seconds":60}'
+cargo run --release -p motion-gallery --features studio,gpu --bin motion-gallery -- studio --demo brush-atlas --params '{"seconds":40}'
+cargo run --release -p motion-gallery --features studio,gpu --bin motion-gallery -- studio --demo particle-atlas --params '{"seconds":52}'
+cargo run --release -p motion-gallery --features studio,gpu --bin motion-gallery -- studio --demo particle-features --params '{"seconds":60,"count":96}'
+cargo run --release -p motion-gallery --features studio,gpu --bin motion-gallery -- studio --demo filter-atlas --params '{"seconds":60}'
+cargo run --release -p motion-gallery --features studio,gpu --bin motion-gallery -- studio --demo audio-atlas --params '{"seconds":60}'
+cargo run --release -p motion-gallery --features studio,gpu --bin motion-gallery -- studio --demo typography-atlas --params '{"seconds":60}'
+cargo run --release -p motion-gallery --features studio,gpu --bin motion-gallery -- studio --demo caption-atlas --params '{"seconds":48}'
 cargo run -p motion-gallery --features ffmpeg --bin motion-gallery -- export signal-garden --params '{"seconds":8,"count":72}' --font /path/to/font.ttf --output signal.mp4
 ```
 
@@ -17,9 +26,15 @@ for a serif face such as Georgia: Room to Move's cover and body text fall back t
 sans-serif that discovery finds first (for example Arial Unicode) unless `--font` names one. `--size`, `--backend`,
 `--range`, `--params` and overwrite/cancellation use the library's Project API.
 
+All demos default to 1920x1080 output for stills, video exports and Studio at 100%
+preview render scale. The internal design canvas remains 960x540 to preserve
+layout and animation coordinates; rendering rasterizes directly at Full HD rather
+than enlarging a finished 960x540 image. Pass an explicit `--size`, such as
+`--size 1280x720`, to override the output resolution.
+
 Studio opens one demo, never the full catalog. Choose `studio --demo NAME`;
 positional `studio NAME` and `--timeline NAME` also remain available. With no
-selection Gallery opens the first catalog entry. Duplicate/unknown `--demo`
+selection Gallery opens Animation (`animation-atlas`), the first catalog entry. Duplicate/unknown `--demo`
 selections fail before font discovery or window startup. Use `list` for IDs.
 
 Signal Garden includes a synthesized, sidechain-ducked mix; its FFT bands drive the spectrum and constellations and its bus meters drive the HUD.
@@ -27,8 +42,10 @@ Studio Play uses the audible-sample clock for rational-frame-rate
 synchronization; Mute disables only preview sound. Audio preparation runs outside
 the rendering thread. Empty audio does not request an output device.
 
-Use Release builds for playback. Studio defaults to 50% preview scale and a
-256 MiB logical frame cache; `MOTION_STUDIO_CACHE_MIB=0..1024` adjusts that cache.
+Use Release builds for playback and select 100% preview render scale when checking
+fine detail. Viewer zoom changes the displayed size, not the rendered pixel count.
+The preview frame cache defaults to 256 MiB of logical payload;
+`MOTION_STUDIO_CACHE_MIB=0..1024` adjusts that cache.
 Playback is real-time only, without complete-film preparation or a per-frame
 waiting mode. Slow renders skip missed frames to follow the wall/audio clock.
 Playback waits for its first frame before starting the clock and prefetches about one
@@ -46,26 +63,82 @@ See [Studio](../docs/studio.md).
 
 ## Film Program
 
+Capability atlases, including Particle Features and Ink Features, appear first
+in catalog and CLI listing order, followed by narrative films and optional Harmonics.
+
 | Film | Composition | Source |
 | --- | --- | --- |
+| Animation (animation reference) | Forty-three pages isolate all 24 `Easing` variants, three spring damping regimes, four oscillator waveforms, seeded noise, `FollowPath`, staggered color/transforms and nine time-composition studies. Explanations sit beside sampled curves, live markers and numeric readouts. Use `animation-atlas` with `--params '{"seconds":60}'`, then pause or seek to compare pages. | [animation_atlas.rs](src/demos/animation_atlas.rs) |
+| Brush Atlas (brush reference) | Ten pages show every `BrushPreset`, one per page, using the same path and nominal nib width. Explanations sit beside a clipped specimen. Each retains its preset pressure, nib and material settings, including Multiply compositing and Neon Bloom. A geometric clip reveals retained strokes. Use `brush-atlas` with `--params '{"seconds":40}'` for four seconds per page. | [brush_atlas.rs](src/demos/brush_atlas.rs) |
+| Particle Atlas (particle reference) | Thirteen pages show every particle `Preset`, with a description on the left and a live simulation on the right. Seeded physics, trails, bokeh, collision splashes, procedural sprites, fireworks and colored vector dispersal/convergence use retained simulations and independent local clocks. HDR recipes receive local Bloom. Use `particle-atlas` with `--params '{"seconds":52}'` for four seconds per page. | [particle_atlas.rs](src/demos/particle_atlas.rs) |
+| Particle Features (capability reference) | Forty-seven pages pair left-hand descriptions with isolated live specimens: emitters, analytic trajectories, forces, groups, colliders, lifecycle events, styles, sprite sheets, appearance curves and time control. The final page compares one and four workers. Use `particle-features` with `--params '{"seconds":60,"count":96}'` for the extended tour. | [particle_features.rs](src/demos/particle_features.rs) |
+| Filter Atlas (rendering reference) | Seventeen pages compare unfiltered and processed specimens: blur, shadow, glow, color adjustment, Bloom, halation, anamorphic streaks, distortion, dispersion, vignette, bokeh, radial blur, flare, relighting, grain, directional blur and filter order. | [filter_atlas.rs](src/demos/filter_atlas.rs) |
+| Compositing Atlas (rendering reference) | Twenty-six pages cover all seventeen public blend modes, alpha/luminance and inverted masks, coverage/geometric clips, group opacity, sibling order and filter isolation. | [compositing_atlas.rs](src/demos/compositing_atlas.rs) |
+| Vector Atlas (content reference) | Thirteen pages show arc-length trim, dashes, caps, joins, winding rules, linear/radial/sweep gradients, extension and interpolation, native SVG, morphing and vector writing. | [vector_atlas.rs](src/demos/vector_atlas.rs) |
+| Ink Features (content reference) | Twenty-one pages isolate pressure, nibs, five bristles, caps, gradient paint, depletion, dry fibers, grain, paper, intersection build-up, rim darkening, wobble, boil, wetness, recorded input, pen lifts, erasing, pigment mixing and height-based relighting. | [ink_features.rs](src/demos/ink_features.rs) |
+| Noise Atlas (procedural reference) | Twelve pages sample value, Perlin, Simplex, 3D Perlin slices, Worley distances and edges, five-octave fBm, turbulence, ridged noise, domain warp, analytic gradients and curl fields. | [noise_atlas.rs](src/demos/noise_atlas.rs) |
+| Audio Atlas (audio reference) | Twenty-one audible pages cover oscillators, seeded noise, ADSR, chirp, drums, EQ, dynamics, delay, reverb, ducking, pan, stereo width, a master limiter and eleven sound presets. Dry and processed PCM drive the waveforms. | [audio_atlas.rs](src/demos/audio_atlas.rs) |
+| Typography Atlas (text reference) | Eighteen Chinese and English studies show rich spans, weights, hierarchy, wrapping, line height, four alignments, glyph outlines, gradients, grapheme/word/line reveal, per-part motion, vector handwriting and stable partial visibility. | [typography_atlas.rs](src/demos/typography_atlas.rs) |
+| Caption Atlas (subtitle reference) | Twelve Chinese and English studies show timed cues, bilingual lines, automatic wrapping, safe areas, padding, contrast, keyword highlights, overlapping cues, exact boundaries, SRT round trips, shared markers and uniform retiming. | [caption_atlas.rs](src/demos/caption_atlas.rs) |
+| Particle Garden | Four acts: fireworks with sub-emitters bouncing off polygon/segment colliders; a boid murmuration over a curl flow field with ribbon trails; text, image and path emitters dissolving into paint-coloured sprites from a padded atlas; bokeh dust and Temperature-curve embers under noise-driven Atmosphere. | [particle_garden.rs](src/demos/particle_garden.rs) |
 | The Harbor Line (infographic) | A flat data-journalism explainer about a fictional harbour ferry: a scale-mapped bar chart grows year by year, an axis-labelled line chart traces falling commute times, keyframed counters tick up in a `Row` of stat cards and a timed caption track narrates underneath. Diagram charts and scales, `Keyframes`, `Row`/`Column` layout and captions. | [data_story.rs](src/demos/data_story.rs) |
-| Pip Takes a Bow (character) | A paper-cutout puppet in three shots: Pip walks past parallax hills, waves from a theatre stage backed by a photographic `Image`, then jumps for joy under confetti. Inline SVG limbs on a 12-bone `Skeleton`, procedural gaits and `Keyframes<Pose>` blends, a spring-loaded hat, joined by built-in `Iris` and `Push` transitions. | [puppet_show.rs](src/demos/puppet_show.rs) |
-| Solstice (branding) | A brand ident: a circle, square and triangle spring onto a construction grid and morph into the SVG sun-on-horizon mark while a trimmed orbit draws around them, then a burst and the wordmark lockup. Grid, chrome, burst and lockup are a `motion::declarative` JSON document composited with Rust-built morphs. | [logo_sting.rs](src/demos/logo_sting.rs) |
-| Last Order (cinematic) | A rainy night seen from a neon diner in four acts: split-screen clip vs AgX shoulder, bloom/halation/anamorphic streaks, rack-focus DepthOfField with hexagonal bokeh, `Elevation` shadows, Atmosphere fog/dust/light leak, a CDL + ColorWheels LUT grade and finally `Look::film` via `Look::scene`. Captions name each feature as it appears; the tone map is baked into a `Lut3d` because the gallery has no display stage. | [cinematic_look.rs](src/demos/cinematic_look.rs) |
-| Room to Move (magazine) | An editorial issue: a serif cover with spring-settled letters, a justified two-column spread with drop cap and pull quote, and a full-bleed closing page. Grapheme animation, paragraph layout, masks and directional wipes. | [type_in_motion.rs](src/demos/type_in_motion.rs) |
+| Motion (branding) | A Motion ident: a circle, square and triangle spring onto a construction grid and morph into a three-stroke SVG M monogram while a trimmed orbit draws around them, then a burst reveals the lowercase `motion` wordmark and MADE TO MOVE tagline. Grid, chrome, burst and lockup are a `motion::declarative` JSON document composited with Rust-built morphs. | [logo_sting.rs](src/demos/logo_sting.rs) |
+| Room to Move (magazine) | An editorial issue: a serif cover with spring-settled letters, a start-aligned two-column spread with 16-unit body text, drop cap and pull quote, and a full-bleed closing page. Grapheme animation, paragraph layout, masks and directional wipes. | [type_in_motion.rs](src/demos/type_in_motion.rs) |
 | The Long Way Home (nostalgia) | A brush-and-ink landscape on aged paper with a typewriter caption, rust stamp, orange date mark, dust, scratches, light leak and flickering grain. Pressure strokes, ink material, camera drift and per-frame seeded film damage. | [ink_journey.rs](src/demos/ink_journey.rs) |
 | Signal Garden (sci-fi audio) | An instrument display wired to a live mix: synthesized kick, hats, bass and lead are routed through buses with sidechain ducking, delay/reverb, pan/width and a limiting master. FFT bands drive the radial spectrum and Plexus constellations, the measured duck gain makes the garden pump with the kick, and a motion-blurred radar sweep and bus meters read back the mix. | [signal_garden.rs](src/demos/signal_garden.rs) |
-| Chidori (lightning) | A crackling orb gathers in a moonlit valley; sparks and thin arcs swell into a blinding burst, then a full-power orb throws branching bolts, cracks the ground and flings debris before fading. Midpoint-displacement bolts re-rolled at 15 Hz, plus blending, bloom, chromatic fringing and camera shake, paced by progress so any duration plays the same beats. | [chidori.rs](src/demos/chidori.rs) |
-| Quiet Hours (pastoral) | A hand-painted day in four equal shots: a sunlit ancient forest with light beams and golden dust, a clear stream with sparkling water and wildflowers, a dusk village above a sea of clouds, and a firefly night under the stars. Procedural gradients and silhouettes, wind-swayed grass, screen/plus light, bloom and grain. Use `--params '{"seconds":60}'` for a one-minute film. | [quiet_hours.rs](src/demos/quiet_hours.rs) |
-| Particle Garden | Four acts: fireworks with sub-emitters bouncing off polygon/segment colliders; a boid murmuration over a curl flow field with ribbon trails; text, image and path emitters dissolving into paint-coloured sprites from a padded atlas; bokeh dust and Temperature-curve embers under noise-driven Atmosphere. | [particle_garden.rs](src/demos/particle_garden.rs) |
 | Harmonics (`formula`) | An equation writes itself and morphs as a waveform doubles frequency. Native Typst vectors, semantic matching and function geometry. | [harmonics.rs](src/demos/harmonics.rs) |
 
-Ten entries are available by default, eleven with `formula`.
+Eighteen entries are available by default, nineteen with `formula`.
 All use a 960x540 design canvas and exact 30 fps timelines. Parameters
 accept 1..=60 seconds, a deterministic seed and a mark density of 4..=128.
 `DemoMetadata.features` describes combinations; features may recur across films.
 Optional entries are absent when their feature is disabled. Listing initializes
 neither formulas, audio, fonts nor GPU devices.
+
+## Capability Atlases
+
+`animation-atlas`, `brush-atlas`, `filter-atlas`, `compositing-atlas`, `vector-atlas`, `ink-features`, `noise-atlas`,
+`audio-atlas`, `typography-atlas` and `caption-atlas` share a left-hand explanation
+and a clipped specimen card; `particle-atlas` and `particle-features` use the same
+frame. Their 193 atlas pages use explicit local progress and
+seeds; seeking does not depend on
+the previously viewed frame. Use `--params '{"seconds":60}'` for a slower tour,
+then pause or seek in Studio. The default eight seconds is a quick overview,
+not a reading pace. The atlas typography uses the supplied generic sans-serif face.
+
+The shared page frame uses 48-unit outer margins and a 568x337 rounded specimen
+card, with a soft drop shadow, on the 960x540 canvas. The header shows the category
+label, the demo title and the current page number. The caption column names the
+page, explains it in three lines and previews the next page. Particle pages also
+show their capability group under the explanation. A segmented footer marks
+each page and fills with playback progress.
+
+Animation maps every page to an independent 3.2-second sample clock, so changing
+the overall duration does not truncate its authored curves or composed motion.
+Sampled values retain overshoot and signed signals. Brush Atlas keeps each full
+stroke's geometry and material preparation, scales the specimen into the shared
+viewport and reveals it with an outer geometric clip. Light paper preserves dark
+and translucent materials; Neon retains its dark field and local Bloom.
+
+The specimens call the actual rendering, vector, ink, noise and audio APIs, rather
+than approximating their output with decorative animation. Vector artwork, paper
+textures and noise fields are generated from fixed inputs; no external image or
+audio files are required. Audio Atlas prepares real 48 kHz stereo mixes outside
+frame callbacks. Its three lanes show dry mono, processed left and processed right
+PCM, with full-page peak envelopes behind the current waveform. One displayed
+visual gain is shared across the lanes; it does not change playback volume.
+Studio and video export play the processed mix. PNG stills contain no audio.
+
+Typography Atlas and Caption Atlas cover Chinese and English only. Both use the
+font library discovered once at application startup, with the generic default
+family and ordinary installed-face fallback. No font files or family names are
+bundled or hardcoded. Leave out `--font` for the default system-font experience;
+the system must have Chinese glyph coverage. Output can differ between machines
+with different installed fonts. Text reveal counts come from actual paragraph
+parts, not UTF-8 byte lengths. Caption vectors are measured and cached with the
+supplied font snapshot; frame sampling never discovers fonts or parses SRT.
+The caption specimens use a four-second local clock, except the six-second
+retiming example. Captions and markers are visual studies, not synthesized speech.
 
 ## Particle Comparisons
 
@@ -78,17 +151,26 @@ cargo run -p motion-gallery --bin particle_comparisons -- /tmp/motion-particle-c
 
 ## Default Budgets
 
-Gallery uses unchanged engine authoring admission: 256 MiB of logical live bytes,
-16777216 pixels and no frame-work cap. The temporary 1 GiB/20-billion frame policy
-and 100-million brush override are removed. Continuous strokes retain their
+Gallery explicitly allows 1 GiB of logical live bytes per frame for Full HD
+transition intermediates. The engine default remains 256 MiB; Gallery retains
+the unchanged 16777216-pixel limit and no frame-work cap. This admission limit
+does not preallocate 1 GiB. Continuous strokes retain their
 geometry, pressure and load; Final ink charges actual indexed distance evaluations
-against BrushStroke's unchanged 32-million default. These are not process-memory or real-time playback guarantees.
+against BrushStroke's unchanged 32-million default. Brush Atlas explicitly raises
+only its per-stroke material-work allowance to 64 million evaluations for the
+full-length, five-bristle comparison; other engine limits remain unchanged.
+Ink Features explicitly allows 128 million material evaluations per stroke. Its
+five-bristle study uses 96 path sample intervals to stay within the existing path
+verb limit; neither engine defaults nor admission limits are raised globally.
+Particle Features explicitly allows 1.6 billion simulation work units per specimen,
+up from the 100-million default. Every specimen derives its population from twice
+the `count` parameter, without changing particle, byte or authoring limits.
+These are not process-memory or real-time playback guarantees.
 
-With the bundled Noto Sans fixture, all ten default films retain their 72 marks,
-seed 20261027 and eight-second timelines. First/middle/last sampled frames at
-1920x1080 pass default admission and exact CPU replay in Final and Draft. This is
-60 sampled cases, not every frame, custom parameter set, optional formula film or
-GPU full-resolution acceptance. Native backend parity is checked separately;
+With the bundled Noto Sans CJK fixture, every catalog entry keeps seed 20261027 and an
+eight-second timeline. First/middle/last sampled frames at 1920x1080 pass default
+admission and exact CPU replay in Final and Draft. This is 108 sampled cases (114 with
+`formula`), not every frame, custom parameter set or GPU full-resolution acceptance. Native backend parity is checked separately;
 do not simplify artwork or infer throughput from admission tests.
 
 ## Validation
@@ -97,4 +179,32 @@ do not simplify artwork or infer throughput from admission tests.
 CARGO_INCREMENTAL=0 cargo test --locked --offline -j 2 -p motion-gallery --lib
 MOTION_TEST_FONT=/path/to/font.ttf CARGO_INCREMENTAL=0 cargo test --locked --offline -j 2 -p motion-gallery --lib every_demo_renders_its_subject_and_replays_exactly -- --ignored --nocapture
 MOTION_TEST_FONT=/path/to/font.ttf CARGO_INCREMENTAL=0 cargo test --locked --offline -j 2 -p motion-gallery --all-features --lib films_match_cpu_gpu_and_replay -- --ignored --nocapture
+MOTION_TEST_FONT=/path/to/font.ttf cargo test --release --locked --offline -p motion-gallery --lib particle_features:: -- --include-ignored --nocapture
+MOTION_TEST_FONT=/path/to/font.ttf cargo test --release --locked --offline -p motion-gallery --lib capability_atlases -- --include-ignored --nocapture
+MOTION_TEST_FONT=/path/to/font.ttf cargo test --release --locked --offline -p motion-gallery --features gpu --lib capability_atlases_match_cpu_gpu_and_replay -- --ignored --nocapture
+cargo test --release --locked --offline -p motion-gallery --lib audio_atlas:: -- --nocapture
+cargo test --release --locked --offline -p motion-gallery --lib noise_atlas:: -- --nocapture
+cargo test --release --locked --offline -p motion-gallery --lib typography_atlas:: -- --include-ignored --nocapture
+cargo test --release --locked --offline -p motion-gallery --lib caption_atlas:: -- --nocapture
+MOTION_TEST_FONT=/path/to/font.ttf cargo test --release --locked --offline -p motion-gallery --all-features --lib default_full_hd_output_preserves_demo_layouts -- --ignored --nocapture
+MOTION_TEST_FONT=/path/to/Georgia.ttf cargo test --release --locked --offline -p motion-gallery --features gpu --lib type_in_motion::tests::readable_columns_fit_and_frames_replay -- --ignored --nocapture
+MOTION_TEST_FONT=/path/to/Menlo.ttc cargo test --release --locked --offline -p motion-gallery --features gpu --lib signal_garden::tests::readable_hud_fits_and_frames_replay -- --ignored --nocapture
 ```
+
+Particle Features has separate CPU checks for visible subjects, motion, viewport isolation
+and exact replay on all 47 pages, plus worker and time-mapping state checks. Its authored
+studies are not exhaustive acceptance of every particle parameter combination or backend.
+
+The ten capability atlases have separate CPU checks for visible subjects, motion,
+viewport isolation and exact replay on all 193 pages. The typography and caption
+cases explicitly discover system fonts, including Chinese coverage; the other eight
+use `MOTION_TEST_FONT`. Metadata checks exercise
+one-, eight- and sixty-second durations. Audio checks cover finite deterministic
+PCM, real DSP changes, limiting and audible delay/reverb tails. These sampled
+checks do not establish full-resolution GPU parity or physical audio-device behavior.
+The separate native GPU check samples two times on each of the 193 pages at
+288x162, requires at most two channel values of CPU/GPU difference and verifies
+exact GPU replay.
+Typography checks also cover grapheme integrity, stable layout and cool/warm
+gradient pixels. Caption checks exercise exact cue boundaries, overlap, SRT
+interchange, marker progress and shared retimed boundaries.

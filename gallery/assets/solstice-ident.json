@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "name": "Solstice ident: construction layer and lockup",
+  "name": "Motion ident: construction layer and lockup",
   "size": [960, 540],
   "fps": 30,
   "background": "#1e3bff",
@@ -76,7 +76,7 @@
                       "trim": { "end": { "expr": "smoothstep(0.15 * $k, 1.05 * $k, t)" } }
                     },
                     {
-                      "line": { "from": [0, 450], "to": [960, 450] },
+                      "line": { "from": [0, 470], "to": [960, 470] },
                       "stroke": { "width": 1, "paint": "rgb(244 241 234 / 16%)" },
                       "trim": { "end": { "expr": "smoothstep(0.25 * $k, 1.15 * $k, t)" } }
                     },
@@ -117,44 +117,44 @@
                     },
                     {
                       "text": {
-                        "content": "SOLSTICE / BRAND IDENT",
+                        "content": "MOTION / IDENTITY",
                         
-                        "size": 11,
+                        "size": 14,
                         "weight": 700,
-                        "letter_spacing": 3
+                        "letter_spacing": 0
                       },
                       "fill": "rgb(244 241 234 / 75%)",
                       "position": [166, 44]
                     },
                     {
                       "text": {
-                        "content": "N\u00ba 01",
+                        "content": "01 / 30",
                         
-                        "size": 11,
+                        "size": 14,
                         "weight": 700,
-                        "letter_spacing": 3
+                        "letter_spacing": 0
                       },
                       "fill": "#d7ff3c",
                       "position": [880, 44]
                     },
                     {
                       "text": {
-                        "content": "LIGHT \u00b7 FORM \u00b7 MOTION",
+                        "content": "FRAME / TIME / FORM",
                         
-                        "size": 11,
+                        "size": 14,
                         "weight": 700,
-                        "letter_spacing": 3
+                        "letter_spacing": 0
                       },
                       "fill": "rgb(244 241 234 / 75%)",
                       "position": [160, 498]
                     },
                     {
                       "text": {
-                        "content": "MMXXVI",
+                        "content": "RUST / 2D",
                         
-                        "size": 11,
+                        "size": 14,
                         "weight": 700,
-                        "letter_spacing": 3
+                        "letter_spacing": 0
                       },
                       "fill": "rgb(244 241 234 / 75%)",
                       "position": [872, 498]
@@ -189,11 +189,11 @@
                 {
                   "id": "wordmark",
                   "text": {
-                    "content": "SOLSTICE",
+                    "content": "motion",
                     
-                    "size": 64,
+                    "size": 88,
                     "weight": 800,
-                    "letter_spacing": 16,
+                    "letter_spacing": 0,
                     "split": "characters",
                     "parts": {
                       "delay": { "$param": "stagger" },
@@ -217,13 +217,13 @@
                     }
                   },
                   "fill": "#f4f1ea",
-                  "position": [488, 340]
+                  "position": [480, 340]
                 },
                 {
                   "id": "rule",
                   "rect": { "bounds": [0, 0, 96, 4] },
                   "fill": "#d7ff3c",
-                  "position": [480, 384],
+                  "position": [480, 410],
                   "scale_xy": {
                     "tween": {
                       "from": [0, 1],
@@ -237,17 +237,17 @@
                 {
                   "id": "tagline",
                   "text": {
-                    "content": "STUDIO FOR LIGHT & FORM",
+                    "content": "MADE TO MOVE",
                     
-                    "size": 15,
+                    "size": 20,
                     "weight": 600,
-                    "letter_spacing": 6
+                    "letter_spacing": 0
                   },
                   "fill": "#f4f1ea",
                   "position": {
                     "tween": {
-                      "from": [483, 424],
-                      "to": [483, 414],
+                      "from": [480, 454],
+                      "to": [480, 444],
                       "delay": { "$param": "tag_at" },
                       "duration": { "$param": "tag_d" },
                       "easing": "cubic_out"

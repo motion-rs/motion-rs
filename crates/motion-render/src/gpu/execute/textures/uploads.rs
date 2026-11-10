@@ -172,7 +172,7 @@ impl BatchUploads<'_> {
             }
             offset = next + source.len() as u64;
         }
-        assert_eq!(offset, bytes);
+        debug_assert_eq!(offset, bytes);
         if let Some(staging) = self.staging {
             encoder.copy_buffer_to_buffer(staging, start, &buffer, 0, bytes);
             #[cfg(test)]

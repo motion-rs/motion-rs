@@ -3,7 +3,7 @@
 //! reverb, panning and stereo width and a limiting master, then read back offline.
 //! FFT bands drive a radial spectrum and Plexus particle constellations, the
 //! measured duck gain makes the whole garden pump with the kick, and a
-//! motion-blurred radar sweep and HUD meters are lit with bloom and bokeh.
+//! motion-blurred radar sweep is lit with bloom and bokeh beneath crisp HUD meters.
 
 use crate::{DemoMetadata, DemoParameters};
 use motion::audio::pcm::BusMeter;
@@ -181,8 +181,7 @@ fn frame(context: &SceneContext<'_>, rig: &Rig) -> Node {
     }
     layers.push(core(context, bass, pump));
     layers.push(foreground(context));
-    layers.extend(hud(context, rig, &levels, pump, intro));
-    Node::group(layers)
+    let instrument = Node::group(layers)
         .clip_with(context.bounds(), ClipMode::Geometric)
         .filter(Filter::Glow {
             threshold: 0.35,
@@ -191,7 +190,7 @@ fn frame(context: &SceneContext<'_>, rig: &Rig) -> Node {
         })
         .filter(Filter::Optics(motion::Optics::Lens {
             distortion: 0.0,
-            chromatic: 0.0018 + pump * 0.0016,
+            chromatic: 0.0006 + pump * 0.0006,
             auto_fit: false,
             center: None,
         }))
@@ -200,7 +199,11 @@ fn frame(context: &SceneContext<'_>, rig: &Rig) -> Node {
             strength: 0.55,
             roundness: 0.0,
         }))
-        .filter(Filter::grain(7, 0.008))
+        .filter(Filter::grain(7, 0.002));
+    Node::group([
+        instrument,
+        Node::group(hud(context, rig, &levels, pump, intro)),
+    ])
 }
 
 fn backdrop(context: &SceneContext<'_>) -> Node {
@@ -402,7 +405,7 @@ fn readout(value: &str, size: f64, fill: Color) -> Text {
         .family(MONO)
         .size(size)
         .weight(FontWeight::BOLD)
-        .letter_spacing(1.5)
+        .letter_spacing(0.0)
         .fill(fill)
 }
 
@@ -439,28 +442,28 @@ fn duck_trace(rig: &Rig, seconds: f64) -> Node {
 
 fn hud(context: &SceneContext<'_>, rig: &Rig, levels: &[f64], pump: f64, intro: f64) -> Vec<Node> {
     let seconds = context.seconds();
-    let dim = color(CYAN).with_alpha(0.75);
+    let dim = color(CYAN).with_alpha(0.95);
     let mut nodes = vec![
         bracket(28.0, 28.0, 1.0, 1.0),
         bracket(932.0, 28.0, -1.0, 1.0),
         bracket(28.0, 512.0, 1.0, -1.0),
         bracket(932.0, 512.0, -1.0, -1.0),
-        readout("SIGNAL GARDEN", 15.0, color(ICE)).translate(48.0, 40.0),
-        readout("LIVE MIX // 4 BUS + SIDECHAIN", 10.5, dim).translate(48.0, 62.0),
-        readout(&format!("T+{seconds:05.2}s"), 12.0, color(ICE)).translate(790.0, 40.0),
-        readout(&format!("BPM {BPM:.0}  RADIAL"), 10.5, dim).translate(790.0, 62.0),
+        readout("SIGNAL GARDEN", 20.0, color(ICE)).translate(48.0, 40.0),
+        readout("LIVE MIX // 4 BUS + SIDECHAIN", 14.0, dim).translate(48.0, 70.0),
+        readout(&format!("T+{seconds:05.2}s"), 16.0, color(ICE)).translate(768.0, 40.0),
+        readout(&format!("BPM {BPM:.0}  RADIAL"), 14.0, dim).translate(768.0, 68.0),
     ];
     for (index, name) in BUSES.iter().enumerate() {
-        let top = 84.0 + index as f64 * 18.0;
+        let top = 98.0 + index as f64 * 24.0;
         let level = meter_level(rms_db(&rig.meters[index], seconds) + 6.0);
-        nodes.push(readout(&name.to_uppercase(), 9.5, dim).translate(790.0, top));
+        nodes.push(readout(&name.to_uppercase(), 14.0, dim).translate(768.0, top));
         nodes.push(
-            Rect::new(840.0, top + 2.0, 932.0, top + 9.0)
+            Rect::new(824.0, top + 4.0, 932.0, top + 14.0)
                 .fill(color(CYAN).with_alpha(0.14))
                 .into(),
         );
         nodes.push(
-            Rect::new(840.0, top + 2.0, 840.0 + 92.0 * level, top + 9.0)
+            Rect::new(824.0, top + 4.0, 824.0 + 108.0 * level, top + 14.0)
                 .fill(color(CYAN))
                 .into(),
         );
@@ -468,14 +471,14 @@ fn hud(context: &SceneContext<'_>, rig: &Rig, levels: &[f64], pump: f64, intro: 
     for (index, (low, high)) in BANDS.iter().enumerate() {
         let top = 392.0 + index as f64 * 22.0;
         let level = levels[index].clamp(0.0, 1.0);
-        nodes.push(readout(&format!("{low:>4.0}-{high:<4.0}"), 10.0, dim).translate(48.0, top));
+        nodes.push(readout(&format!("{low:>4.0}-{high:<4.0}"), 14.0, dim).translate(48.0, top));
         nodes.push(
-            Rect::new(138.0, top + 2.0, 258.0, top + 10.0)
+            Rect::new(138.0, top + 4.0, 258.0, top + 14.0)
                 .fill(color(CYAN).with_alpha(0.14))
                 .into(),
         );
         nodes.push(
-            Rect::new(138.0, top + 2.0, 138.0 + 120.0 * level, top + 10.0)
+            Rect::new(138.0, top + 4.0, 138.0 + 120.0 * level, top + 14.0)
                 .fill(if level > 0.85 {
                     color(AMBER)
                 } else {
@@ -484,16 +487,87 @@ fn hud(context: &SceneContext<'_>, rig: &Rig, levels: &[f64], pump: f64, intro: 
                 .into(),
         );
     }
-    nodes.push(readout("SIDECHAIN // KICK > BASS", 10.0, dim).translate(720.0, 392.0));
+    nodes.push(readout("SIDECHAIN // KICK > BASS", 14.0, dim).translate(720.0, 384.0));
     nodes.push(duck_trace(rig, seconds));
     nodes.push(
         readout(
             &format!("GR {:+05.1} dB", duck_db(&rig.bass, &rig.bass_dry, seconds)),
-            12.0,
+            16.0,
             if pump > 0.5 { color(AMBER) } else { color(ICE) },
         )
-        .translate(720.0, 472.0),
+        .translate(720.0, 466.0),
     );
-    nodes.push(readout(&format!("{:.1} LUFS", rig.lufs), 10.0, dim).translate(850.0, 474.0));
+    nodes.push(readout(&format!("{:.1} LUFS", rig.lufs), 14.0, dim).translate(720.0, 490.0));
     nodes.into_iter().map(|node| node.opacity(intro)).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[ignore = "requires explicit MOTION_TEST_FONT and native GPU when enabled; HUD bounds and replay"]
+    fn readable_hud_fits_and_frames_replay() -> motion::Result {
+        let font = std::env::var_os("MOTION_TEST_FONT")
+            .ok_or_else(|| std::io::Error::other("Set MOTION_TEST_FONT"))?;
+        let mut fonts = FontLibrary::new();
+        fonts.load_file(std::path::Path::new(&font))?;
+        for value in ["KICK", "HATS", "BASS", "LEAD"] {
+            assert!(
+                readout(value, 14.0, color(ICE))
+                    .layout(&fonts)?
+                    .bounds()
+                    .width()
+                    <= 56.0
+            );
+        }
+        for (low, high) in BANDS {
+            let value = format!("{low:>4.0}-{high:<4.0}");
+            assert!(
+                readout(&value, 14.0, color(ICE))
+                    .layout(&fonts)?
+                    .bounds()
+                    .width()
+                    <= 90.0
+            );
+        }
+        assert!(
+            readout("SIDECHAIN // KICK > BASS", 14.0, color(ICE))
+                .layout(&fonts)?
+                .bounds()
+                .width()
+                <= 212.0
+        );
+        let film = timeline(DemoParameters::default())?;
+        assert_eq!(film.frame_count(), 240);
+        let options = crate::render_options(Some(std::path::Path::new(&font)))?
+            .backend(BackendPreference::Cpu);
+        assert_eq!(options.limits.max_bytes, crate::GALLERY_FRAME_BYTES);
+        for size in [PixelSize::new(960, 540), PixelSize::new(1920, 1080)] {
+            let options = options.clone().size(size);
+            for seconds in [0.0, 1.375, 3.0, 7.8] {
+                let first = render_still(&film, seconds.seconds(), &options)?;
+                render_still(&film, Time::ZERO, &options)?;
+                let replay = render_still(&film, seconds.seconds(), &options)?;
+                assert_eq!(first.bytes(), replay.bytes());
+                #[cfg(feature = "gpu")]
+                {
+                    let gpu_options = options.clone().backend(BackendPreference::Gpu);
+                    let gpu = render_still(&film, seconds.seconds(), &gpu_options)?;
+                    let difference = first
+                        .bytes()
+                        .iter()
+                        .zip(gpu.bytes())
+                        .map(|(cpu, gpu)| cpu.abs_diff(*gpu))
+                        .max()
+                        .unwrap_or(0);
+                    assert!(difference <= 2, "CPU/GPU difference: {difference}");
+                    render_still(&film, Time::ZERO, &gpu_options)?;
+                    let replay = render_still(&film, seconds.seconds(), &gpu_options)?;
+                    assert_eq!(gpu.bytes(), replay.bytes());
+                }
+            }
+        }
+        Ok(())
+    }
 }

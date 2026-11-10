@@ -1,4 +1,4 @@
-//! Solstice brand ident: a JSON `motion::declarative` document draws the construction
+//! Motion brand ident: a JSON `motion::declarative` document draws the construction
 //! grid, chrome, burst and wordmark lockup, while Rust springs three primitives on
 //! screen, morphs them into the SVG logo mark and sweeps a trimmed orbit around it.
 
@@ -12,7 +12,7 @@ use std::sync::Arc;
 
 pub(super) const METADATA: DemoMetadata = DemoMetadata::new(
     "logo-sting",
-    "Solstice",
+    "Motion",
     "Branding",
     &[
         "declarative-json",
@@ -24,19 +24,24 @@ pub(super) const METADATA: DemoMetadata = DemoMetadata::new(
 );
 
 const DOCUMENT: &str = include_str!("../../assets/solstice-ident.json");
+
 const MARK: &[u8] = include_bytes!("../../assets/solstice-mark.svg");
+
 const LIME: u32 = 0xd7ff3c;
+
 const CREAM: u32 = 0xf4f1ea;
+
 /// The authored document timing is designed for an eight-second film.
 const DESIGN_SECONDS: f64 = 8.0;
-/// Sun centre inside the 240×240 mark artwork, used as the transform pivot.
-const SUN: Point = Point::new(120.0, 112.0);
+
+/// Centre of the Motion monogram inside the 240x240 artwork, used as its pivot.
+const MARK_CENTER: Point = Point::new(120.0, 124.0);
 
 /// The same three ids as the mark, drawn as plain geometry spread along the horizon.
 const PRIMITIVES: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 240 240">
-  <circle id="sun" cx="-56" cy="112" r="44" fill="#d7ff3c"/>
-  <rect id="horizon" x="80" y="72" width="80" height="80" fill="#f4f1ea"/>
-  <path id="echo" d="M296 66 L344 152 L248 152 Z" fill="#f4f1ea"/>
+    <circle id="rise" cx="-56" cy="124" r="44" fill="#d7ff3c"/>
+    <rect id="fold" x="80" y="84" width="80" height="80" fill="#f4f1ea"/>
+    <path id="drive" d="M296 78 L344 164 L248 164 Z" fill="#d7ff3c"/>
 </svg>"##;
 
 pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
@@ -91,21 +96,24 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
                 } else {
                     mark_tree.node()
                 };
-                let mark = shape.pivot(Pivot::Point(SUN)).at(centre).scale(scale);
+                let mark = shape
+                    .pivot(Pivot::Point(MARK_CENTER))
+                    .at(centre)
+                    .scale(scale);
 
-                // A lime orbit sweeps around the forming sun and leaves before the burst.
+                // A lime orbit sweeps around the forming monogram and leaves before the burst.
                 let head = window(0.2, 0.48, Easing::CubicInOut);
                 let tail = window(0.3, 0.52, Easing::CubicIn);
                 let orbit = Circle::new(Point::new(480.0, 250.0), 112.0)
                     .stroke(4.0, Color::from_hex(LIME))
                     .trim(tail, head);
-                let horizon = Rect::new(0.0, 0.0, 1.0, 2.0)
+                let baseline = Rect::new(0.0, 0.0, 1.0, 2.0)
                     .fill(Color::from_hex(CREAM))
                     .pivot(Pivot::Center)
                     .at(Point::new(480.0, 250.0))
                     .scale_xy(560.0 * window(0.05, 0.2, Easing::ExponentialOut), 1.0)
                     .opacity(1.0 - window(0.22, 0.3, Easing::Linear));
-                Ok((horizon, orbit, mark))
+                Ok((baseline, orbit, mark))
             },
         )
     }))
@@ -126,4 +134,77 @@ fn scaled_document(k: f64) -> motion::Result<Document> {
         }
     }
     Document::from_json_with(DOCUMENT, Some(&serde_json::Value::Object(overrides)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn motion_identity_compiles_at_requested_durations() -> motion::Result {
+        let document: serde_json::Value = serde_json::from_str(DOCUMENT).unwrap();
+        let children = document["tracks"][0]["items"][0]["scene"]["content"]["children"]
+            .as_array()
+            .unwrap();
+        let wordmark = children
+            .iter()
+            .find(|node| node["id"] == "wordmark")
+            .unwrap();
+        assert_eq!(wordmark["text"]["content"], "motion");
+        assert_eq!(wordmark["text"]["letter_spacing"], 0);
+        let source = SvgAsset::from_bytes(PRIMITIVES.as_bytes())?;
+        let target = SvgAsset::from_bytes(MARK)?;
+        let morph = Morph::new(&source.tree, &target.tree)?;
+        for progress in [0.0, 0.5, 1.0] {
+            morph.sample(progress)?;
+        }
+        for seconds in [1, 8, 30, 60] {
+            let film = timeline(DemoParameters {
+                seconds,
+                ..DemoParameters::default()
+            })?;
+            assert_eq!(film.total_duration(), seconds.seconds());
+            assert_eq!(film.frame_count(), u64::from(seconds) * 30);
+        }
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "requires explicit MOTION_TEST_FONT and native GPU when enabled; identity frames and replay"]
+    fn motion_identity_renders_morphs_and_replays() -> motion::Result {
+        let font = std::env::var_os("MOTION_TEST_FONT")
+            .ok_or_else(|| std::io::Error::other("Set MOTION_TEST_FONT"))?;
+        let options = crate::render_options(Some(std::path::Path::new(&font)))?
+            .backend(BackendPreference::Cpu)
+            .size(PixelSize::new(960, 540));
+        for seconds in [8, 30] {
+            let film = timeline(DemoParameters {
+                seconds,
+                ..DemoParameters::default()
+            })?;
+            for progress in [0.1, 0.3, 0.5, 0.75, 0.975] {
+                let time = (f64::from(seconds) * progress).seconds();
+                let first = render_still(&film, time, &options)?;
+                render_still(&film, Time::ZERO, &options)?;
+                let replay = render_still(&film, time, &options)?;
+                assert_eq!(first.bytes(), replay.bytes());
+                #[cfg(feature = "gpu")]
+                {
+                    let gpu_options = options.clone().backend(BackendPreference::Gpu);
+                    let gpu = render_still(&film, time, &gpu_options)?;
+                    let difference = first
+                        .bytes()
+                        .iter()
+                        .zip(gpu.bytes())
+                        .map(|(cpu, gpu)| cpu.abs_diff(*gpu))
+                        .max()
+                        .unwrap_or(0);
+                    assert!(difference <= 2, "CPU/GPU difference: {difference}");
+                    let replay = render_still(&film, time, &gpu_options)?;
+                    assert_eq!(gpu.bytes(), replay.bytes());
+                }
+            }
+        }
+        Ok(())
+    }
 }

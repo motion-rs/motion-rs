@@ -6,7 +6,7 @@ use motion::vector::{VectorGroup, VectorItem, VectorPath, VectorTree};
 use std::sync::Arc;
 
 /// Shared outline source used by the two colored logo recipes.
-fn logo(bounds: Rect) -> motion::Result<Arc<VectorTree>> {
+pub(super) fn logo(bounds: Rect) -> motion::Result<Arc<VectorTree>> {
     Ok(Arc::new(VectorTree::new(
         bounds,
         VectorGroup {

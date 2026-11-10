@@ -36,8 +36,7 @@ cargo bench -p motion-bench --bench films --features films,gpu        # CPU and 
 cargo bench -p motion-bench --bench films --features films,gpu,ffmpeg # Include native video export
 ```
 
-The `quiet-hours` and `chidori` Gallery films are intentionally excluded from this target (and
-from `MOTION_BENCH_CASES` selection): they are showcases, not performance workloads.
+Every Gallery catalog entry is a `films` case; select a subset with `MOTION_BENCH_CASES`.
 
 `--all-features` also enables `films`; avoid it when excluding long film runs.
 The marker only gates target selection; GPU and native encoding remain separate

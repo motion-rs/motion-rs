@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 240 240">
-  <!-- Solstice mark: a sun on the horizon above its reflection. -->
-  <path id="sun" d="M36 112 A84 84 0 0 1 204 112 Z" fill="#d7ff3c"/>
-  <rect id="horizon" x="36" y="124" width="168" height="22" fill="#f4f1ea"/>
-  <path id="echo" d="M64 160 L176 160 L120 216 Z" fill="#f4f1ea"/>
+  <!-- Motion monogram: three forward-leaning strokes share the morph source ids. -->
+  <path id="rise" d="M28 184 L56 64 H88 L60 184 Z" fill="#d7ff3c"/>
+  <path id="fold" d="M72 64 H108 L128 112 L152 64 H188 L128 176 Z" fill="#f4f1ea"/>
+  <path id="drive" d="M152 64 H184 L212 184 H180 Z" fill="#d7ff3c"/>
 </svg>

@@ -15,7 +15,7 @@ Scene, Node, Project, Composition, still, film, Studio (capitalized), CPU backen
 - Verify every concrete claim against the source before writing it: type, function and file names,
   limits and defaults, feature flags, CLI flags, error behavior. If you cannot verify it, leave it out.
 - Describe current behavior in the present tense. Proposals and future work belong in
-  `docs/plan.md` or `docs/roadmap.md` and are labeled as such; never present them as available APIs.
+  `docs/plan.md` and are labeled as such; never present them as available APIs.
 - Design pages (`docs/design/`) state contracts and decisions: ownership, invariants, limits, failure
   and determinism. They do not list signatures; Rustdoc does. Update the owning page when a contract
   changes, in the same change.
@@ -23,11 +23,10 @@ Scene, Node, Project, Composition, still, film, Studio (capitalized), CPU backen
 
 ## Language And Form
 
-- English, complete sentences, headings in sentence case, no marketing tone. `docs/roadmap.md` and
-  `docs/reviews/` are Chinese working documents; do not translate or mix languages within a page.
+- English, complete sentences, headings in sentence case, no marketing tone. Do not mix languages
+  within a page.
 - Tag every fence: `rust,no_run`, `rust`, `sh`, `toml`, `text`. An untagged fence is compiled as Rust.
-- Do not create new plan, notes or status documents. Add remaining work to `docs/plan.md`; put dated
-  review output in `docs/reviews/`.
+- Do not create new plan, notes or status documents. Add remaining work to `docs/plan.md`.
 
 ## Rust Blocks Are Compiled
 

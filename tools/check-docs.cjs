@@ -13,10 +13,6 @@ const roots = [
   ".github",
 ];
 
-// Design records and dated reviews are not compiled: links are checked, fence tags are not.
-const looseFences = (relative) =>
-  relative === "docs/roadmap.md" || relative.startsWith("docs/reviews/");
-
 function markdownFiles(entry) {
   const file = path.join(root, entry);
   if (!fs.existsSync(file)) return [];
@@ -59,7 +55,7 @@ function analyze(relative, source, exists, headings) {
   source.split(/\r?\n/).forEach((line, index) => {
     const fence = /^\s*(```|~~~)(\S*)/.exec(line);
     if (fence) {
-      if (!fenced && !fence[2] && !looseFences(relative))
+      if (!fenced && !fence[2])
         issues.push(`${relative}:${index + 1}: Untagged code fence`);
       fenced = !fenced;
       return;

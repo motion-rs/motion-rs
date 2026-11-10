@@ -193,12 +193,7 @@ fn main() -> motion::Result {
     }
     let size = support::size((960, 540))?;
     let entries = motion_gallery::catalog();
-    // Showcase films are deliberately excluded from benchmarks.
-    let names = entries
-        .iter()
-        .map(|entry| entry.id)
-        .filter(|id| !matches!(*id, "quiet-hours" | "chidori"))
-        .collect::<Vec<_>>();
+    let names = entries.iter().map(|entry| entry.id).collect::<Vec<_>>();
     let films = support::selected("MOTION_BENCH_CASES", &names)?;
     let backends = support::renderers(cfg!(feature = "gpu"))?;
     let sequences = std::env::var("MOTION_BENCH_SEQUENCES").unwrap_or_else(|_| "1".into()) == "1";

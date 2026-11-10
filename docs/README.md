@@ -24,13 +24,10 @@ for integration and contribution, not prerequisites for the tutorial.
 - [Benchmarks](benchmarks.md): workloads, procedures and current measured results.
 - [Measurement manifest](performance-runs.json): recorded runs and provenance.
 - [Quality report](quality-report.md): image-quality measurements, with provenance.
-- [Roadmap](roadmap.md): the original cinematic-quality design record (Chinese, partly implemented).
-- [Reviews](reviews/): dated implementation and code reviews; they are not API contracts.
 
 ## Conventions
 
-Documentation is written in English. `roadmap.md` and the dated reviews are Chinese working
-documents and are not translated. Terms are defined in the
+Documentation is written in English. Terms are defined in the
 [design glossary](design/README.md#glossary). Every Rust block in the tutorial, the command-line
 page and the rendering and resources design pages is compiled as a Rustdoc test (see
 [development checks](development.md)).

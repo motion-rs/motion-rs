@@ -24,12 +24,6 @@ const policies = [
     "streak_sigmas returns None only for non-anamorphic variants; the call is inside an Anamorphic match arm.",
   ],
   [
-    "gallery/src/demos/cinematic_look/diner.rs",
-    ["height is clamped to the supported range"],
-    "invariant",
-    "Authored dish heights are fixed finite values within Elevation::shadow's accepted range.",
-  ],
-  [
     "gallery/src/demos/particle_garden.rs",
     ["initialised above"],
     "invariant",

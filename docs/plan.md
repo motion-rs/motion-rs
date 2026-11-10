@@ -30,18 +30,18 @@ both the previous step and the initial baseline. Do not create per-step reports.
 Contracts that already exist are in [rendering](design/rendering.md),
 [GPU rendering](design/gpu.md) and [architecture](design/architecture.md).
 
-Performance measurements are paused. Three merged deliverables remain from earlier reviews,
-and R10–R12 come from the Gallery profile in [review 7](reviews/review7.md), which also lists
+Performance measurements are paused. Four merged deliverables remain from earlier reviews,
+while R10 and R12 come from the Gallery profile in review 7, which also lists
 output-changing proposals that need separate approval. IDs track review requests, not a
 measured priority ranking; duplicate requests are grouped by deliverable.
 
 | ID | Remaining Work | Acceptance Boundary |
 | --- | --- | --- |
 | R1 | Row-wise SIMD (blur, spans) only if measured against the scalar paths; per-pixel lanes were removed (P-6 / H-2) | Scalar agreement, tails, overflow and exceptional values; no implicit FMA changes |
+| R3 | Explicit opt-in subtree raster cache (P-9 / S-7) | Isolated-layer API, bounded lifetime/identity and separate output-change approval |
 | R4 | General cold item-parallel prepare (S-3) | Per-item admission/scratch, ordered assembly and deterministic failure; disabled cached-copy experiment removed |
 | R6 | Current-source performance acceptance (N-6 / M2 / M4) | Record actual suite workload/sampling and absolute timings; full films, process RSS, GUI presentation and cross-device automated milestone gates remain separate |
 | R10 | Extend session polygon scratch reuse to active-edge and intersection buffers; band-area reuse has focused cold-path evidence but unresolved warm/off-target regressions | Bit-identical coverage; logical byte and work admission unchanged; separate measured cold gains from general acceptance |
-| R11 | Admit Last Order (cinematic-look) at 1080p on the CPU and on the GPU after frame 88 | `full_size_default_budgets_admit_original_demos_and_replay` and the GPU film fixture pass; any output or limit change is approved and documented in the Gallery README |
 | R12 | Prepare independent audio buses in parallel and merge them in a fixed order | Bit-identical PCM and loudness reports for every worker count |
 
 Whole-band area/cover and Gallery default-budget restoration are implemented; their
@@ -52,12 +52,6 @@ implemented, not new tasks. Full-frame linear APIs remain supported; automatic s
 raster caching and DisplayList/PreparedFrame object pooling are not implied by storage
 reuse. Further locality, preview wait reduction and decode scratch tuning need profiling
 after measurements resume, without changing geometry, density, alpha or replay.
-
-R3's explicit isolated-layer raster cache is implemented with bounded source identity
-and lifetime. Rasterized replay differences have separate opt-in approval; ordinary
-nodes remain unchanged. CPU functional tests and a named native GPU replay fixture
-pass on the current macOS host. Timing gains and Gallery adoption remain unmeasured
-until performance measurements resume.
 
 Do not count approved low-level APIs, checked `try_*` alternatives, migration notes,
 test-only audio reference fixtures or optional LaTeX/disk-cache extensions as deprecated

@@ -3,19 +3,28 @@
 use crate::{DemoMetadata, DemoParameters};
 use motion::prelude::*;
 
-mod chidori;
-mod cinematic_look;
+mod animation_atlas;
+mod atlas;
+mod audio_atlas;
+mod brush_atlas;
+mod caption_atlas;
+mod compositing_atlas;
 mod data_story;
+mod filter_atlas;
 #[cfg(feature = "formula")]
 mod harmonics;
+mod ink_features;
 mod ink_journey;
 mod logo_sting;
+mod noise_atlas;
+mod particle_atlas;
+mod particle_features;
 mod particle_garden;
 pub(crate) mod particle_recipes;
-mod puppet_show;
-mod quiet_hours;
 mod signal_garden;
 mod type_in_motion;
+mod typography_atlas;
+mod vector_atlas;
 
 /// A tracked single-line label. Families that are not installed fall back to the
 /// system sans, so the films stay renderable with an explicit `--font`.
@@ -47,6 +56,54 @@ struct Film {
 
 const PROGRAM: &[Film] = &[
     Film {
+        metadata: animation_atlas::METADATA,
+        build: animation_atlas::timeline,
+    },
+    Film {
+        metadata: brush_atlas::METADATA,
+        build: brush_atlas::timeline,
+    },
+    Film {
+        metadata: particle_atlas::METADATA,
+        build: particle_atlas::timeline,
+    },
+    Film {
+        metadata: particle_features::METADATA,
+        build: particle_features::timeline,
+    },
+    Film {
+        metadata: filter_atlas::METADATA,
+        build: filter_atlas::timeline,
+    },
+    Film {
+        metadata: compositing_atlas::METADATA,
+        build: compositing_atlas::timeline,
+    },
+    Film {
+        metadata: vector_atlas::METADATA,
+        build: vector_atlas::timeline,
+    },
+    Film {
+        metadata: ink_features::METADATA,
+        build: ink_features::timeline,
+    },
+    Film {
+        metadata: noise_atlas::METADATA,
+        build: noise_atlas::timeline,
+    },
+    Film {
+        metadata: audio_atlas::METADATA,
+        build: audio_atlas::timeline,
+    },
+    Film {
+        metadata: typography_atlas::METADATA,
+        build: typography_atlas::timeline,
+    },
+    Film {
+        metadata: caption_atlas::METADATA,
+        build: caption_atlas::timeline,
+    },
+    Film {
         metadata: particle_garden::METADATA,
         build: particle_garden::timeline,
     },
@@ -55,16 +112,8 @@ const PROGRAM: &[Film] = &[
         build: data_story::timeline,
     },
     Film {
-        metadata: puppet_show::METADATA,
-        build: puppet_show::timeline,
-    },
-    Film {
         metadata: logo_sting::METADATA,
         build: logo_sting::timeline,
-    },
-    Film {
-        metadata: cinematic_look::METADATA,
-        build: cinematic_look::timeline,
     },
     Film {
         metadata: type_in_motion::METADATA,
@@ -77,14 +126,6 @@ const PROGRAM: &[Film] = &[
     Film {
         metadata: signal_garden::METADATA,
         build: signal_garden::timeline,
-    },
-    Film {
-        metadata: chidori::METADATA,
-        build: chidori::timeline,
-    },
-    Film {
-        metadata: quiet_hours::METADATA,
-        build: quiet_hours::timeline,
     },
     #[cfg(feature = "formula")]
     Film {

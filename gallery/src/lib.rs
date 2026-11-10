@@ -4,7 +4,11 @@ mod demos;
 pub use demos::particle_recipes::comparison_frames;
 
 use motion::prelude::*;
+use motion::render::RasterLimits;
 use motion::{ProjectCommand, StudioArgs};
+
+/// Maximum logical bytes per Gallery frame, including Full HD transition intermediates.
+const GALLERY_FRAME_BYTES: u64 = 1024 * 1024 * 1024;
 
 /// Resource-free metadata for one demonstration.
 #[derive(Clone, Copy, Debug)]
@@ -90,7 +94,12 @@ pub fn render_options(font: Option<&std::path::Path>) -> motion::Result<RenderOp
     let assets = Assets::new(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets"))?
         .with_fonts(fonts);
     Ok(RenderOptions::default()
+        .size(PixelSize::new(1920, 1080))
         .resources(assets)
+        .limits(RasterLimits {
+            max_bytes: GALLERY_FRAME_BYTES,
+            ..RasterLimits::default()
+        })
         .background(Color::from_hex(0xf4f6f5)))
 }
 
@@ -171,6 +180,27 @@ mod tests {
     #[cfg(feature = "ffmpeg")]
     use motion::extend::ProgressSink;
     use std::collections::BTreeSet;
+
+    #[test]
+    #[ignore = "requires explicit MOTION_TEST_FONT; Gallery output size and design-space preservation"]
+    fn default_full_hd_output_preserves_demo_layouts() -> motion::Result {
+        let font = std::env::var_os("MOTION_TEST_FONT")
+            .ok_or_else(|| std::io::Error::other("Set MOTION_TEST_FONT"))?;
+        let options = render_options(Some(std::path::Path::new(&font)))?;
+        assert_eq!(options.size, Some(PixelSize::new(1920, 1080)));
+        assert_eq!(options.limits.max_bytes, GALLERY_FRAME_BYTES);
+        options.validate()?;
+        let gallery = project(options.clone())?;
+        for demo in catalog() {
+            let film = gallery.build(demo.id, None)?;
+            assert_eq!(film.size(), Size::new(960.0, 540.0), "{}", demo.id);
+            assert_eq!(film.frame_count(), 240, "{}", demo.id);
+        }
+        let overridden = options.size(PixelSize::new(1280, 720));
+        assert_eq!(overridden.size, Some(PixelSize::new(1280, 720)));
+        overridden.validate()?;
+        Ok(())
+    }
 
     #[test]
     fn studio_selects_exactly_one_demo_without_loading_resources() {
@@ -257,6 +287,33 @@ mod tests {
     #[test]
     fn film_program_has_unique_ids_composed_features_and_exact_duration() -> motion::Result {
         let entries = catalog();
+        let expected = [
+            "animation-atlas",
+            "brush-atlas",
+            "particle-atlas",
+            "particle-features",
+            "filter-atlas",
+            "compositing-atlas",
+            "vector-atlas",
+            "ink-features",
+            "noise-atlas",
+            "audio-atlas",
+            "typography-atlas",
+            "caption-atlas",
+            "particle-garden",
+            "data-story",
+            "logo-sting",
+            "type-in-motion",
+            "ink-journey",
+            "signal-garden",
+        ]
+        .into_iter()
+        .chain(cfg!(feature = "formula").then_some("harmonics"))
+        .collect::<Vec<_>>();
+        assert_eq!(
+            entries.iter().map(|entry| entry.id).collect::<Vec<_>>(),
+            expected
+        );
         let mut ids = BTreeSet::new();
         for entry in &entries {
             assert!(ids.insert(entry.id), "duplicate demo: {}", entry.id);
@@ -274,15 +331,29 @@ mod tests {
             "type-in-motion",
             "ink-journey",
             "signal-garden",
-            "quiet-hours",
-            "chidori",
             "particle-garden",
-            "cinematic-look",
             "data-story",
-            "puppet-show",
             "logo-sting",
+            "animation-atlas",
+            "brush-atlas",
+            "particle-atlas",
+            "particle-features",
+            "filter-atlas",
+            "compositing-atlas",
+            "vector-atlas",
+            "noise-atlas",
+            "ink-features",
+            "audio-atlas",
+            "typography-atlas",
+            "caption-atlas",
         ] {
             assert!(ids.contains(required), "missing film: {required}");
+        }
+        for removed in ["chidori", "puppet-show", "quiet-hours", "cinematic-look"] {
+            assert!(
+                !ids.contains(removed),
+                "removed demo must not be listed: {removed}"
+            );
         }
         assert_eq!(
             entries
@@ -291,14 +362,17 @@ mod tests {
                 .count(),
             usize::from(cfg!(feature = "formula"))
         );
-        assert_eq!(entries.len(), 10 + usize::from(cfg!(feature = "formula")));
+        assert_eq!(entries.len(), 18 + usize::from(cfg!(feature = "formula")));
         let project = project(RenderOptions::default())?;
+        for removed in ["chidori", "puppet-show", "quiet-hours", "cinematic-look"] {
+            assert!(project.build(removed, None).is_err());
+        }
         let registered = project
             .list()
             .into_iter()
             .map(|entry| entry.name)
-            .collect::<BTreeSet<_>>();
-        assert_eq!(registered, ids.into_iter().map(str::to_owned).collect());
+            .collect::<Vec<_>>();
+        assert_eq!(registered, expected);
         for entry in entries {
             for seconds in [1, 8] {
                 let timeline =
@@ -349,7 +423,7 @@ mod tests {
 
     #[test]
     #[ignore = "requires explicit MOTION_TEST_FONT; full-size sampled admission/replay, not a benchmark"]
-    fn full_size_default_budgets_admit_original_demos_and_replay() -> motion::Result {
+    fn full_size_default_budgets_admit_catalog_and_replay() -> motion::Result {
         let font = std::env::var_os("MOTION_TEST_FONT")
             .ok_or_else(|| std::io::Error::other("Set MOTION_TEST_FONT"))?;
         let options = render_options(Some(std::path::Path::new(&font)))?

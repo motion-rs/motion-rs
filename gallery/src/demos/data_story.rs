@@ -22,21 +22,31 @@ pub(super) const METADATA: DemoMetadata = DemoMetadata::new(
 );
 
 const PAPER: u32 = 0xf7f5f0;
+
 const INK: u32 = 0x1f2a37;
-const MUTED: u32 = 0x6b7280;
+
+const MUTED: u32 = 0x4b5563;
+
 const GRID: u32 = 0xe2ded5;
+
 const TEAL: u32 = 0x0f9d8a;
+
 const CORAL: u32 = 0xff6b4a;
+
 const AMBER: u32 = 0xe9a23b;
 
 const YEARS: [f64; 10] = [
     2016.0, 2017.0, 2018.0, 2019.0, 2020.0, 2021.0, 2022.0, 2023.0, 2024.0, 2025.0,
 ];
+
 const RIDERS: [f64; 10] = [3.1, 3.6, 4.2, 4.0, 1.9, 2.8, 4.6, 5.9, 7.2, 8.4];
+
 const COMMUTE: [f64; 10] = [52.0, 51.0, 49.0, 48.0, 47.0, 45.0, 42.0, 39.0, 36.0, 33.0];
 
 const BAR_PLOT: Rect = Rect::new(84.0, 136.0, 500.0, 380.0);
+
 const LINE_PLOT: Rect = Rect::new(600.0, 150.0, 900.0, 292.0);
+
 const NARRATION: [(f64, f64, &str); 4] = [
     (
         0.02,
@@ -66,7 +76,10 @@ fn window(progress: f64, start: f64, length: f64) -> f64 {
 }
 
 fn label(text: impl Into<String>, size: f64, hex: u32) -> Text {
-    Text::new(text.into()).size(size).fill(color(hex))
+    Text::new(text.into())
+        .size(size)
+        .weight(FontWeight::MEDIUM)
+        .fill(color(hex))
 }
 
 pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
@@ -85,7 +98,7 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
             .collect::<Result<Vec<_>, _>>()?,
     )?;
     let style = CaptionStyle::new(Rect::new(48.0, 452.0, 912.0, 512.0))
-        .font_size(19.0)
+        .font_size(22.0)
         .color(color(PAPER))
         .background(color(INK))
         .padding(18.0, 10.0)
@@ -124,12 +137,14 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
                     let header = window(progress, 0.0, 0.08);
                     nodes.push(
                         Node::group([
-                            Node::from(Rect::new(48.0, 30.0, 56.0, 78.0).fill(color(TEAL))),
-                            label("THE HARBOR LINE", 26.0, INK).translate(70.0, 28.0),
-                            label("How a ferry rewired Port Avelin's commute", 15.0, MUTED)
-                                .translate(70.0, 60.0),
-                            label("FICTIONAL DATA  |  2016-2025", 12.0, MUTED)
-                                .translate(722.0, 40.0),
+                            Node::from(Rect::new(48.0, 30.0, 56.0, 88.0).fill(color(TEAL))),
+                            label("THE HARBOR LINE", 32.0, INK)
+                                .weight(FontWeight::SEMIBOLD)
+                                .translate(70.0, 28.0),
+                            label("How a ferry rewired Port Avelin's commute", 18.0, MUTED)
+                                .translate(70.0, 68.0),
+                            label("FICTIONAL DATA  |  2016-2025", 14.0, MUTED)
+                                .translate(690.0, 40.0),
                         ])
                         .opacity(header)
                         .translate(0.0, (1.0 - header) * -12.0),
@@ -146,9 +161,9 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
                         // The invisible strut fixes the column width so ticking digits
                         // never shift neighbouring cards inside the measured row.
                         Column::new().gap(4.0).children([
-                            Node::from(label(value, 26.0, hex)),
-                            Node::from(label(caption, 12.0, MUTED)),
-                            Node::from(Rect::new(0.0, 0.0, 86.0, 1.0).fill(color(0xffffff))),
+                            Node::from(label(value, 28.0, hex).weight(FontWeight::SEMIBOLD)),
+                            Node::from(label(caption, 14.0, MUTED)),
+                            Node::from(Rect::new(0.0, 0.0, 96.0, 1.0).fill(color(0xffffff))),
                         ])
                     };
                     nodes.push(
@@ -156,11 +171,11 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
                             Node::from(Rect::new(560.0, 338.0, 912.0, 420.0).fill(color(0xffffff))),
                             Node::from(Rect::new(560.0, 338.0, 912.0, 341.0).fill(color(TEAL))),
                             Row::new()
-                                .gap(18.0)
+                                .gap(12.0)
                                 .alignment(Alignment::Start)
                                 .children([
-                                    stat(format!("{riders:.1}M"), "riders in 2025", TEAL),
-                                    stat(format!("+{growth:.0}%"), "since 2016", AMBER),
+                                    stat(format!("{riders:.1}M"), "riders in 2025", 0x087f70),
+                                    stat(format!("+{growth:.0}%"), "since 2016", 0x996400),
                                     stat(
                                         if saved < 0.5 {
                                             "0 min".to_owned()
@@ -168,7 +183,7 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
                                             format!("-{saved:.0} min")
                                         },
                                         "per commute",
-                                        CORAL,
+                                        0xc54230,
                                     ),
                                 ])
                                 .translate(578.0, 356.0),
@@ -195,14 +210,14 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
 
 fn bar_chart(progress: f64, scale: Scale, ticks: &[f64]) -> motion::Result<Node> {
     let mut nodes =
-        vec![label("Annual riders, millions", 14.0, INK).translate(BAR_PLOT.left, 100.0)];
+        vec![label("Annual riders, millions", 18.0, INK).translate(BAR_PLOT.left, 100.0)];
     let axis = window(progress, 0.02, 0.08);
     for &tick in ticks {
         let y = scale.map(tick)?;
         nodes.push(
             Node::group([
                 Node::from(Rect::new(BAR_PLOT.left, y, BAR_PLOT.right, y + 1.0).fill(color(GRID))),
-                label(format!("{tick:.0}"), 12.0, MUTED).translate(BAR_PLOT.left - 26.0, y - 9.0),
+                label(format!("{tick:.0}"), 14.0, MUTED).translate(BAR_PLOT.left - 26.0, y - 10.0),
             ])
             .opacity(axis),
         );
@@ -228,13 +243,13 @@ fn bar_chart(progress: f64, scale: Scale, ticks: &[f64]) -> motion::Result<Node>
                 .into(),
         );
         nodes.push(
-            label(format!("'{:02}", year as i64 % 100), 12.0, MUTED)
+            label(format!("'{:02}", year as i64 % 100), 14.0, MUTED)
                 .translate(left + 2.0, BAR_PLOT.bottom + 6.0)
                 .opacity(axis),
         );
         let shown = window(progress, 0.14 + index as f64 * 0.036, 0.06);
         nodes.push(
-            label(format!("{value:.1}"), 11.0, INK)
+            label(format!("{value:.1}"), 14.0, INK)
                 .translate(left + 1.0, top - 18.0)
                 .opacity(shown),
         );
@@ -251,8 +266,8 @@ fn bar_chart(progress: f64, scale: Scale, ticks: &[f64]) -> motion::Result<Node>
     );
     // Callout tagging the record year once the story reaches its conclusion.
     let callout = Node::group([
-        Node::from(Rect::new(322.0, 112.0, 452.0, 140.0).fill(color(INK))),
-        label("Record year: 8.4M", 13.0, PAPER).translate(332.0, 117.0),
+        Node::from(Rect::new(316.0, 104.0, 500.0, 136.0).fill(color(INK))),
+        label("Record year: 8.4M", 15.0, PAPER).translate(326.0, 111.0),
     ]);
     nodes.push(
         callout
@@ -272,17 +287,21 @@ fn line_chart(
     let draw = window(progress, 0.46, 0.30);
     let reach = draw * (YEARS.len() - 1) as f64;
     let whole = reach.floor() as usize;
-    let mut points: Vec<(f64, f64)> = (0..=whole.min(YEARS.len() - 1))
+    let last = whole.min(YEARS.len() - 1);
+    let mut points: Vec<(f64, f64)> = (0..=last)
         .map(|index| (YEARS[index], COMMUTE[index]))
         .collect();
-    if whole + 1 < YEARS.len() {
+    let head = if whole + 1 < YEARS.len() {
         let fraction = reach - whole as f64;
-        points.push((
+        let head = (
             YEARS[whole] + fraction,
             COMMUTE[whole] + (COMMUTE[whole + 1] - COMMUTE[whole]) * fraction,
-        ));
-    }
-    let head = *points.last().expect("at least one point");
+        );
+        points.push(head);
+        head
+    } else {
+        (YEARS[last], COMMUTE[last])
+    };
     let stroke = StrokeStyle {
         width: 3.5,
         cap: LineCap::Round,
@@ -293,7 +312,7 @@ fn line_chart(
         chart = chart.series(points, color(CORAL), stroke)?;
     }
     let mut nodes = vec![
-        label("Average commute, minutes", 14.0, INK).translate(LINE_PLOT.left, 100.0),
+        label("Average commute, minutes", 18.0, INK).translate(LINE_PLOT.left, 100.0),
         chart.node(context)?,
         Node::from(
             Rect::new(
@@ -307,11 +326,71 @@ fn line_chart(
     ];
     if draw > 0.0 {
         let point = Point::new(horizontal.map(head.0)?, vertical.map(head.1)?);
+        let label_left = if point.x < LINE_PLOT.left + 60.0 {
+            point.x + 12.0
+        } else {
+            point.x - 24.0
+        };
         nodes.push(Circle::new(point, 6.0).fill(color(CORAL)).into());
         nodes.push(
-            label(format!("{:.0} min", head.1), 12.0, CORAL)
-                .translate(point.x - 18.0, point.y - 26.0),
+            label(format!("{:.0} min", head.1), 14.0, 0xc54230)
+                .translate(label_left, point.y - 26.0),
         );
     }
     Ok(Node::group(nodes).opacity(appear))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[ignore = "requires explicit MOTION_TEST_FONT and native GPU when enabled; label bounds and replay"]
+    fn larger_labels_fit_and_frames_replay() -> motion::Result {
+        let font = std::env::var_os("MOTION_TEST_FONT")
+            .ok_or_else(|| std::io::Error::other("Set MOTION_TEST_FONT"))?;
+        let mut fonts = FontLibrary::new();
+        fonts.load_file(std::path::Path::new(&font))?;
+        for value in ["8.4M", "+171%", "-19 min"] {
+            let bounds = label(value, 28.0, INK)
+                .weight(FontWeight::SEMIBOLD)
+                .layout(&fonts)?
+                .bounds();
+            assert!(bounds.width() <= 104.0, "statistic too wide: {value}");
+        }
+        let callout = label("Record year: 8.4M", 15.0, PAPER).layout(&fonts)?;
+        assert!(callout.bounds().width() <= 164.0);
+        let options = crate::render_options(Some(std::path::Path::new(&font)))?
+            .backend(BackendPreference::Cpu);
+        let film = timeline(DemoParameters {
+            seconds: 30,
+            ..DemoParameters::default()
+        })?;
+        assert_eq!(film.frame_count(), 900);
+        for size in [PixelSize::new(960, 540), PixelSize::new(1920, 1080)] {
+            let options = options.clone().size(size);
+            for seconds in [1.5, 15.0, 25.8, 29.0] {
+                let first = render_still(&film, seconds.seconds(), &options)?;
+                render_still(&film, Time::ZERO, &options)?;
+                let replay = render_still(&film, seconds.seconds(), &options)?;
+                assert_eq!(first.bytes(), replay.bytes());
+                #[cfg(feature = "gpu")]
+                {
+                    let gpu_options = options.clone().backend(BackendPreference::Gpu);
+                    let gpu = render_still(&film, seconds.seconds(), &gpu_options)?;
+                    let difference = first
+                        .bytes()
+                        .iter()
+                        .zip(gpu.bytes())
+                        .map(|(cpu, gpu)| cpu.abs_diff(*gpu))
+                        .max()
+                        .unwrap_or(0);
+                    assert!(difference <= 2, "CPU/GPU difference: {difference}");
+                    let replay = render_still(&film, seconds.seconds(), &gpu_options)?;
+                    assert_eq!(gpu.bytes(), replay.bytes());
+                }
+            }
+        }
+        Ok(())
+    }
 }
