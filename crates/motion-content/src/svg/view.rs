@@ -1,7 +1,9 @@
 //! The `Svg` node builder with lazy loading, viewport fitting, and failure placeholders.
 
 use super::*;
-use motion_core::{Canvas, DrawContext, Drawable, Node, NodeModifiers, ValidationError};
+use motion_core::{
+    Canvas, DeferredContent, DrawContext, Drawable, Node, NodeModifiers, ValidationError,
+};
 
 type Selection = Arc<dyn Fn(Node) -> Node + Send + Sync>;
 
@@ -196,25 +198,13 @@ impl Drawable for FailedResource {
 #[derive(Clone)]
 struct DeferredSvg(Svg);
 
-impl Drawable for DeferredSvg {
-    fn bounds(&self, _: &DrawContext) -> Result<Rect, ValidationError> {
-        Ok(Rect::default())
-    }
-
-    fn draw(&self, _: &DrawContext, _: &mut Canvas<'_>) -> Result<(), ValidationError> {
-        Err(ValidationError::invalid(
-            "svg",
-            "resolution",
-            "SVG must resolve before drawing",
-        ))
-    }
-
-    fn resolve_node(&self, context: &DrawContext) -> Result<Option<Node>, ValidationError> {
+impl DeferredContent for DeferredSvg {
+    fn resolve(&self, context: &DrawContext) -> Result<Node, ValidationError> {
         match self.0.node_with(context) {
-            Ok(node) => Ok(Some(node)),
+            Ok(node) => Ok(node),
             Err(error) => {
                 if error.kind() == motion_core::ErrorKind::Asset {
-                    Ok(Some(Node::from(FailedResource(self.0.clone()))))
+                    Ok(Node::from(FailedResource(self.0.clone())))
                 } else {
                     Err(ValidationError::invalid(
                         "svg",
@@ -229,6 +219,6 @@ impl Drawable for DeferredSvg {
 
 impl From<Svg> for Node {
     fn from(svg: Svg) -> Node {
-        Node::from(DeferredSvg(svg))
+        Node::deferred(DeferredSvg(svg))
     }
 }

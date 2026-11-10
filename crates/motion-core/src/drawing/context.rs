@@ -274,11 +274,6 @@ impl DrawContext {
 /// # Ok::<(), motion_core::ValidationError>(())
 /// ```
 pub trait Drawable: Send + Sync {
-    /// Resolves deferred content to ordinary nodes at the current drawing time.
-    fn resolve_node(&self, _context: &DrawContext) -> Result<Option<crate::Node>, ValidationError> {
-        Ok(None)
-    }
-
     /// Local layout/ink bounds before node placement; invalid content is an error.
     fn bounds(&self, context: &DrawContext) -> Result<Rect, ValidationError>;
 
@@ -289,6 +284,21 @@ pub trait Drawable: Send + Sync {
 
     /// Emits local commands; validation errors propagate without partial output.
     fn draw(&self, context: &DrawContext, canvas: &mut Canvas<'_>) -> Result<(), ValidationError>;
+}
+
+/// Content that expands into ordinary nodes at the current drawing time.
+///
+/// Deferred content is not a leaf: it owns no bounds or commands. Measuring and
+/// compiling resolve it first, so the outer placement and inherited scene time
+/// apply to the resolved subtree.
+pub trait DeferredContent: Send + Sync {
+    /// Resolves this content to an ordinary node at the drawing time in `context`.
+    fn resolve(&self, context: &DrawContext) -> Result<crate::Node, ValidationError>;
+
+    /// Real horizontal text baseline of the resolved node in local coordinates.
+    fn baseline(&self, _context: &DrawContext) -> Option<f64> {
+        None
+    }
 }
 
 #[cfg(test)]

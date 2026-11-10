@@ -74,9 +74,9 @@ pub use color::math::{
 };
 pub use display_list::{DisplayList, PixelSize, ValidatedDisplayList};
 pub use drawing::{
-    BlendMode, BlendSpace, Canvas, ClipMode, DrawCommand, DrawContext, Drawable, FillRule,
-    IntoShapeClip, LineCap, LineJoin, MAX_STROKE_VERBS, MaskMode, Paint, PathClip, RectClip,
-    RenderQuality, Shape, ShapeClip, StrokeStyle, Styled,
+    BlendMode, BlendSpace, Canvas, ClipMode, DeferredContent, DrawCommand, DrawContext, Drawable,
+    FillRule, IntoShapeClip, LineCap, LineJoin, MAX_STROKE_VERBS, MaskMode, Paint, PathClip,
+    RectClip, RenderQuality, Shape, ShapeClip, StrokeStyle, Styled,
 };
 pub use drawing::{
     GradientExtend, GradientSpace, GradientUnits, ImagePattern, LinearGradient, RadialGradient,
@@ -131,8 +131,8 @@ pub mod prelude {
         TimelineWarning, Track, TrackBuilder,
     };
     pub use crate::{
-        Canvas, DrawCommand, DrawContext, Drawable, FillRule, LineCap, LineJoin, Paint, PathClip,
-        RectClip, RenderQuality, Shape, ShapeClip, StrokeStyle, Styled,
+        Canvas, DeferredContent, DrawCommand, DrawContext, Drawable, FillRule, LineCap, LineJoin,
+        Paint, PathClip, RectClip, RenderQuality, Shape, ShapeClip, StrokeStyle, Styled,
     };
     pub use crate::{
         CrossFade, Iris, IrisShape, MotionBlur, Push, Slide, Transition, Wipe, ZoomBlur,

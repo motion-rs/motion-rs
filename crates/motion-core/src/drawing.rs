@@ -13,7 +13,7 @@ pub use blend::{BlendMode, BlendSpace, FillRule, MaskMode};
 pub use canvas::Canvas;
 pub use clip::{ClipGeometry, ClipMode, IntoShapeClip, PathClip, RectClip, ShapeClip};
 pub use command::DrawCommand;
-pub use context::{DrawContext, Drawable, RenderQuality};
+pub use context::{DeferredContent, DrawContext, Drawable, RenderQuality};
 
 pub use paint::{
     GradientExtend, GradientSpace, GradientUnits, ImagePattern, LinearGradient, Paint,

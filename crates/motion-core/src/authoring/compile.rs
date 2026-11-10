@@ -17,18 +17,6 @@ mod tests;
 pub use inspection::NodeInspection;
 
 impl Node {
-    pub(crate) fn record_local(
-        &self,
-        context: &DrawContext,
-        limits: ValidationLimits,
-    ) -> Result<Vec<DrawCommand>, ValidationError> {
-        let mut state = ValidationState::new(limits)?;
-        let plan = plan(self, "node", 1, context, &mut state)?;
-        let mut output = Builder::new(PixelSize::new(1, 1), limits)?;
-        plan.emit(Transform::IDENTITY, &mut output)?;
-        Ok(output.finish()?.commands)
-    }
-
     /// Compiles content to flat device-space commands without rendering.
     ///
     /// Logical design space is contained and centered in the output dimensions.
@@ -225,28 +213,28 @@ fn plan(
             (Content::Children(vec![subject]), bounds, has_commands)
         }
         NodeKind::Leaf(drawable) => {
-            if let Some(resolved) = drawable.resolve_node(context).map_err(|mut error| {
+            let bounds = drawable.bounds(context)?;
+            crate::drawing::validate_rect(bounds, &path, "bounds")?;
+            let commands =
+                Canvas::new(state, &path, depth + 1).record(drawable.as_ref(), context)?;
+            let has_commands = !commands.is_empty();
+            (Content::Leaf(commands), Bounds::Known(bounds), has_commands)
+        }
+        NodeKind::Deferred(content) => {
+            let resolved = content.resolve(context).map_err(|mut error| {
                 error.path = format!("{path}.{}", error.path);
                 error
-            })? {
-                let expanded = plan(
-                    &resolved,
-                    &format!("{path}.resolved"),
-                    depth + 1,
-                    context,
-                    state,
-                )?;
-                let bounds = expanded.bounds;
-                let has_commands = expanded.has_commands;
-                (Content::Children(vec![expanded]), bounds, has_commands)
-            } else {
-                let bounds = drawable.bounds(context)?;
-                crate::drawing::validate_rect(bounds, &path, "bounds")?;
-                let commands =
-                    Canvas::new(state, &path, depth + 1).record(drawable.as_ref(), context)?;
-                let has_commands = !commands.is_empty();
-                (Content::Leaf(commands), Bounds::Known(bounds), has_commands)
-            }
+            })?;
+            let expanded = plan(
+                &resolved,
+                &format!("{path}.resolved"),
+                depth + 1,
+                context,
+                state,
+            )?;
+            let bounds = expanded.bounds;
+            let has_commands = expanded.has_commands;
+            (Content::Children(vec![expanded]), bounds, has_commands)
         }
         NodeKind::Group(children)
         | NodeKind::Layout(_, children)
@@ -488,31 +476,21 @@ impl Plan {
 mod deferred_content_tests {
     use super::*;
     use crate::Shape;
-    use crate::{Color, Drawable, NodeModifiers, Rect, Time, TimeLiteral};
+    use crate::{Color, DeferredContent, NodeModifiers, Rect, TimeLiteral};
 
     struct Deferred;
 
-    impl Drawable for Deferred {
-        fn bounds(&self, _: &DrawContext) -> Result<Rect, ValidationError> {
-            Ok(Rect::default())
-        }
-
-        fn draw(&self, _: &DrawContext, _: &mut Canvas<'_>) -> Result<(), ValidationError> {
-            panic!("deferred content must resolve before drawing")
-        }
-
-        fn resolve_node(&self, context: &DrawContext) -> Result<Option<Node>, ValidationError> {
-            Ok(Some(
-                Rect::new(0.0, 0.0, 2.0 + context.time().as_seconds(), 1.0)
-                    .fill(Color::WHITE)
-                    .into(),
-            ))
+    impl DeferredContent for Deferred {
+        fn resolve(&self, context: &DrawContext) -> Result<Node, ValidationError> {
+            Ok(Rect::new(0.0, 0.0, 2.0 + context.time().as_seconds(), 1.0)
+                .fill(Color::WHITE)
+                .into())
         }
     }
 
     #[test]
     fn deferred_content_preserves_outer_placement_and_inherited_local_time() {
-        let node = Node::from(Deferred)
+        let node = Node::deferred(Deferred)
             .translate(10.0, 0.0)
             .with_scene_time(1.seconds());
         assert_eq!(
@@ -527,10 +505,5 @@ mod deferred_content_tests {
             )
             .unwrap();
         assert_eq!(list.commands.len(), 1);
-        let commands = DrawContext::default()
-            .with_time(Time::ZERO)
-            .record(&Deferred, ValidationLimits::default())
-            .unwrap();
-        assert_eq!(commands.len(), 1);
     }
 }

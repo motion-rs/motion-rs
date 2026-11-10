@@ -108,7 +108,7 @@ fn text_tree_preserves_actual_rich_paragraph_pixels_bounds_and_reading_order()
     let tree = text.vector_tree(&context)?;
     assert_eq!(
         tree.node().measure(ValidationLimits::default())?,
-        text.bounds(&context)?
+        text.local_bounds(&context)?
     );
     let render = |node: Node| -> motion_core::Result<motion_render::Bitmap> {
         let frame = node

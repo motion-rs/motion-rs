@@ -5,8 +5,8 @@ use std::sync::Arc;
 use crate::drawing::BlendMode;
 use crate::validation::ValidationState;
 use crate::{
-    DrawContext, Drawable, Duration, Pivot, Point, Rect, SceneContext, Time, ValidationError,
-    ValidationLimits,
+    DeferredContent, DrawContext, Drawable, Duration, Pivot, Point, Rect, SceneContext, Time,
+    ValidationError, ValidationLimits,
 };
 
 pub mod camera;

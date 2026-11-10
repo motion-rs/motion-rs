@@ -75,7 +75,7 @@
 //! | Typst math | `formula` | `formula` |
 //! | JSON documents and schema | `declarative` | `declarative` |
 //! | Vector trees and morphs | `vector` | `vector` |
-//! | Extension protocols (`Drawable`, `Transition`, `RenderPrepare`) | `extend` | always |
+//! | Extension protocols (`Drawable`, `DeferredContent`, `Transition`, `RenderPrepare`) | `extend` | always |
 //! | Compiled commands, caches, backends | `render` | always |
 //! | Desktop preview | `studio` | `studio` |
 //!
@@ -290,8 +290,8 @@ pub mod extend {
         InstanceRecord, InstanceUpload, MAX_INSTANCE_COUNT,
     };
     pub use motion_core::{
-        Asset, AudioSource, Canvas, DrawContext, Drawable, ImagePixels, LoadContext, Transition,
-        ValidationError, ValidationLimits,
+        Asset, AudioSource, Canvas, DeferredContent, DrawContext, Drawable, ImagePixels,
+        LoadContext, Transition, ValidationError, ValidationLimits,
     };
     pub use motion_encode::{Encoder, EncoderCapabilities, ProgressSink};
     pub use motion_render::RenderPrepare;

@@ -58,6 +58,7 @@ pub(super) struct NodeMask {
 pub(super) enum NodeKind {
     Empty,
     Leaf(Arc<dyn Drawable>),
+    Deferred(Arc<dyn DeferredContent>),
     Group(Vec<Node>),
     Accumulate(Vec<Node>),
     Layout(Layout, Vec<Node>),
@@ -69,6 +70,7 @@ impl std::fmt::Debug for NodeKind {
         match self {
             Self::Empty => formatter.write_str("Empty"),
             Self::Leaf(_) => formatter.write_str("Leaf(..)"),
+            Self::Deferred(_) => formatter.write_str("Deferred(..)"),
             Self::Relative(relative) => formatter.debug_tuple("Relative").field(relative).finish(),
             Self::Group(children) => formatter.debug_tuple("Group").field(children).finish(),
             Self::Accumulate(children) => {
@@ -386,13 +388,14 @@ impl Node {
                 subject.transformed(translation, &path)?
             }
             NodeKind::Leaf(drawable) => {
-                if let Some(resolved) = drawable.resolve_node(context)? {
-                    resolved.measure_bounds(&path, depth + 1, state, context)?
-                } else {
-                    let bounds = drawable.bounds(context)?;
-                    crate::drawing::validate_rect(bounds, &path, "bounds")?;
-                    Bounds::Known(bounds)
-                }
+                let bounds = drawable.bounds(context)?;
+                crate::drawing::validate_rect(bounds, &path, "bounds")?;
+                Bounds::Known(bounds)
+            }
+            NodeKind::Deferred(content) => {
+                content
+                    .resolve(context)?
+                    .measure_bounds(&path, depth + 1, state, context)?
             }
             NodeKind::Group(children)
             | NodeKind::Layout(_, children)
@@ -471,13 +474,24 @@ impl Node {
         let (baseline, local_bounds) = if let Some(metrics) = self.data.text_metrics {
             metrics
         } else {
-            let NodeKind::Leaf(drawable) = &self.data.kind else {
-                return Ok(None);
-            };
-            let Some(baseline) = drawable.baseline(context) else {
-                return Ok(None);
-            };
-            (baseline, drawable.bounds(context)?)
+            match &self.data.kind {
+                NodeKind::Leaf(drawable) => {
+                    let Some(baseline) = drawable.baseline(context) else {
+                        return Ok(None);
+                    };
+                    (baseline, drawable.bounds(context)?)
+                }
+                NodeKind::Deferred(content) => {
+                    let Some(baseline) = content.baseline(context) else {
+                        return Ok(None);
+                    };
+                    let bounds = content
+                        .resolve(context)?
+                        .measure_with(context, crate::ValidationLimits::default())?;
+                    (baseline, bounds)
+                }
+                _ => return Ok(None),
+            }
         };
         if !baseline.is_finite() {
             return Err(ValidationError::invalid(
@@ -510,6 +524,13 @@ impl Node {
 impl<Content: Drawable + 'static> From<Content> for Node {
     fn from(content: Content) -> Self {
         Self::new(NodeKind::Leaf(Arc::new(content)))
+    }
+}
+
+impl Node {
+    /// Wraps content that expands into ordinary nodes at compile time.
+    pub fn deferred(content: impl DeferredContent + 'static) -> Self {
+        Self::new(NodeKind::Deferred(Arc::new(content)))
     }
 }
 

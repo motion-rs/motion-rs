@@ -227,12 +227,6 @@ impl<'a> Canvas<'a> {
         drawable: &dyn Drawable,
         context: &DrawContext,
     ) -> Result<Vec<DrawCommand>, ValidationError> {
-        if let Some(resolved) = drawable.resolve_node(context)? {
-            for command in resolved.record_local(context, crate::ValidationLimits::default())? {
-                self.push(command)?;
-            }
-            return self.finish();
-        }
         let path = self.path;
         let result = drawable.draw(context, &mut self);
         let commands = self.finish()?;

@@ -102,10 +102,25 @@ impl Drawable for GlyphDrawable {
     }
 }
 
-impl Drawable for Text {
-    fn resolve_node(&self, context: &DrawContext) -> Result<Option<Node>, ValidationError> {
-        if self.write_progress.is_none() && self.part_animation.is_none() {
-            return Ok(None);
+impl Text {
+    /// Local ink bounds of the resolved text, including animation effects.
+    pub(crate) fn local_bounds(&self, context: &DrawContext) -> Result<Rect, ValidationError> {
+        if self.is_deferred() {
+            return DeferredContent::resolve(self, context)?
+                .measure_with(context, motion_core::ValidationLimits::default());
+        }
+        TextRun(self.clone()).bounds(context)
+    }
+
+    pub(crate) fn is_deferred(&self) -> bool {
+        self.write_progress.is_some() || self.part_animation.is_some()
+    }
+}
+
+impl DeferredContent for Text {
+    fn resolve(&self, context: &DrawContext) -> Result<Node, ValidationError> {
+        if !self.is_deferred() {
+            return Ok(Node::from(TextRun(self.clone())));
         }
         let mut base = self.clone();
         base.write_progress = None;
@@ -117,25 +132,39 @@ impl Drawable for Text {
                     "Use separate Text nodes for simultaneous handwriting and part transforms",
                 ));
             }
-            return base
-                .animate_parts_resolved(context, animation.delay, animation.style.as_ref())
-                .map(Some);
+            return base.animate_parts_resolved(context, animation.delay, animation.style.as_ref());
         }
         let Some(progress) = self.write_progress else {
-            return Ok(None);
+            return Ok(Node::from(TextRun(base)));
         };
         if !progress.is_finite() {
             return Err(invalid("progress", "Text write progress must be finite"));
         }
-        base.write_with_context(progress, context).map(Some)
+        base.write_with_context(progress, context)
     }
 
-    fn bounds(&self, context: &DrawContext) -> Result<Rect, ValidationError> {
-        if let Some(node) = self.resolve_node(context)? {
-            return node.measure_with(context, motion_core::ValidationLimits::default());
+    fn baseline(&self, context: &DrawContext) -> Option<f64> {
+        self.resolve(context).ok().map(|layout| layout.baseline)
+    }
+}
+
+impl From<Text> for Node {
+    fn from(text: Text) -> Node {
+        if text.is_deferred() {
+            Node::deferred(text)
+        } else {
+            Node::from(TextRun(text))
         }
-        let layout = self.resolve(context)?;
-        let margin = self.stroke.as_ref().map_or(0.0, |(width, _)| width * 2.0);
+    }
+}
+
+/// Static text laid out and drawn as a leaf.
+struct TextRun(Text);
+
+impl Drawable for TextRun {
+    fn bounds(&self, context: &DrawContext) -> Result<Rect, ValidationError> {
+        let layout = self.0.resolve(context)?;
+        let margin = self.0.stroke.as_ref().map_or(0.0, |(width, _)| width * 2.0);
         Ok(Rect::new(
             layout.bounds.left - margin,
             layout.bounds.top - margin,
@@ -145,27 +174,27 @@ impl Drawable for Text {
     }
 
     fn baseline(&self, context: &DrawContext) -> Option<f64> {
-        self.resolve(context).ok().map(|layout| layout.baseline)
+        self.0.resolve(context).ok().map(|layout| layout.baseline)
     }
 
     fn draw(&self, context: &DrawContext, canvas: &mut Canvas<'_>) -> Result<(), ValidationError> {
-        let layout = self.resolve(context)?;
-        let parts = layout.parts(self.split);
+        let layout = self.0.resolve(context)?;
+        let parts = layout.parts(self.0.split);
         for glyph in layout.glyphs.iter() {
             let owner = parts.iter().position(|part| part.owns(glyph)).unwrap_or(0);
-            if self.visible.is_some_and(|visible| owner >= visible) {
+            if self.0.visible.is_some_and(|visible| owner >= visible) {
                 continue;
             }
             GlyphDrawable {
                 artwork: glyph.artwork.clone(),
                 transform: glyph.transform,
                 bounds: glyph.bounds,
-                fill: self.spans[glyph.span]
+                fill: self.0.spans[glyph.span]
                     .fill
                     .as_ref()
-                    .unwrap_or(&self.fill)
+                    .unwrap_or(&self.0.fill)
                     .clone(),
-                stroke: self.stroke.clone(),
+                stroke: self.0.stroke.clone(),
             }
             .draw(context, canvas)?;
         }

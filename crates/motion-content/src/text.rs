@@ -27,8 +27,8 @@
 use crate::FontLibrary;
 
 use motion_core::{
-    Canvas, Color, DrawContext, Drawable, FillRule, Node, NodeModifiers, Paint, Rect, Time,
-    Transform, ValidationError,
+    Canvas, Color, DeferredContent, DrawContext, Drawable, FillRule, Node, NodeModifiers, Paint,
+    Rect, Time, Transform, ValidationError,
 };
 use std::{
     collections::BTreeMap,
@@ -519,7 +519,7 @@ impl Text {
         }
         Ok(Arc::new(
             VectorTree::new(
-                self.bounds(context)?,
+                self.local_bounds(context)?,
                 VectorGroup {
                     children,
                     ..Default::default()

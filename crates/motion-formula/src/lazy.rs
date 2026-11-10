@@ -1,7 +1,7 @@
 //! Deferred mathematical content using the shared frozen formula compiler.
 
 use crate::{FormulaAsset, FormulaCompileError, FormulaCompiler, FormulaOptions};
-use motion_core::{Canvas, Color, DrawContext, Drawable, Node, Rect, ValidationError};
+use motion_core::{Color, DeferredContent, DrawContext, Node, ValidationError};
 use std::{
     collections::BTreeSet,
     ops::Range,
@@ -177,22 +177,19 @@ impl Formula {
     }
 }
 
-impl Drawable for Formula {
-    fn resolve_node(&self, context: &DrawContext) -> Result<Option<Node>, ValidationError> {
-        self.node(context).map(Some)
-    }
-
-    fn bounds(&self, context: &DrawContext) -> Result<Rect, ValidationError> {
-        self.node(context)?
-            .measure_with(context, motion_core::ValidationLimits::default())
+impl DeferredContent for Formula {
+    fn resolve(&self, context: &DrawContext) -> Result<Node, ValidationError> {
+        self.node(context)
     }
 
     fn baseline(&self, _: &DrawContext) -> Option<f64> {
         self.compiled().ok().and_then(|formula| formula.baseline())
     }
+}
 
-    fn draw(&self, _: &DrawContext, _: &mut Canvas<'_>) -> Result<(), ValidationError> {
-        Err(invalid("Deferred formula must resolve before recording"))
+impl From<Formula> for Node {
+    fn from(formula: Formula) -> Node {
+        Node::deferred(formula)
     }
 }
 

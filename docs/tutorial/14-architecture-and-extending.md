@@ -37,7 +37,7 @@ fn main() -> motion::Result {
 }
 ```
 
-Drawable returns local bounds and emits commands to a checked Canvas. It does not create devices, write files or return an image task with a separate backend lifetime. `bounds` is fallible, so a Drawable reports invalid geometry as a `ValidationError`; `resolve_node` resolves lazy content into ordinary Nodes.
+Drawable returns local bounds and emits commands to a checked Canvas. It does not create devices, write files or return an image task with a separate backend lifetime. `bounds` is fallible, so a Drawable reports invalid geometry as a `ValidationError`. It is only for true leaves. Content that expands into other nodes at the current time, such as animated text, SVG and formulas, implements `DeferredContent::resolve` and is wrapped with `Node::deferred`.
 
 ## Crate Ownership
 

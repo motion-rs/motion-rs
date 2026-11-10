@@ -70,7 +70,7 @@ authoring guarantees.
    retain complete-key results, not mutable playback history.
 2. One authoring model produces immutable Node snapshots. Shared leaves reuse
    static preparation without freezing custom callbacks.
-3. Traits serve open extension points such as Scene, Drawable, Asset, AudioSource
+3. Traits serve open extension points such as Scene, Drawable, DeferredContent, Asset, AudioSource
    and Encoder. Closed command/backend protocols use exhaustive enums.
 4. Shared CPU preparation generates coverage for both backends. GPU composition
    does not imply GPU path rasterization or automatic speedup.

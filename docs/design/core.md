@@ -108,7 +108,8 @@ splitting and geometric morphing operate before pixel execution; topology,
 subpath pairing and winding remain explicit inputs. These dependencies are part
 of the numerical environment, not proof of cross-platform byte identity.
 
-Drawable uses the supplied DrawContext and checked Canvas. Recording retains the
+Drawable uses the supplied DrawContext and checked Canvas. DeferredContent is a separate
+node kind: it only resolves to an ordinary Node at the drawing time. Recording retains the
 first error even if a custom callback ignores it. Compilation measures layout,
 composes transforms and validates all branches, including invisible content.
 It returns ValidatedDisplayList, an immutable checked command snapshot. Editable

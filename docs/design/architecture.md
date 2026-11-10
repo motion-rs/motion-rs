@@ -9,7 +9,7 @@ resources, not an object advanced by a playback clock.
 SceneContext supplies signed local/global ticks, rational frame rate, logical bounds,
 explicit resource snapshots, keyed random streams and a bounded cache. Node snapshots
 are immutable and copy-on-write. Compilation measures layout, resolves placement,
-records Drawable commands and validates all branches, including invisible content.
+expands `DeferredContent` into ordinary nodes, records Drawable commands and validates all branches, including invisible content.
 
 Node compilation validates while recording and returns ValidatedDisplayList directly.
 DisplayList is an editable low-level API. ValidatedDisplayList freezes a checked Arc snapshot and
