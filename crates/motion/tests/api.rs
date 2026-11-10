@@ -117,9 +117,7 @@ mod canonical_api_tests {
         let time: Time = motion_core::Time::from_frame(1, rate);
         let duration: motion_core::Duration = 1.seconds();
         let movement = Tween::new(0.0, 1.0, duration);
-        let output = Composition::new(2, 1)
-            .frame_rate(rate)
-            .frame_count(2)
+        let output = Composition::new(2, 1, motion::render::FrameClock::new(rate, 2))
             .render_frame(1, Size::new(2.0, 1.0), |context| {
                 let sampled: motion_core::Time = context.time();
                 assert_eq!(sampled, time);
@@ -158,7 +156,8 @@ mod canonical_api_tests {
         assert!(color.to_rgba_float()[0] > 1.0);
         let timeline = Timeline::try_new(Size::new(8.0, 4.0), FrameRate::NTSC)?
             .try_track(|track| track.try_push(callback.with_duration(1.seconds())))?;
-        let _: FrameRenderer = Composition::new(8, 4).frame_renderer(timeline.size())?;
+        let _: FrameRenderer = Composition::new(8, 4, motion::render::FrameClock::new(30, 150))
+            .frame_renderer(timeline.size())?;
         let _span = TextSpan::new("canonical").size(14.0);
         assert_eq!(std::mem::size_of::<Particle>(), 72);
         assert!(Node::empty().measure(ValidationLimits::default()).is_ok());

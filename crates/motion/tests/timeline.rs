@@ -160,7 +160,13 @@ mod scenes {
                         .preflight_with(&DrawContext::default(), ValidationLimits::default())
                         .is_err()
                 );
-                assert_eq!(Composition::try_new(0, 16).err().unwrap().field, "width");
+                assert_eq!(
+                    Composition::try_new(0, 16, motion::render::FrameClock::new(30, 150))
+                        .err()
+                        .unwrap()
+                        .field,
+                    "width"
+                );
                 for opacity in [-0.01, 1.01, f64::NAN] {
                     assert_eq!(
                         rectangle()
@@ -455,9 +461,10 @@ mod scenes {
                     Ok(track)
                 })?;
                 assert_eq!(timeline.frame_count(), 20);
-                let mut session = Composition::new(64, 48)
-                    .frame_count(24)
-                    .backend(renderer.into())
+                let mut session = Composition::new(64, 48, motion::render::FrameClock::new(30, 24))
+                    .with_options(
+                        motion::render::RenderOptions::default().backend(renderer.into()),
+                    )?
                     .frame_renderer(size)?;
                 let mut replay = None;
                 let mut held = None;
@@ -959,9 +966,11 @@ mod scenes {
                     )
                 })?
                 .try_duration(500.milliseconds())?;
-            let composition = motion::render::Composition::new(8, 4)
-                .frame_rate(timeline.frame_rate())
-                .frame_count(timeline.frame_count());
+            let composition = motion::render::Composition::new(
+                8,
+                4,
+                motion::render::FrameClock::new(timeline.frame_rate(), timeline.frame_count()),
+            );
             let build = |context: &SceneContext<'_>| timeline.render(context);
             let late = composition.render_frame(14, size(), build)?;
             let early = composition.render_frame(0, size(), build)?;
@@ -1454,10 +1463,12 @@ mod scenes {
             let mut software = std::collections::BTreeMap::<u32, Vec<u32>>::new();
             let marker_color = Color::from_hex(0xd45d49);
             for backend in backends {
-                let composition = Composition::new(64, 64)
-                    .frame_count(10)
-                    .backend(backend.into())
-                    .background(Color::WHITE);
+                let composition = Composition::new(64, 64, motion::render::FrameClock::new(30, 10))
+                    .with_options(
+                        motion::render::RenderOptions::default()
+                            .backend(backend.into())
+                            .background(Color::WHITE),
+                    )?;
                 let mut renderer = composition.frame_renderer(Size::new(64.0, 64.0))?;
                 let mut references = std::collections::BTreeMap::<u32, Vec<u32>>::new();
                 for index in [5, 0, 2, 1, 9, 5, 2] {

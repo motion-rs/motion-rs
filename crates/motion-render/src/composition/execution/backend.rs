@@ -46,8 +46,8 @@ impl FrameExecution<'_> {
     ) -> Result<crate::gpu::PendingTextureFrame> {
         let end = self.duration;
         let shutter = self.composition.shutter();
-        let sampling = self.composition.shutter_sampling;
-        let output = self.composition.configured_output_size();
+        let sampling = self.composition.options.shutter_sampling;
+        let output = self.composition.output_size();
         let (prepared, limits) = self.prepare_frame(
             index,
             self.time,
@@ -75,7 +75,7 @@ impl FrameExecution<'_> {
         let started = self.timings.map(|_| std::time::Instant::now());
         #[cfg(feature = "gpu")]
         let plan = crate::gpu::Plan::new(&prepared, limits)?
-            .with_display(&self.composition.display, u64::from(index))?;
+            .with_display(&self.composition.options.display, u64::from(index))?;
         #[cfg(feature = "gpu")]
         if let Some(started) = started {
             self.timings.as_mut().expect("enabled timings").plan += started.elapsed();
@@ -99,7 +99,7 @@ impl FrameExecution<'_> {
         if let Some(decision) = &self.backend {
             return Ok(decision.renderer);
         }
-        let preference = self.composition.backend;
+        let preference = self.composition.options.backend;
         let allow_software = preference.allow_software();
         if preference == crate::BackendPreference::Cpu {
             self.backend = Some(crate::BackendDecision {
@@ -199,7 +199,7 @@ impl FrameExecution<'_> {
             let preparation = prepared.stats();
             #[cfg(feature = "gpu")]
             let plan = {
-                let preference = self.composition.backend;
+                let preference = self.composition.options.backend;
                 let requested = self
                     .backend
                     .as_ref()
@@ -275,7 +275,7 @@ impl FrameExecution<'_> {
                             crate::gpu::Plan::new(&prepared, limits)?
                         };
                         let plan = if packed {
-                            plan.with_display(&self.composition.display, u64::from(index))?
+                            plan.with_display(&self.composition.options.display, u64::from(index))?
                         } else {
                             plan
                         };

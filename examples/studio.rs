@@ -18,7 +18,7 @@ fn main() -> motion::Result {
     let film = document.compile(&CompileOptions::default())?;
     motion::studio::run(motion::studio::StudioScene::timeline(
         "timeline",
-        Composition::new(640, 360),
+        Composition::new(640, 360, motion::render::FrameClock::new(30, 150)),
         film.timeline().clone(),
     )?)
 }

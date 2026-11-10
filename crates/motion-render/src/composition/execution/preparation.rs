@@ -15,11 +15,12 @@ impl FrameExecution<'_> {
         let validation = self.context().validation_limits();
         let assets = self
             .composition
+            .options
             .resources
             .as_ref()
             .unwrap_or_else(|| self.context().assets());
         let mut drawing = motion_core::DrawContext::default()
-            .quality(self.composition.quality)
+            .quality(self.composition.options.quality)
             .render_cache(self.options.cache.clone())
             .with_font_usage(self.options.font_usage.clone())
             .with_diagnostics(self.diagnostics.clone())
@@ -39,15 +40,15 @@ impl FrameExecution<'_> {
             &list,
             validation,
             self.limits,
-            if self.composition.quality == motion_core::RenderQuality::Draft {
+            if self.composition.options.quality == motion_core::RenderQuality::Draft {
                 0.35
             } else {
                 1.0 / 256.0
             },
             Some(&mut self.coverage_cache),
         )?
-        .quality(self.composition.quality)
-        .blend_space(self.composition.blend_space);
+        .quality(self.composition.options.quality)
+        .blend_space(self.composition.options.blend_space);
         if let Some(started) = started {
             self.timings.as_mut().expect("enabled timings").coverage += started.elapsed();
         }
@@ -69,11 +70,12 @@ impl FrameExecution<'_> {
         self.asset_diagnostics.clear();
         self.composition.validate_frame_index(index)?;
         self.limits.validate_size(self.size)?;
-        let rate = self.composition.frame_rate;
+        let rate = self.composition.clock.rate;
         let diagnostics = motion_core::RequestDiagnostics::default();
         self.diagnostics = diagnostics.clone();
         let assets = self
             .composition
+            .options
             .resources
             .as_ref()
             .unwrap_or_else(|| self.context().assets())
@@ -89,7 +91,7 @@ impl FrameExecution<'_> {
         .with_clip_duration(self.duration)
         .with_assets(&assets)
         .with_diagnostics(&diagnostics)
-        .quality(self.composition.quality);
+        .quality(self.composition.options.quality);
         let started = self.timings.map(|_| std::time::Instant::now());
         let node = build(&context).with_scene_time(context.time());
         if let Some(started) = started {
@@ -125,7 +127,7 @@ impl FrameExecution<'_> {
             return Err(motion_core::Error::BuildErrors(scene_errors).at_frame(u64::from(index)));
         }
         let result = result?;
-        if !self.composition.allow_missing_assets
+        if !self.composition.options.allow_missing_assets
             && let Some(error) = self.asset_diagnostics.first()
         {
             return Err(

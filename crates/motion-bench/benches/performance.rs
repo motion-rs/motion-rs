@@ -126,12 +126,18 @@ fn main() -> motion::Result {
         }),
     )?;
     for &renderer in &renderers {
-        let composition = Composition::new(size.width as usize, size.height as usize)
-            .frame_count(90)
-            .backend(renderer.into())
-            .quality(motion::RenderQuality::Final)
-            .resources(resources.clone())
-            .raster_limits(limits)?;
+        let composition = Composition::new(
+            size.width as usize,
+            size.height as usize,
+            motion::render::FrameClock::new(30, 90),
+        )
+        .with_options(
+            motion::render::RenderOptions::default()
+                .backend(renderer.into())
+                .quality(motion::RenderQuality::Final)
+                .resources(resources.clone())
+                .limits(limits),
+        )?;
         let mut session = composition.frame_renderer(Size::new(640.0, 360.0))?;
         for case in &cases {
             let name = format!("{renderer:?}/{case}");
@@ -282,14 +288,16 @@ mod _case_tests {
         let mut fonts = FontLibrary::new();
         fonts.load_file(font)?;
         let resources = Assets::new(".")?.with_fonts(fonts);
-        let composition = Composition::new(160, 90)
-            .frame_count(90)
-            .resources(resources)
-            .raster_limits(RasterLimits {
-                max_bytes: 1024 * 1024 * 1024,
-                max_work: 400_000_000,
-                ..RasterLimits::default()
-            })?;
+        let composition = Composition::new(160, 90, motion::render::FrameClock::new(30, 90))
+            .with_options(
+                motion::render::RenderOptions::default()
+                    .resources(resources)
+                    .limits(RasterLimits {
+                        max_bytes: 1024 * 1024 * 1024,
+                        max_work: 400_000_000,
+                        ..RasterLimits::default()
+                    }),
+            )?;
         let mut renderer = composition.frame_renderer(Size::new(640.0, 360.0))?;
         for case in CASES {
             let first = renderer.render_frame(45, |context| artwork(case, context))?;

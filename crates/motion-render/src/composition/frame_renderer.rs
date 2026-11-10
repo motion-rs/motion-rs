@@ -152,7 +152,7 @@ impl FrameRenderer {
         format: crate::PixelFormat,
         build: impl FnMut(&SceneContext<'_>) -> Node,
     ) -> Result<crate::FrameBuffer> {
-        let rate = self.composition.frame_rate;
+        let rate = self.composition.clock.rate;
         let mut output = crate::FrameBuffer::vacant();
         self.session.render(
             FrameRequest {
@@ -181,7 +181,7 @@ impl FrameRenderer {
         self.last_stats = None;
         self.asset_diagnostics.clear();
         self.composition.validate_frame_index(index)?;
-        let rate = self.composition.frame_rate;
+        let rate = self.composition.clock.rate;
         self.session.render(
             FrameRequest {
                 time: Time::from_frame(i64::from(index), rate),
@@ -224,7 +224,7 @@ impl FrameRenderer {
     /// Configured backend policy, without selecting or initializing a device.
     /// Automatic remains Automatic after its startup decision has been made.
     pub fn requested_backend(&self) -> crate::BackendPreference {
-        self.composition.backend
+        self.composition.options.backend
     }
 }
 

@@ -75,12 +75,13 @@ fn explicit_font_gpu_matches_cpu_and_replays() -> motion_core::Result {
         .gap(4.0)
         .alignment(motion_core::Alignment::Baseline)
         .children([latin, arabic]);
-    let composition = Composition::new(128, 64)
-        .frame_count(3)
-        .background(motion_core::Color::BLACK);
+    let composition = Composition::new(128, 64, motion_render::FrameClock::new(30, 3))
+        .with_options(
+            motion_render::RenderOptions::default().background(motion_core::Color::BLACK),
+        )?;
     let mut cpu = composition.frame_renderer(Size::new(128.0, 64.0))?;
     let mut gpu = composition
-        .backend(Renderer::Gpu.into())
+        .configure(|options| options.backend(Renderer::Gpu.into()))
         .frame_renderer(Size::new(128.0, 64.0))?;
     let build = |context: &motion_core::SceneContext<'_>| {
         row.clone()

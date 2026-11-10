@@ -113,7 +113,7 @@ type TextureRegistrar = dyn Fn(&wgpu::Texture) -> egui::TextureId;
 /// # fn main() -> motion_core::Result {
 /// studio::run(StudioScene::new(
 ///     "Study",
-///     Composition::new(640, 360).frame_count(90),
+///     Composition::new(640, 360, motion_render::FrameClock::new(30, 90)),
 ///     Size::new(640.0, 360.0),
 ///     |context| {
 ///         Node::from(
@@ -225,7 +225,10 @@ impl StudioApp {
         if let Some(shared) = shared.as_ref().filter(|_| {
             std::env::var_os("MOTION_STUDIO_SHARED_GPU").is_some_and(|value| value == "1")
         }) {
-            scene.composition = scene.composition.clone().gpu_context(shared.clone());
+            scene.composition = scene
+                .composition
+                .clone()
+                .configure(|options| options.gpu_context(shared.clone()));
         }
         let preview = PreviewCoordinator::new(scene.clone(), context.egui_ctx.clone())?;
         #[cfg(feature = "gpu")]
@@ -235,7 +238,7 @@ impl StudioApp {
         let audio = AudioForm::default();
         let timeline_view = crate::timeline_ui::TimelineView::new(&scene, &context.egui_ctx, clock);
         let diagnostics = alignment_diagnostics(&scene, clock);
-        let export_size = scene.composition.configured_output_size();
+        let export_size = scene.composition.output_size();
         let export_range = (0, clock.frame_count());
         let last_interaction = Instant::now();
         #[cfg(feature = "gpu")]

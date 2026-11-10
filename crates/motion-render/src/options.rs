@@ -199,12 +199,7 @@ pub fn size(timeline: &Timeline, options: &RenderOptions) -> Result<PixelSize> {
 /// Creates a checked session template using the timeline's exact rate and frame count.
 /// Carries resources, structural/raster limits, backend policy and optional shutter settings.
 pub fn composition(timeline: &Timeline, options: &RenderOptions) -> Result<crate::Composition> {
-    timeline.validate()?;
-    let size = size(timeline, options)?;
-    crate::Composition::new(size.width as usize, size.height as usize)
-        .frame_rate(timeline.frame_rate())
-        .frame_count(timeline.frame_count())
-        .render_options(options)
+    crate::Composition::for_timeline(timeline, options)
 }
 
 /// Renders an arbitrary in-range tick to straight sRGB RGBA with preserved alpha.
@@ -230,10 +225,12 @@ mod tests {
     fn draft_disables_global_shutter_and_final_remains_exact() -> Result<()> {
         let options = RenderOptions::default();
         assert_eq!(options.quality, motion_core::RenderQuality::Final);
-        let base = Composition::new(16, 16).motion_blur(motion_core::MotionBlur {
-            samples: 4,
-            shutter_angle: 180.0,
-        })?;
+        let base = Composition::new(16, 16, crate::FrameClock::new(30, 150)).with_options(
+            crate::RenderOptions::default().motion_blur(motion_core::MotionBlur {
+                samples: 4,
+                shutter_angle: 180.0,
+            }),
+        )?;
         let build = |context: &SceneContext<'_>| {
             Node::from(
                 Circle::new(Point::new(8.0 + context.seconds(), 8.0), 4.0).fill(Color::WHITE),
@@ -251,7 +248,7 @@ mod tests {
         )?;
         let mut final_renderer = base
             .clone()
-            .quality(motion_core::RenderQuality::Final)
+            .configure(|options| options.quality(motion_core::RenderQuality::Final))
             .frame_renderer(Size::new(16.0, 16.0))?;
         assert_eq!(
             final_renderer.render_output_at(
@@ -264,7 +261,7 @@ mod tests {
         );
         let mut calls = 0;
         let mut draft = base
-            .quality(motion_core::RenderQuality::Draft)
+            .configure(|options| options.quality(motion_core::RenderQuality::Draft))
             .frame_renderer(Size::new(16.0, 16.0))?;
         draft.render_output_at(
             Time::from_frame(2, FrameRate::from(30)),
@@ -282,7 +279,8 @@ mod tests {
     #[test]
     fn cloned_compositions_share_coverage_between_worker_sessions() -> Result<()> {
         let options = RenderOptions::default();
-        let composition = Composition::new(8, 8).render_options(&options)?;
+        let composition = Composition::new(8, 8, crate::FrameClock::new(30, 150))
+            .with_options(options.clone())?;
         let mut first = composition.frame_renderer(Size::new(8.0, 8.0))?;
         first.render_frame(0, |_| {
             Node::from(Circle::new(Point::new(4.0, 4.0), 2.75).fill(Color::WHITE))
@@ -348,10 +346,12 @@ mod tests {
             size: Some(PixelSize::new(8, 4)),
             ..RenderOptions::default()
         };
-        let composition = Composition::new(16, 8).render_options(&options).unwrap();
-        assert_eq!(composition.configured_output_size(), PixelSize::new(8, 4));
-        assert_eq!(composition.configured_frame_count(), 150);
-        assert_eq!(composition.background_color(), Color::WHITE);
+        let composition = Composition::new(16, 8, crate::FrameClock::new(30, 150))
+            .with_options(options.clone())
+            .unwrap();
+        assert_eq!(composition.output_size(), PixelSize::new(8, 4));
+        assert_eq!(composition.frame_count(), 150);
+        assert_eq!(composition.snapshot_background(), Color::WHITE);
         let invalid = RenderOptions {
             size: Some(PixelSize::new(0, 4)),
             ..RenderOptions::default()

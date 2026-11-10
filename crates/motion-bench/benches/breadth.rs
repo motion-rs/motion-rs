@@ -152,16 +152,18 @@ fn main() -> motion::Result {
         let base = composition(size, renderer, &resources)?;
         for case in &cases {
             let composition = if case == "display-transform" {
-                base.clone().display(DisplayTransform {
-                    tone_map: ToneMap::AgX,
-                    grain: Some(FilmGrain {
-                        seed: 9,
-                        amount: 0.01,
-                        size: 1.4,
-                        luma_response: 1.0,
-                        chroma: 0.1,
-                    }),
-                    ..DisplayTransform::default()
+                base.clone().configure(|options| {
+                    options.display(DisplayTransform {
+                        tone_map: ToneMap::AgX,
+                        grain: Some(FilmGrain {
+                            seed: 9,
+                            amount: 0.01,
+                            size: 1.4,
+                            luma_response: 1.0,
+                            chroma: 0.1,
+                        }),
+                        ..DisplayTransform::default()
+                    })
                 })
             } else {
                 base.clone()
@@ -269,16 +271,18 @@ mod _case_tests {
         let composition = composition(PixelSize::new(160, 90), Renderer::Cpu, &resources)?;
         for case in CASES.iter().filter(|case| HEAVY.contains(case) == heavy) {
             let configured = if *case == "display-transform" {
-                composition.clone().display(DisplayTransform {
-                    tone_map: ToneMap::AgX,
-                    grain: Some(FilmGrain {
-                        seed: 9,
-                        amount: 0.01,
-                        size: 1.4,
-                        luma_response: 1.0,
-                        chroma: 0.1,
-                    }),
-                    ..DisplayTransform::default()
+                composition.clone().configure(|options| {
+                    options.display(DisplayTransform {
+                        tone_map: ToneMap::AgX,
+                        grain: Some(FilmGrain {
+                            seed: 9,
+                            amount: 0.01,
+                            size: 1.4,
+                            luma_response: 1.0,
+                            chroma: 0.1,
+                        }),
+                        ..DisplayTransform::default()
+                    })
                 })
             } else {
                 composition.clone()

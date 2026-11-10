@@ -504,7 +504,7 @@ impl crate::app::StudioApp {
             }
             if self.inspection.viewer.background == 3 {
                 let [red, green, blue, _] =
-                    self.scene.composition.background_color().to_rgba_float();
+                    self.scene.composition.snapshot_background().to_rgba_float();
                 ui.painter().rect_filled(
                     bounds,
                     0.0,

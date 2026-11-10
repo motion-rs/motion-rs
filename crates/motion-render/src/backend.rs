@@ -130,8 +130,10 @@ mod tests {
     #[cfg(feature = "gpu")]
     fn automatic_precision_fallback_precedes_device_initialization() -> motion_core::Result<()> {
         use motion_core::NodeModifiers;
-        let mut session = crate::Composition::new(4, 4)
-            .backend(crate::BackendPreference::automatic())
+        let mut session = crate::Composition::new(4, 4, crate::FrameClock::new(30, 150))
+            .with_options(
+                crate::RenderOptions::default().backend(crate::BackendPreference::automatic()),
+            )?
             .frame_renderer(motion_core::Size::new(4.0, 4.0))?;
         session.render_frame(0, |_| {
             motion_core::Node::from(
@@ -154,8 +156,10 @@ mod tests {
     #[test]
     #[cfg(not(feature = "gpu"))]
     fn automatic_without_feature_falls_back_before_rendering() -> motion_core::Result<()> {
-        let mut session = crate::Composition::new(4, 4)
-            .backend(crate::BackendPreference::automatic())
+        let mut session = crate::Composition::new(4, 4, crate::FrameClock::new(30, 150))
+            .with_options(
+                crate::RenderOptions::default().backend(crate::BackendPreference::automatic()),
+            )?
             .frame_renderer(motion_core::Size::new(4.0, 4.0))?;
         session.render_frame(0, |_| motion_core::Node::empty())?;
         let decision = session.backend_decision().unwrap();

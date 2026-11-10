@@ -168,8 +168,9 @@ separate measurement.
 
 ## Frames and Stills
 
-Composition owns dimensions, rational rate, frame count, background, resources and
-backend policy. Reuse `frame_renderer(size)` for random-access frames and cache reuse;
+Composition owns a `FrameClock` (rational rate and frame count, never defaulted) and one
+`RenderOptions` (dimensions, background, resources, backend policy and the rest); there are
+no per-option setters beyond `with_options` and `configure`. Reuse `frame_renderer(size)` for random-access frames and cache reuse;
 its FrameRenderer wraps a RenderSession. For Timeline output, render_still/export
 apply the same RenderOptions policy.
 Snapshot is opaque RGB; its PPM writer truncates/replaces the selected file explicitly.
@@ -182,7 +183,7 @@ for both new and overwritten outputs; export never reads or changes that umask.
 ```rust,no_run
 use motion::prelude::*;
 use motion::render::Composition;
-let composition = Composition::new(320, 180).frame_rate(30).frame_count(60);
+let composition = Composition::new(320, 180, motion::render::FrameClock::new(30, 60));
 let mut renderer = composition.frame_renderer(Size::new(320.0, 180.0))?;
 let frame = renderer.render_frame(15, |context| {
     Node::from(Circle::new(context.center(), 24.0).fill(Color::rgb(20, 160, 130)))
@@ -321,9 +322,9 @@ multiple times. A memory target is replaced only on success and its old retained
 payload is charged while rendering; an external texture has no rollback guarantee
 after a GPU failure. Each request installs new diagnostics and clears prior totals.
 last_stats describes successful memory output, not external-texture conversion.
-Request background overrides the options' background; render_options does not
-change Composition's separate opaque Snapshot background. Query backend_decision for
-the actual backend; renderer() reports the configured initial choice.
+Request background overrides the options' background. Snapshot output composites over
+`RenderOptions::background` made opaque, or white when it is absent. Query
+backend_decision for the actual backend; `requested_backend()` reports the request.
 
 ## Resources and Content
 

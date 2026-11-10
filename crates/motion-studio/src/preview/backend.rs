@@ -102,17 +102,16 @@ fn measure(
     frame: u32,
     backend: motion_render::BackendPreference,
 ) -> Option<Duration> {
-    let size = scene.composition.configured_output_size();
+    let size = scene.composition.output_size();
     let composition = scene
         .composition
         .clone()
-        .output_size(motion_core::PixelSize::new(
+        .with_output_size(motion_core::PixelSize::new(
             ((u64::from(size.width) * u64::from(settings.scale)) / 100).max(1) as u32,
             ((u64::from(size.height) * u64::from(settings.scale)) / 100).max(1) as u32,
         ))
         .ok()?
-        .backend(backend)
-        .quality(settings.quality);
+        .configure(|options| options.backend(backend).quality(settings.quality));
     let scaled = StudioScene {
         composition,
         ..scene.clone()
@@ -123,7 +122,7 @@ fn measure(
         Renderer::Cpu
     };
     let mut renderer = PreviewRenderer::new(&scaled, initial).ok()?;
-    let count = u32::try_from(scene.composition.configured_frame_count()).ok()?;
+    let count = u32::try_from(scene.composition.frame_count()).ok()?;
     if count == 0 {
         return None;
     }

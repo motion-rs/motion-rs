@@ -8,9 +8,11 @@ fn studio_all_codecs_export_and_retain_transactions() -> motion_core::Result<()>
     let directory = tempfile::tempdir()?;
     let scene = StudioScene::new(
         "Codecs",
-        motion_render::Composition::new(32, 16)
-            .frame_rate(motion_core::FrameRate::from(4))
-            .frame_count(2),
+        motion_render::Composition::new(
+            32,
+            16,
+            motion_render::FrameClock::new(motion_core::FrameRate::from(4), 2),
+        ),
         motion_core::Size::new(32.0, 16.0),
         |context| {
             motion_core::Node::from(
@@ -125,10 +127,10 @@ fn start_export_job(
     context: Context,
 ) -> io::Result<ExportJob> {
     let draft = ExportForm {
-        size: scene.composition.configured_output_size(),
+        size: scene.composition.output_size(),
         range: (
             0,
-            u32::try_from(scene.composition.configured_frame_count()).map_err(io::Error::other)?,
+            u32::try_from(scene.composition.frame_count()).map_err(io::Error::other)?,
         ),
         backend: if renderer == Renderer::Gpu {
             motion_render::BackendPreference::gpu()
@@ -153,9 +155,8 @@ fn shared_texture_preview_and_automatic_export_loss_preserve_transactions()
     let context = crate::GpuContext::new()?;
     let scene = StudioScene::new(
         "Shared",
-        motion_render::Composition::new(16, 8)
-            .gpu_context(context.clone())
-            .frame_count(3),
+        motion_render::Composition::new(16, 8, motion_render::FrameClock::new(30, 3))
+            .with_options(motion_render::RenderOptions::default().gpu_context(context.clone()))?,
         motion_core::Size::new(16.0, 8.0),
         |_| {
             motion_core::Node::from(
@@ -232,9 +233,11 @@ fn scaled_transparent_preview_is_rational_and_cached_without_devices() -> motion
     let count = calls.clone();
     let scene = StudioScene::new(
         "Fractional",
-        motion_render::Composition::new(16, 8)
-            .frame_rate(motion_core::FrameRate::new(30_000, 1001))
-            .frame_count(6),
+        motion_render::Composition::new(
+            16,
+            8,
+            motion_render::FrameClock::new(motion_core::FrameRate::new(30_000, 1001), 6),
+        ),
         motion_core::Size::new(16.0, 8.0),
         move |context| {
             count.fetch_add(1, Ordering::SeqCst);
@@ -292,10 +295,13 @@ fn automatic_preview_rejects_gpu_plan_without_rejecting_cpu_frame() -> motion_co
     };
     let scene = StudioScene::preview_only(
         "GPU admission",
-        motion_render::Composition::new(64, 64)
-            .gpu_context(context)
-            .backend(motion_render::BackendPreference::automatic())
-            .raster_limits(limits)?,
+        motion_render::Composition::new(64, 64, motion_render::FrameClock::new(30, 150))
+            .with_options(
+                motion_render::RenderOptions::default()
+                    .gpu_context(context)
+                    .backend(motion_render::BackendPreference::automatic())
+                    .limits(limits),
+            )?,
         motion_core::Size::new(64.0, 64.0),
         |sample| {
             motion_core::Node::group((0..48).map(|index| {
@@ -324,7 +330,7 @@ fn automatic_preview_rejects_gpu_plan_without_rejecting_cpu_frame() -> motion_co
         composition: scene
             .composition
             .clone()
-            .backend(motion_render::BackendPreference::Cpu),
+            .configure(|options| options.backend(motion_render::BackendPreference::Cpu)),
         ..scene.clone()
     };
     let expected =
@@ -348,7 +354,13 @@ fn automatic_preview_rejects_gpu_plan_without_rejecting_cpu_frame() -> motion_co
     );
     let build = scene.definition.build_scene.clone();
     let changing = StudioScene {
-        composition: scene.composition.clone().frame_count(2),
+        composition: scene
+            .composition
+            .clone()
+            .with_clock(motion_render::FrameClock::new(
+                scene.composition.frame_rate(),
+                2,
+            )),
         definition: SceneDefinition {
             build_scene: Arc::new(move |sample| {
                 if sample.time() == motion_core::Time::ZERO {
@@ -380,7 +392,7 @@ fn automatic_preview_rejects_gpu_plan_without_rejecting_cpu_frame() -> motion_co
         composition: scene
             .composition
             .clone()
-            .backend(motion_render::BackendPreference::gpu()),
+            .configure(|options| options.backend(motion_render::BackendPreference::gpu())),
         ..scene
     };
     let error = PreviewRenderer::new(&explicit, Renderer::Gpu)?
@@ -483,7 +495,7 @@ fn preview_cache_retains_long_cycles_and_evicts_by_bytes() -> motion_core::Resul
         let observed = calls.clone();
         let scene = StudioScene::preview_only(
             "cache",
-            motion_render::Composition::new(8, 4).frame_count(48),
+            motion_render::Composition::new(8, 4, motion_render::FrameClock::new(30, 48)),
             motion_core::Size::new(8.0, 4.0),
             move |context| {
                 observed.fetch_add(1, Ordering::SeqCst);
@@ -528,7 +540,7 @@ fn unified_png_is_transactional_and_range_errors_do_not_evaluate() -> motion_cor
     let directory = tempfile::tempdir()?;
     let scene = StudioScene::new(
         "PNG",
-        motion_render::Composition::new(8, 4).frame_count(3),
+        motion_render::Composition::new(8, 4, motion_render::FrameClock::new(30, 3)),
         motion_core::Size::new(8.0, 4.0),
         |_| {
             motion_core::Node::from(
@@ -597,7 +609,7 @@ fn playback_prefetch_is_bounded_cached_and_never_published() -> motion_core::Res
     let (built, builds) = std::sync::mpsc::channel();
     let scene = StudioScene::preview_only(
         "prefetch",
-        motion_render::Composition::new(8, 4).frame_count(20),
+        motion_render::Composition::new(8, 4, motion_render::FrameClock::new(30, 20)),
         motion_core::Size::new(8.0, 4.0),
         move |context| {
             built
@@ -645,7 +657,7 @@ fn playback_seek_preempts_inflight_prefetch_without_stale_reply() -> motion_core
     let builds = observed.clone();
     let scene = StudioScene::preview_only(
         "seek",
-        motion_render::Composition::new(8, 4).frame_count(30),
+        motion_render::Composition::new(8, 4, motion_render::FrameClock::new(30, 30)),
         motion_core::Size::new(8.0, 4.0),
         move |context| {
             let frame = context.time().to_frame(context.frame_rate());
@@ -690,8 +702,11 @@ fn preview_missing_asset_keeps_magenta_frame_and_typed_diagnostic() -> motion_co
     let directory = tempfile::tempdir()?;
     let scene = StudioScene::preview_only(
         "Resource failure",
-        motion_render::Composition::new(8, 8)
-            .resources(motion_core::Assets::new(directory.path())?),
+        motion_render::Composition::new(8, 8, motion_render::FrameClock::new(30, 150))
+            .with_options(
+                motion_render::RenderOptions::default()
+                    .resources(motion_core::Assets::new(directory.path())?),
+            )?,
         motion_core::Size::new(8.0, 8.0),
         |_| motion_core::Node::from(Image::open("missing.png").size(8.0, 8.0)),
     );
@@ -728,7 +743,7 @@ fn export_no_clobber_uses_branch_before_evaluation() -> motion_core::Result {
     std::fs::write(&destination, b"committed destination")?;
     let scene = StudioScene::new(
         "export",
-        motion_render::Composition::new(8, 4),
+        motion_render::Composition::new(8, 4, motion_render::FrameClock::new(30, 150)),
         motion_core::Size::new(8.0, 4.0),
         |_| panic!("No-clobber must precede scene evaluation"),
     );
@@ -798,7 +813,11 @@ fn timeline_worker_keeps_preview_silent_and_exports_its_mix() -> motion_core::Re
     let timeline = motion_core::Timeline::try_new(motion_core::Size::new(8.0, 4.0), 30)?
         .try_audio(motion_core::AudioClip::source(Tone(calls.clone())))?
         .try_duration(100.milliseconds())?;
-    let scene = StudioScene::timeline("sound", motion_render::Composition::new(8, 4), timeline)?;
+    let scene = StudioScene::timeline(
+        "sound",
+        motion_render::Composition::new(8, 4, motion_render::FrameClock::new(30, 150)),
+        timeline,
+    )?;
     let mut preview = PreviewRenderer::new(&scene, Renderer::Cpu)?;
     preview.render_frame(&scene, 0)?;
     assert_eq!(calls.load(std::sync::atomic::Ordering::Relaxed), 0);
@@ -856,7 +875,7 @@ fn export_missing_gpu_fails_before_evaluation_or_files() -> motion_core::Result 
     let destination = directory.path().join("native.mp4");
     let scene = StudioScene::new(
         "Native GPU unavailable",
-        motion_render::Composition::new(8, 4),
+        motion_render::Composition::new(8, 4, motion_render::FrameClock::new(30, 150)),
         motion_core::Size::new(8.0, 4.0),
         |_| panic!("Missing GPU feature must precede scene evaluation"),
     );
@@ -887,7 +906,8 @@ fn preview_session_uses_linear_cpu_without_fonts() -> motion_core::Result {
     use motion_render::Composition;
     let scene = StudioScene::preview_only(
         "geometry",
-        Composition::new(8, 4).background(Color::BLACK),
+        Composition::new(8, 4, motion_render::FrameClock::new(30, 150))
+            .with_options(motion_render::RenderOptions::default().background(Color::BLACK))?,
         Size::new(8.0, 4.0),
         |_| Node::from(Rect::new(0.0, 0.0, 8.0, 4.0).fill(Color::WHITE)).opacity(0.5),
     );
@@ -896,13 +916,12 @@ fn preview_session_uses_linear_cpu_without_fonts() -> motion_core::Result {
     assert_eq!((snapshot.width(), snapshot.height()), (8, 4));
     assert_eq!(snapshot.pixels()[0], 0xbbbbbb);
     let denied = StudioScene {
-        composition: scene
-            .composition
-            .clone()
-            .raster_limits(motion_core::RasterLimits {
+        composition: scene.composition.clone().configure(|options| {
+            options.limits(motion_core::RasterLimits {
                 max_bytes: 1,
                 ..motion_core::RasterLimits::default()
-            })?,
+            })
+        }),
         ..scene.clone()
     };
     let mut restricted = PreviewRenderer::new(&denied, Renderer::Cpu)?;
@@ -918,7 +937,7 @@ fn preview_session_uses_linear_cpu_without_fonts() -> motion_core::Result {
         "max_bytes"
     );
     assert_eq!(
-        scene.composition.configured_raster_limits().max_bytes,
+        scene.composition.raster_limits().max_bytes,
         motion_core::RasterLimits::default().max_bytes
     );
     assert_eq!(session.render_frame(&scene, 0)?.pixels(), snapshot.pixels());
@@ -929,14 +948,15 @@ fn preview_session_uses_linear_cpu_without_fonts() -> motion_core::Result {
 fn preview_honors_global_shutter_and_replays_without_fonts() -> motion_core::Result {
     let calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let observed = calls.clone();
-    let composition = motion_render::Composition::new(8, 4)
-        .frame_rate(24)
-        .frame_count(3)
-        .background(motion_core::Color::BLACK)
-        .motion_blur(motion_core::MotionBlur {
-            shutter_angle: 180.0,
-            samples: 4,
-        })?;
+    let composition = motion_render::Composition::new(8, 4, motion_render::FrameClock::new(24, 3))
+        .with_options(
+            motion_render::RenderOptions::default()
+                .background(motion_core::Color::BLACK)
+                .motion_blur(motion_core::MotionBlur {
+                    shutter_angle: 180.0,
+                    samples: 4,
+                }),
+        )?;
     let scene = StudioScene::preview_only(
         "shutter",
         composition,
@@ -983,9 +1003,9 @@ fn worker_scene(builds: Arc<std::sync::atomic::AtomicUsize>) -> StudioScene {
     use motion_render::Composition;
     StudioScene::preview_only(
         "worker",
-        Composition::new(8, 4)
-            .frame_count(8)
-            .background(Color::BLACK),
+        Composition::new(8, 4, motion_render::FrameClock::new(30, 8))
+            .with_options(motion_render::RenderOptions::default().background(Color::BLACK))
+            .unwrap(),
         Size::new(8.0, 4.0),
         move |context| {
             let paint = context.cache("paint", || {
@@ -1061,14 +1081,14 @@ fn preview_export_is_rejected_before_builder_or_file_access() -> motion_core::Re
     use motion_render::Composition;
     let exportable = StudioScene::new(
         "Exportable",
-        Composition::new(8, 4),
+        Composition::new(8, 4, motion_render::FrameClock::new(30, 150)),
         Size::new(8.0, 4.0),
         |_| Node::empty(),
     );
     assert!(exportable.supports_video_export());
     let scene = StudioScene::preview_only(
         "Native",
-        Composition::new(8, 4),
+        Composition::new(8, 4, motion_render::FrameClock::new(30, 150)),
         Size::new(8.0, 4.0),
         |_| panic!("export must not evaluate scene"),
     );
@@ -1184,15 +1204,16 @@ fn worker_export_acceptance(renderer: Renderer) -> motion_core::Result {
     let font = FontFace::from_bytes(std::fs::read(font)?, 0)?;
     let assets = Assets::new(".")?;
     assets.preload("label", Arc::new(font))?;
-    let composition = Composition::new(96, 48)
-        .frame_rate(24)
-        .frame_count(3)
-        .background(Color::BLACK)
-        .render_context(RenderContext::new().with_assets(assets))
-        .raster_limits(motion_core::RasterLimits {
-            max_bytes: 64 * 1024 * 1024,
-            ..motion_core::RasterLimits::default()
-        })?;
+    let composition = Composition::new(96, 48, motion_render::FrameClock::new(24, 3))
+        .with_options(
+            motion_render::RenderOptions::default()
+                .background(Color::BLACK)
+                .context(RenderContext::new().with_assets(assets))
+                .limits(motion_core::RasterLimits {
+                    max_bytes: 64 * 1024 * 1024,
+                    ..motion_core::RasterLimits::default()
+                }),
+        )?;
 
     fn build(context: &SceneContext<'_>) -> Node {
         let font = context.assets().font("label").get().unwrap();
@@ -1282,12 +1303,12 @@ fn worker_export_acceptance(renderer: Renderer) -> motion_core::Result {
     }
     let committed = std::fs::read(&destination)?;
     let restricted = StudioScene {
-        composition: composition
-            .clone()
-            .raster_limits(motion_core::RasterLimits {
+        composition: composition.clone().configure(|options| {
+            options.limits(motion_core::RasterLimits {
                 max_work: 1,
-                ..composition.configured_raster_limits()
-            })?,
+                ..composition.raster_limits()
+            })
+        }),
         ..scene.clone()
     };
     let denied = start_export_job(
@@ -1431,10 +1452,8 @@ fn gpu_preview_seek_export_and_cancellation_preserve_worker_contracts() -> motio
         .tempdir_in(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target"))?
         .keep();
     eprintln!("GPU_WORKER_ARTIFACTS={}", directory.display());
-    let composition = Composition::new(96, 64)
-        .frame_rate(12)
-        .frame_count(12)
-        .background(Color::BLACK);
+    let composition = Composition::new(96, 64, motion_render::FrameClock::new(12, 12))
+        .with_options(motion_render::RenderOptions::default().background(Color::BLACK))?;
     let build = |context: &SceneContext<'_>| {
         let left = 8.0 + context.time().to_frame(context.frame_rate()) as f64 * 4.0;
         Node::from(
@@ -1447,7 +1466,7 @@ fn gpu_preview_seek_export_and_cancellation_preserve_worker_contracts() -> motio
     let mut software = composition.frame_renderer(size)?;
     let mut gpu = composition
         .clone()
-        .backend(Renderer::Gpu.into())
+        .configure(|options| options.backend(Renderer::Gpu.into()))
         .frame_renderer(size)?;
     gpu.render_frame(0, build)?;
     let adapter = gpu.gpu_info().expect("initialized GPU").clone();
@@ -1625,9 +1644,7 @@ fn audio_drafts_round_trip_and_mix_through_the_export_worker() -> motion_core::R
     });
     let scene = StudioScene::new(
         "Audio acceptance",
-        motion_render::Composition::new(64, 64)
-            .frame_rate(24)
-            .frame_count(48),
+        motion_render::Composition::new(64, 64, motion_render::FrameClock::new(24, 48)),
         motion_core::Size::new(64.0, 64.0),
         |_| motion_core::Node::empty(),
     );
@@ -1756,8 +1773,12 @@ fn preview_mailbox_coalesces_requests_and_rejects_stale_results() {
 
 #[test]
 fn preview_pixels_keep_rgb_channels_and_opaque_alpha() {
-    let snapshot = motion_render::Composition::new(2, 1)
-        .background(motion_core::Color::rgb(17, 134, 119))
+    let snapshot = motion_render::Composition::new(2, 1, motion_render::FrameClock::new(30, 150))
+        .with_options(
+            motion_render::RenderOptions::default()
+                .background(motion_core::Color::rgb(17, 134, 119)),
+        )
+        .unwrap()
         .render_frame(0, motion_core::Size::new(2.0, 1.0), |_| {
             motion_core::Node::empty()
         })

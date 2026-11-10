@@ -77,17 +77,17 @@ fn svg_lazy_selection_writing_images_and_security_keep_original_resources()
 -> motion_core::Result<()> {
     let missing = motion_core::Assets::new(".")?;
     let captured = Svg::new(missing.svg("missing-native-svg-diagnostic.svg")).translate(1.0, 1.0);
-    let composition = motion_render::Composition::new(8, 8);
+    let composition =
+        motion_render::Composition::new(8, 8, motion_render::FrameClock::new(30, 150));
     let error = composition
         .render_frame(0, Size::new(8.0, 8.0), |_| captured.clone())
         .err()
         .expect("strict SVG resource failure");
     assert_eq!(error.kind(), motion_core::ErrorKind::Asset);
     assert_eq!(error.frame(), Some(0));
-    let placeholder =
-        composition
-            .allow_missing_assets(true)
-            .render_frame(0, Size::new(8.0, 8.0), |_| captured.clone())?;
+    let placeholder = composition
+        .configure(|options| options.allow_missing_assets(true))
+        .render_frame(0, Size::new(8.0, 8.0), |_| captured.clone())?;
     assert!(placeholder.pixels().contains(&0xff00ff));
     let directory = tempfile::tempdir()?;
     let path = directory.path().join("art.svg");

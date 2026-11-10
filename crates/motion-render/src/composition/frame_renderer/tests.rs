@@ -23,12 +23,14 @@ fn public_yuv10_output_uses_packing_and_preserves_unaligned_fallback() -> Result
                 ),
             )
         };
-        let base = Composition::new(width, 6).frame_rate(24).frame_count(2);
+        let base = Composition::new(width, 6, crate::FrameClock::new(24, 2));
         let mut cpu = base
             .clone()
-            .backend(Renderer::Cpu.into())
+            .configure(|options| options.backend(Renderer::Cpu.into()))
             .frame_renderer(size)?;
-        let mut gpu = base.backend(Renderer::Gpu.into()).frame_renderer(size)?;
+        let mut gpu = base
+            .configure(|options| options.backend(Renderer::Gpu.into()))
+            .frame_renderer(size)?;
         let expected = cpu.render_output_at(Time::ZERO, Some(Color::BLACK), format, source)?;
         let actual = gpu.render_output_at(Time::ZERO, Some(Color::BLACK), format, source)?;
         assert_eq!(actual.format(), format);
@@ -154,15 +156,17 @@ fn global_shutter_averages_complete_frames_and_preserves_old_once_contract() -> 
         motion_core::BlendSpace::LinearRgb,
         motion_core::BlendSpace::Srgb,
     ] {
-        let base = Composition::new(4, 2)
-            .frame_rate(1)
-            .frame_count(3)
-            .background(motion_core::Color::BLACK)
-            .blend_space(space);
-        let configured = base.clone().motion_blur(motion_core::MotionBlur {
-            shutter_angle: 360.0,
-            samples: 4,
-        })?;
+        let base = Composition::new(4, 2, crate::FrameClock::new(1, 3)).with_options(
+            crate::RenderOptions::default()
+                .background(motion_core::Color::BLACK)
+                .blend_space(space),
+        )?;
+        let configured = base.clone().configure(|options| {
+            options.motion_blur(motion_core::MotionBlur {
+                shutter_angle: 360.0,
+                samples: 4,
+            })
+        });
         let mut observed = Vec::new();
         let result = configured.render_frame_sampled(1, design, |context| {
             observed.push((
@@ -230,10 +234,9 @@ fn global_shutter_averages_complete_frames_and_preserves_old_once_contract() -> 
 }
 
 fn composition() -> Composition {
-    Composition::new(8, 4)
-        .frame_rate(24)
-        .frame_count(12)
-        .background(Color::rgb(20, 40, 60))
+    Composition::new(8, 4, crate::FrameClock::new(24, 12))
+        .with_options(crate::RenderOptions::default().background(Color::rgb(20, 40, 60)))
+        .unwrap()
 }
 
 fn tile() -> Node {
@@ -257,8 +260,8 @@ fn rational_clock_is_exact_for_fractional_rates() -> Result {
         motion_core::FrameRate::new(11, 1),
         motion_core::FrameRate::new(123_457, 1_001),
     ] {
-        let composition = composition().frame_rate(rate).frame_count(1001);
-        assert_eq!(composition.configured_frame_rate()?, rate);
+        let composition = composition().with_clock(crate::FrameClock::new(rate, 1001));
+        assert_eq!(composition.frame_rate(), rate);
         let mut session = composition.frame_renderer(Size::new(8.0, 4.0))?;
         for index in [1000, 1, 0, 501, 1] {
             session.render_frame(index, |context| {
@@ -272,13 +275,8 @@ fn rational_clock_is_exact_for_fractional_rates() -> Result {
             })?;
         }
     }
-    let composition = composition()
-        .frame_rate(motion_core::FrameRate::NTSC)
-        .frame_rate(24);
-    assert_eq!(
-        composition.configured_frame_rate()?,
-        motion_core::FrameRate::from(24)
-    );
+    let composition = composition().with_clock(crate::FrameClock::new(24, 150));
+    assert_eq!(composition.frame_rate(), motion_core::FrameRate::from(24));
     for (rate, frames, field) in [
         (motion_core::FrameRate::new(u32::MAX, 1), 1, "frame_rate"),
         (
@@ -289,8 +287,7 @@ fn rational_clock_is_exact_for_fractional_rates() -> Result {
     ] {
         let error = composition
             .clone()
-            .frame_rate(rate)
-            .frame_count(u64::from(frames))
+            .with_clock(crate::FrameClock::new(rate, u64::from(frames)))
             .render_frame(0, Size::new(8.0, 4.0), |_| {
                 panic!("Invalid time must fail before evaluation")
             })
@@ -304,10 +301,13 @@ fn rational_clock_is_exact_for_fractional_rates() -> Result {
 #[test]
 fn composition_frame_counts_are_u64_and_duration_is_checked() -> Result {
     let count = u64::from(u32::MAX) + 1;
-    let composition = composition().frame_count(count);
-    assert_eq!(composition.configured_frame_count(), count);
+    let composition = composition().with_clock(crate::FrameClock::new(30, count));
+    assert_eq!(composition.frame_count(), count);
     composition.preflight()?;
-    let error = composition.frame_count(u64::MAX).preflight().unwrap_err();
+    let error = composition
+        .with_clock(crate::FrameClock::new(30, u64::MAX))
+        .preflight()
+        .unwrap_err();
     assert_eq!(error.field, "frame_count");
     Ok(())
 }
@@ -319,9 +319,11 @@ fn composition_raster_policy_is_inherited_and_overrides_are_local() -> Result {
         max_bytes: 512 * 1024 * 1024,
         ..RasterLimits::default()
     };
-    let configured = original.clone().raster_limits(configured_limits)?;
+    let configured = original
+        .clone()
+        .configure(|options| options.limits(configured_limits));
     assert_eq!(
-        original.configured_raster_limits().max_bytes,
+        original.raster_limits().max_bytes,
         RasterLimits::default().max_bytes
     );
     let size = Size::new(8.0, 4.0);
@@ -335,7 +337,7 @@ fn composition_raster_policy_is_inherited_and_overrides_are_local() -> Result {
     })?;
     assert!(first.render_frame(0, |_| tile()).is_err());
     assert_eq!(
-        configured.configured_raster_limits().max_bytes,
+        configured.raster_limits().max_bytes,
         configured_limits.max_bytes
     );
     assert_eq!(second.limits.max_bytes, configured_limits.max_bytes);
@@ -344,10 +346,12 @@ fn composition_raster_policy_is_inherited_and_overrides_are_local() -> Result {
         first.render_frame(0, |_| tile())?.pixels(),
         configured.render_frame(0, size, |_| tile())?.pixels()
     );
-    let denied = configured.clone().raster_limits(RasterLimits {
-        max_bytes: 1,
-        ..configured_limits
-    })?;
+    let denied = configured.clone().configure(|options| {
+        options.limits(RasterLimits {
+            max_bytes: 1,
+            ..configured_limits
+        })
+    });
     assert!(denied.render_frame(0, size, |_| tile()).is_err());
     for invalid in [
         RasterLimits {
@@ -367,16 +371,21 @@ fn composition_raster_policy_is_inherited_and_overrides_are_local() -> Result {
             ..configured_limits
         },
     ] {
-        assert!(configured.clone().raster_limits(invalid).is_err());
+        assert!(
+            configured
+                .clone()
+                .with_options(crate::RenderOptions::default().limits(invalid))
+                .is_err()
+        );
     }
     assert!(
-        Composition::new(0, 4)
-            .raster_limits(configured_limits)
+        Composition::new(0, 4, crate::FrameClock::new(30, 150))
+            .with_options(crate::RenderOptions::default().limits(configured_limits))
             .is_err()
     );
     assert!(
         original
-            .raster_limits(configured_limits)?
+            .configure(|options| options.limits(configured_limits))
             .frame_renderer(size)?
             .gpu_info()
             .is_none()
@@ -386,7 +395,8 @@ fn composition_raster_policy_is_inherited_and_overrides_are_local() -> Result {
 
 #[test]
 fn cpu_design_mapping_and_background_ignore_background_alpha() -> Result {
-    let composition = Composition::new(8, 4).background(Color::rgba(0, 0, 0, 0));
+    let composition = Composition::new(8, 4, crate::FrameClock::new(30, 150))
+        .with_options(crate::RenderOptions::default().background(Color::rgba(0, 0, 0, 0)))?;
     let snapshot = composition.render_frame(0, Size::new(4.0, 4.0), |context| {
         assert_eq!(context.size(), Size::new(4.0, 4.0));
         tile()
@@ -599,7 +609,7 @@ fn cpu_context_policy_and_failed_limit_updates_do_not_fall_back() -> Result {
         ..ValidationLimits::default()
     })?;
     let mut renderer = composition()
-        .render_context(context)
+        .configure(|options| options.context(context))
         .frame_renderer(Size::new(8.0, 4.0))?;
     assert_eq!(renderer.context().validation_limits().max_nodes, 1);
     let error = diagnostic(
@@ -640,8 +650,8 @@ fn cpu_context_policy_and_failed_limit_updates_do_not_fall_back() -> Result {
 #[test]
 fn cpu_invalid_configuration_and_index_fail_before_evaluation() -> Result {
     for composition in [
-        Composition::new(0, 4),
-        Composition::new(8, 4).frame_count(0),
+        Composition::new(0, 4, crate::FrameClock::new(30, 150)),
+        Composition::new(8, 4, crate::FrameClock::new(30, 0)),
     ] {
         assert!(
             composition
@@ -674,7 +684,7 @@ fn cpu_invalid_configuration_and_index_fail_before_evaluation() -> Result {
 #[test]
 fn gpu_selection_is_explicit_and_lazy_without_a_device() -> Result {
     let selected = composition()
-        .backend(Renderer::Gpu.into())
+        .configure(|options| options.backend(Renderer::Gpu.into()))
         .frame_renderer(Size::new(8.0, 4.0));
     #[cfg(not(feature = "gpu"))]
     {
@@ -732,13 +742,13 @@ fn gpu_selection_is_explicit_and_lazy_without_a_device() -> Result {
 #[ignore = "requires separate authorization to initialize native GPU devices"]
 fn gpu_device_session_seek_budget_and_recovery_match_cpu() -> Result {
     for (width, height) in [(8, 4), (65, 37), (127, 73)] {
-        let composition = Composition::new(width, height)
-            .frame_rate(24)
-            .frame_count(12)
-            .background(motion_core::Color::rgb(20, 40, 60));
+        let composition = Composition::new(width, height, crate::FrameClock::new(24, 12))
+            .with_options(
+                crate::RenderOptions::default().background(motion_core::Color::rgb(20, 40, 60)),
+            )?;
         let mut cpu = composition.frame_renderer(Size::new(8.0, 4.0))?;
         let mut gpu = composition
-            .backend(Renderer::Gpu.into())
+            .configure(|options| options.backend(Renderer::Gpu.into()))
             .frame_renderer(Size::new(8.0, 4.0))?;
         assert!(gpu.gpu_info().is_none());
         let mut first = None;

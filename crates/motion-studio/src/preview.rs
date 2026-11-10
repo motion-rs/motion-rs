@@ -240,8 +240,7 @@ impl PreviewRenderer {
         let mut frame_renderer = scene
             .composition
             .clone()
-            .backend(renderer.into())
-            .allow_missing_assets(true)
+            .configure(|options| options.backend(renderer.into()).allow_missing_assets(true))
             .frame_renderer(scene.definition.design_size)?;
         frame_renderer.enable_timings(true);
         Ok(Self {
@@ -291,13 +290,13 @@ impl PreviewRenderer {
     ) -> motion_core::Result<PreviewSubmission> {
         self.inspection_error = None;
         let build = &scene.definition.build_scene;
-        let original = scene.composition.configured_output_size();
+        let original = scene.composition.output_size();
         let width = ((u64::from(original.width) * u64::from(settings.scale)) / 100).max(1) as u32;
         let height = ((u64::from(original.height) * u64::from(settings.scale)) / 100).max(1) as u32;
         let background = if settings.transparent {
             None
         } else {
-            let color = scene.composition.background_color();
+            let color = scene.composition.snapshot_background();
             Some(color.with_alpha(1.0))
         };
         let nodes = std::cell::RefCell::new(Vec::new());
@@ -383,10 +382,12 @@ impl PreviewRenderer {
                     let cpu = scene
                         .composition
                         .clone()
-                        .output_size(motion_core::PixelSize::new(width, height))?
-                        .backend(motion_render::BackendPreference::Cpu)
-                        .backend(Renderer::Cpu.into())
-                        .allow_missing_assets(true);
+                        .with_output_size(motion_core::PixelSize::new(width, height))?
+                        .configure(|options| {
+                            options
+                                .backend(motion_render::BackendPreference::Cpu)
+                                .allow_missing_assets(true)
+                        });
                     self.renderer = cpu.frame_renderer(scene.definition.design_size)?;
                     self.admission_fallback = Some(error.to_string());
                 }
@@ -394,10 +395,7 @@ impl PreviewRenderer {
             }
         }
         let frame = self.renderer.render_output_at(
-            motion_core::Time::from_frame(
-                i64::from(index),
-                scene.composition.configured_frame_rate()?,
-            ),
+            motion_core::Time::from_frame(i64::from(index), scene.composition.frame_rate()),
             background,
             motion_render::PixelFormat::SrgbRgba8 {
                 premultiplied: !settings.pixels,

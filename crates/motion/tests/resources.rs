@@ -22,11 +22,17 @@ mod resources {
             );
             #[cfg(not(feature = "gpu"))]
             {
-                let error = motion::render::Composition::new(1, 1)
-                    .backend(motion::Renderer::Gpu.into())
-                    .frame_renderer(motion::Size::new(1.0, 1.0))
-                    .err()
-                    .unwrap();
+                let error = motion::render::Composition::new(
+                    1,
+                    1,
+                    motion::render::FrameClock::new(30, 150),
+                )
+                .with_options(
+                    motion::render::RenderOptions::default().backend(motion::Renderer::Gpu.into()),
+                )?
+                .frame_renderer(motion::Size::new(1.0, 1.0))
+                .err()
+                .unwrap();
                 assert_eq!(error.kind(), ErrorKind::GpuUnavailable);
                 assert_eq!(
                     error.downcast_ref::<ValidationError>().unwrap().field,
@@ -155,7 +161,8 @@ mod resources {
             use motion::{Color, Image, Node, Rect, Size};
             let directory = tempfile::tempdir()?;
             let assets = Assets::new(directory.path())?;
-            let composition = Composition::new(8, 8).resources(assets.clone());
+            let composition = Composition::new(8, 8, motion::render::FrameClock::new(30, 150))
+                .with_options(motion::render::RenderOptions::default().resources(assets.clone()))?;
             let mut strict = composition.frame_renderer(Size::new(8.0, 8.0))?;
             let error = strict
                 .render_frame(3, |_| Node::from(Image::open("missing.png").size(8.0, 8.0)))
@@ -170,7 +177,7 @@ mod resources {
             assert!(strict.last_stats().is_none());
             assert_eq!(strict.asset_diagnostics().len(), 1);
             let mut preview = composition
-                .allow_missing_assets(true)
+                .configure(|options| options.allow_missing_assets(true))
                 .frame_renderer(Size::new(8.0, 8.0))?;
             let frame = preview
                 .render_frame(4, |_| Node::from(Image::open("missing.png").size(8.0, 8.0)))?;

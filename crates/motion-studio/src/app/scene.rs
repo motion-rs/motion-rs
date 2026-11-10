@@ -52,7 +52,7 @@ impl StudioScene {
     /// use motion_studio::StudioScene;
     /// let scene = StudioScene::new(
     ///     "Geometry",
-    ///     Composition::new(640, 360),
+    ///     Composition::new(640, 360, motion_render::FrameClock::new(30, 150)),
     ///     Size::new(640.0, 360.0),
     ///     |context| Node::from(context.bounds().fill(Color::WHITE)),
     /// );
@@ -96,7 +96,7 @@ impl StudioScene {
     /// use motion_studio::StudioScene;
     /// let scene = StudioScene::preview_only(
     ///     "Geometry",
-    ///     Composition::new(640, 360),
+    ///     Composition::new(640, 360, motion_render::FrameClock::new(30, 150)),
     ///     Size::new(640.0, 360.0),
     ///     |context| Node::from(context.bounds().fill(Color::WHITE)),
     /// );
@@ -159,9 +159,10 @@ impl StudioScene {
                 "Studio timeline exceeds u32 frames",
             )
         })?;
-        let composition = composition
-            .frame_rate(timeline.frame_rate())
-            .frame_count(u64::from(count));
+        let composition = composition.with_clock(motion_render::FrameClock::new(
+            timeline.frame_rate(),
+            u64::from(count),
+        ));
         let size = timeline.size();
         let timeline = Arc::new(timeline);
         let visual = timeline.clone();

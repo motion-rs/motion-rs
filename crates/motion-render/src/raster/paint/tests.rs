@@ -206,18 +206,21 @@ fn paints_validate_hidden_commands_budget_failures_and_composition_blend_space()
         .is_err()
     );
     let scene = || Node::from(Rect::new(0.0, 0.0, 2.0, 2.0).fill(Color::WHITE.with_alpha(0.5)));
-    let linear = Composition::new(2, 2)
-        .background(Color::BLACK)
+    let linear = Composition::new(2, 2, crate::FrameClock::new(30, 150))
+        .with_options(crate::RenderOptions::default().background(Color::BLACK))?
         .render_frame(0, Size::new(2.0, 2.0), |_| scene())?;
-    let encoded = Composition::new(2, 2)
-        .background(Color::BLACK)
-        .blend_space(BlendSpace::Srgb)
+    let encoded = Composition::new(2, 2, crate::FrameClock::new(30, 150))
+        .with_options(
+            crate::RenderOptions::default()
+                .background(Color::BLACK)
+                .blend_space(BlendSpace::Srgb),
+        )?
         .render_frame(0, Size::new(2.0, 2.0), |_| scene())?;
     assert_ne!(linear.pixels(), encoded.pixels());
     assert!((127..=129).contains(&((encoded.pixels()[0] >> 16) & 255)));
     assert!(
-        Composition::new(2, 2)
-            .blend_space(BlendSpace::Srgb)
+        Composition::new(2, 2, crate::FrameClock::new(30, 150))
+            .with_options(crate::RenderOptions::default().blend_space(BlendSpace::Srgb))?
             .frame_renderer(Size::new(2.0, 2.0))
             .is_ok()
     );

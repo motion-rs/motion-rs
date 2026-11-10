@@ -351,8 +351,8 @@ mod tests {
     ) -> motion_core::Result<motion_render::Snapshot> {
         let size = PixelSize::new(64, 48);
         let image = std::sync::Arc::new(recipe.render(size, time, RasterLimits::default())?);
-        Composition::new(64, 48)
-            .backend(renderer.into())
+        Composition::new(64, 48, motion_render::FrameClock::new(30, 150))
+            .with_options(motion_render::RenderOptions::default().backend(renderer.into()))?
             .render_frame(0, Size::new(64.0, 48.0), |_| {
                 Node::group([
                     Rect::new(0.0, 0.0, 64.0, 48.0)
@@ -375,8 +375,10 @@ mod tests {
         let size = PixelSize::new(64, 48);
         for recipe in [Atmosphere::fog(7), Atmosphere::light_leak(7)] {
             let overlay = recipe.overlay(size, 1.seconds(), RasterLimits::default())?;
-            let frame = Composition::new(64, 48)
-                .backend(Renderer::Cpu.into())
+            let frame = Composition::new(64, 48, motion_render::FrameClock::new(30, 150))
+                .with_options(
+                    motion_render::RenderOptions::default().backend(Renderer::Cpu.into()),
+                )?
                 .render_frame(0, Size::new(64.0, 48.0), |_| {
                     Node::group([
                         Rect::new(0.0, 0.0, 64.0, 48.0)

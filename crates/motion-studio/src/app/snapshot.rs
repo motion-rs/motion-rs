@@ -174,7 +174,11 @@ fn dump_workbench_png() -> motion_core::Result<()> {
                     Rect::new(60.0, 60.0, 300.0, 120.0).fill(Color::rgba(255, 255, 255, 160))
                 })
             });
-        let scene = StudioScene::timeline("Demo", Composition::new(960, 540), timeline)?;
+        let scene = StudioScene::timeline(
+            "Demo",
+            Composition::new(960, 540, motion_render::FrameClock::new(30, 150)),
+            timeline,
+        )?;
         let clock = StudioClock::new(&scene.composition)?;
         let mut app = StudioApp::with_persistence(&creation, scene, clock, false)?;
         crate::theme::apply(&context, dark);

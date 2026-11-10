@@ -40,7 +40,7 @@ fn texture_playback(
     let context = renderer
         .selected_gpu_context()?
         .expect("explicit GPU backend");
-    let size = composition.configured_output_size();
+    let size = composition.output_size();
     let texture = context.device().create_texture(&wgpu::TextureDescriptor {
         label: Some("Film native preview benchmark"),
         size: wgpu::Extent3d {

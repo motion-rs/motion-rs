@@ -61,8 +61,8 @@ pub(super) fn microbenchmarks(
         20_000,
     )?;
     report.record("animation/keyframes64", measured, json!({}))?;
-    let snapshot =
-        Composition::new(640, 360).render_frame(0, Size::new(640.0, 360.0), |context| {
+    let snapshot = Composition::new(640, 360, motion::render::FrameClock::new(30, 150))
+        .render_frame(0, Size::new(640.0, 360.0), |context| {
             artwork("shapes", context)
         })?;
     report.reference("io-reference.ppm", &ppm(&snapshot))?;

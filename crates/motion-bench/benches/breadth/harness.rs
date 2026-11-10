@@ -42,13 +42,19 @@ pub(super) fn composition(
     renderer: Renderer,
     resources: &Assets,
 ) -> motion::Result<Composition> {
-    Ok(Composition::new(size.width as usize, size.height as usize)
-        .frame_count(90)
-        .backend(renderer.into())
-        .quality(motion::RenderQuality::Final)
-        .render_context(render_context()?)
-        .resources(resources.clone())
-        .raster_limits(limits())?)
+    Composition::new(
+        size.width as usize,
+        size.height as usize,
+        motion::render::FrameClock::new(30, 90),
+    )
+    .with_options(
+        motion::render::RenderOptions::default()
+            .backend(renderer.into())
+            .quality(motion::RenderQuality::Final)
+            .context(render_context()?)
+            .resources(resources.clone())
+            .limits(limits()),
+    )
 }
 
 pub(super) fn parse_sizes(value: &str) -> motion::Result<Vec<PixelSize>> {

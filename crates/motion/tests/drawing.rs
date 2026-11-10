@@ -330,12 +330,11 @@ mod drawing {
         fn stroke_gpu_matches_cpu_and_replays() -> motion::Result {
             use motion::render::Composition;
             use motion::{Color, Renderer};
-            let composition = Composition::new(16, 16)
-                .frame_count(12)
-                .background(Color::BLACK);
+            let composition = Composition::new(16, 16, motion::render::FrameClock::new(30, 12))
+                .with_options(motion::render::RenderOptions::default().background(Color::BLACK))?;
             let mut cpu = composition.frame_renderer(Size::new(8.0, 8.0))?;
             let mut gpu = composition
-                .backend(Renderer::Gpu.into())
+                .configure(|options| options.backend(Renderer::Gpu.into()))
                 .frame_renderer(Size::new(8.0, 8.0))?;
             let build = |context: &motion::SceneContext<'_>| {
                 let index = context.time().to_frame(context.frame_rate());
@@ -508,12 +507,15 @@ mod drawing {
                 ("M1 1h6v6H1z m2 2h2v2H3z", FillRule::NonZero),
                 ("M1 1 7 1 4 7z", FillRule::NonZero),
             ];
-            let composition = Composition::new(16, 16)
-                .frame_count(cases.len() as u64)
-                .background(Color::BLACK);
+            let composition = Composition::new(
+                16,
+                16,
+                motion::render::FrameClock::new(30, cases.len() as u64),
+            )
+            .with_options(motion::render::RenderOptions::default().background(Color::BLACK))?;
             let mut cpu = composition.frame_renderer(Size::new(8.0, 8.0))?;
             let mut gpu = composition
-                .backend(Renderer::Gpu.into())
+                .configure(|options| options.backend(Renderer::Gpu.into()))
                 .frame_renderer(Size::new(8.0, 8.0))?;
             let build = |context: &motion::SceneContext<'_>| {
                 let index = context.time().to_frame(context.frame_rate()) as usize;

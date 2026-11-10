@@ -44,7 +44,7 @@ impl FrameExecution<'_> {
     /// Shared registry and structural policy; builders receive its immutable
     /// assets through SceneContext. fonts are explicit preloaded handles.
     pub fn context(&self) -> &RenderContext {
-        &self.composition.context
+        &self.composition.options.context
     }
 
     /// Evaluates once at the requested frame's signed-tick time, then consumes
@@ -85,10 +85,10 @@ impl FrameExecution<'_> {
         let Some(configuration) = self.composition.shutter() else {
             return self.render_frame_once(index, build);
         };
-        let color = self.composition.background;
+        let color = self.composition.snapshot_background();
         let color = color.with_alpha(1.0);
-        let sampling = self.composition.shutter_sampling;
-        let output = self.composition.configured_output_size();
+        let sampling = self.composition.options.shutter_sampling;
+        let output = self.composition.output_size();
         self.render_frame_once(index, |context| {
             sampling
                 .capture(configuration, context, output, |sample| {
@@ -113,7 +113,7 @@ impl FrameExecution<'_> {
         build: impl FnOnce(&SceneContext<'_>) -> Node,
     ) -> Result<Snapshot> {
         (|| -> Result<Snapshot> {
-            let background = self.composition.background;
+            let background = self.composition.snapshot_background();
             let (prepared, limits) =
                 self.prepare_frame(index, None, Some(background.with_alpha(1.0)), build)?;
             let rendered = self.render_prepared_output(index, prepared, limits, true)?;
@@ -150,7 +150,7 @@ impl FrameExecution<'_> {
                         premultiplied: false,
                     },
                     limits,
-                    &self.composition.display,
+                    &self.composition.options.display,
                     u64::from(index),
                 )
             });
@@ -163,7 +163,7 @@ impl FrameExecution<'_> {
                 work: crate::FrameBuffer::display_conversion_work(
                     rgba.size(),
                     rgba.format(),
-                    Some(&self.composition.display),
+                    Some(&self.composition.options.display),
                 ),
                 peak_bytes: rgba.retained_bytes()
                     + u64::from(rgba.size().width) * u64::from(rgba.size().height) * 16,
@@ -194,7 +194,7 @@ impl FrameExecution<'_> {
         format: crate::PixelFormat,
         build: impl FnMut(&SceneContext<'_>) -> Node,
     ) -> Result<crate::FrameBuffer> {
-        let rate = self.composition.frame_rate;
+        let rate = self.composition.clock.rate;
         let index = u32::try_from(time.to_frame(rate))
             .map_err(|error| motion_core::Error::Parameters(Box::new(error)))?;
         let (prepared, limits) = self.prepare_output_at(time, background, build)?;
@@ -207,7 +207,7 @@ impl FrameExecution<'_> {
         background: Option<Color>,
         mut build: impl FnMut(&SceneContext<'_>) -> Node,
     ) -> Result<(crate::PreparedFrame, RasterLimits)> {
-        let rate = self.composition.frame_rate;
+        let rate = self.composition.clock.rate;
         let end = self.duration;
         if time < Time::ZERO || time >= end {
             self.last_stats = None;
@@ -222,8 +222,8 @@ impl FrameExecution<'_> {
         let index = u32::try_from(time.to_frame(rate))
             .map_err(|error| motion_core::Error::Parameters(Box::new(error)))?;
         let shutter = self.composition.shutter();
-        let sampling = self.composition.shutter_sampling;
-        let output = self.composition.configured_output_size();
+        let sampling = self.composition.options.shutter_sampling;
+        let output = self.composition.output_size();
         self.prepare_frame(index, Some(time), background, |context| {
             if let Some(shutter) = shutter {
                 sampling
@@ -258,10 +258,10 @@ impl FrameExecution<'_> {
         self.output_pool.trim(limits.max_bytes / 8);
         let started = self.timings.map(|_| std::time::Instant::now());
         let cpu = self.backend.as_ref().map_or_else(
-            || self.composition.backend == crate::BackendPreference::Cpu,
+            || self.composition.options.backend == crate::BackendPreference::Cpu,
             |decision| decision.renderer == Renderer::Cpu,
         );
-        let display = self.composition.display.clone();
+        let display = self.composition.options.display.clone();
         if cpu && (!prepared.items().is_empty() || !display.is_identity()) {
             self.select_backend()?;
             let output_pool = self.output_pool.clone();
@@ -346,7 +346,7 @@ impl FrameExecution<'_> {
                 Err(error)
                     if self.backend.is_none()
                         && matches!(
-                            self.composition.backend,
+                            self.composition.options.backend,
                             crate::BackendPreference::Automatic { .. }
                         ) =>
                 {
@@ -432,7 +432,7 @@ mod scene_output_tests {
 
     #[test]
     fn opt_in_timings_preserve_output_work_and_reset_attempts() {
-        let mut renderer = Composition::new(8, 8)
+        let mut renderer = Composition::new(8, 8, crate::FrameClock::new(30, 150))
             .frame_renderer(Size::new(8.0, 8.0))
             .unwrap();
         let build = |_: &SceneContext<'_>| {
@@ -464,9 +464,8 @@ mod scene_output_tests {
     #[cfg(feature = "gpu")]
     #[ignore = "requires native GPU; verifies frame-stage observations without latency assertions"]
     fn native_frame_stage_timings_preserve_output_and_logical_stats() -> motion_core::Result {
-        let mut renderer = Composition::new(8, 8)
-            .backend(Renderer::Gpu.into())
-            .frame_count(2)
+        let mut renderer = Composition::new(8, 8, crate::FrameClock::new(30, 2))
+            .with_options(crate::RenderOptions::default().backend(Renderer::Gpu.into()))?
             .frame_renderer(Size::new(8.0, 8.0))?;
         let build = |_: &SceneContext<'_>| {
             Node::from(motion_core::Rect::new(0.0, 0.0, 4.0, 8.0).fill(Color::WHITE))
@@ -496,10 +495,9 @@ mod scene_output_tests {
     #[test]
     fn memoized_hidden_scene_failures_retain_original_errors_on_later_frames() {
         use motion_core::NodeModifiers;
-        let composition = Composition::new(8, 8)
-            .frame_rate(30)
-            .frame_count(4)
-            .allow_missing_assets(true);
+        let composition = Composition::new(8, 8, crate::FrameClock::new(30, 4))
+            .with_options(crate::RenderOptions::default().allow_missing_assets(true))
+            .unwrap();
         let mut renderer = composition.frame_renderer(Size::new(8.0, 8.0)).unwrap();
         let builds = std::cell::Cell::new(0);
         for index in [0, 1, 0] {
@@ -531,10 +529,9 @@ mod scene_output_tests {
 
     #[test]
     fn recoverable_scene_errors_retain_frames_and_do_not_poison_session_retries() {
-        let composition = Composition::new(8, 8)
-            .frame_rate(30)
-            .frame_count(4)
-            .allow_missing_assets(true);
+        let composition = Composition::new(8, 8, crate::FrameClock::new(30, 4))
+            .with_options(crate::RenderOptions::default().allow_missing_assets(true))
+            .unwrap();
         let mut renderer = composition.frame_renderer(Size::new(8.0, 8.0)).unwrap();
         let failed = motion_core::scene(|_| -> motion_core::Result<Node> {
             Err(std::io::Error::other("scene I/O failure").into())

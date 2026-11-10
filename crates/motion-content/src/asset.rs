@@ -74,8 +74,11 @@ mod tests {
             data: Arc::from(&br##"<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"><rect width="2" height="2" fill="#00ff00"/></svg>"##[..]),
         }).get()?;
         assets.preload("diagram.svg", svg)?;
-        let composition =
-            Composition::new(8, 4).render_context(RenderContext::new().with_assets(assets.clone()));
+        let composition = Composition::new(8, 4, motion_render::FrameClock::new(30, 150))
+            .with_options(
+                motion_render::RenderOptions::default()
+                    .context(RenderContext::new().with_assets(assets.clone())),
+            )?;
         let frame = composition.render_frame(0, Size::new(8.0, 4.0), |context| {
             assert!(context.assets().pool().same_pool(assets.pool()));
             for node in [
@@ -100,7 +103,7 @@ mod tests {
             Arc::new(ImageAsset::from_rgba8(1, 1, vec![255, 0, 0, 255])?),
         )?;
         let frame = composition
-            .resources(override_assets.clone())
+            .configure(|options| options.resources(override_assets.clone()))
             .render_frame(0, Size::new(8.0, 4.0), |context| {
                 assert!(context.assets().pool().same_pool(override_assets.pool()));
                 crate::Image::open("logo.png").into()
@@ -115,7 +118,8 @@ mod tests {
         use motion_render::Composition;
         let directory = tempfile::tempdir()?;
         let assets = Assets::new(directory.path())?;
-        let composition = Composition::new(2, 2).resources(assets);
+        let composition = Composition::new(2, 2, motion_render::FrameClock::new(30, 150))
+            .with_options(motion_render::RenderOptions::default().resources(assets))?;
         let build = |_: &motion_core::SceneContext<'_>| {
             crate::Image::open("absent.png").size(2.0, 2.0).into()
         };
@@ -125,10 +129,9 @@ mod tests {
             .unwrap();
         assert_eq!(error.kind(), motion_core::ErrorKind::Asset);
         assert_eq!(error.frame(), Some(0));
-        let frame =
-            composition
-                .allow_missing_assets(true)
-                .render_frame(0, Size::new(2.0, 2.0), build)?;
+        let frame = composition
+            .configure(|options| options.allow_missing_assets(true))
+            .render_frame(0, Size::new(2.0, 2.0), build)?;
         assert_eq!(frame.pixels()[0], 0xff00ff);
         Ok(())
     }

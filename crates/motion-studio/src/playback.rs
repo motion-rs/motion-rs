@@ -18,9 +18,9 @@ pub(crate) struct StudioClock {
 impl StudioClock {
     pub(crate) fn new(composition: &Composition) -> Result<Self> {
         Ok(Self {
-            size: composition.configured_output_size(),
-            rate: composition.configured_frame_rate()?,
-            frames: u32::try_from(composition.configured_frame_count())
+            size: composition.output_size(),
+            rate: composition.frame_rate(),
+            frames: u32::try_from(composition.frame_count())
                 .map_err(|error| motion_core::Error::Parameters(Box::new(error)))?,
         })
     }
@@ -197,13 +197,11 @@ impl StudioApp {
     pub(crate) fn advance_transport(&mut self) {
         let frame = self.clock;
         if self.audio_preview.status().is_none() {
-            if let Ok(rate) = self.scene.composition.configured_frame_rate() {
-                self.playback.transport.advance_range(
-                    Instant::now(),
-                    rate,
-                    self.exports.export_range,
-                );
-            }
+            self.playback.transport.advance_range(
+                Instant::now(),
+                self.scene.composition.frame_rate(),
+                self.exports.export_range,
+            );
             return;
         }
         if let Some(status) = self.audio_preview.status() {

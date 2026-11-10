@@ -179,7 +179,7 @@ impl StudioApp {
         let previous = self.clock;
         self.preview = preview;
         self.observations.diagnostics = super::alignment_diagnostics(&scene, clock);
-        self.exports.export_size = scene.composition.configured_output_size();
+        self.exports.export_size = scene.composition.output_size();
         let (start, end) = self.exports.export_range;
         self.exports.export_range = if end >= previous.frame_count() || end > clock.frame_count() {
             (

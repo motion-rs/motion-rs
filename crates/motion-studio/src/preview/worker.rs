@@ -77,9 +77,10 @@ fn run_preview_worker(
             if mailbox.stopping {
                 break;
             }
-            let next_bytes = mailbox.pending.as_ref().map_or(0, |_| {
-                source.composition.configured_raster_limits().max_bytes
-            });
+            let next_bytes = mailbox
+                .pending
+                .as_ref()
+                .map_or(0, |_| source.composition.raster_limits().max_bytes);
             let ready = front
                 .1
                 .as_mut()
@@ -141,7 +142,7 @@ fn run_preview_worker(
                 Ok(Ok((mut submission, diagnostics))) => {
                     let ready = submission.is_ready();
                     if matches!(ready, Ok(false)) {
-                        let bytes = source.composition.configured_raster_limits().max_bytes;
+                        let bytes = source.composition.raster_limits().max_bytes;
                         inflight_bytes = inflight_bytes.saturating_add(bytes);
                         inflight.push_back((request, Ok(submission), diagnostics, bytes, started));
                         continue;
@@ -217,15 +218,23 @@ fn submit_preview(
         *cache = None;
         let mut scene = source.clone();
         {
-            let size = scene.composition.configured_output_size();
-            scene.composition = scene.composition.output_size(motion_core::PixelSize::new(
-                ((u64::from(size.width) * u64::from(request.settings.scale)) / 100).max(1) as u32,
-                ((u64::from(size.height) * u64::from(request.settings.scale)) / 100).max(1) as u32,
-            ))?;
+            let size = scene.composition.output_size();
+            scene.composition = scene
+                .composition
+                .with_output_size(motion_core::PixelSize::new(
+                    ((u64::from(size.width) * u64::from(request.settings.scale)) / 100).max(1)
+                        as u32,
+                    ((u64::from(size.height) * u64::from(request.settings.scale)) / 100).max(1)
+                        as u32,
+                ))?;
             if let Some(preference) = request.settings.backend {
-                scene.composition = scene.composition.backend(preference);
+                scene.composition = scene
+                    .composition
+                    .configure(|options| options.backend(preference));
             }
-            scene.composition = scene.composition.quality(request.settings.quality);
+            scene.composition = scene
+                .composition
+                .configure(|options| options.quality(request.settings.quality));
         }
         let choice = if matches!(
             request.settings.backend,
@@ -236,7 +245,9 @@ fn submit_preview(
             None
         };
         if let Some(choice) = &choice {
-            scene.composition = scene.composition.backend(choice.backend);
+            scene.composition = scene
+                .composition
+                .configure(|options| options.backend(choice.backend));
         }
         let mut renderer = PreviewRenderer::new(&scene, key.renderer)?;
         renderer.automatic = choice.is_some();

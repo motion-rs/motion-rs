@@ -189,7 +189,7 @@ impl StudioApp {
                         (
                             "ProRes 4444 alpha",
                             crate::export::ExportFormat::ProRes,
-                            self.scene.composition.configured_output_size(),
+                            self.scene.composition.output_size(),
                         ),
                         (
                             "GIF preview",
@@ -229,11 +229,11 @@ impl StudioApp {
         });
         ui.horizontal(|ui| {
             if ui.small_button("Design").clicked() {
-                self.exports.export_size = self.scene.composition.configured_output_size();
+                self.exports.export_size = self.scene.composition.output_size();
             }
             for height in [720, 1080, 2160] {
                 if ui.small_button(format!("{height}p")).clicked() {
-                    let size = self.scene.composition.configured_output_size();
+                    let size = self.scene.composition.output_size();
                     self.exports.export_size = motion_core::PixelSize::new(
                         (f64::from(size.width) * f64::from(height) / f64::from(size.height))
                             .round()

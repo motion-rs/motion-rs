@@ -647,13 +647,12 @@ mod tests {
             (image([0, 255, 0, 255]), 300.milliseconds()),
             (image([0, 0, 255, 192]), 200.milliseconds()),
         ])?);
-        let composition = motion_render::Composition::new(24, 16)
-            .frame_rate(10)
-            .frame_count(20);
+        let composition =
+            motion_render::Composition::new(24, 16, motion_render::FrameClock::new(10, 20));
         let design = motion_core::Size::new(12.0, 8.0);
         let mut cpu = composition.clone().frame_renderer(design)?;
         let mut gpu = composition
-            .backend(motion_render::Renderer::Gpu.into())
+            .configure(|options| options.backend(motion_render::Renderer::Gpu.into()))
             .frame_renderer(design)?;
         let mut requests = 0;
         for mode in [

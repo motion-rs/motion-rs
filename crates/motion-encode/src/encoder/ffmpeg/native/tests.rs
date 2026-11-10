@@ -8,7 +8,7 @@ fn frame(
     height: usize,
     background: motion_core::Color,
 ) -> motion_render::FrameBuffer {
-    motion_render::Composition::new(width, height)
+    motion_render::Composition::new(width, height, motion_render::FrameClock::new(30, 150))
         .frame_renderer(motion_core::Size::new(width as f64, height as f64))
         .unwrap()
         .render_output_at(

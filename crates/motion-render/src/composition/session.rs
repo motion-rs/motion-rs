@@ -145,12 +145,12 @@ impl RenderSession {
                     "Requested duration exceeds frame addressing",
                 )
             })?;
-        let composition = Composition::new(self.size.width as usize, self.size.height as usize)
-            .frame_rate(request.frame_rate)
-            .frame_count(u64::from(count))
-            .render_options(&self.options)?
-            .blend_space(self.options.blend_space)
-            .allow_missing_assets(self.options.allow_missing_assets);
+        let composition = Composition::new(
+            self.size.width as usize,
+            self.size.height as usize,
+            crate::composition::FrameClock::new(request.frame_rate, u64::from(count)),
+        )
+        .with_options(self.options.clone())?;
         let retained = match &request.target {
             crate::RenderTarget::Memory(output) if !output.planes().is_empty() => {
                 output.retained_bytes()

@@ -25,7 +25,7 @@ fn cached_frames_merge_into_runs_for_painting_and_lookup() {
     let context = egui::Context::default();
     let scene = StudioScene::new(
         "runs",
-        motion_render::Composition::new(16, 8).frame_count(30),
+        motion_render::Composition::new(16, 8, motion_render::FrameClock::new(30, 30)),
         motion_core::Size::new(16.0, 8.0),
         |_| motion_core::Node::empty(),
     );

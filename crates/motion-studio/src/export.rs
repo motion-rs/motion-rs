@@ -91,9 +91,9 @@ impl ExportJob {
                     let mut timeline = if let Some(timeline) = scene.definition.audio_timeline {
                         timeline
                     } else {
-                        let rate = scene.composition.configured_frame_rate()?;
+                        let rate = scene.composition.frame_rate();
                         let duration = motion_core::Time::from_frame(
-                            i64::try_from(scene.composition.configured_frame_count())
+                            i64::try_from(scene.composition.frame_count())
                                 .map_err(|error| motion_core::Error::Parameters(Box::new(error)))?,
                             rate,
                         );

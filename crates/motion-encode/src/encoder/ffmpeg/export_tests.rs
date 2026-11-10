@@ -142,8 +142,8 @@ fn explicit_font_video_commit_cancel_and_failure() -> Result {
     let text = Text::from_font("AV", &font, 16.0, Color::WHITE)?;
     let store = Assets::new(".")?;
     store.preload("title", Arc::new(font))?;
-    let snapshot = Composition::new(64, 32)
-        .background(Color::BLACK)
+    let snapshot = Composition::new(64, 32, motion_render::FrameClock::new(30, 150))
+        .with_options(motion_render::RenderOptions::default().background(Color::BLACK))?
         .render_frame(0, Size::new(64.0, 32.0), |_| Node::from(text.clone()))?;
     assert!(snapshot.pixels().iter().any(|pixel| *pixel != 0));
     assert!(snapshot.pixels().contains(&0));

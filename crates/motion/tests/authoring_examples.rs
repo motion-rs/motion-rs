@@ -213,12 +213,12 @@ fn authoring_example_8() -> Result<(), Box<dyn std::error::Error>> {
     use motion::prelude::*;
     use motion::render::*;
 
-    let composition = Composition::new(8, 4)
-        .frame_count(3)
-        .motion_blur(MotionBlur {
+    let composition = Composition::new(8, 4, motion::render::FrameClock::new(30, 3)).with_options(
+        motion::render::RenderOptions::default().motion_blur(MotionBlur {
             shutter_angle: 180.0,
             samples: 4,
-        })?;
+        }),
+    )?;
     let frame = composition.render_frame_sampled(1, Size::new(8.0, 4.0), |context| {
         Node::from(
             Rect::new(context.seconds() * 4.0, 0.0, 4.0, 4.0).fill(Color::from_hex(0x24a49b)),
@@ -286,10 +286,12 @@ fn authoring_example_10() -> Result<(), Box<dyn std::error::Error>> {
     let timeline = Timeline::try_new(Size::new(8.0, 4.0), 30)?
         .try_track(|track| track.try_push(tile)?.try_gap(500.milliseconds()))?;
     assert_eq!(timeline.frame_count(), 45);
-    let frame = Composition::new(8, 4)
-        .frame_rate(timeline.frame_rate())
-        .frame_count(timeline.frame_count())
-        .render_frame(0, timeline.size(), |context| timeline.render(context))?;
+    let frame = Composition::new(
+        8,
+        4,
+        FrameClock::new(timeline.frame_rate(), timeline.frame_count()),
+    )
+    .render_frame(0, timeline.size(), |context| timeline.render(context))?;
     assert!(frame.pixels().iter().all(|pixel| *pixel == 0xffffff));
     Ok(())
 }
@@ -312,9 +314,11 @@ fn authoring_example_11() -> Result<(), Box<dyn std::error::Error>> {
             .try_push(next)
     })?;
     assert_eq!(timeline.frame_count(), 45);
-    Composition::new(8, 4)
-        .frame_count(45)
-        .render_frame(20, timeline.size(), |context| timeline.render(context))?;
+    Composition::new(8, 4, motion::render::FrameClock::new(30, 45)).render_frame(
+        20,
+        timeline.size(),
+        |context| timeline.render(context),
+    )?;
     Ok(())
 }
 
@@ -350,8 +354,8 @@ fn authoring_example_13() -> Result<(), Box<dyn std::error::Error>> {
         .stop(0.0, Color::from_hex(0x1080c0))
         .stop(1.0, Color::WHITE)
         .space(GradientSpace::Oklab);
-    let image = Composition::new(8, 8)
-        .blend_space(BlendSpace::Srgb)
+    let image = Composition::new(8, 8, motion::render::FrameClock::new(30, 150))
+        .with_options(motion::render::RenderOptions::default().blend_space(BlendSpace::Srgb))?
         .render_frame(0, Size::new(8.0, 8.0), |_| {
             Node::from(Rect::new(0.0, 0.0, 8.0, 8.0).fill(brush.clone()))
         })?;
@@ -416,8 +420,8 @@ fn authoring_example_16() -> Result<(), Box<dyn std::error::Error>> {
     .stroke(0.5, Color::WHITE)
     .trim(0.0, 0.8)
     .dash(&[1.0, 0.5], -0.2);
-    let frame = Composition::new(8, 8)
-        .background(Color::BLACK)
+    let frame = Composition::new(8, 8, motion::render::FrameClock::new(30, 150))
+        .with_options(motion::render::RenderOptions::default().background(Color::BLACK))?
         .render_frame(0, Size::new(8.0, 8.0), |_| Node::from(curve.clone()))?;
     assert_eq!(frame.width(), 8);
     Ok(())
@@ -435,8 +439,8 @@ fn authoring_example_17() -> Result<(), Box<dyn std::error::Error>> {
     .stroke(0.5, Color::WHITE)
     .trim(0.0, 0.8)
     .dash(&[1.0, 0.5], -0.2);
-    let frame = Composition::new(8, 8)
-        .background(Color::BLACK)
+    let frame = Composition::new(8, 8, motion::render::FrameClock::new(30, 150))
+        .with_options(motion::render::RenderOptions::default().background(Color::BLACK))?
         .render_frame(0, Size::new(8.0, 8.0), |_| Node::from(curve.clone()))?;
     assert_eq!(frame.width(), 8);
     Ok(())

@@ -183,11 +183,7 @@ impl PreviewCoordinator {
             .map_or(1, usize::from)
             .saturating_sub(1)
             .clamp(1, 6);
-        let largest = scene
-            .composition
-            .configured_raster_limits()
-            .max_bytes
-            .max(1);
+        let largest = scene.composition.raster_limits().max_bytes.max(1);
         let workers = cpus.min((2 * 1024 * 1024 * 1024_u64 / largest).max(1) as usize);
         Self::with_slots(scene, context, bytes, workers)
     }
@@ -205,7 +201,10 @@ impl PreviewCoordinator {
             .studio_render_options(motion_render::BackendPreference::automatic())
             .cache
             .fork_partition(motion_core::CachePartition::Scene);
-        scene.composition = scene.composition.clone().render_cache(cache);
+        scene.composition = scene
+            .composition
+            .clone()
+            .configure(|options| options.cache(cache));
         let shared = Arc::new((Mutex::new(CoordinatorState::default()), Condvar::new()));
         #[cfg(feature = "gpu")]
         let textures = textures::TextureRing::default();
@@ -598,8 +597,8 @@ impl CoordinatorRuntime {
             candidates.push(request);
         }
         let count = self.clock.frames;
-        let estimate = (self.scene.composition.configured_output_size().width as usize
-            * self.scene.composition.configured_output_size().height as usize
+        let estimate = (self.scene.composition.output_size().width as usize
+            * self.scene.composition.output_size().height as usize
             * 4
             * request.settings.scale as usize
             * request.settings.scale as usize

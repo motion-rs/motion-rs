@@ -572,10 +572,14 @@ fn explicit_paragraph_fonts_shaping_fallback_metrics_parts_and_replay() {
     .unwrap();
     assert_eq!(probe.borrow()[0], 250.milliseconds());
     assert_eq!(probe.borrow()[3], -50.milliseconds());
-    let composition = motion_render::Composition::new(128, 112)
-        .frame_count(12)
-        .background(motion_core::Color::BLACK)
-        .resources(resources.clone());
+    let composition =
+        motion_render::Composition::new(128, 112, motion_render::FrameClock::new(30, 12))
+            .with_options(
+                motion_render::RenderOptions::default()
+                    .background(motion_core::Color::BLACK)
+                    .resources(resources.clone()),
+            )
+            .unwrap();
     let build = |context: &motion_core::SceneContext<'_>| {
         text.try_animate_parts_at(context, 20.milliseconds(), |part| {
             PartStyle::new()
@@ -623,7 +627,7 @@ fn explicit_bitmap_emoji_uses_image_and_shared_paragraph() {
             .any(|glyph| glyph.artwork.bitmap.is_some())
     );
     assert_eq!(layout.parts(TextSplit::Characters).len(), 5);
-    let frame = motion_render::Composition::new(128, 64)
+    let frame = motion_render::Composition::new(128, 64, motion_render::FrameClock::new(30, 150))
         .render_frame(0, motion_core::Size::new(128.0, 64.0), |_| {
             text.clone().translate(4.0, 4.0)
         })
@@ -728,8 +732,9 @@ fn explicit_colrv0_and_cbdt_are_actual_color_glyphs() {
         text.layout(&fonts).unwrap().glyphs[0].artwork.layers.len(),
         2
     );
-    let frame = motion_render::Composition::new(48, 48)
-        .background(motion_core::Color::BLACK)
+    let frame = motion_render::Composition::new(48, 48, motion_render::FrameClock::new(30, 150))
+        .with_options(motion_render::RenderOptions::default().background(motion_core::Color::BLACK))
+        .unwrap()
         .render_frame(0, motion_core::Size::new(48.0, 48.0), |_| {
             text.clone().into()
         })
@@ -786,8 +791,9 @@ fn explicit_colrv0_and_cbdt_are_actual_color_glyphs() {
             .bitmap
             .is_some()
     );
-    let frame = motion_render::Composition::new(48, 48)
-        .background(motion_core::Color::BLACK)
+    let frame = motion_render::Composition::new(48, 48, motion_render::FrameClock::new(30, 150))
+        .with_options(motion_render::RenderOptions::default().background(motion_core::Color::BLACK))
+        .unwrap()
         .render_frame(0, motion_core::Size::new(48.0, 48.0), |_| {
             text.clone().into()
         })

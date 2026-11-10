@@ -182,8 +182,8 @@ impl SceneDescriptor {
         self.composition.preflight()?;
         if let Some(check) = &self.visual {
             check.validate(
-                self.composition.configured_output_size(),
-                self.composition.configured_frame_count(),
+                self.composition.output_size(),
+                self.composition.frame_count(),
                 &self.id,
             )?;
         }
@@ -199,7 +199,7 @@ mod tests {
         SceneDescriptor::new(
             "study.v1",
             "Study",
-            Composition::new(16, 8).frame_count(7),
+            Composition::new(16, 8, crate::render::FrameClock::new(30, 7)),
             |_: &SceneContext<'_>| Node::empty(),
         )
         .visual_check(VisualCheckPolicy::new(
@@ -229,9 +229,11 @@ mod tests {
         let spec = SceneDescriptor::new(
             "ntsc",
             "Rational",
-            Composition::new(16, 8)
-                .frame_rate(crate::FrameRate::NTSC)
-                .frame_count(7),
+            Composition::new(
+                16,
+                8,
+                crate::render::FrameClock::new(crate::FrameRate::NTSC, 7),
+            ),
             |_: &SceneContext<'_>| -> Node {
                 panic!("metadata validation must not evaluate scenes")
             },
