@@ -47,13 +47,15 @@ fn main() -> motion::Result {
         Mode::Film => ("film", Look::film(42)),
     };
     let scene_look = look.clone();
-    let timeline = Timeline::new(Size::new(640.0, 360.0), 24).track(move |track| {
-        track.scene(4.seconds(), move |context| {
-            scene_look
-                .scene(context, PixelSize::new(640, 360), artwork)
-                .expect("valid look")
+    let timeline = Timeline::new(Size::new(640.0, 360.0), 24)
+        .track(move |track| {
+            track.scene(4.seconds(), move |context| {
+                scene_look
+                    .scene(context, PixelSize::new(640, 360), artwork)
+                    .expect("valid look")
+            })
         })
-    });
+        .build()?;
     if args.still {
         std::fs::create_dir_all("docs/assets")?;
         let frame = render_still(

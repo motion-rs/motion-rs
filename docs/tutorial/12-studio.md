@@ -18,7 +18,7 @@ fn main() -> motion::Result {
                 .fill(Color::rgb(35, 155, 130))
                 .rotate(context.seconds() * 0.6)
         })
-    });
+    }).build()?;
     motion::studio::run(motion::studio::StudioScene::timeline(
         "tutorial",
         Composition::new(640, 360, motion::render::FrameClock::new(30, 150)),

@@ -36,11 +36,13 @@ pub(super) const METADATA: DemoMetadata = DemoMetadata::new(
 );
 
 pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
-    Ok(Timeline::new(Size::new(960.0, 540.0), 30).track(|track| {
-        track.scene(parameters.seconds.seconds(), move |context| {
-            frame(context, parameters)
+    Timeline::new(Size::new(960.0, 540.0), 30)
+        .track(|track| {
+            track.scene(parameters.seconds.seconds(), move |context| {
+                frame(context, parameters)
+            })
         })
-    }))
+        .build()
 }
 
 fn frame(context: &SceneContext<'_>, parameters: DemoParameters) -> Node {
@@ -358,12 +360,14 @@ mod tests {
         let options = crate::render_options(Some(&font))?.size(PixelSize::new(192, 108));
         let parameters = DemoParameters::default();
         let optimized = timeline(parameters)?;
-        let reference = Timeline::new(Size::new(960.0, 540.0), 30).track(|track| {
-            track.push(
-                (move |context: &SceneContext<'_>| frame_mode::<false>(context, parameters))
-                    .with_duration(8.seconds()),
-            )
-        });
+        let reference = Timeline::new(Size::new(960.0, 540.0), 30)
+            .track(|track| {
+                track.push(
+                    (move |context: &SceneContext<'_>| frame_mode::<false>(context, parameters))
+                        .with_duration(8.seconds()),
+                )
+            })
+            .build()?;
         let mut actual =
             motion::export::composition(&optimized, &options)?.frame_renderer(optimized.size())?;
         let mut expected =

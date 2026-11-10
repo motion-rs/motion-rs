@@ -47,7 +47,7 @@ fn main() -> motion::Result {
                     .fill(Color::rgb(20, 160, 130)),
             )
         })
-    });
+    }).build()?;
     let bitmap = render_still(
         &timeline,
         1500.milliseconds(),
@@ -132,7 +132,7 @@ Studio opens one scene at a time. See [12 Studio](12-studio.md) for preview and 
 
 | API | Purpose |
 | --- | --- |
-| `Timeline::new(size, rate)` | Create a timeline with explicit logical size and frame rate |
+| `Timeline::new(size, rate).build()?` | Create a timeline with explicit logical size and frame rate |
 | `track.scene(duration, callback)` | Add a scene to a track |
 | `context.sample(&animation)` | Sample at the current scene-local time |
 | `render_still` | Request a transparent image at one time point |

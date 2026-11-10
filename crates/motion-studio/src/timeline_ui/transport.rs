@@ -192,7 +192,7 @@ impl StudioApp {
                         );
                     }
                     if let Some(timeline) = &self.scene.definition.audio_timeline {
-                        let master = timeline.audio_master();
+                        let master = timeline.soundtrack().master();
                         if let Some(normalize) = master.normalize {
                             ui.label(format!("Target: {:.1} LUFS", normalize.target_lufs));
                         }

@@ -195,7 +195,7 @@ pub(super) fn soundtrack(duration: Time, ducked: bool, seed: u32) -> motion::Res
     Ok(Soundtrack { buses, clips })
 }
 
-pub(super) fn audio_timeline(track: &Soundtrack, duration: Time) -> Timeline {
+pub(super) fn audio_timeline(track: &Soundtrack, duration: Time) -> TimelineBuilder {
     let mut timeline = Timeline::new(Size::new(960.0, 540.0), 30);
     for bus in &track.buses {
         timeline = timeline.audio_bus(bus.clone());

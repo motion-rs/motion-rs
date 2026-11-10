@@ -91,10 +91,10 @@ impl Rig {
 pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
     let duration = i64::from(parameters.seconds).seconds();
     let seed = parameters.seed as u32;
-    let output = audio_timeline(&soundtrack(duration, true, seed)?, duration);
+    let output = audio_timeline(&soundtrack(duration, true, seed)?, duration).build()?;
     let mix = MixedAudio::from_timeline(&output, RATE)?;
     let dry = MixedAudio::from_timeline(
-        &audio_timeline(&soundtrack(duration, false, seed)?, duration),
+        &audio_timeline(&soundtrack(duration, false, seed)?, duration).build()?,
         RATE,
     )?;
     let analysis = AudioAnalysis::from_source(&mix, duration)?;
@@ -137,7 +137,10 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
         meters,
         lufs: mix.loudness_report()?.integrated_lufs.unwrap_or(-70.0),
     });
-    Ok(output.track(|track| track.scene(duration, move |context| frame(context, &rig))))
+    output
+        .to_builder()
+        .track(|track| track.scene(duration, move |context| frame(context, &rig)))
+        .build()
 }
 
 fn color(hex: u32) -> Color {

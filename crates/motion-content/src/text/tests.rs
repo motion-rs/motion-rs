@@ -140,15 +140,20 @@ fn lazy_parts_use_nested_scene_time_and_replay_without_explicit_context() -> mot
                 observed.lock().unwrap().push((part.index, part.time()));
                 PartStyle::new()
             });
-    let child = Timeline::new(Size::new(64.0, 32.0), 30).track(|track| {
-        track
-            .push((move |_: &SceneContext<'_>| Node::from(text.clone())).with_duration(1.seconds()))
-    });
-    let parent = Timeline::new(Size::new(64.0, 32.0), 30).track(|track| {
-        track
-            .gap(1.seconds())
-            .push(child.with_duration(1.seconds()))
-    });
+    let child = Timeline::new(Size::new(64.0, 32.0), 30)
+        .track(|track| {
+            track.push(
+                (move |_: &SceneContext<'_>| Node::from(text.clone())).with_duration(1.seconds()),
+            )
+        })
+        .build()?;
+    let parent = Timeline::new(Size::new(64.0, 32.0), 30)
+        .track(|track| {
+            track
+                .gap(1.seconds())
+                .push(child.with_duration(1.seconds()))
+        })
+        .build()?;
     let first = motion_render::render_still(
         &parent,
         1250.milliseconds(),

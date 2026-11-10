@@ -210,49 +210,42 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
         curve: vec![(0.0, 0.0), (0.25, 0.1), (0.65, 0.85), (1.0, 1.0)],
         lift_pause: 0.65.seconds(),
     };
-    Ok(atlas::timeline(
-        parameters,
-        METADATA,
-        PAGES,
-        move |page, progress, _| {
-            let reveal = (0.08 + progress * 1.1).min(1.0);
-            let stroke = strokes[page].clone();
-            let ink = match page {
-                14 => Node::from(
-                    stroke
-                        .boil(3.0, 0.05, seed, (progress * 120.0) as u64)
-                        .write(reveal),
-                ),
-                15 => {
-                    Node::from(stroke.wetness((progress * 4.0).seconds(), 10.0, 1.4.seconds())?)
-                }
-                16 => Node::from(recorded.clone().write_with((progress * 4.0).seconds())?),
-                17 => Node::from(stroke.write_timed((progress * 3.45).seconds(), &timing)?),
-                18 => stroke.write(reveal).erase(atlas::specimen(progress)),
-                19 => pigment(progress)?,
-                20 => {
-                    let relief = stroke.clone().height_map(2.0).write(reveal);
-                    Node::group([
-                        Node::from(stroke.write(reveal)),
-                        Node::from(relief)
-                            .filter(Filter::Optics(Optics::Relight {
-                                height_from: HeightFrom::Luma,
-                                light_dir: [math::cos(progress * 6.0), -0.5, 0.8],
-                                color: Color::WHITE,
-                                ambient: 0.35,
-                                specular: 1.0,
-                            }))
-                            .blend_mode(BlendMode::Multiply),
-                    ])
-                }
-                _ => Node::from(stroke.write(reveal)),
-            };
-            Ok(Node::group([
-                Node::from(atlas::VIEWPORT.fill(Color::WHITE)),
-                ink,
-            ]))
-        },
-    ))
+    atlas::timeline(parameters, METADATA, PAGES, move |page, progress, _| {
+        let reveal = (0.08 + progress * 1.1).min(1.0);
+        let stroke = strokes[page].clone();
+        let ink = match page {
+            14 => Node::from(
+                stroke
+                    .boil(3.0, 0.05, seed, (progress * 120.0) as u64)
+                    .write(reveal),
+            ),
+            15 => Node::from(stroke.wetness((progress * 4.0).seconds(), 10.0, 1.4.seconds())?),
+            16 => Node::from(recorded.clone().write_with((progress * 4.0).seconds())?),
+            17 => Node::from(stroke.write_timed((progress * 3.45).seconds(), &timing)?),
+            18 => stroke.write(reveal).erase(atlas::specimen(progress)),
+            19 => pigment(progress)?,
+            20 => {
+                let relief = stroke.clone().height_map(2.0).write(reveal);
+                Node::group([
+                    Node::from(stroke.write(reveal)),
+                    Node::from(relief)
+                        .filter(Filter::Optics(Optics::Relight {
+                            height_from: HeightFrom::Luma,
+                            light_dir: [math::cos(progress * 6.0), -0.5, 0.8],
+                            color: Color::WHITE,
+                            ambient: 0.35,
+                            specular: 1.0,
+                        }))
+                        .blend_mode(BlendMode::Multiply),
+                ])
+            }
+            _ => Node::from(stroke.write(reveal)),
+        };
+        Ok(Node::group([
+            Node::from(atlas::VIEWPORT.fill(Color::WHITE)),
+            ink,
+        ]))
+    })
 }
 
 fn configured(page: usize, seed: u32) -> motion::Result<BrushStroke> {

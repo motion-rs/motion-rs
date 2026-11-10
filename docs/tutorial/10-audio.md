@@ -34,7 +34,7 @@ fn main() -> motion::Result {
                 let radius = 20.0 + context.sample(&loudness) * 80.0;
                 Circle::new(context.center(), radius).fill(Color::rgb(20, 150, 125))
             })
-        });
+        }).build()?;
     render_still(&timeline, 500.milliseconds(), &RenderOptions::default())?
         .save_png("tutorial-audio-reactive.png")
 }
@@ -99,7 +99,7 @@ fn main() -> motion::Result {
     let timeline = Timeline::new(Size::new(320.0, 180.0), 30)
         .audio(narration)
         .audio(music)
-        .duration(6.seconds());
+        .duration(6.seconds()).build()?;
     let resolved = motion::audio::prepare_timeline(&timeline)?;
     let _mixed = MixedAudio::from_timeline(&resolved, 48_000)?;
     Ok(())
@@ -127,7 +127,7 @@ fn main() -> motion::Result {
     let timeline = Timeline::new(Size::new(320.0, 180.0), 30)
         .audio_bus(music)
         .audio(AudioClip::source(tone).duration(2.seconds()).bus("music").fade_in(50.milliseconds()))
-        .master(Master::safe());
+        .master(Master::safe()).build()?;
     let mixed = MixedAudio::from_timeline(&timeline, 48_000)?;
     let _report = mixed.loudness_report()?;
     let _levels = mixed.bus_meters()[0].level(500.milliseconds());

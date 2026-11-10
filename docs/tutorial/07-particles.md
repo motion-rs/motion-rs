@@ -18,7 +18,7 @@ fn main() -> motion::Result {
     )
     .style(ParticleStyle::GlowDots { radius: 2.0 });
     let timeline = Timeline::new(Size::new(480.0, 270.0), 30)
-        .track(|track| track.push(firework.with_duration(3.seconds())));
+        .track(|track| track.push(firework.with_duration(3.seconds()))).build()?;
     render_still(&timeline, 1.seconds(), &RenderOptions::default())?
         .save_png("tutorial-particles.png")
 }

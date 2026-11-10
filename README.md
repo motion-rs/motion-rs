@@ -22,7 +22,7 @@ let timeline = Timeline::new(Size::new(640.0, 360.0), 30)
     let horizontal = context.sample(&Tween::new(32.0, 480.0, 3.seconds()));
     Node::from(Rect::new(horizontal, 64.0, horizontal + 96.0, 88.0)
         .fill(Color::rgb(20, 150, 125)))
-    }).with_duration(3.seconds())));
+    }).with_duration(3.seconds()))).build()?;
 let bitmap = render_still(&timeline, 1500.milliseconds(), &RenderOptions::default())?;
 bitmap.save_png("frame.png")?;
 # Ok::<(), motion::Error>(())

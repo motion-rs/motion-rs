@@ -53,7 +53,7 @@
 //!         })
 //!         .with_duration(3.seconds()),
 //!     )
-//! });
+//! }).build()?;
 //! render_still(&timeline, 1500.milliseconds(), &RenderOptions::default())?
 //!     .save_png("frame.png")?;
 //! # Ok(())
@@ -213,9 +213,9 @@ pub use motion_core::{
     Point, Polygon, Polyline, Pose, Push, RadialGradient, Random, Rect, RegularPolygon,
     RenderQuality, Ring, RoundedRect, Row, Sampling, Scene, SceneContext, Shape, Side, Size,
     Skeleton, Slide, Soundtrack, Source, Spline, Spring, Star, StrokeStyle, Styled, SweepGradient,
-    Time, TimeLiteral, Timeline, Track, TrackBuilder, Transform, TransformComponents, Tween,
-    ValidationError, Vector2, Wipe, ZoomBlur, animation, authoring, color, geometry, noise, path2d,
-    sample_offsets, shape, time, try_camera,
+    Time, TimeLiteral, Timeline, TimelineBuilder, TimelineWarning, Track, TrackBuilder, Transform,
+    TransformComponents, Tween, ValidationError, Vector2, Wipe, ZoomBlur, animation, authoring,
+    color, geometry, noise, path2d, sample_offsets, shape, time, try_camera,
 };
 pub use motion_render::{BackendPreference, RenderOptions, Renderer, render_still};
 
@@ -338,9 +338,10 @@ pub mod prelude {
         Push, RadialGradient, Random, Rect, RegularPolygon, RenderOptions, RenderQuality, Renderer,
         Ring, RoundedRect, Row, Sampling, Scene, SceneContext, SceneDescriptor, Shape, Side, Size,
         Skeleton, Slide, Source, Spline, Spring, Star, StrokeStyle, Styled, SweepGradient, Time,
-        TimeLiteral, Timeline, Track, TrackBuilder, Transform, TransformComponents, Tween,
-        ValidationError, Vector2, VisualCheckPolicy, VisualRegion, Waveform, Wipe, ZoomBlur,
-        camera, export, group, key, math, piecewise, remap, render_still, scene,
+        TimeLiteral, Timeline, TimelineBuilder, TimelineWarning, Track, TrackBuilder, Transform,
+        TransformComponents, Tween, ValidationError, Vector2, VisualCheckPolicy, VisualRegion,
+        Waveform, Wipe, ZoomBlur, camera, export, group, key, math, piecewise, remap, render_still,
+        scene,
     };
     pub use crate::{
         ApertureShape, BitDepth, Cdl, ColorWheels, DepthOfField, DepthPlane, DisplayTransform,

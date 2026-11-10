@@ -18,7 +18,7 @@ fn main() -> motion::Result {
             Circle::new(Point::new(40.0 + context.seconds() * 240.0, 90.0), 20.0)
                 .fill(Color::rgb(20, 150, 125))
         })
-    });
+    }).build()?;
     let options = ExportOptions::new("tutorial-frames").codec(Codec::PngSequence);
     let report = export(&timeline, &options, &NoProgress)?;
     println!("{} frames -> {}", report.frames, report.path.display());
@@ -54,7 +54,7 @@ fn main() -> motion::Result {
             Circle::new(context.center(), 20.0 + context.progress() * 30.0)
                 .fill(Color::rgb(20, 150, 125))
         })
-    });
+    }).build()?;
     export(&timeline, &ExportOptions::new("tutorial-film.mp4"), &NoProgress)?;
     Ok(())
 }

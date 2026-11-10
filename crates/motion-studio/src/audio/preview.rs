@@ -353,7 +353,7 @@ fn timeline_request(
         ));
     }
     let rate = timeline.frame_rate();
-    let total = (timeline.total_duration().ticks() as u128 * u128::from(audio::SAMPLE_RATE))
+    let total = (timeline.duration().ticks() as u128 * u128::from(audio::SAMPLE_RATE))
         .div_ceil(motion_core::TICKS_PER_SECOND as u128) as u64;
     Ok(Request {
         clips,
@@ -391,23 +391,26 @@ impl PreviewMix {
                 total: request.total,
             });
         }
-        let mut timeline = request.native.as_deref().cloned().unwrap_or_else(|| {
-            motion_core::Timeline::new(
+        let mut builder = match request.native.as_deref() {
+            Some(native) => native.to_builder(),
+            None => motion_core::Timeline::try_new(
                 motion_core::Size::new(1.0, 1.0),
                 motion_core::FrameRate::NTSC,
             )
-        });
+            .map_err(io::Error::other)?,
+        };
         for clip in &request.clips {
-            timeline = timeline.try_audio(clip.clone()).map_err(io::Error::other)?;
+            builder = builder.try_audio(clip.clone()).map_err(io::Error::other)?;
         }
+        let timeline = builder.build().map_err(io::Error::other)?;
         let timeline = if timeline.audio_clips().map_err(io::Error::other)?.is_empty() {
             None
         } else {
             Some(timeline)
         };
         let processed = timeline.as_ref().is_some_and(|timeline| {
-            timeline.audio_master() != motion_core::Master::default()
-                || !timeline.audio_buses().is_empty()
+            timeline.soundtrack().master() != motion_core::Master::default()
+                || !timeline.soundtrack().buses().is_empty()
                 || timeline.audio_clips().is_ok_and(|clips| {
                     clips
                         .iter()

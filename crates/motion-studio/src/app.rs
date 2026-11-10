@@ -166,8 +166,8 @@ pub(crate) fn alignment_diagnostics(
         std::collections::VecDeque::new,
         |timeline| {
             timeline
-                .adjustments()
-                .iter()
+                .diagnostics()
+                .boundary_adjustments()
                 .take(128)
                 .map(|adjustment| {
                     let frame = adjustment

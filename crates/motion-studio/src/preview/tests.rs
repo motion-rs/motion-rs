@@ -212,7 +212,8 @@ fn shared_texture_preview_and_automatic_export_loss_preserve_transactions()
             },
             motion_core::Time::from_frame(3, motion_core::FrameRate::new(30, 1)),
         ))
-    })?;
+    })?
+    .build()?;
     let mut options = motion_encode::ExportOptions::new(&path);
     options.overwrite = true;
     options.render.gpu_context = Some(context);
@@ -812,7 +813,8 @@ fn timeline_worker_keeps_preview_silent_and_exports_its_mix() -> motion_core::Re
     }
     let timeline = motion_core::Timeline::try_new(motion_core::Size::new(8.0, 4.0), 30)?
         .try_audio(motion_core::AudioClip::source(Tone(calls.clone())))?
-        .try_duration(100.milliseconds())?;
+        .try_duration(100.milliseconds())?
+        .build()?;
     let scene = StudioScene::timeline(
         "sound",
         motion_render::Composition::new(8, 4, motion_render::FrameClock::new(30, 150)),

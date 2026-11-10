@@ -35,7 +35,7 @@ fn main() -> motion::Result {
                 .write(context.progress())
                 .translate(32.0, 100.0)
         })
-    });
+    }).build()?;
     render_still(&timeline, 1.seconds(), &options)?
         .save_png("tutorial-content.png")
 }
@@ -62,7 +62,7 @@ fn main() -> motion::Result {
         track.scene(1.seconds(), |_| {
             Image::open("tile.png").translate(64.0, 29.0)
         })
-    });
+    }).build()?;
     render_still(&timeline, Time::ZERO, &options)?
         .save_png("tutorial-preloaded-image.png")
 }

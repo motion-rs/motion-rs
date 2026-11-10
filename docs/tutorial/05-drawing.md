@@ -27,7 +27,7 @@ fn main() -> motion::Result {
                     .clip_with(Rect::new(180.0, 80.0, 300.0, 190.0), ClipMode::Geometric),
             ))
         })
-    });
+    }).build()?;
     render_still(&timeline, Time::ZERO, &RenderOptions::default())?
         .save_png("tutorial-drawing.png")
 }

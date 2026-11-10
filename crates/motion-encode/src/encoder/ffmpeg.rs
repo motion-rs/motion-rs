@@ -239,14 +239,16 @@ mod codec_tests {
     #[ignore = "requires native FFmpeg with libx264/libx265/libvpx-vp9/prores_ks"]
     fn native_codecs_export_readable_ordered_frames_with_alpha_inputs() -> Result {
         let directory = tempfile::tempdir()?;
-        let timeline = Timeline::new(Size::new(16.0, 16.0), 2).track(|track| {
-            track.push(motion_core::Scene::with_duration(
-                |_: &motion_core::SceneContext<'_>| {
-                    Node::from(Rect::new(2.0, 2.0, 14.0, 14.0).fill(Color::WHITE)).opacity(0.5)
-                },
-                1.seconds(),
-            ))
-        });
+        let timeline = Timeline::new(Size::new(16.0, 16.0), 2)
+            .track(|track| {
+                track.push(motion_core::Scene::with_duration(
+                    |_: &motion_core::SceneContext<'_>| {
+                        Node::from(Rect::new(2.0, 2.0, 14.0, 14.0).fill(Color::WHITE)).opacity(0.5)
+                    },
+                    1.seconds(),
+                ))
+            })
+            .build()?;
         for (name, codec) in [
             ("h264.mp4", Codec::default()),
             ("hevc.mp4", Codec::H265 { quality: 28 }),

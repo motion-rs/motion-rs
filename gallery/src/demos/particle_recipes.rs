@@ -46,28 +46,30 @@ pub fn comparison_frames(directory: &std::path::Path, options: &RenderOptions) -
         for bloom in [false, true] {
             for tone_map in [ToneMap::None, ToneMap::AgX] {
                 let simulation = simulation.clone();
-                let timeline = Timeline::new(Size::new(320.0, 180.0), 30).track(|track| {
-                    track.scene(3.seconds(), move |context| {
-                        let particles = simulation.render(context);
-                        let particles = if bloom {
-                            particles.filter(Filter::Bloom {
-                                threshold: 0.4,
-                                knee: 0.2,
-                                radius: 4.0,
-                                levels: 3,
-                                falloff: 0.6,
-                                intensity: 0.8,
-                                tint: Color::WHITE,
-                            })
-                        } else {
-                            particles
-                        };
-                        Node::group([
-                            context.bounds().fill(Color::from_hex(0x101418)).into(),
-                            particles,
-                        ])
+                let timeline = Timeline::new(Size::new(320.0, 180.0), 30)
+                    .track(|track| {
+                        track.scene(3.seconds(), move |context| {
+                            let particles = simulation.render(context);
+                            let particles = if bloom {
+                                particles.filter(Filter::Bloom {
+                                    threshold: 0.4,
+                                    knee: 0.2,
+                                    radius: 4.0,
+                                    levels: 3,
+                                    falloff: 0.6,
+                                    intensity: 0.8,
+                                    tint: Color::WHITE,
+                                })
+                            } else {
+                                particles
+                            };
+                            Node::group([
+                                context.bounds().fill(Color::from_hex(0x101418)).into(),
+                                particles,
+                            ])
+                        })
                     })
-                });
+                    .build()?;
                 let frame = render_still(
                     &timeline,
                     time,

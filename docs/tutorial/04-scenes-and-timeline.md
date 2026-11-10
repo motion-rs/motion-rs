@@ -28,7 +28,7 @@ fn main() -> motion::Result {
         track
             .push(first.with_duration(2.seconds()))
             .push(second.with_duration(1.seconds()))
-    });
+    }).build()?;
     render_still(&timeline, 2500.milliseconds(), &RenderOptions::default())?
         .save_png("tutorial-timeline.png")
 }
@@ -76,7 +76,7 @@ Place fixed decoration in `context.memo(key, builder)` to reuse static subtrees 
 
 ## Timeline and Track
 
-`Timeline` holds design dimensions, a rational frame rate and tracks. Ordinary clips within a track are sequential; different tracks contribute to composition at the same time.
+`Timeline::new(size, rate)` starts a `TimelineBuilder`; `build()` freezes it into an immutable, validated `Timeline` that holds design dimensions, a rational frame rate, tracks, a `Soundtrack` and `diagnostics()`. Ordinary clips within a track are sequential; different tracks contribute to composition at the same time.
 
 | Operation | Use |
 | --- | --- |
@@ -85,15 +85,15 @@ Place fixed decoration in `context.memo(key, builder)` to reuse static subtrees 
 | `track.gap(duration)` | Insert an explicit gap |
 | `track.place(start, scene)` | Place a scene at a specific time |
 | `track.transition(effect, duration)` | Arrange a transition between adjacent clips |
-| `Timeline::audio` | Attach an audio occurrence |
-| `Timeline::duration` | Set the final film duration explicitly |
+| `TimelineBuilder::audio` | Attach an audio occurrence |
+| `TimelineBuilder::duration` | Set the final film duration explicitly; otherwise it is the end of the tracks and audio |
 
 Transitions allow only two adjacent clips to participate simultaneously; arbitrary triple overlaps do not replace transition design. `CrossFade`, `Slide`, `Push`, `Wipe`, `Iris` and `ZoomBlur` provide different composition methods. Both sides keep their own local clocks during a transition.
 
-Non-`try_` track and timeline methods accumulate authoring diagnostics, checked by `validate()`, rendering, export or Studio. Use `try_track`, `try_push` and similar methods for programmatic input requiring immediate failure. Do not ignore retained errors.
+Non-`try_` track and builder methods accumulate authoring errors that `TimelineBuilder::build` reports together. Use `try_track`, `try_push` and similar methods for programmatic input requiring immediate failure. Do not ignore retained errors.
 
 Clip boundaries align independently to rational frame ticks and retain alignment
-diagnostics. The half-open end is not the index of the final rendered frame.
+warnings in `Timeline::diagnostics()`; an explicit duration shorter than the content adds a `Truncated` warning and cuts only the picture. The half-open end is not the index of the final rendered frame.
 Animated-image source-time selection is separate from timeline placement; trimmed
 or reversed views share source frames rather than duplicating endpoint durations.
 

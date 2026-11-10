@@ -68,7 +68,8 @@ mod resources {
             )?;
             let text = Text::from_font("Used font", &face, 12.0, Color::WHITE)?;
             let timeline = Timeline::new(Size::new(96.0, 32.0), 30)
-                .track(|track| track.scene(100.milliseconds(), move |_| text.clone()));
+                .track(|track| track.scene(100.milliseconds(), move |_| text.clone()))
+                .build()?;
             let mut options =
                 ExportOptions::new(directory.path().join("text")).codec(Codec::PngSequence);
             options.workers = 2;
@@ -81,7 +82,8 @@ mod resources {
             assert_eq!(first.fonts, second.fonts);
             options.path = directory.path().join("empty");
             let empty = Timeline::new(Size::new(96.0, 32.0), 30)
-                .track(|track| track.scene(100.milliseconds(), |_| Node::empty()));
+                .track(|track| track.scene(100.milliseconds(), |_| Node::empty()))
+                .build()?;
             assert!(
                 motion::export(&empty, &options, &NoProgress)?
                     .fonts
@@ -136,7 +138,8 @@ mod resources {
                 Node::from(Image::open("missing.png").size(8.0, 8.0))
             };
             let timeline = Timeline::try_new(Size::new(8.0, 8.0), 30)?
-                .try_track(|track| track.try_push(build.with_duration(100.milliseconds())))?;
+                .try_track(|track| track.try_push(build.with_duration(100.milliseconds())))?
+                .build()?;
             let mut options = ExportOptions::new(&destination);
             options.overwrite = true;
             options.render.resources = Some(Assets::new(directory.path())?);

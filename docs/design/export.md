@@ -40,7 +40,7 @@ PNG sequence and GIF encoders are pure Rust and do not need FFmpeg.
 
 | Rule | Source |
 | --- | --- |
-| `range` is half-open and must satisfy `0 <= start < end <= total_duration`. | [`render.rs`](../../crates/motion-encode/src/export/render.rs) |
+| `range` is half-open and must satisfy `0 <= start < end <= duration`. | [`render.rs`](../../crates/motion-encode/src/export/render.rs) |
 | Start and end round up to the next frame timestamp; a range with no frame is rejected. The report carries the normalized range. | same |
 | Output rate is the timeline rate, except `Codec::Gif`, which samples at its own `frame_rate`. | same |
 | `workers` must be in `1..=64` and `max_parallel_bytes` positive. | same |

@@ -6,7 +6,9 @@ use motion_core::Result;
 use motion_core::{
     AssetStatus, Assets, AudioClip, Color, MotionBlur, NodeModifiers, Rect, ValidationError,
 };
-use motion_core::{ErrorKind, FrameRate, Node, Scene, SceneContext, Size, Time, Timeline};
+use motion_core::{
+    ErrorKind, FrameRate, Node, Scene, SceneContext, Size, Time, Timeline, TimelineBuilder,
+};
 #[cfg(feature = "ffmpeg")]
 use motion_render::{BackendPreference, Composition, RenderContext};
 use std::sync::Mutex;
@@ -41,14 +43,23 @@ impl ProgressSink for Progress {
     }
 }
 
+fn builder(
+    size: Size,
+    rate: FrameRate,
+    frames: u32,
+    build: impl Fn(&SceneContext<'_>) -> Node + Send + Sync + 'static,
+) -> TimelineBuilder {
+    Timeline::new(size, rate)
+        .track(|track| track.push(build.with_duration(Time::from_frame(i64::from(frames), rate))))
+}
+
 fn timeline(
     size: Size,
     rate: FrameRate,
     frames: u32,
     build: impl Fn(&SceneContext<'_>) -> Node + Send + Sync + 'static,
 ) -> Timeline {
-    Timeline::new(size, rate)
-        .track(|track| track.push(build.with_duration(Time::from_frame(i64::from(frames), rate))))
+    builder(size, rate, frames, build).build().unwrap()
 }
 
 #[test]
@@ -114,10 +125,11 @@ fn audio_preparation_failure_preserves_destination_without_evaluating_scene() ->
     std::fs::write(&destination, b"existing")?;
     let source = directory.path().join("corrupt.wav");
     std::fs::write(&source, b"not an audio stream")?;
-    let scene = timeline(Size::new(64.0, 64.0), FrameRate::from(24), 24, |_| {
+    let scene = builder(Size::new(64.0, 64.0), FrameRate::from(24), 24, |_| {
         panic!("audio preparation failure must precede scene evaluation")
     })
-    .audio(AudioClip::file(&source));
+    .audio(AudioClip::file(&source))
+    .build()?;
     assert!(
         export(
             &scene,
@@ -293,7 +305,7 @@ fn fractional_video_acceptance(backend: BackendPreference) -> Result {
         let destination = directory.path().join(format!("{}.mp4", rate.numerator()));
         let evaluated = std::sync::Arc::new(Mutex::new(Vec::new()));
         let observed = evaluated.clone();
-        let scene = timeline(Size::new(8.0, 4.0), rate, 7, move |context| {
+        let scene = builder(Size::new(8.0, 4.0), rate, 7, move |context| {
             let index = context.time().to_frame(rate);
             assert_eq!(context.frame_rate(), rate);
             assert_eq!(context.time(), Time::from_frame(index, rate));
@@ -301,7 +313,8 @@ fn fractional_video_acceptance(backend: BackendPreference) -> Result {
             Rect::new(0.0, 0.0, 4.0, 4.0).fill(Color::WHITE).into()
         })
         .audio(AudioClip::file(&source).duration(Time::from_seconds(0.5)))
-        .try_duration(Time::from_frame(7, rate))?;
+        .try_duration(Time::from_frame(7, rate))?
+        .build()?;
         assert_eq!(
             export(
                 &scene,
@@ -364,10 +377,11 @@ fn audio_source_cannot_be_replaced_by_destination_even_with_overwrite() -> Resul
     let source = directory.path().join("source.wav");
     crate::encoder::ffmpeg::native::tests::write_tone(&source, 440.0, 0.25)?;
     let original = std::fs::read(&source)?;
-    let scene = timeline(Size::new(64.0, 64.0), FrameRate::from(24), 24, |_| {
+    let scene = builder(Size::new(64.0, 64.0), FrameRate::from(24), 24, |_| {
         panic!("audio source destination builder")
     })
-    .audio(AudioClip::file(&source));
+    .audio(AudioClip::file(&source))
+    .build()?;
     let error = export(
         &scene,
         &ExportOptions::new(&source).workers(1).overwrite(true),

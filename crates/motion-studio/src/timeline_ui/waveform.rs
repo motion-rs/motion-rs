@@ -39,7 +39,7 @@ pub(super) fn spawn_analysis(
                     let mixed = motion_encode::MixedAudio::from_timeline(&timeline, 8000)?;
                     let peaks = motion_encode::audio::WaveformPyramid::from_source(
                         &mixed,
-                        timeline.total_duration(),
+                        timeline.duration(),
                     )?
                     .peaks(4096)?;
                     let mut overview = AudioOverview {
@@ -48,10 +48,8 @@ pub(super) fn spawn_analysis(
                     };
                     overview.meters = mixed.bus_meters().to_vec();
                     let analyzed = (|| -> motion_core::Result {
-                        let analysis = motion_encode::AudioAnalysis::from_source(
-                            &mixed,
-                            timeline.total_duration(),
-                        )?;
+                        let analysis =
+                            motion_encode::AudioAnalysis::from_source(&mixed, timeline.duration())?;
                         overview.curve = analysis
                             .loudness()?
                             .values()

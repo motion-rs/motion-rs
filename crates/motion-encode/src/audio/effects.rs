@@ -673,7 +673,8 @@ mod tests {
             0.0,
         );
         let timeline = Timeline::new(Size::new(1.0, 1.0), 30)
-            .audio(AudioClip::source(pcm.clone()).effect(effect));
+            .audio(AudioClip::source(pcm.clone()).effect(effect))
+            .build()?;
         let whole = crate::MixedAudio::from_timeline(&timeline, 8000)?;
         let window = crate::MixedAudio::from_window(
             &timeline,

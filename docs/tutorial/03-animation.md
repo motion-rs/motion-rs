@@ -24,7 +24,7 @@ fn main() -> motion::Result {
                 .fill(Color::rgb(20, 150, 125))
                 .opacity(context.sample(&opacity))
         })
-    });
+    }).build()?;
     render_still(&timeline, 1.seconds(), &RenderOptions::default())?
         .save_png("tutorial-animation.png")
 }

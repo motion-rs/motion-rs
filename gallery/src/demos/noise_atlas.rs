@@ -122,24 +122,19 @@ pub(super) const PAGES: &[Page] = &[
 
 pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
     let seed = parameters.seed as u32 ^ (parameters.seed >> 32) as u32;
-    Ok(atlas::timeline(
-        parameters,
-        METADATA,
-        PAGES,
-        move |page, progress, _| {
-            if page >= 10 {
-                return Ok(arrows(page, progress, seed));
-            }
-            let image = field_image(page, progress, seed)?;
-            Ok(Image::from_asset(Arc::new(image))
-                .pivot(Pivot::Point(Point::ORIGIN))
-                .scale_xy(
-                    448.0 / f64::from(FIELD_SIZE[0]),
-                    240.0 / f64::from(FIELD_SIZE[1]),
-                )
-                .translate(32.0, 32.0))
-        },
-    ))
+    atlas::timeline(parameters, METADATA, PAGES, move |page, progress, _| {
+        if page >= 10 {
+            return Ok(arrows(page, progress, seed));
+        }
+        let image = field_image(page, progress, seed)?;
+        Ok(Image::from_asset(Arc::new(image))
+            .pivot(Pivot::Point(Point::ORIGIN))
+            .scale_xy(
+                448.0 / f64::from(FIELD_SIZE[0]),
+                240.0 / f64::from(FIELD_SIZE[1]),
+            )
+            .translate(32.0, 32.0))
+    })
 }
 
 fn field_image(page: usize, progress: f64, seed: u32) -> motion::Result<ImageAsset> {

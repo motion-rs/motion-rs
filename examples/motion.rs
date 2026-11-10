@@ -20,7 +20,7 @@ fn main() -> std::process::ExitCode {
                 .compile(&CompileOptions::default())
                 .expect("valid document")
                 .timeline()
-                .clone()
+                .to_builder()
         })
         .run()
 }

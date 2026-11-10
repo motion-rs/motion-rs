@@ -284,7 +284,8 @@ fn authoring_example_10() -> Result<(), Box<dyn std::error::Error>> {
         (|_: &SceneContext<'_>| Node::from(Rect::new(0.0, 0.0, 8.0, 4.0).fill(Color::WHITE)))
             .with_duration(1.seconds());
     let timeline = Timeline::try_new(Size::new(8.0, 4.0), 30)?
-        .try_track(|track| track.try_push(tile)?.try_gap(500.milliseconds()))?;
+        .try_track(|track| track.try_push(tile)?.try_gap(500.milliseconds()))?
+        .build()?;
     assert_eq!(timeline.frame_count(), 45);
     let frame = Composition::new(
         8,
@@ -307,12 +308,14 @@ fn authoring_example_11() -> Result<(), Box<dyn std::error::Error>> {
         .with_duration(1.seconds());
     let next = (|context: &SceneContext<'_>| Node::from(context.bounds().fill(Color::BLACK)))
         .with_duration(1.seconds());
-    let timeline = Timeline::try_new(Size::new(8.0, 4.0), 30)?.try_track(|track| {
-        track
-            .try_push(first)?
-            .try_transition(CrossFade, 500.milliseconds())?
-            .try_push(next)
-    })?;
+    let timeline = Timeline::try_new(Size::new(8.0, 4.0), 30)?
+        .try_track(|track| {
+            track
+                .try_push(first)?
+                .try_transition(CrossFade, 500.milliseconds())?
+                .try_push(next)
+        })?
+        .build()?;
     assert_eq!(timeline.frame_count(), 45);
     Composition::new(8, 4, motion::render::FrameClock::new(30, 45)).render_frame(
         20,

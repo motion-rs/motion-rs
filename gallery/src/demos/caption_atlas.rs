@@ -130,12 +130,12 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
     let studies = (0..PAGES.len())
         .map(study)
         .collect::<motion::Result<Vec<_>>>()?;
-    Ok(atlas::timeline(
+    atlas::timeline(
         parameters,
         METADATA,
         PAGES,
         move |page, progress, context| draw(&studies[page], page, progress, context),
-    ))
+    )
 }
 
 fn study(page: usize) -> motion::Result<Study> {

@@ -111,13 +111,14 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
         .iter()
         .map(|page| (page.build)(dense))
         .collect::<motion::Result<Vec<_>>>()?;
-    Ok(Timeline::new(Size::new(960.0, 540.0), 30)
+    Timeline::new(Size::new(960.0, 540.0), 30)
         .background(Color::from_hex(super::atlas::PAPER))
         .track(|track| {
             track.scene(parameters.seconds.seconds(), move |context| {
                 frame(context, &studies)
             })
-        }))
+        })
+        .build()
 }
 
 fn frame(context: &SceneContext<'_>, studies: &[Study]) -> motion::Result<Node> {
@@ -253,7 +254,7 @@ mod tests {
                 seconds,
                 ..DemoParameters::default()
             })?;
-            assert_eq!(timeline.total_duration(), seconds.seconds());
+            assert_eq!(timeline.duration(), seconds.seconds());
             assert_eq!(timeline.frame_count(), u64::from(seconds) * 30);
         }
         Ok(())
@@ -283,9 +284,8 @@ mod tests {
             .collect::<motion::Result<Vec<_>>>()?;
         let background = Timeline::new(Size::new(960.0, 540.0), 30)
             .background(Color::from_hex(super::super::atlas::PAPER))
-            .track(|track| {
-                track.scene(60.seconds(), move |context| frame(context, &empty_studies))
-            });
+            .track(|track| track.scene(60.seconds(), move |context| frame(context, &empty_studies)))
+            .build()?;
         for (page, description) in PAGES.iter().enumerate() {
             let moment = |local: f64| ((page as f64 + local) * 60.0 / PAGES.len() as f64).seconds();
             let early = render_still(&timeline, moment(0.25), &options)?;

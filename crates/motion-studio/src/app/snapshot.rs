@@ -173,7 +173,8 @@ fn dump_workbench_png() -> motion_core::Result<()> {
                 track.gap(1.seconds()).scene(2.seconds(), |_| {
                     Rect::new(60.0, 60.0, 300.0, 120.0).fill(Color::rgba(255, 255, 255, 160))
                 })
-            });
+            })
+            .build()?;
         let scene = StudioScene::timeline(
             "Demo",
             Composition::new(960, 540, motion_render::FrameClock::new(30, 150)),

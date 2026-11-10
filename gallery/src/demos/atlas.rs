@@ -57,12 +57,12 @@ pub(super) struct Sheet<'a> {
     pub next: Option<&'a str>,
 }
 
-pub(super) fn timeline(
+pub(super) fn builder(
     parameters: DemoParameters,
     metadata: DemoMetadata,
     pages: &'static [Page],
     draw: impl Fn(usize, f64, &SceneContext<'_>) -> motion::Result<Node> + Send + Sync + 'static,
-) -> Timeline {
+) -> TimelineBuilder {
     Timeline::new(Size::new(960.0, 540.0), 30)
         .background(Color::from_hex(PAPER))
         .track(|track| {
@@ -85,6 +85,15 @@ pub(super) fn timeline(
                 ))
             })
         })
+}
+
+pub(super) fn timeline(
+    parameters: DemoParameters,
+    metadata: DemoMetadata,
+    pages: &'static [Page],
+    draw: impl Fn(usize, f64, &SceneContext<'_>) -> motion::Result<Node> + Send + Sync + 'static,
+) -> motion::Result<Timeline> {
+    builder(parameters, metadata, pages, draw).build()
 }
 
 /// Composes the page frame, the caption column and a specimen drawn in [`VIEWPORT`] units.
@@ -380,7 +389,7 @@ mod tests {
             }
             for seconds in [1, 8, 60] {
                 let timeline = project.build(id, Some(serde_json::json!({"seconds": seconds})))?;
-                assert_eq!(timeline.total_duration(), seconds.seconds(), "{id}");
+                assert_eq!(timeline.duration(), seconds.seconds(), "{id}");
                 assert_eq!(timeline.frame_count(), seconds as u64 * 30, "{id}");
             }
         }
@@ -411,7 +420,7 @@ mod tests {
                 &options
             };
             let film = project.build(id, Some(serde_json::json!({"seconds": 60})))?;
-            let empty = timeline(parameters, metadata, pages, |_, _, _| Ok(Node::empty()));
+            let empty = timeline(parameters, metadata, pages, |_, _, _| Ok(Node::empty()))?;
             for (page, description) in pages.iter().enumerate() {
                 let moment =
                     |local: f64| ((page as f64 + local) * 60.0 / pages.len() as f64).seconds();

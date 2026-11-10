@@ -92,7 +92,7 @@ impl Project {
             size: timeline.size(),
             frame_rate: timeline.frame_rate(),
             frames,
-            duration: timeline.total_duration(),
+            duration: timeline.duration(),
             checked_frames: checked,
             resources: film.watch,
         })

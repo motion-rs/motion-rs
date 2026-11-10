@@ -40,14 +40,9 @@ impl MixedAudio {
         quality: ResampleQuality,
     ) -> motion_core::Result<Self> {
         let timeline = crate::audio::prepare_timeline(timeline)?;
-        Self::new_with(
-            &timeline.audio_clips()?,
-            rate,
-            timeline.total_duration(),
-            quality,
-        )?
-        .process_buses(timeline.audio_buses())?
-        .master(timeline.audio_master())
+        Self::new_with(&timeline.audio_clips()?, rate, timeline.duration(), quality)?
+            .process_buses(timeline.soundtrack().buses())?
+            .master(timeline.soundtrack().master())
     }
 
     /// Mixes only a selected timeline interval while preserving original fade/envelope clocks.
@@ -70,8 +65,8 @@ impl MixedAudio {
             return Err(invalid("range", "Invalid audio window").into());
         }
         let clips = timeline.audio_clips()?;
-        if timeline.audio_master() != motion_core::Master::default()
-            || !timeline.audio_buses().is_empty()
+        if timeline.soundtrack().master() != motion_core::Master::default()
+            || !timeline.soundtrack().buses().is_empty()
             || clips.iter().any(|clip| {
                 !clip.parameters().effects.is_empty() || !clip.parameters().ducking.is_empty()
             })

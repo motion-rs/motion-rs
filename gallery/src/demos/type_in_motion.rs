@@ -48,7 +48,7 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
     let duration = parameters.seconds.seconds();
     let shot = Time::from_ticks(duration.ticks() * 2 / 5);
     let turn = Time::from_ticks(duration.ticks() / 10);
-    Ok(Timeline::new(Size::new(960.0, 540.0), 30)
+    Timeline::new(Size::new(960.0, 540.0), 30)
         .track(|track| {
             track
                 .scene(shot, cover)
@@ -69,7 +69,8 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
                 )
                 .scene(shot, closing)
         })
-        .duration(duration))
+        .duration(duration)
+        .build()
 }
 
 fn color(hex: u32) -> Color {

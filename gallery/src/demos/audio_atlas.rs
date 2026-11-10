@@ -249,13 +249,13 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
         );
         studies.push(study);
     }
-    let mut timeline = atlas::timeline(parameters, METADATA, PAGES, move |page, progress, _| {
+    let mut timeline = atlas::builder(parameters, METADATA, PAGES, move |page, progress, _| {
         Ok(waveforms(&studies[page], progress))
     });
     for clip in clips {
         timeline = timeline.audio(clip);
     }
-    Ok(timeline)
+    timeline.build()
 }
 
 fn prepare(page: usize, duration: Time, seed: u32) -> motion::Result<Study> {
@@ -421,8 +421,11 @@ fn prepare(page: usize, duration: Time, seed: u32) -> motion::Result<Study> {
         }
         dry_timeline = processed_timeline.clone();
     }
-    let dry = Arc::new(MixedAudio::from_timeline(&dry_timeline, RATE)?);
-    let processed = Arc::new(MixedAudio::from_timeline(&processed_timeline, RATE)?);
+    let dry = Arc::new(MixedAudio::from_timeline(&dry_timeline.build()?, RATE)?);
+    let processed = Arc::new(MixedAudio::from_timeline(
+        &processed_timeline.build()?,
+        RATE,
+    )?);
     let envelopes = overview(&dry, &processed);
     Ok(Study {
         dry,

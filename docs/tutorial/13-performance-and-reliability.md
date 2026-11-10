@@ -16,7 +16,7 @@ fn main() -> motion::Result {
         track.scene(1.seconds(), |context| {
             context.bounds().fill(Color::rgb(20, 150, 125))
         })
-    });
+    }).build()?;
     let options = RenderOptions::default().limits(RasterLimits {
         max_work: 1,
         ..RasterLimits::sandbox()

@@ -135,87 +135,82 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
     let source = SvgAsset::from_bytes(SOURCE)?.tree;
     let target = SvgAsset::from_bytes(TARGET)?.tree;
     let morph = Morph::new(&source, &target)?;
-    Ok(atlas::timeline(
-        parameters,
-        METADATA,
-        PAGES,
-        move |page, progress, _| {
-            let color = Color::from_hex(atlas::MINT);
-            let bounds = Rect::new(40.0, 52.0, 472.0, 252.0);
-            Ok(match page {
-                0 => curve()
-                    .stroke(7.0, color)
-                    .trim(0.0, 0.1 + 0.9 * progress)
-                    .into(),
-                1 => curve()
-                    .stroke(7.0, color)
-                    .dash(&[18.0, 10.0, 3.0, 10.0], progress * 100.0)
-                    .into(),
-                2 | 3 => stroke_styles(page, progress),
-                4 => {
-                    let path = nested_path();
-                    Node::group([
-                        path.clone()
-                            .fill(color)
-                            .fill_rule(FillRule::NonZero)
-                            .translate(-120.0, 0.0),
-                        path.fill(Color::from_hex(atlas::GOLD))
-                            .fill_rule(FillRule::EvenOdd)
-                            .translate(120.0, 0.0),
-                    ])
-                    .rotate((progress - 0.5) * 0.25)
-                }
-                5 => bounds
-                    .fill(
-                        LinearGradient::new(
-                            Point::new(40.0, 52.0),
-                            Point::new(260.0 + progress * 210.0, 252.0),
-                        )
+    atlas::timeline(parameters, METADATA, PAGES, move |page, progress, _| {
+        let color = Color::from_hex(atlas::MINT);
+        let bounds = Rect::new(40.0, 52.0, 472.0, 252.0);
+        Ok(match page {
+            0 => curve()
+                .stroke(7.0, color)
+                .trim(0.0, 0.1 + 0.9 * progress)
+                .into(),
+            1 => curve()
+                .stroke(7.0, color)
+                .dash(&[18.0, 10.0, 3.0, 10.0], progress * 100.0)
+                .into(),
+            2 | 3 => stroke_styles(page, progress),
+            4 => {
+                let path = nested_path();
+                Node::group([
+                    path.clone()
+                        .fill(color)
+                        .fill_rule(FillRule::NonZero)
+                        .translate(-120.0, 0.0),
+                    path.fill(Color::from_hex(atlas::GOLD))
+                        .fill_rule(FillRule::EvenOdd)
+                        .translate(120.0, 0.0),
+                ])
+                .rotate((progress - 0.5) * 0.25)
+            }
+            5 => bounds
+                .fill(
+                    LinearGradient::new(
+                        Point::new(40.0, 52.0),
+                        Point::new(260.0 + progress * 210.0, 252.0),
+                    )
+                    .units(GradientUnits::UserSpace)
+                    .stop(0.0, color)
+                    .stop(0.5, Color::from_hex(atlas::BLUE))
+                    .stop(1.0, Color::from_hex(0xd64b36)),
+                )
+                .into(),
+            6 => bounds
+                .fill(
+                    RadialGradient::new(Point::new(256.0, 152.0), 210.0)
                         .units(GradientUnits::UserSpace)
-                        .stop(0.0, color)
-                        .stop(0.5, Color::from_hex(atlas::BLUE))
-                        .stop(1.0, Color::from_hex(0xd64b36)),
+                        .focal(Point::new(170.0 + progress * 150.0, 120.0))
+                        .stop(0.0, Color::from_hex(atlas::GOLD))
+                        .stop(1.0, Color::from_hex(0x3564c4)),
+                )
+                .into(),
+            7 => bounds
+                .fill(
+                    SweepGradient::new(
+                        Point::new(256.0, 152.0),
+                        progress * 6.0,
+                        progress * 6.0 + std::f64::consts::TAU,
                     )
-                    .into(),
-                6 => bounds
-                    .fill(
-                        RadialGradient::new(Point::new(256.0, 152.0), 210.0)
-                            .units(GradientUnits::UserSpace)
-                            .focal(Point::new(170.0 + progress * 150.0, 120.0))
-                            .stop(0.0, Color::from_hex(atlas::GOLD))
-                            .stop(1.0, Color::from_hex(0x3564c4)),
-                    )
-                    .into(),
-                7 => bounds
-                    .fill(
-                        SweepGradient::new(
-                            Point::new(256.0, 152.0),
-                            progress * 6.0,
-                            progress * 6.0 + std::f64::consts::TAU,
-                        )
-                        .units(GradientUnits::UserSpace)
-                        .stop(0.0, color)
-                        .stop(0.5, Color::from_hex(atlas::GOLD))
-                        .stop(1.0, color),
-                    )
-                    .into(),
-                8 => extensions(progress),
-                9 => interpolation(progress),
-                10 => source
-                    .node()
-                    .rotate((progress - 0.5) * 0.9)
-                    .scale(0.8 + 0.2 * progress),
-                11 => morph.sample(Easing::CubicInOut.apply(progress))?,
-                _ => source.write(
-                    progress,
-                    WriteOptions {
-                        width: 3.0,
-                        outline_fraction: 0.8,
-                    },
-                )?,
-            })
-        },
-    ))
+                    .units(GradientUnits::UserSpace)
+                    .stop(0.0, color)
+                    .stop(0.5, Color::from_hex(atlas::GOLD))
+                    .stop(1.0, color),
+                )
+                .into(),
+            8 => extensions(progress),
+            9 => interpolation(progress),
+            10 => source
+                .node()
+                .rotate((progress - 0.5) * 0.9)
+                .scale(0.8 + 0.2 * progress),
+            11 => morph.sample(Easing::CubicInOut.apply(progress))?,
+            _ => source.write(
+                progress,
+                WriteOptions {
+                    width: 3.0,
+                    outline_fraction: 0.8,
+                },
+            )?,
+        })
+    })
 }
 
 fn curve() -> Path2D {

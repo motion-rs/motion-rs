@@ -93,19 +93,21 @@ mod canonical_api_tests {
 
     #[test]
     fn author_prelude_supports_result_tuples_memo_math_and_track_scene() -> motion::Result {
-        let timeline = Timeline::new(Size::new(8.0, 4.0), 30).track(|track| {
-            track.scene(1_u32.seconds(), |context| -> motion::Result<_> {
-                let title = context.memo(key::F64(2.0), || {
-                    Rect::new(0.0, 0.0, 2.0, 2.0).fill(Color::WHITE)
-                });
-                let progress = context.ease_in(Time::ZERO, 1.seconds(), Easing::Linear);
-                Ok((
-                    title,
-                    Circle::new(Point::new(4.0, 2.0), math::lerp(&0.5, &1.0, progress))
-                        .fill(Color::BLACK),
-                ))
+        let timeline = Timeline::new(Size::new(8.0, 4.0), 30)
+            .track(|track| {
+                track.scene(1_u32.seconds(), |context| -> motion::Result<_> {
+                    let title = context.memo(key::F64(2.0), || {
+                        Rect::new(0.0, 0.0, 2.0, 2.0).fill(Color::WHITE)
+                    });
+                    let progress = context.ease_in(Time::ZERO, 1.seconds(), Easing::Linear);
+                    Ok((
+                        title,
+                        Circle::new(Point::new(4.0, 2.0), math::lerp(&0.5, &1.0, progress))
+                            .fill(Color::BLACK),
+                    ))
+                })
             })
-        });
+            .build()?;
         assert_eq!(Scene::duration(&timeline), Some(1.seconds()));
         render_still(&timeline, Time::ZERO, &RenderOptions::default())?;
         Ok(())
@@ -155,7 +157,8 @@ mod canonical_api_tests {
         let color = Color::from_rgb_float(1.25, 0.5, 0.25);
         assert!(color.to_rgba_float()[0] > 1.0);
         let timeline = Timeline::try_new(Size::new(8.0, 4.0), FrameRate::NTSC)?
-            .try_track(|track| track.try_push(callback.with_duration(1.seconds())))?;
+            .try_track(|track| track.try_push(callback.with_duration(1.seconds())))?
+            .build()?;
         let _: FrameRenderer = Composition::new(8, 4, motion::render::FrameClock::new(30, 150))
             .frame_renderer(timeline.size())?;
         let _span = TextSpan::new("canonical").size(14.0);

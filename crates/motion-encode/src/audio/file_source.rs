@@ -223,8 +223,7 @@ mod tests {
         let directory = tempfile::tempdir()?;
         let path = directory.path().join("tone.wav");
         let clip = AudioClip::file(path.clone()).fade_in(100.milliseconds());
-        let timeline = Timeline::new(Size::new(8.0, 4.0), 30).audio(clip);
-        assert!(timeline.validate().is_ok());
+        let timeline = Timeline::new(Size::new(8.0, 4.0), 30).audio(clip).build()?;
         assert!(super::super::prepare_timeline(&timeline).is_err());
         let count = 8000_u32;
         let mut wav = std::fs::File::create(&path)?;

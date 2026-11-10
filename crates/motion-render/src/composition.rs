@@ -110,7 +110,6 @@ impl Composition {
         timeline: &motion_core::Timeline,
         options: &crate::RenderOptions,
     ) -> Result<Self> {
-        timeline.validate()?;
         let size = crate::options::size(timeline, options)?;
         Self::new(
             size.width as usize,

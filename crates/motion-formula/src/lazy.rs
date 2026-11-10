@@ -242,12 +242,15 @@ mod tests {
     #[test]
     fn lazy_formula_output_errors_keep_formula_kind_node_name_and_frame() {
         use motion_core::{Scene, SceneContext, Time, TimeLiteral, Timeline};
-        let timeline = Timeline::new(Size::new(160.0, 64.0), 30).track(|track| {
-            track.push(
-                (|_: &SceneContext<'_>| Node::from(Formula::typst("")).named("invalid-math"))
-                    .with_duration(1.seconds()),
-            )
-        });
+        let timeline = Timeline::new(Size::new(160.0, 64.0), 30)
+            .track(|track| {
+                track.push(
+                    (|_: &SceneContext<'_>| Node::from(Formula::typst("")).named("invalid-math"))
+                        .with_duration(1.seconds()),
+                )
+            })
+            .build()
+            .unwrap();
         let error = motion_render::render_still(
             &timeline,
             Time::ZERO,

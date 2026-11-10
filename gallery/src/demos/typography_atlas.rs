@@ -169,21 +169,16 @@ pub(super) const PAGES: &[Page] = &[
 ];
 
 pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
-    Ok(atlas::timeline(
-        parameters,
-        METADATA,
-        PAGES,
-        |page, progress, context| {
-            let fonts = context
-                .assets()
-                .fonts()
-                .and_then(|fonts| fonts.downcast_ref::<FontLibrary>())
-                .ok_or_else(|| {
-                    std::io::Error::other("Typography Atlas requires the supplied font library")
-                })?;
-            Ok(draw(page, progress, fonts)?.opacity(math::smoothstep(0.0, 0.3, progress)))
-        },
-    ))
+    atlas::timeline(parameters, METADATA, PAGES, |page, progress, context| {
+        let fonts = context
+            .assets()
+            .fonts()
+            .and_then(|fonts| fonts.downcast_ref::<FontLibrary>())
+            .ok_or_else(|| {
+                std::io::Error::other("Typography Atlas requires the supplied font library")
+            })?;
+        Ok(draw(page, progress, fonts)?.opacity(math::smoothstep(0.0, 0.3, progress)))
+    })
 }
 
 fn paragraph(value: &str, size: f64) -> Text {

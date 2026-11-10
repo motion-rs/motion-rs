@@ -150,7 +150,6 @@ impl StudioScene {
         composition: Composition,
         timeline: motion_core::Timeline,
     ) -> Result<Self> {
-        timeline.validate()?;
         let timeline = motion_encode::audio::prepare_timeline(&timeline)?;
         let count = u32::try_from(timeline.frame_count()).map_err(|_| {
             motion_core::ValidationError::invalid(

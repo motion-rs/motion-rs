@@ -322,20 +322,20 @@ mod tests {
     fn deferred_timeline_errors_fail_before_frame_callbacks() {
         let called = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let observed = called.clone();
-        let timeline = Timeline::new(Size::new(8.0, 4.0), 30).track(|track| {
-            track
-                .push(
-                    (move |_: &SceneContext<'_>| {
-                        observed.store(true, std::sync::atomic::Ordering::Relaxed);
-                        Node::empty()
-                    })
-                    .with_duration(1.seconds()),
-                )
-                .gap((-1).seconds())
-        });
-        let error = render_still(&timeline, Time::ZERO, &RenderOptions::default())
-            .err()
-            .unwrap();
+        let error = Timeline::new(Size::new(8.0, 4.0), 30)
+            .track(|track| {
+                track
+                    .push(
+                        (move |_: &SceneContext<'_>| {
+                            observed.store(true, std::sync::atomic::Ordering::Relaxed);
+                            Node::empty()
+                        })
+                        .with_duration(1.seconds()),
+                    )
+                    .gap((-1).seconds())
+            })
+            .build()
+            .unwrap_err();
         assert!(!error.build_errors().is_empty());
         assert!(!called.load(std::sync::atomic::Ordering::Relaxed));
     }

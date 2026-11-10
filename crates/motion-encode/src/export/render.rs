@@ -19,9 +19,8 @@ pub(super) fn selected(
     let range = options
         .range
         .clone()
-        .unwrap_or(Time::ZERO..timeline.total_duration());
-    if range.start < Time::ZERO || range.start >= range.end || range.end > timeline.total_duration()
-    {
+        .unwrap_or(Time::ZERO..timeline.duration());
+    if range.start < Time::ZERO || range.start >= range.end || range.end > timeline.duration() {
         return Err(invalid("range", "Require 0<=start<end<=timeline duration"));
     }
     let rate = output_rate(timeline, options);

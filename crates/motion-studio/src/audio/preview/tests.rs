@@ -15,7 +15,8 @@ fn preview_uses_fractional_frame_sample_boundaries_and_same_mix() -> motion_core
     let timeline = Arc::new(
         motion_core::Timeline::try_new(motion_core::Size::new(16.0, 8.0), rate)?
             .try_audio(motion_core::AudioClip::source(pcm))?
-            .try_duration(motion_core::Time::from_frame(60, rate))?,
+            .try_duration(motion_core::Time::from_frame(60, rate))?
+            .build()?,
     );
     let request = timeline_request(timeline.clone(), Vec::new(), 30)?;
     assert_eq!(request.start, 48_048);
@@ -33,7 +34,8 @@ fn preview_uses_fractional_frame_sample_boundaries_and_same_mix() -> motion_core
     assert!(timeline_request(timeline, Vec::new(), 60).is_err());
     let silent = Arc::new(
         motion_core::Timeline::try_new(motion_core::Size::new(16.0, 8.0), rate)?
-            .try_duration(1.seconds())?,
+            .try_duration(1.seconds())?
+            .build()?,
     );
     let request = timeline_request(silent, Vec::new(), 0)?;
     let prepared = PreviewMix::prepare(&request)?;
@@ -69,7 +71,8 @@ fn cancelled_request_does_not_read_audio_or_open_device() -> motion_core::Result
     let reads = Arc::new(AtomicU64::new(0));
     let timeline = Arc::new(
         motion_core::Timeline::try_new(motion_core::Size::new(16.0, 8.0), 30)?
-            .try_audio(motion_core::AudioClip::source(Source(reads.clone())))?,
+            .try_audio(motion_core::AudioClip::source(Source(reads.clone())))?
+            .build()?,
     );
     let request = timeline_request(timeline, Vec::new(), 0)?;
     request.shared.cancelled.store(true, Ordering::Relaxed);
@@ -87,7 +90,8 @@ fn replacing_playback_cancels_the_old_session_and_preserves_seek_origin() -> mot
             motion_core::Size::new(16.0, 8.0),
             motion_core::FrameRate::NTSC,
         )?
-        .try_duration(2.seconds())?,
+        .try_duration(2.seconds())?
+        .build()?,
     );
     let mut preview = AudioPreview {
         inbox: Inbox::default(),
@@ -118,7 +122,8 @@ fn silent_timeline_finishes_preparation_without_an_output_device() -> motion_cor
     });
     let timeline = Arc::new(
         motion_core::Timeline::try_new(motion_core::Size::new(16.0, 8.0), 30)?
-            .try_duration(1.seconds())?,
+            .try_duration(1.seconds())?
+            .build()?,
     );
     let mut preview = AudioPreview::new(context)?;
     preview.start_timeline(&AudioForm::default(), timeline, 0)?;
@@ -160,7 +165,8 @@ fn timeline_and_file_preview_sources_are_mixed_in_order() -> motion_core::Result
         .try_duration(motion_core::Time::from_frame(
             3,
             motion_core::FrameRate::NTSC,
-        ))?,
+        ))?
+        .build()?,
     );
     let mut request = timeline_request(timeline, vec![clip], 0)?;
     let mut combined = PreviewMix::prepare(&request)?;
@@ -208,7 +214,8 @@ fn file_preview_windows_preserve_offsets_fades_and_export_crop() -> motion_core:
     let timeline = Arc::new(
         motion_core::Timeline::new(motion_core::Size::new(1.0, 1.0), 100)
             .audio(clip)
-            .duration(1.seconds()),
+            .duration(1.seconds())
+            .build()?,
     );
     let request = timeline_request(timeline.clone(), vec![], 10)?;
     let mut preview = PreviewMix::prepare(&request)?;

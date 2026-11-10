@@ -7,10 +7,12 @@ use motion_core::TimeLiteral;
 fn nested_audio_preparation_depth_fails_without_poisoning_following_mixes() -> motion_core::Result {
     use motion_core::{Size, Timeline};
     let mut timeline = Timeline::new(Size::new(8.0, 8.0), 30)
-        .audio(AudioClip::source(PcmBuffer::new(8000, 1, vec![0.1; 8])?));
+        .audio(AudioClip::source(PcmBuffer::new(8000, 1, vec![0.1; 8])?))
+        .build()?;
     for _ in 0..17 {
         timeline = Timeline::new(Size::new(8.0, 8.0), 30)
-            .audio(AudioClip::composition(timeline).duration(1.milliseconds()));
+            .audio(AudioClip::composition(timeline).duration(1.milliseconds()))
+            .build()?;
     }
     assert!(MixedAudio::from_timeline(&timeline, 8000).is_err());
     assert!(
@@ -45,13 +47,15 @@ fn bus_tails_meter_windows_and_spatial_controls_are_preserved() -> motion_core::
         }));
     let timeline = Timeline::new(Size::new(8.0, 8.0), 30)
         .audio(clip.clone())
-        .audio_bus(bus.clone());
-    assert_eq!(timeline.total_duration(), 1200.milliseconds());
+        .audio_bus(bus.clone())
+        .build()?;
+    assert_eq!(timeline.duration(), 1200.milliseconds());
     assert_eq!(
         Timeline::new(Size::new(8.0, 8.0), 30)
             .audio_bus(bus)
             .audio(clip)
-            .total_duration(),
+            .build()?
+            .duration(),
         1200.milliseconds()
     );
     let mixed = MixedAudio::from_timeline(&timeline, 8000)?;
@@ -147,13 +151,15 @@ fn buses_nested_master_and_local_sound_declarations_are_preserved() -> motion_co
         .master(Master {
             gain_db: -6.0,
             ..Default::default()
-        });
+        })
+        .build()?;
     let parent = Timeline::new(Size::new(8.0, 8.0), 30)
         .track(|track| track.push(child.clone()))
         .master(Master {
             gain_db: -6.0,
             ..Default::default()
-        });
+        })
+        .build()?;
     let nested = MixedAudio::from_timeline(&parent, 8000)?;
     let expected = 0.1 * super::super::effects::amplitude(-18.0);
     let mut samples = [0.0; 2];
@@ -178,8 +184,9 @@ fn buses_nested_master_and_local_sound_declarations_are_preserved() -> motion_co
     assert_eq!(scene.audio_clips()?.len(), 1);
     assert_eq!(scene.audio_clips()?.len(), 1);
     assert_eq!(calls.load(std::sync::atomic::Ordering::Relaxed), 1);
-    let timeline =
-        Timeline::new(Size::new(8.0, 8.0), 30).track(|track| track.gap(1.seconds()).push(scene));
+    let timeline = Timeline::new(Size::new(8.0, 8.0), 30)
+        .track(|track| track.gap(1.seconds()).push(scene))
+        .build()?;
     let mix = MixedAudio::from_timeline(&timeline, 8000)?;
     mix.read(4000, &mut samples);
     assert_eq!(samples, [0.0; 2]);
@@ -486,7 +493,8 @@ fn timeline_audio_exports_decodes_aac_and_protects_existing_output() -> motion_c
         motion_core::FrameRate::NTSC,
     )?
     .try_audio(clip)?
-    .try_duration(Time::from_frame(7, motion_core::FrameRate::NTSC))?;
+    .try_duration(Time::from_frame(7, motion_core::FrameRate::NTSC))?
+    .build()?;
     let directory = tempfile::tempdir()?;
     let path = directory.path().join("native-audio.mp4");
     crate::export(
@@ -537,7 +545,8 @@ fn timeline_audio_exports_decodes_aac_and_protects_existing_output() -> motion_c
         }
     }
     let invalid = motion_core::Timeline::try_new(timeline.size(), timeline.frame_rate())?
-        .try_audio(AudioClip::source(Invalid))?;
+        .try_audio(AudioClip::source(Invalid))?
+        .build()?;
     assert!(
         crate::export(
             &invalid,
@@ -587,13 +596,16 @@ fn clip_ducking_lowers_music_under_the_trigger_and_recovers() -> motion_core::Re
         .lookahead(10.milliseconds());
     let timeline = Timeline::new(Size::new(8.0, 8.0), 30)
         .audio(music.ducked_by(&voice, duck))
-        .audio(voice.clone());
+        .audio(voice.clone())
+        .build()?;
     let mix = MixedAudio::from_timeline(&timeline, 8000)?;
     assert!((peak(&mix, 0.2, 0.8) - 0.4).abs() < 1e-6);
     let mid = f64::from(peak(&mix, 1.3, 1.6));
     let voice_only = f64::from(peak(
         &MixedAudio::from_timeline(
-            &Timeline::new(Size::new(8.0, 8.0), 30).audio(voice.clone()),
+            &Timeline::new(Size::new(8.0, 8.0), 30)
+                .audio(voice.clone())
+                .build()?,
             8000,
         )?,
         1.3,
@@ -620,6 +632,8 @@ fn bus_ducking_uses_earlier_buses_and_rejects_forward_or_unknown_triggers() -> m
             .audio(music.clone().bus("music"))
             .audio_bus(AudioBus::new("voice"))
             .audio_bus(AudioBus::new("music").ducked_by(DuckTrigger::Bus(trigger.to_owned()), duck))
+            .build()
+            .unwrap()
     };
     let mix = MixedAudio::from_timeline(&build("voice"), 8000)?;
     let ducked = f64::from(peak(&mix, 1.3, 1.6));
@@ -630,12 +644,10 @@ fn bus_ducking_uses_earlier_buses_and_rejects_forward_or_unknown_triggers() -> m
     let invalid_duck = Duck::new(5.0, 1.0);
     assert!(invalid_duck.validate().is_err());
     assert!(
-        MixedAudio::from_timeline(
-            &Timeline::new(Size::new(8.0, 8.0), 30)
-                .audio(music.clone().ducked_by(&voice, invalid_duck)),
-            8000
-        )
-        .is_err()
+        Timeline::new(Size::new(8.0, 8.0), 30)
+            .audio(music.clone().ducked_by(&voice, invalid_duck))
+            .build()
+            .is_err()
     );
     Ok(())
 }
@@ -658,7 +670,8 @@ fn ducking_triggers_follow_relocation_and_sinc_mixing_is_selectable() -> motion_
     assert!(cropped.parameters().ducking.is_empty());
     let source = PcmBuffer::new(44_100, 1, vec![0.25; 4410])?;
     let timeline = motion_core::Timeline::new(motion_core::Size::new(8.0, 8.0), 30)
-        .audio(AudioClip::source(source));
+        .audio(AudioClip::source(source))
+        .build()?;
     let sinc = MixedAudio::from_timeline_with(&timeline, 48_000, ResampleQuality::Sinc)?;
     let mut samples = [0.0; 2];
     sinc.read(2400, &mut samples);

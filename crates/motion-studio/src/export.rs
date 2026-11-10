@@ -104,7 +104,8 @@ impl ExportJob {
                         );
                         Arc::new(
                             motion_core::Timeline::try_new(scene.definition.design_size, rate)?
-                                .try_track(|track| track.try_push(source))?,
+                                .try_track(|track| track.try_push(source))?
+                                .build()?,
                         )
                     };
                     let silent = matches!(
@@ -113,7 +114,7 @@ impl ExportJob {
                     );
                     if silent {
                         let visual = timeline.clone();
-                        let duration = timeline.total_duration();
+                        let duration = timeline.duration();
                         timeline = Arc::new(
                             motion_core::Timeline::try_new(timeline.size(), timeline.frame_rate())?
                                 .try_track(|track| {
@@ -126,13 +127,16 @@ impl ExportJob {
                                         },
                                         duration,
                                     ))
-                                })?,
+                                })?
+                                .build()?,
                         );
                     }
                     if !draft.png && !silent {
+                        let mut builder = timeline.to_builder();
                         for clip in audio.audio_clips() {
-                            timeline = Arc::new((*timeline).clone().try_audio(clip.clone())?);
+                            builder = builder.try_audio(clip.clone())?;
                         }
+                        timeline = Arc::new(builder.build()?);
                     }
                     let mut options = motion_encode::ExportOptions::new(&destination);
                     options.render = scene.composition.studio_render_options(draft.backend);

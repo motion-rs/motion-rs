@@ -10,7 +10,7 @@
 //! use motion_render::{Composition, RenderPrepare, RenderOptions, Renderer, render_still};
 //! let source = PcmBuffer::new(48_000, 1, vec![0.25; 4800])?;
 //! let clip = AudioClip::source(source).start(50.milliseconds()).pan(-1.0);
-//! let timeline = Timeline::new(Size::new(8.0, 4.0), 30).audio(clip);
+//! let timeline = Timeline::new(Size::new(8.0, 4.0), 30).audio(clip).build()?;
 //! let mixed = MixedAudio::from_timeline(&timeline, 48_000)?;
 //! let mut pcm = [0.0; 2];
 //! assert_eq!(mixed.read(2400, &mut pcm), 1);

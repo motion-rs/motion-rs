@@ -378,7 +378,7 @@ mod tests {
                 let timeline =
                     project.build(entry.id, Some(serde_json::json!({"seconds":seconds})))?;
                 assert_eq!(timeline.size(), Size::new(960.0, 540.0));
-                assert_eq!(timeline.total_duration(), seconds.seconds());
+                assert_eq!(timeline.duration(), seconds.seconds());
                 assert_eq!(timeline.frame_count(), seconds as u64 * 30);
             }
         }

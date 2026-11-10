@@ -446,20 +446,22 @@ mod scenes {
                 ),
                 (Easing::QuadraticInOut, true),
             ] {
-                let timeline = Timeline::try_new(size, rate)?.try_track(|mut track| {
-                    for index in 0..4 {
-                        if index > 0 {
-                            track = track.try_transition(CurveFade(curve.clone()), overlap)?;
+                let timeline = Timeline::try_new(size, rate)?
+                    .try_track(|mut track| {
+                        for index in 0..4 {
+                            if index > 0 {
+                                track = track.try_transition(CurveFade(curve.clone()), overlap)?;
+                            }
+                            track = track.try_push(
+                                (move |context: &SceneContext<'_>| {
+                                    artwork(index, context.time(), duration, remap)
+                                })
+                                .with_duration(duration),
+                            )?;
                         }
-                        track = track.try_push(
-                            (move |context: &SceneContext<'_>| {
-                                artwork(index, context.time(), duration, remap)
-                            })
-                            .with_duration(duration),
-                        )?;
-                    }
-                    Ok(track)
-                })?;
+                        Ok(track)
+                    })?
+                    .build()?;
                 assert_eq!(timeline.frame_count(), 20);
                 let mut session = Composition::new(64, 48, motion::render::FrameClock::new(30, 24))
                     .with_options(
@@ -568,23 +570,29 @@ mod scenes {
                 )
                 .fade_out(1.seconds())
             };
-            let child = Timeline::try_new(size(), 4)?.try_audio(clip())?;
-            let parent = Timeline::try_new(size(), 4)?.try_track(|track| {
-                track
-                    .try_gap(500.milliseconds())?
-                    .try_push(child.with_duration(1.seconds()))?
-                    .try_gap(1.seconds())
-            })?;
+            let child = Timeline::try_new(size(), 4)?.try_audio(clip())?.build()?;
+            let parent = Timeline::try_new(size(), 4)?
+                .try_track(|track| {
+                    track
+                        .try_gap(500.milliseconds())?
+                        .try_push(child.with_duration(1.seconds()))?
+                        .try_gap(1.seconds())
+                })?
+                .build()?;
             let mixed = motion::encode::MixedAudio::from_timeline(&parent, 4)?;
             let mut values = [0.0; 20];
             mixed.read(0, &mut values);
             assert_eq!(&values[..4], &[0.0; 4]);
             assert_eq!(&values[4..12], &[1.0; 8]);
             assert_eq!(&values[12..], &[0.0; 8]);
-            assert_eq!(parent.total_duration(), 2500.milliseconds());
-            let short = Timeline::try_new(size(), 30)?.try_audio(motion::AudioClip::source(
-                motion::encode::PcmBuffer::new(1000, 1, vec![1.0; 10])?,
-            ))?;
+            assert_eq!(parent.duration(), 2500.milliseconds());
+            let short = Timeline::try_new(size(), 30)?
+                .try_audio(motion::AudioClip::source(motion::encode::PcmBuffer::new(
+                    1000,
+                    1,
+                    vec![1.0; 10],
+                )?))?
+                .build()?;
             assert_eq!(short.frame_count(), 1);
             let _mix = motion::encode::MixedAudio::from_timeline(&parent, 48_000)?;
             Ok(())
@@ -607,12 +615,14 @@ mod scenes {
                 })
                 .with_duration(2.seconds())
             };
-            let timeline = Timeline::try_new(size(), 10)?.try_track(|track| {
-                track
-                    .try_push(make(0, Color::rgb(255, 0, 0)))?
-                    .try_transition(motion::authoring::transition::CrossFade, 1.seconds())?
-                    .try_push(make(1, Color::rgb(0, 0, 255)))
-            })?;
+            let timeline = Timeline::try_new(size(), 10)?
+                .try_track(|track| {
+                    track
+                        .try_push(make(0, Color::rgb(255, 0, 0)))?
+                        .try_transition(motion::authoring::transition::CrossFade, 1.seconds())?
+                        .try_push(make(1, Color::rgb(0, 0, 255)))
+                })?
+                .build()?;
             assert_eq!(timeline.frame_count(), 30);
             let cache = SceneCache::new(0);
             let context =
@@ -705,22 +715,24 @@ mod scenes {
                     )
                 }
             }
-            let timeline = Timeline::try_new(size(), 10)?.try_track(|track| {
-                track
-                    .try_push(
-                        (|context: &SceneContext<'_>| {
-                            Node::from(context.bounds().fill(Color::rgb(255, 0, 0)))
-                        })
-                        .with_duration(2.seconds()),
-                    )?
-                    .try_transition(Eased, 1.seconds())?
-                    .try_push(
-                        (|context: &SceneContext<'_>| {
-                            Node::from(context.bounds().fill(Color::rgb(0, 0, 255)))
-                        })
-                        .with_duration(2.seconds()),
-                    )
-            })?;
+            let timeline = Timeline::try_new(size(), 10)?
+                .try_track(|track| {
+                    track
+                        .try_push(
+                            (|context: &SceneContext<'_>| {
+                                Node::from(context.bounds().fill(Color::rgb(255, 0, 0)))
+                            })
+                            .with_duration(2.seconds()),
+                        )?
+                        .try_transition(Eased, 1.seconds())?
+                        .try_push(
+                            (|context: &SceneContext<'_>| {
+                                Node::from(context.bounds().fill(Color::rgb(0, 0, 255)))
+                            })
+                            .with_duration(2.seconds()),
+                        )
+                })?
+                .build()?;
             let cache = SceneCache::new(0);
             let context =
                 SceneContext::new(1500.milliseconds(), FrameRate::from(10), size(), &cache);
@@ -736,14 +748,16 @@ mod scenes {
         #[test]
         fn nested_timeline_contain_is_centered_and_clips_content_before_mapping() -> motion::Result
         {
-            let child = Timeline::try_new(Size::new(8.0, 4.0), 24)?.try_track(|track| {
-                track.try_push(
-                    (|_: &SceneContext<'_>| {
-                        Node::from(motion::Rect::new(-8.0, -4.0, 16.0, 8.0).fill(Color::WHITE))
-                    })
-                    .with_duration(1.seconds()),
-                )
-            })?;
+            let child = Timeline::try_new(Size::new(8.0, 4.0), 24)?
+                .try_track(|track| {
+                    track.try_push(
+                        (|_: &SceneContext<'_>| {
+                            Node::from(motion::Rect::new(-8.0, -4.0, 16.0, 8.0).fill(Color::WHITE))
+                        })
+                        .with_duration(1.seconds()),
+                    )
+                })?
+                .build()?;
             let cache = SceneCache::new(0);
             for (parent_size, expected) in [
                 (
@@ -780,14 +794,16 @@ mod scenes {
         fn nested_equal_viewports_clip_after_placement_and_three_levels_compose_once()
         -> motion::Result {
             let cache = SceneCache::new(0);
-            let child = Timeline::try_new(Size::new(8.0, 4.0), 30)?.try_track(|track| {
-                track.try_push(
-                    (|_: &SceneContext<'_>| {
-                        Node::from(motion::Rect::new(-8.0, -4.0, 16.0, 8.0).fill(Color::WHITE))
-                    })
-                    .with_duration(1.seconds()),
-                )
-            })?;
+            let child = Timeline::try_new(Size::new(8.0, 4.0), 30)?
+                .try_track(|track| {
+                    track.try_push(
+                        (|_: &SceneContext<'_>| {
+                            Node::from(motion::Rect::new(-8.0, -4.0, 16.0, 8.0).fill(Color::WHITE))
+                        })
+                        .with_duration(1.seconds()),
+                    )
+                })?
+                .build()?;
             let context = SceneContext::new(Time::ZERO, FrameRate::from(30), child.size(), &cache);
             let shifted = context
                 .embed(&child, Time::ZERO)
@@ -807,11 +823,14 @@ mod scenes {
             }
             let inner = Timeline::try_new(Size::new(8.0, 8.0), 24)?
                 .background(Color::WHITE)
-                .try_duration(1.seconds())?;
+                .try_duration(1.seconds())?
+                .build()?;
             let middle = Timeline::try_new(Size::new(16.0, 8.0), 30)?
-                .try_track(|track| track.try_push(inner))?;
+                .try_track(|track| track.try_push(inner))?
+                .build()?;
             let outer = Timeline::try_new(Size::new(8.0, 12.0), 60)?
-                .try_track(|track| track.try_push(middle))?;
+                .try_track(|track| track.try_push(middle))?
+                .build()?;
             let context = SceneContext::new(Time::ZERO, FrameRate::from(60), outer.size(), &cache);
             let frame = outer
                 .render(&context)
@@ -834,8 +853,9 @@ mod scenes {
                     );
                 }
             }
-            let tiny =
-                Timeline::try_new(Size::new(1e-300, 1e-300), 30)?.try_duration(1.seconds())?;
+            let tiny = Timeline::try_new(Size::new(1e-300, 1e-300), 30)?
+                .try_duration(1.seconds())?
+                .build()?;
             let huge_context = SceneContext::new(
                 Time::ZERO,
                 FrameRate::from(30),
@@ -890,9 +910,10 @@ mod scenes {
                         500.milliseconds(),
                         make(2, Color::rgb(0, 0, 255).with_alpha(0.5), i32::MIN),
                     )
-                })?;
-            assert_eq!(timeline.total_duration(), 2500.milliseconds());
-            assert_eq!(Scene::duration(&timeline), Some(timeline.total_duration()));
+                })?
+                .build()?;
+            assert_eq!(timeline.duration(), 2500.milliseconds());
+            assert_eq!(Scene::duration(&timeline), Some(timeline.duration()));
             let cache = SceneCache::new(0);
             for (time, color, ids) in [
                 (Time::from_ticks(-1), [0.0; 4], vec![]),
@@ -929,14 +950,22 @@ mod scenes {
                 }
             }
             assert_eq!(
-                timeline.clone().try_duration(1.seconds())?.frame_count(),
+                timeline
+                    .to_builder()
+                    .try_duration(1.seconds())?
+                    .build()?
+                    .frame_count(),
                 10
             );
             assert_eq!(
-                timeline.clone().try_duration(3.seconds())?.frame_count(),
+                timeline
+                    .to_builder()
+                    .try_duration(3.seconds())?
+                    .build()?
+                    .frame_count(),
                 30
             );
-            let empty = timeline.clone().try_duration(Time::ZERO)?;
+            let empty = timeline.to_builder().try_duration(Time::ZERO)?.build()?;
             let context = SceneContext::new(Time::ZERO, FrameRate::from(10), size(), &cache);
             assert!(
                 empty
@@ -965,7 +994,8 @@ mod scenes {
                         .with_duration(1.seconds()),
                     )
                 })?
-                .try_duration(500.milliseconds())?;
+                .try_duration(500.milliseconds())?
+                .build()?;
             let composition = motion::render::Composition::new(
                 8,
                 4,
@@ -1054,7 +1084,8 @@ mod scenes {
                             })
                             .with_duration(1500.milliseconds()),
                         )
-                    })?;
+                    })?
+                    .build()?;
                 for index in [0, 14, 15, 29, 30, 44, 45, 59, 60, 74, 75, 14] {
                     let context =
                         SceneContext::new(Time::from_frame(index, rate), rate, design, &cache);
@@ -1111,64 +1142,72 @@ mod scenes {
             let resources = motion::Assets::new(".")?.with_fonts(fonts.clone());
             let scene_fonts = fonts.clone();
             let child_size = Size::new(128.0, 64.0);
-            let child = Timeline::try_new(child_size, 24)?.try_track(|track| {
-                track.try_push(
-                    (move |context: &SceneContext<'_>| {
-                        assert_eq!(context.size(), child_size);
-                        assert_eq!(context.frame_rate(), FrameRate::from(24));
-                        assert_eq!(context.assets().fonts().unwrap().snapshot_id(), identity);
-                        let progress = context.progress();
-                        let world = Node::group([
-                            Node::from(
-                                motion::Rect::new(-64.0, -64.0, 192.0, 128.0)
-                                    .fill(Color::rgb(40, 100, 130)),
-                            ),
-                            Node::from(
-                                motion::Rect::new(70.0, 20.0, 95.0, 50.0)
-                                    .fill(Color::rgb(240, 100, 60)),
-                            ),
-                        ]);
-                        let world = motion::try_camera(
-                            context,
-                            world,
-                            motion::Camera {
-                                center: motion::Point::new(64.0 + progress * 12.0, 32.0),
-                                zoom: 1.0 + progress * 0.2,
-                                rotation: progress * 0.15,
-                            },
-                        )
-                        .unwrap();
-                        let animated = motion::Text::new("A")
-                            .size(18.0)
-                            .fonts(&scene_fonts)
-                            .try_animate_parts_at(context, Time::ZERO, |part| {
-                                let amount =
-                                    part.sample(&motion::Tween::new(0.0, 1.0, 200.milliseconds()));
-                                motion::PartStyle::new()
-                                    .scale(0.8 + amount * 0.2)
-                                    .offset(0.0, 2.0 * (1.0 - amount))
-                                    .opacity(amount)
-                            })
+            let child = Timeline::try_new(child_size, 24)?
+                .try_track(|track| {
+                    track.try_push(
+                        (move |context: &SceneContext<'_>| {
+                            assert_eq!(context.size(), child_size);
+                            assert_eq!(context.frame_rate(), FrameRate::from(24));
+                            assert_eq!(context.assets().fonts().unwrap().snapshot_id(), identity);
+                            let progress = context.progress();
+                            let world = Node::group([
+                                Node::from(
+                                    motion::Rect::new(-64.0, -64.0, 192.0, 128.0)
+                                        .fill(Color::rgb(40, 100, 130)),
+                                ),
+                                Node::from(
+                                    motion::Rect::new(70.0, 20.0, 95.0, 50.0)
+                                        .fill(Color::rgb(240, 100, 60)),
+                                ),
+                            ]);
+                            let world = motion::try_camera(
+                                context,
+                                world,
+                                motion::Camera {
+                                    center: motion::Point::new(64.0 + progress * 12.0, 32.0),
+                                    zoom: 1.0 + progress * 0.2,
+                                    rotation: progress * 0.15,
+                                },
+                            )
                             .unwrap();
-                        let labels = motion::Row::new()
-                            .alignment(motion::Alignment::Baseline)
-                            .gap(4.0)
-                            .children([
-                                animated,
-                                Node::from(motion::Text::new("B").size(12.0).fonts(&scene_fonts)),
+                            let animated = motion::Text::new("A")
+                                .size(18.0)
+                                .fonts(&scene_fonts)
+                                .try_animate_parts_at(context, Time::ZERO, |part| {
+                                    let amount = part.sample(&motion::Tween::new(
+                                        0.0,
+                                        1.0,
+                                        200.milliseconds(),
+                                    ));
+                                    motion::PartStyle::new()
+                                        .scale(0.8 + amount * 0.2)
+                                        .offset(0.0, 2.0 * (1.0 - amount))
+                                        .opacity(amount)
+                                })
+                                .unwrap();
+                            let labels = motion::Row::new()
+                                .alignment(motion::Alignment::Baseline)
+                                .gap(4.0)
+                                .children([
+                                    animated,
+                                    Node::from(
+                                        motion::Text::new("B").size(12.0).fonts(&scene_fonts),
+                                    ),
+                                ])
+                                .translate(8.0, 8.0);
+                            Node::group([
+                                world,
+                                labels,
+                                Node::from(
+                                    motion::Rect::new(2.0, 2.0, 6.0, 6.0)
+                                        .fill(Color::rgb(0, 255, 0)),
+                                ),
                             ])
-                            .translate(8.0, 8.0);
-                        Node::group([
-                            world,
-                            labels,
-                            Node::from(
-                                motion::Rect::new(2.0, 2.0, 6.0, 6.0).fill(Color::rgb(0, 255, 0)),
-                            ),
-                        ])
-                    })
-                    .with_duration(1500.milliseconds()),
-                )
-            })?;
+                        })
+                        .with_duration(1500.milliseconds()),
+                    )
+                })?
+                .build()?;
             let validation = ValidationLimits::default();
             let limits = RasterLimits::default();
             let cache = SceneCache::new(0);
@@ -1181,9 +1220,9 @@ mod scenes {
                 Size::new(96.0, 96.0),
                 Size::new(64.0, 128.0),
             ] {
-                let parent = Timeline::try_new(design, FrameRate::NTSC)?.try_track(|track| {
-                    track.try_gap(500.milliseconds())?.try_push(child.clone())
-                })?;
+                let parent = Timeline::try_new(design, FrameRate::NTSC)?
+                    .try_track(|track| track.try_gap(500.milliseconds())?.try_push(child.clone()))?
+                    .build()?;
                 let start = parent.tracks()[0].clips()[0].start();
                 let scale =
                     (design.width / child_size.width).min(design.height / child_size.height);
@@ -1204,7 +1243,7 @@ mod scenes {
                         .prepare(validation, limits)?;
                     let expected = frame.render_linear(limits)?;
                     assert_eq!(expected.pixel(0, 0), Some([0.0; 4]));
-                    if time >= start && time < start + child.total_duration() {
+                    if time >= start && time < start + child.duration() {
                         assert_eq!(
                             expected.pixel((4.0 * scale) as u32, (offset + 4.0 * scale) as u32),
                             Some([0.0, 1.0, 0.0, 1.0])

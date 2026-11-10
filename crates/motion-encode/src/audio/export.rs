@@ -293,7 +293,7 @@ pub fn export_audio(
     let range = options
         .range
         .clone()
-        .unwrap_or(Time::ZERO..timeline.total_duration());
+        .unwrap_or(Time::ZERO..timeline.duration());
     if range.start < Time::ZERO || range.end <= range.start {
         return Err(invalid("range", "Audio export range must be nonempty").into());
     }
@@ -417,7 +417,10 @@ mod tests {
             (0..4800).flat_map(|_| [level, -level / 2.0]).collect(),
         )
         .unwrap();
-        Timeline::new(Size::new(8.0, 4.0), 30).audio(AudioClip::source(pcm))
+        Timeline::new(Size::new(8.0, 4.0), 30)
+            .audio(AudioClip::source(pcm))
+            .build()
+            .unwrap()
     }
 
     #[test]
@@ -507,7 +510,7 @@ mod tests {
         );
         assert!(
             export_audio(
-                &Timeline::new(Size::new(8.0, 4.0), 30),
+                &Timeline::new(Size::new(8.0, 4.0), 30).build()?,
                 &AudioExportOptions::new(&bad)
             )
             .is_err()

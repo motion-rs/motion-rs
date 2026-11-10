@@ -474,7 +474,7 @@ impl AudioSource for CompositionSource {
     }
 
     fn duration(&self) -> Option<Duration> {
-        Some(self.0.total_duration())
+        Some(self.0.duration())
     }
 
     fn read(&self, _: u64, output: &mut [f32]) -> usize {

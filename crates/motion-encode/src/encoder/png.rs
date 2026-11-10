@@ -165,12 +165,14 @@ mod tests {
     fn transparent_png_sequence_commits_only_on_complete_export() -> Result {
         let directory = tempfile::tempdir()?;
         let destination = directory.path().join("frames");
-        let timeline = Timeline::new(Size::new(3.0, 3.0), 2).track(|track| {
-            track.push(motion_core::Scene::with_duration(
-                |_: &motion_core::SceneContext<'_>| Node::empty(),
-                1.seconds(),
-            ))
-        });
+        let timeline = Timeline::new(Size::new(3.0, 3.0), 2)
+            .track(|track| {
+                track.push(motion_core::Scene::with_duration(
+                    |_: &motion_core::SceneContext<'_>| Node::empty(),
+                    1.seconds(),
+                ))
+            })
+            .build()?;
         let mut options = ExportOptions::new(&destination)
             .codec(Codec::PngSequence)
             .size(PixelSize::new(3, 3));

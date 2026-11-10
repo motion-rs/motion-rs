@@ -68,55 +68,57 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
         .to(at(0.53), 250.0, Easing::Linear)
         .to(at(0.62), 196.0, Easing::BackOut { overshoot: 1.4 });
 
-    Ok(base.track(|track| {
-        track.scene(
-            parameters.seconds.seconds(),
-            move |context: &SceneContext<'_>| -> motion::Result<_> {
-                let time = context.time();
-                let progress = context.progress();
-                let design = context.seconds() / k;
-                let scale = lockup_scale.sample(time);
-                let centre = Point::new(480.0, lockup_y.sample(time));
-                let window = |start: f64, end: f64, easing: Easing| {
-                    easing.apply(((progress - start) / (end - start)).clamp(0.0, 1.0))
-                };
+    base.to_builder()
+        .track(|track| {
+            track.scene(
+                parameters.seconds.seconds(),
+                move |context: &SceneContext<'_>| -> motion::Result<_> {
+                    let time = context.time();
+                    let progress = context.progress();
+                    let design = context.seconds() / k;
+                    let scale = lockup_scale.sample(time);
+                    let centre = Point::new(480.0, lockup_y.sample(time));
+                    let window = |start: f64, end: f64, easing: Easing| {
+                        easing.apply(((progress - start) / (end - start)).clamp(0.0, 1.0))
+                    };
 
-                let shape = if progress < 0.25 {
-                    let pops =
-                        [0.24, 0.5, 0.76].map(|start| pop.sample((design - start).seconds()));
-                    primitives.node_mapped(&|address, node| {
-                        node.scale(
-                            pops.get(address.first().copied().unwrap_or(0))
-                                .copied()
-                                .unwrap_or(1.0),
-                        )
-                    })
-                } else if progress < 0.62 {
-                    morph.sample(window(0.25, 0.5, Easing::CubicInOut))?
-                } else {
-                    mark_tree.node()
-                };
-                let mark = shape
-                    .pivot(Pivot::Point(MARK_CENTER))
-                    .at(centre)
-                    .scale(scale);
+                    let shape = if progress < 0.25 {
+                        let pops =
+                            [0.24, 0.5, 0.76].map(|start| pop.sample((design - start).seconds()));
+                        primitives.node_mapped(&|address, node| {
+                            node.scale(
+                                pops.get(address.first().copied().unwrap_or(0))
+                                    .copied()
+                                    .unwrap_or(1.0),
+                            )
+                        })
+                    } else if progress < 0.62 {
+                        morph.sample(window(0.25, 0.5, Easing::CubicInOut))?
+                    } else {
+                        mark_tree.node()
+                    };
+                    let mark = shape
+                        .pivot(Pivot::Point(MARK_CENTER))
+                        .at(centre)
+                        .scale(scale);
 
-                // A lime orbit sweeps around the forming monogram and leaves before the burst.
-                let head = window(0.2, 0.48, Easing::CubicInOut);
-                let tail = window(0.3, 0.52, Easing::CubicIn);
-                let orbit = Circle::new(Point::new(480.0, 250.0), 112.0)
-                    .stroke(4.0, Color::from_hex(LIME))
-                    .trim(tail, head);
-                let baseline = Rect::new(0.0, 0.0, 1.0, 2.0)
-                    .fill(Color::from_hex(CREAM))
-                    .pivot(Pivot::Center)
-                    .at(Point::new(480.0, 250.0))
-                    .scale_xy(560.0 * window(0.05, 0.2, Easing::ExponentialOut), 1.0)
-                    .opacity(1.0 - window(0.22, 0.3, Easing::Linear));
-                Ok((baseline, orbit, mark))
-            },
-        )
-    }))
+                    // A lime orbit sweeps around the forming monogram and leaves before the burst.
+                    let head = window(0.2, 0.48, Easing::CubicInOut);
+                    let tail = window(0.3, 0.52, Easing::CubicIn);
+                    let orbit = Circle::new(Point::new(480.0, 250.0), 112.0)
+                        .stroke(4.0, Color::from_hex(LIME))
+                        .trim(tail, head);
+                    let baseline = Rect::new(0.0, 0.0, 1.0, 2.0)
+                        .fill(Color::from_hex(CREAM))
+                        .pivot(Pivot::Center)
+                        .at(Point::new(480.0, 250.0))
+                        .scale_xy(560.0 * window(0.05, 0.2, Easing::ExponentialOut), 1.0)
+                        .opacity(1.0 - window(0.22, 0.3, Easing::Linear));
+                    Ok((baseline, orbit, mark))
+                },
+            )
+        })
+        .build()
 }
 
 fn assets_dir() -> std::path::PathBuf {
@@ -163,7 +165,7 @@ mod tests {
                 seconds,
                 ..DemoParameters::default()
             })?;
-            assert_eq!(film.total_duration(), seconds.seconds());
+            assert_eq!(film.duration(), seconds.seconds());
             assert_eq!(film.frame_count(), u64::from(seconds) * 30);
         }
         Ok(())

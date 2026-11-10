@@ -41,13 +41,14 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
             preset.simulation(options)
         })
         .collect::<Result<Vec<_>, _>>()?;
-    Ok(Timeline::new(Size::new(960.0, 540.0), 30)
+    Timeline::new(Size::new(960.0, 540.0), 30)
         .background(Color::from_hex(super::atlas::PAPER))
         .track(|track| {
             track.scene(parameters.seconds.seconds(), move |context| {
                 frame(context, &simulations)
             })
-        }))
+        })
+        .build()
 }
 
 fn frame(context: &SceneContext<'_>, simulations: &[ParticleSimulation]) -> motion::Result<Node> {
@@ -294,7 +295,7 @@ mod tests {
                 ..DemoParameters::default()
             })?;
             assert_eq!(timeline.size(), Size::new(960.0, 540.0));
-            assert_eq!(timeline.total_duration(), seconds.seconds());
+            assert_eq!(timeline.duration(), seconds.seconds());
             assert_eq!(timeline.frame_count(), u64::from(seconds) * 30);
         }
         Ok(())
@@ -323,7 +324,8 @@ mod tests {
                 track.scene(52.seconds(), move |context| {
                     frame(context, &empty_simulations)
                 })
-            });
+            })
+            .build()?;
         for (page, preset) in Preset::ALL.into_iter().enumerate() {
             let time = (page as f64 * 4.0 + 1.0).seconds();
             let early = render_still(&timeline, time, &options)?;

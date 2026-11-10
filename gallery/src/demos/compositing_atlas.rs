@@ -249,77 +249,70 @@ pub(super) const PAGES: &[Page] = &[
 ];
 
 pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
-    Ok(atlas::timeline(
-        parameters,
-        METADATA,
-        PAGES,
-        |page, progress, _| {
-            if page < MODES.len() {
-                return Ok(layers(progress, MODES[page], 1.0));
+    atlas::timeline(parameters, METADATA, PAGES, |page, progress, _| {
+        if page < MODES.len() {
+            return Ok(layers(progress, MODES[page], 1.0));
+        }
+        let source = atlas::specimen(progress);
+        let processed = match page {
+            17..=20 => {
+                let mode = [
+                    MaskMode::Alpha,
+                    MaskMode::Luminance,
+                    MaskMode::InvertedAlpha,
+                    MaskMode::InvertedLuminance,
+                ][page - 17];
+                let mask = Circle::new(Point::new(150.0 + 212.0 * progress, 152.0), 100.0).fill(
+                    LinearGradient::new(Point::new(110.0, 0.0), Point::new(400.0, 0.0))
+                        .units(GradientUnits::UserSpace)
+                        .stop(0.0, Color::BLACK)
+                        .stop(1.0, Color::WHITE),
+                );
+                source.clone().mask(mask, mode)
             }
-            let source = atlas::specimen(progress);
-            let processed = match page {
-                17..=20 => {
-                    let mode = [
-                        MaskMode::Alpha,
-                        MaskMode::Luminance,
-                        MaskMode::InvertedAlpha,
-                        MaskMode::InvertedLuminance,
-                    ][page - 17];
-                    let mask = Circle::new(Point::new(150.0 + 212.0 * progress, 152.0), 100.0)
-                        .fill(
-                            LinearGradient::new(Point::new(110.0, 0.0), Point::new(400.0, 0.0))
-                                .units(GradientUnits::UserSpace)
-                                .stop(0.0, Color::BLACK)
-                                .stop(1.0, Color::WHITE),
-                        );
-                    source.clone().mask(mask, mode)
-                }
-                21 | 22 => source.clone().clip_with(
-                    Circle::new(Point::new(180.0 + 150.0 * progress, 152.0), 105.0),
-                    if page == 21 {
-                        ClipMode::Coverage
-                    } else {
-                        ClipMode::Geometric
-                    },
-                ),
-                23 => {
-                    let background = Node::from(
-                        Rect::new(48.0, 48.0, 464.0, 256.0).fill(Color::from_hex(0xc9d9cf)),
-                    );
-                    return Ok(atlas::pair(
-                        Node::group([background.clone(), Node::group(shapes(progress, 0.5))]),
-                        Node::group([background, Node::group(shapes(progress, 1.0)).opacity(0.5)]),
-                        "Child alpha",
-                        "Group opacity",
-                    ));
-                }
-                24 => {
-                    let back = Rect::new(90.0, 70.0, 300.0, 235.0)
-                        .fill(Color::from_hex(atlas::MINT))
-                        .z_index(1);
-                    let front = Circle::new(
-                        Point::new(290.0 + math::sin(progress * 6.0) * 40.0, 152.0),
-                        84.0,
-                    )
-                    .fill(Color::from_hex(atlas::GOLD))
-                    .z_index(if progress < 0.5 { 0 } else { 2 });
-                    return Ok(Node::group([back, front]));
-                }
-                _ => {
-                    let children = shapes(progress, 1.0);
-                    let blur = Filter::Blur { sigma: 12.0 };
-                    return Ok(atlas::pair(
-                        Node::group(children.clone()).filter(blur.clone()),
-                        Node::group(children.map(|child| child.filter(blur.clone()))),
-                        "Group blur",
-                        "Child blur",
-                    ));
-                }
-            };
-            Ok(atlas::comparison(source, processed))
-        },
-    ))
+            21 | 22 => source.clone().clip_with(
+                Circle::new(Point::new(180.0 + 150.0 * progress, 152.0), 105.0),
+                if page == 21 {
+                    ClipMode::Coverage
+                } else {
+                    ClipMode::Geometric
+                },
+            ),
+            23 => {
+                let background =
+                    Node::from(Rect::new(48.0, 48.0, 464.0, 256.0).fill(Color::from_hex(0xc9d9cf)));
+                return Ok(atlas::pair(
+                    Node::group([background.clone(), Node::group(shapes(progress, 0.5))]),
+                    Node::group([background, Node::group(shapes(progress, 1.0)).opacity(0.5)]),
+                    "Child alpha",
+                    "Group opacity",
+                ));
+            }
+            24 => {
+                let back = Rect::new(90.0, 70.0, 300.0, 235.0)
+                    .fill(Color::from_hex(atlas::MINT))
+                    .z_index(1);
+                let front = Circle::new(
+                    Point::new(290.0 + math::sin(progress * 6.0) * 40.0, 152.0),
+                    84.0,
+                )
+                .fill(Color::from_hex(atlas::GOLD))
+                .z_index(if progress < 0.5 { 0 } else { 2 });
+                return Ok(Node::group([back, front]));
+            }
+            _ => {
+                let children = shapes(progress, 1.0);
+                let blur = Filter::Blur { sigma: 12.0 };
+                return Ok(atlas::pair(
+                    Node::group(children.clone()).filter(blur.clone()),
+                    Node::group(children.map(|child| child.filter(blur.clone()))),
+                    "Group blur",
+                    "Child blur",
+                ));
+            }
+        };
+        Ok(atlas::comparison(source, processed))
+    })
 }
 
 fn layers(progress: f64, mode: BlendMode, alpha: f64) -> Node {

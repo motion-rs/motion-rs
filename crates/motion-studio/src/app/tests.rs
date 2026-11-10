@@ -148,12 +148,16 @@ fn timeline_boundary_warnings_are_visible_without_rendering_or_devices() -> moti
 {
     let context = egui::Context::default();
     let creation = eframe::CreationContext::_new_kittest(context);
-    let timeline = motion_core::Timeline::new(Size::new(16.0, 8.0), 30).track(|track| {
-        track.scene(motion_core::Time::from_seconds(0.05), |_| {
-            Node::from(motion_core::Rect::new(0.0, 0.0, 8.0, 8.0).fill(motion_core::Color::WHITE))
+    let timeline = motion_core::Timeline::new(Size::new(16.0, 8.0), 30)
+        .track(|track| {
+            track.scene(motion_core::Time::from_seconds(0.05), |_| {
+                Node::from(
+                    motion_core::Rect::new(0.0, 0.0, 8.0, 8.0).fill(motion_core::Color::WHITE),
+                )
+            })
         })
-    });
-    assert!(!timeline.adjustments().is_empty());
+        .build()?;
+    assert!(!timeline.diagnostics().is_empty());
     let scene = StudioScene::timeline(
         "Alignment",
         Composition::new(16, 8, motion_render::FrameClock::new(30, 150)),

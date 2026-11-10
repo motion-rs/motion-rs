@@ -79,14 +79,16 @@ conversion excludes ancestor transforms and requires finite invertible mappings.
 Keep fixed HUD content outside the camera. Skeleton hierarchy transforms attach
 ordinary Node artwork; they do not introduce a separate 3D engine.
 
-Timeline owns design dimensions, rational rate, tracks and audio occurrences.
-Clip boundaries align independently to frame ticks with retained diagnostics.
+Timeline is built once by TimelineBuilder and never changes afterwards. It owns design
+dimensions, rational rate, tracks, a Soundtrack (audio occurrences, buses, master) and
+its final duration. Clip boundaries align independently to frame ticks with warnings
+in Diagnostics.
 Transitions admit two neighboring clips, not arbitrary triple overlaps; both
 endpoints keep their local clocks and share global resources. Nested timelines clip
 their own viewport before centered contain mapping; child rates do not retime the
 parent clock implicitly.
 
-Ordinary builders retain bounded diagnostics and validate before execution.
+Ordinary builders retain bounded errors that build() reports together.
 Explicit try_* methods provide immediate failure. Project registers lazy factories
 and typed parameters; listing/help does not build timelines or discover resources.
 Preview, stills and export select the same authored timeline.

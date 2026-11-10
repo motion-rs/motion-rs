@@ -79,7 +79,8 @@ mod tests {
             .collect();
         let timeline = Timeline::new(Size::new(8.0, 8.0), 30)
             .audio(AudioClip::source(PcmBuffer::new(48_000, 2, samples)?).bus("music"))
-            .audio_bus(AudioBus::new("music"));
+            .audio_bus(AudioBus::new("music"))
+            .build()?;
         let mix = MixedAudio::from_timeline(&timeline, 48_000)?;
         let readout = AudioReadout::from_mix(&mix, Time::ZERO)?;
         assert!(readout.integrated_lufs.is_some());

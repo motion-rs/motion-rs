@@ -193,9 +193,8 @@ impl Document {
                 .try_duration(duration)
                 .map_err(|error| located(Some("duration".into()), error))?;
         }
-        timeline.validate()?;
         Ok(CompiledDocument {
-            timeline,
+            timeline: timeline.build()?,
             look,
             resources: std::mem::take(&mut compiler.resources),
             #[cfg(feature = "text")]

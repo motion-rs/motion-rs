@@ -11,7 +11,7 @@
 //! use motion_core::Scene as _;
 //! let timeline = Timeline::new(Size::new(4.0, 2.0), 30).track(|track| {
 //!     track.push((|_: &SceneContext<'_>| Node::empty()).with_duration(1.seconds()))
-//! });
+//! }).build()?;
 //! let bitmap = render_still(&timeline, 250.milliseconds(), &RenderOptions::default())?;
 //! assert_eq!(bitmap.bytes(), &[0; 32]);
 //! # Ok::<(), motion_core::Error>(())

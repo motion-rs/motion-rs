@@ -16,7 +16,7 @@
 //!         .push(first)
 //!         .transition(CrossFade, 500.milliseconds())
 //!         .push(next)
-//! });
+//! }).build()?;
 //! timeline.validate()?;
 //! assert_eq!(timeline.frame_count(), 45);
 //! let cache = SceneCache::default();

@@ -25,7 +25,7 @@ fn main() -> motion::Result {
                         .fill(Color::WHITE),
                 )
             })
-        });
+        }).build()?;
     let time = Time::from_frame(30, FrameRate::NTSC);
     render_still(&timeline, time, &RenderOptions::default())?
         .save_png("tutorial-foundations.png")

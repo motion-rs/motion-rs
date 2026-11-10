@@ -9,16 +9,18 @@ use std::sync::{Arc, Mutex};
 #[test]
 fn bounded_planning_retains_full_submission_limits_without_a_device() -> Result<()> {
     let rate = FrameRate::NTSC;
-    let timeline = Timeline::new(Size::new(32.0, 16.0), rate).track(|track| {
-        track.push(
-            (|_: &motion_core::SceneContext<'_>| {
-                Rect::new(0.25, 0.5, 28.0, 12.0)
-                    .fill(Color::rgb(190, 40, 125))
-                    .opacity(0.5)
-            })
-            .with_duration(Time::from_frame(4, rate)),
-        )
-    });
+    let timeline = Timeline::new(Size::new(32.0, 16.0), rate)
+        .track(|track| {
+            track.push(
+                (|_: &motion_core::SceneContext<'_>| {
+                    Rect::new(0.25, 0.5, 28.0, 12.0)
+                        .fill(Color::rgb(190, 40, 125))
+                        .opacity(0.5)
+                })
+                .with_duration(Time::from_frame(4, rate)),
+            )
+        })
+        .build()?;
     let options = ExportOptions::new("unused").backend(motion_render::BackendPreference::Cpu);
     let mut renderer = composition(&timeline, &options.render)?.frame_renderer(timeline.size())?;
     let (frame, limits) =
@@ -120,18 +122,20 @@ fn ten_bit_gpu_export_matches_cpu_export_within_one_code_value() -> Result<()> {
     }
 
     let rate = FrameRate::NTSC;
-    let timeline = Timeline::new(Size::new(32.0, 16.0), rate).track(|track| {
-        track.push(
-            (move |context: &motion_core::SceneContext<'_>| {
-                Node::from(
-                    Rect::new(0.25 + context.seconds() * 8.0, 0.5, 28.0, 12.0)
-                        .fill(Color::rgb(190, 40, 125)),
-                )
-                .opacity(0.5)
-            })
-            .with_duration(Time::from_frame(6, rate)),
-        )
-    });
+    let timeline = Timeline::new(Size::new(32.0, 16.0), rate)
+        .track(|track| {
+            track.push(
+                (move |context: &motion_core::SceneContext<'_>| {
+                    Node::from(
+                        Rect::new(0.25 + context.seconds() * 8.0, 0.5, 28.0, 12.0)
+                            .fill(Color::rgb(190, 40, 125)),
+                    )
+                    .opacity(0.5)
+                })
+                .with_duration(Time::from_frame(6, rate)),
+            )
+        })
+        .build()?;
     let context = motion_render::GpuContext::new()?;
     let mut outputs = Vec::new();
     for backend in [
@@ -240,18 +244,20 @@ fn automatic_backend_selecting_the_gpu_uses_the_pipeline() -> Result<()> {
     let threads = Arc::new(Mutex::new(std::collections::HashSet::new()));
     let observed = threads.clone();
     let rate = FrameRate::NTSC;
-    let timeline = Timeline::new(Size::new(32.0, 16.0), rate).track(|track| {
-        track.push(
-            (move |context: &motion_core::SceneContext<'_>| {
-                observed.lock().unwrap().insert(std::thread::current().id());
-                Node::from(
-                    Rect::new(0.25 + context.seconds() * 4.0, 0.5, 28.0, 12.0)
-                        .fill(Color::rgb(190, 40, 125)),
-                )
-            })
-            .with_duration(Time::from_frame(12, rate)),
-        )
-    });
+    let timeline = Timeline::new(Size::new(32.0, 16.0), rate)
+        .track(|track| {
+            track.push(
+                (move |context: &motion_core::SceneContext<'_>| {
+                    observed.lock().unwrap().insert(std::thread::current().id());
+                    Node::from(
+                        Rect::new(0.25 + context.seconds() * 4.0, 0.5, 28.0, 12.0)
+                            .fill(Color::rgb(190, 40, 125)),
+                    )
+                })
+                .with_duration(Time::from_frame(12, rate)),
+            )
+        })
+        .build()?;
     let mut options = ExportOptions::new("unused-automatic-output")
         .backend(motion_render::BackendPreference::automatic())
         .workers(2);
@@ -268,19 +274,21 @@ fn gpu_export_pipeline_matches_linear_reference_and_cancels_transactionally() ->
     let threads = Arc::new(Mutex::new(std::collections::HashSet::new()));
     let observed = threads.clone();
     let rate = FrameRate::NTSC;
-    let timeline = Timeline::new(Size::new(32.0, 16.0), rate).track(|track| {
-        track.push(
-            (move |context: &motion_core::SceneContext<'_>| {
-                observed.lock().unwrap().insert(std::thread::current().id());
-                Node::from(
-                    Rect::new(0.25 + context.seconds() * 4.0, 0.5, 28.0, 12.0)
-                        .fill(Color::rgb(190, 40, 125)),
-                )
-                .opacity(0.5)
-            })
-            .with_duration(Time::from_frame(12, rate)),
-        )
-    });
+    let timeline = Timeline::new(Size::new(32.0, 16.0), rate)
+        .track(|track| {
+            track.push(
+                (move |context: &motion_core::SceneContext<'_>| {
+                    observed.lock().unwrap().insert(std::thread::current().id());
+                    Node::from(
+                        Rect::new(0.25 + context.seconds() * 4.0, 0.5, 28.0, 12.0)
+                            .fill(Color::rgb(190, 40, 125)),
+                    )
+                    .opacity(0.5)
+                })
+                .with_duration(Time::from_frame(12, rate)),
+            )
+        })
+        .build()?;
     let mut options = ExportOptions::new("unused-gpu-pipeline-output")
         .backend(motion_render::BackendPreference::gpu())
         .workers(2);
@@ -362,22 +370,24 @@ fn gpu_export_pipeline_matches_linear_reference_and_cancels_transactionally() ->
         std::sync::atomic::AtomicUsize::new(0)
     }));
     let observed = calls.clone();
-    let changing = Timeline::new(Size::new(64.0, 64.0), rate).track(|track| {
-        track.push(
-            (move |context: &motion_core::SceneContext<'_>| {
-                let index = context.time().to_frame(rate) as usize;
-                observed[index].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                if index < 2 {
-                    Node::empty()
-                } else {
-                    Node::from(Rect::new(0.25, 0.5, 62.0, 62.0).fill(Color::WHITE))
-                        .opacity(0.5)
-                        .filter(motion_core::Filter::Blur { sigma: 9.0 })
-                }
-            })
-            .with_duration(Time::from_frame(12, rate)),
-        )
-    });
+    let changing = Timeline::new(Size::new(64.0, 64.0), rate)
+        .track(|track| {
+            track.push(
+                (move |context: &motion_core::SceneContext<'_>| {
+                    let index = context.time().to_frame(rate) as usize;
+                    observed[index].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    if index < 2 {
+                        Node::empty()
+                    } else {
+                        Node::from(Rect::new(0.25, 0.5, 62.0, 62.0).fill(Color::WHITE))
+                            .opacity(0.5)
+                            .filter(motion_core::Filter::Blur { sigma: 9.0 })
+                    }
+                })
+                .with_duration(Time::from_frame(12, rate)),
+            )
+        })
+        .build()?;
     let mut changing_options = options.clone();
     changing_options.path = "unused-heavier-gpu-pipeline".into();
     let context = changing_options.render.gpu_context.clone().unwrap();
@@ -465,18 +475,20 @@ fn gpu_export_pipeline_matches_linear_reference_and_cancels_transactionally() ->
         motion_core::ErrorKind::Cancelled
     );
     assert_eq!(std::fs::read(&options.path)?, committed);
-    let failing = Timeline::new(Size::new(32.0, 16.0), rate).track(|track| {
-        track.push(
-            (move |context: &motion_core::SceneContext<'_>| {
-                assert!(
-                    context.time() != Time::from_frame(3, rate),
-                    "pipeline scene panic"
-                );
-                Node::empty()
-            })
-            .with_duration(Time::from_frame(12, rate)),
-        )
-    });
+    let failing = Timeline::new(Size::new(32.0, 16.0), rate)
+        .track(|track| {
+            track.push(
+                (move |context: &motion_core::SceneContext<'_>| {
+                    assert!(
+                        context.time() != Time::from_frame(3, rate),
+                        "pipeline scene panic"
+                    );
+                    Node::empty()
+                })
+                .with_duration(Time::from_frame(12, rate)),
+            )
+        })
+        .build()?;
     let error = export(&failing, &options, &NoProgress).unwrap_err();
     assert_eq!(error.kind(), motion_core::ErrorKind::ScenePanic);
     assert_eq!(error.frame(), Some(3));

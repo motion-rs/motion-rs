@@ -227,32 +227,27 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
     let flight = FollowPath::new(path.clone(), 2.5.seconds())
         .easing(Easing::SineInOut)
         .delay(0.2.seconds());
-    Ok(atlas::timeline(
-        parameters,
-        METADATA,
-        PAGES,
-        move |page, progress, _| {
-            Ok(match page {
-                0..=23 => {
-                    let movement = Tween::new(0.0, 1.0, 1.25.seconds())
-                        .easing(curves[page].1.clone())
-                        .ping_pong()
-                        .delay(0.2.seconds());
-                    animation_plot(&movement, progress, false)
-                }
-                24..=31 => {
-                    let study = &signals[page - 24];
-                    animation_plot(study.as_ref(), progress, page >= 27)
-                }
-                32 => path_board(&path, &flight, progress),
-                33 => transform_board(progress),
-                _ => {
-                    let study = &compositions[page - 34];
-                    animation_plot(study.as_ref(), progress, false)
-                }
-            })
-        },
-    ))
+    atlas::timeline(parameters, METADATA, PAGES, move |page, progress, _| {
+        Ok(match page {
+            0..=23 => {
+                let movement = Tween::new(0.0, 1.0, 1.25.seconds())
+                    .easing(curves[page].1.clone())
+                    .ping_pong()
+                    .delay(0.2.seconds());
+                animation_plot(&movement, progress, false)
+            }
+            24..=31 => {
+                let study = &signals[page - 24];
+                animation_plot(study.as_ref(), progress, page >= 27)
+            }
+            32 => path_board(&path, &flight, progress),
+            33 => transform_board(progress),
+            _ => {
+                let study = &compositions[page - 34];
+                animation_plot(study.as_ref(), progress, false)
+            }
+        })
+    })
 }
 
 fn easing_curves() -> Vec<(&'static str, Easing)> {

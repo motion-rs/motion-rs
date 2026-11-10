@@ -111,8 +111,9 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
         look,
     });
     let duration = i64::from(parameters.seconds).seconds();
-    Ok(Timeline::new(Size::new(WIDTH, HEIGHT), 30)
-        .track(|track| track.scene(duration, move |context| frame(context, &rig))))
+    Timeline::new(Size::new(WIDTH, HEIGHT), 30)
+        .track(|track| track.scene(duration, move |context| frame(context, &rig)))
+        .build()
 }
 
 fn opacity(seconds: f64, (start, end): (f64, f64), last: bool) -> f64 {

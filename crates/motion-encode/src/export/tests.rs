@@ -10,17 +10,19 @@ use motion_render::PixelFormat;
 fn native_main10_export_renders_display() -> motion_core::Result {
     use motion_core::{LinearGradient, Node, Point, Size, TimeLiteral};
     let directory = tempfile::tempdir()?;
-    let timeline = motion_core::Timeline::new(Size::new(512.0, 16.0), 24).track(|track| {
-        track.scene(1.seconds(), |_| {
-            Node::from(
-                motion_core::Rect::new(0.0, 0.0, 512.0, 16.0).fill(
-                    LinearGradient::new(Point::ORIGIN, Point::new(1.0, 0.0))
-                        .stop(0.0, motion_core::Color::BLACK)
-                        .stop(1.0, motion_core::Color::WHITE),
-                ),
-            )
+    let timeline = motion_core::Timeline::new(Size::new(512.0, 16.0), 24)
+        .track(|track| {
+            track.scene(1.seconds(), |_| {
+                Node::from(
+                    motion_core::Rect::new(0.0, 0.0, 512.0, 16.0).fill(
+                        LinearGradient::new(Point::ORIGIN, Point::new(1.0, 0.0))
+                            .stop(0.0, motion_core::Color::BLACK)
+                            .stop(1.0, motion_core::Color::WHITE),
+                    ),
+                )
+            })
         })
-    });
+        .build()?;
     let backends = [
         motion_render::BackendPreference::Cpu,
         #[cfg(feature = "gpu")]
@@ -84,7 +86,10 @@ fn parallel_worker_selection_respects_frames_memory_and_backend() {
     assert_eq!(render_workers(&options, 100, 1024, None), 1);
     assert_eq!(render_workers(&options, 100, 1024, Some(&cpu)), 8);
     assert_eq!(render_workers(&options, 100, 1024, Some(&gpu)), 1);
-    let timeline = Timeline::new(Size::new(8.0, 4.0), 30).track(|track| track.gap(1.seconds()));
+    let timeline = Timeline::new(Size::new(8.0, 4.0), 30)
+        .track(|track| track.gap(1.seconds()))
+        .build()
+        .unwrap();
     for workers in [0, 65] {
         assert!(selected(&timeline, &options.clone().workers(workers)).is_err());
     }
@@ -96,22 +101,24 @@ fn parallel_export_matches_serial_pixels_ntsc_ranges_and_progress() -> Result<()
     let rate = FrameRate::NTSC;
     let evaluations = std::sync::Arc::new(Mutex::new(Vec::new()));
     let observed = evaluations.clone();
-    let timeline = Timeline::try_new(Size::new(8.0, 4.0), rate)?.try_track(|track| {
-        track.try_push(
-            (move |context: &motion_core::SceneContext<'_>| {
-                observed
-                    .lock()
-                    .unwrap()
-                    .push((context.time().to_frame(rate), std::thread::current().id()));
-                Node::from(
-                    Rect::new(0.25 + context.seconds(), 0.5, 6.75, 3.5)
-                        .fill(Color::rgb(190, 40, 125)),
-                )
-                .opacity(0.3 + context.seconds())
-            })
-            .with_duration(Time::from_frame(12, rate)),
-        )
-    })?;
+    let timeline = Timeline::try_new(Size::new(8.0, 4.0), rate)?
+        .try_track(|track| {
+            track.try_push(
+                (move |context: &motion_core::SceneContext<'_>| {
+                    observed
+                        .lock()
+                        .unwrap()
+                        .push((context.time().to_frame(rate), std::thread::current().id()));
+                    Node::from(
+                        Rect::new(0.25 + context.seconds(), 0.5, 6.75, 3.5)
+                            .fill(Color::rgb(190, 40, 125)),
+                    )
+                    .opacity(0.3 + context.seconds())
+                })
+                .with_duration(Time::from_frame(12, rate)),
+            )
+        })?
+        .build()?;
 
     struct Sink<'a> {
         frames: &'a Mutex<Vec<FrameBuffer>>,
@@ -234,22 +241,24 @@ fn parallel_export_matches_serial_pixels_ntsc_ranges_and_progress() -> Result<()
         std::sync::atomic::AtomicUsize::new(0)
     }));
     let observed = calls.clone();
-    let changing = Timeline::new(motion_core::Size::new(64.0, 64.0), rate).track(|track| {
-        track.push(
-            (move |context: &motion_core::SceneContext<'_>| {
-                let index = context.time().to_frame(rate) as usize;
-                observed[index].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                if index < 4 {
-                    Node::empty()
-                } else {
-                    Node::from(Rect::new(0.25, 0.5, 62.0, 62.0).fill(Color::WHITE))
-                        .filter(motion_core::Filter::Blur { sigma: 8.0 })
-                        .opacity(0.5)
-                }
-            })
-            .with_duration(Time::from_frame(12, rate)),
-        )
-    });
+    let changing = Timeline::new(motion_core::Size::new(64.0, 64.0), rate)
+        .track(|track| {
+            track.push(
+                (move |context: &motion_core::SceneContext<'_>| {
+                    let index = context.time().to_frame(rate) as usize;
+                    observed[index].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    if index < 4 {
+                        Node::empty()
+                    } else {
+                        Node::from(Rect::new(0.25, 0.5, 62.0, 62.0).fill(Color::WHITE))
+                            .filter(motion_core::Filter::Blur { sigma: 8.0 })
+                            .opacity(0.5)
+                    }
+                })
+                .with_duration(Time::from_frame(12, rate)),
+            )
+        })
+        .build()?;
     let format = PixelFormat::SrgbRgba8 {
         premultiplied: false,
     };
@@ -353,15 +362,17 @@ fn encoder_capabilities_validate_without_opening_resources() {
 #[test]
 fn still_and_custom_encoder_share_transparent_pixels_absolute_ticks_and_cancellation() -> Result<()>
 {
-    let timeline = Timeline::try_new(Size::new(4.0, 2.0), 10)?.try_track(|track| {
-        track.try_push(
-            (|context: &motion_core::SceneContext<'_>| {
-                Node::from(Rect::new(0.0, 0.0, 4.0, 2.0).fill(Color::rgb(255, 0, 0)))
-                    .opacity(context.seconds())
-            })
-            .with_duration(1.seconds()),
-        )
-    })?;
+    let timeline = Timeline::try_new(Size::new(4.0, 2.0), 10)?
+        .try_track(|track| {
+            track.try_push(
+                (|context: &motion_core::SceneContext<'_>| {
+                    Node::from(Rect::new(0.0, 0.0, 4.0, 2.0).fill(Color::rgb(255, 0, 0)))
+                        .opacity(context.seconds())
+                })
+                .with_duration(1.seconds()),
+            )
+        })?
+        .build()?;
     let bitmap = render_still(&timeline, 250.milliseconds(), &RenderOptions::default())?;
     assert_eq!(&bitmap.bytes()[..4], &[255, 0, 0, 64]);
 
@@ -453,12 +464,14 @@ fn output_permissions_follow_umask_for_stills_sequences_gif_and_video() -> Resul
     let file_mode = 0o666 & !mask;
     let directory_mode = 0o777 & !mask;
     let directory = tempfile::tempdir()?;
-    let timeline = Timeline::new(Size::new(8.0, 4.0), 1).track(|track| {
-        track.push(motion_core::Scene::with_duration(
-            |_: &motion_core::SceneContext<'_>| Node::empty(),
-            1.seconds(),
-        ))
-    });
+    let timeline = Timeline::new(Size::new(8.0, 4.0), 1)
+        .track(|track| {
+            track.push(motion_core::Scene::with_duration(
+                |_: &motion_core::SceneContext<'_>| Node::empty(),
+                1.seconds(),
+            ))
+        })
+        .build()?;
     let bitmap = render_still(&timeline, Time::ZERO, &RenderOptions::default())?;
     for overwrite in [false, true] {
         let still = directory.path().join("still.png");
@@ -514,18 +527,20 @@ fn parallel_native_exports_match_serial_files_and_preserve_destinations() -> Res
     use std::sync::atomic::{AtomicBool, Ordering};
     let directory = tempfile::tempdir()?;
     let rate = FrameRate::NTSC;
-    let timeline = Timeline::try_new(Size::new(32.0, 16.0), rate)?.try_track(|track| {
-        track.try_push(
-            (|context: &motion_core::SceneContext<'_>| {
-                Node::from(
-                    Rect::new(0.25 + context.seconds() * 8.0, 0.5, 24.0, 12.0)
-                        .fill(Color::rgb(190, 40, 125)),
-                )
-                .opacity(0.3 + context.seconds() * 0.5)
-            })
-            .with_duration(Time::from_frame(24, rate)),
-        )
-    })?;
+    let timeline = Timeline::try_new(Size::new(32.0, 16.0), rate)?
+        .try_track(|track| {
+            track.try_push(
+                (|context: &motion_core::SceneContext<'_>| {
+                    Node::from(
+                        Rect::new(0.25 + context.seconds() * 8.0, 0.5, 24.0, 12.0)
+                            .fill(Color::rgb(190, 40, 125)),
+                    )
+                    .opacity(0.3 + context.seconds() * 0.5)
+                })
+                .with_duration(Time::from_frame(24, rate)),
+            )
+        })?
+        .build()?;
     let path = directory.path().join("serial.mp4");
     let mut options = ExportOptions::new(&path)
         .workers(1)
@@ -571,18 +586,20 @@ fn parallel_native_exports_match_serial_files_and_preserve_destinations() -> Res
     );
     assert_eq!(std::fs::read(&options.path)?, reference);
     for panic_frame in [2, 3] {
-        let failing = Timeline::try_new(Size::new(32.0, 16.0), rate)?.try_track(|track| {
-            track.try_push(
-                (move |context: &motion_core::SceneContext<'_>| {
-                    assert!(
-                        context.time() != Time::from_frame(panic_frame, rate),
-                        "scene panic"
-                    );
-                    Node::empty()
-                })
-                .with_duration(Time::from_frame(24, rate)),
-            )
-        })?;
+        let failing = Timeline::try_new(Size::new(32.0, 16.0), rate)?
+            .try_track(|track| {
+                track.try_push(
+                    (move |context: &motion_core::SceneContext<'_>| {
+                        assert!(
+                            context.time() != Time::from_frame(panic_frame, rate),
+                            "scene panic"
+                        );
+                        Node::empty()
+                    })
+                    .with_duration(Time::from_frame(24, rate)),
+                )
+            })?
+            .build()?;
         let error = export(&failing, &options, &NoProgress).unwrap_err();
         assert_eq!(error.kind(), motion_core::ErrorKind::ScenePanic);
         assert_eq!(error.frame(), Some(panic_frame as u64));
@@ -622,7 +639,8 @@ fn encoder_streams_yuv_crops_fractional_audio_and_preserves_destinations() -> Re
                 .with_duration(duration),
             )
         })?
-        .try_audio(motion_core::AudioClip::source(pcm))?;
+        .try_audio(motion_core::AudioClip::source(pcm))?
+        .build()?;
     let mut options = ExportOptions::new(&path);
     options.range = Some(Time::from_frame(1, rate)..Time::from_frame(4, rate));
     let report = export(&timeline, &options, &NoProgress)?;

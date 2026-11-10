@@ -125,8 +125,8 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
     let bar_scale = Scale::linear((0.0, 9.0), (BAR_PLOT.bottom, BAR_PLOT.top))?;
     let bar_ticks = [0.0, 2.0, 4.0, 6.0, 8.0];
 
-    Ok(
-        Timeline::new(Size::new(960.0, 540.0), 30).track(|track_builder| {
+    Timeline::new(Size::new(960.0, 540.0), 30)
+        .track(|track_builder| {
             track_builder.scene(
                 parameters.seconds.seconds(),
                 move |context: &SceneContext<'_>| -> motion::Result<_> {
@@ -204,8 +204,8 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
                     Ok(Node::group(nodes))
                 },
             )
-        }),
-    )
+        })
+        .build()
 }
 
 fn bar_chart(progress: f64, scale: Scale, ticks: &[f64]) -> motion::Result<Node> {

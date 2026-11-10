@@ -126,7 +126,7 @@ pub(super) const PAGES: &[Page] = &[
 
 pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
     let path = comparison_path();
-    Ok(atlas::timeline(
+    atlas::timeline(
         parameters,
         METADATA,
         PAGES,
@@ -134,7 +134,7 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
             let reveal = Easing::CubicInOut.apply((progress / 0.7).clamp(0.0, 1.0));
             Ok(swatch(context, &path, page, reveal))
         },
-    ))
+    )
 }
 
 fn swatch(context: &SceneContext<'_>, path: &Path2D, index: usize, reveal: f64) -> Node {
@@ -307,7 +307,7 @@ mod tests {
                 ..DemoParameters::default()
             })?;
             assert_eq!(timeline.size(), Size::new(960.0, 540.0));
-            assert_eq!(timeline.total_duration(), seconds.seconds());
+            assert_eq!(timeline.duration(), seconds.seconds());
             assert_eq!(timeline.frame_count(), u64::from(seconds) * 30);
         }
         Ok(())
@@ -364,7 +364,8 @@ mod tests {
             let render = |node: Node| {
                 let timeline = Timeline::new(Size::new(128.0, 96.0), 30)
                     .background(Color::from_hex(background))
-                    .track(|track| track.scene(1.seconds(), move |_| node.clone()));
+                    .track(|track| track.scene(1.seconds(), move |_| node.clone()))
+                    .build()?;
                 render_still(&timeline, 0.5.seconds(), &options)
             };
             let expected = render(preset.node(path.clone(), NIB_WIDTH, preset_color(preset)))?;

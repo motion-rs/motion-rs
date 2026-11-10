@@ -380,18 +380,22 @@ mod tests {
             })
             .collect();
         let timeline = Timeline::new(Size::new(1.0, 1.0), 30)
-            .audio(AudioClip::source(PcmBuffer::new(48000, 2, signal)?));
+            .audio(AudioClip::source(PcmBuffer::new(48000, 2, signal)?))
+            .build()?;
         let mix = MixedAudio::from_timeline(&timeline, 48000)?;
         assert!((mix.loudness_report()?.integrated_lufs.unwrap() + 20.0).abs() < 0.1);
         assert!(mix.levels.get().is_some());
         assert!(std::sync::Arc::ptr_eq(&mix.levels, &mix.clone().levels));
-        let timeline = timeline.master(Master {
-            normalize: Some(Loudness {
-                target_lufs: -23.0,
-                true_peak_db: -1.0,
-            }),
-            ..Default::default()
-        });
+        let timeline = timeline
+            .to_builder()
+            .master(Master {
+                normalize: Some(Loudness {
+                    target_lufs: -23.0,
+                    true_peak_db: -1.0,
+                }),
+                ..Default::default()
+            })
+            .build()?;
         let mix = MixedAudio::from_timeline(&timeline, 48000)?;
         assert!((mix.loudness_report()?.integrated_lufs.unwrap() + 23.0).abs() < 0.1);
         let window = MixedAudio::from_window(&timeline, 1.seconds()..1500.milliseconds(), 48000)?;

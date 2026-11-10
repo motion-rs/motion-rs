@@ -21,7 +21,7 @@ fn main() -> motion::Result {
             Circle::new(Point::new(160.0, 90.0), 24.0)
                 .fill(Color::rgb(20, 150, 125))
         })
-    });
+    }).build()?;
     let bitmap = render_still(&timeline, Time::ZERO, &RenderOptions::default())?;
     bitmap.save_png("tutorial-overview.png")
 }

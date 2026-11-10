@@ -4,7 +4,7 @@ use crate::*;
 
 use crate::extend::ProgressSink;
 use crate::render::Bitmap;
-use crate::{ExportOptions, ExportReport, RenderOptions, Result, Time, Timeline};
+use crate::{ExportOptions, ExportReport, RenderOptions, Result, Time, Timeline, TimelineBuilder};
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::Value;
 use std::sync::Arc;
@@ -95,23 +95,24 @@ impl Project {
         }
     }
 
-    /// Registers an infallible lazy factory, deferring duplicate/name errors.
+    /// Registers a lazy factory returning a timeline builder, deferring duplicate/name
+    /// errors. Builder failures are reported when the timeline is built.
     pub fn timeline(
         self,
         name: impl Into<String>,
-        build: impl Fn() -> Timeline + Send + Sync + 'static,
+        build: impl Fn() -> TimelineBuilder + Send + Sync + 'static,
     ) -> Self {
-        self.defer(|project| project.try_timeline(name, move || Ok(build())))
+        self.defer(|project| project.try_timeline(name, move || build().build()))
     }
 
     /// Registers a factory borrowing bounded, deserialized typed parameters.
     pub fn timeline_with<P: Default + Serialize + DeserializeOwned + 'static>(
         self,
         name: impl Into<String>,
-        build: impl Fn(&P) -> Timeline + Send + Sync + 'static,
+        build: impl Fn(&P) -> TimelineBuilder + Send + Sync + 'static,
     ) -> Self {
         self.defer(|project| {
-            project.try_timeline_with::<P>(name, move |parameters| Ok(build(&parameters)))
+            project.try_timeline_with::<P>(name, move |parameters| build(&parameters).build())
         })
     }
 
@@ -330,7 +331,6 @@ impl Project {
             }
             None => return Err(invalid(format!("Unknown timeline: {name}"))),
         };
-        film.timeline.validate()?;
         Ok(film)
     }
 
@@ -533,12 +533,14 @@ mod tests {
                 if parameters.seconds == 0 || parameters.seconds > 4 {
                     return Err(invalid("seconds must be 1..=4"));
                 }
-                Timeline::try_new(Size::new(4.0, 2.0), 10)?.try_track(|track| {
-                    track.try_push(
-                        (|_: &crate::SceneContext<'_>| crate::Node::empty())
-                            .with_duration(i64::from(parameters.seconds).seconds()),
-                    )
-                })
+                Timeline::try_new(Size::new(4.0, 2.0), 10)?
+                    .try_track(|track| {
+                        track.try_push(
+                            (|_: &crate::SceneContext<'_>| crate::Node::empty())
+                                .with_duration(i64::from(parameters.seconds).seconds()),
+                        )
+                    })?
+                    .build()
             },
         )?;
         assert_eq!(
@@ -586,7 +588,7 @@ mod tests {
         assert_eq!(
             project
                 .build("geometry", Some(serde_json::json!({})))?
-                .total_duration(),
+                .duration(),
             1.seconds()
         );
         assert!(

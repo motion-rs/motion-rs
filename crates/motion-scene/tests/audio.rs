@@ -131,8 +131,8 @@ fn buses_apply_gain_and_effects() {
         })
         .audio(AudioSpec::new("music.wav").bus("music"));
     let routed = files.compile(&routed).unwrap();
-    assert_eq!(routed.timeline().audio_buses().len(), 1);
-    assert!(routed.timeline().audio_master().limiter.is_some());
+    assert_eq!(routed.timeline().soundtrack().buses().len(), 1);
+    assert!(routed.timeline().soundtrack().master().limiter.is_some());
     let ratio =
         level(&mix(&routed), 0.5, 1.5) / level(&mix(&files.compile(&direct).unwrap()), 0.5, 1.5);
     assert!(

@@ -59,7 +59,8 @@ pub use authoring::scene::IntoSceneOutput;
 pub use authoring::scene::{SoundScene, scene, scene_with_sound};
 pub use authoring::skeleton::{Bone, BonePose, BoneTransform, Pose, Skeleton};
 pub use authoring::timeline::{
-    BoundaryAdjustment, BoundaryEdge, Clip, Soundtrack, Timeline, Track, TrackBuilder,
+    BoundaryAdjustment, BoundaryEdge, Clip, Diagnostics, Soundtrack, Timeline, TimelineBuilder,
+    TimelineWarning, Track, TrackBuilder,
 };
 pub use authoring::transition::Direction;
 pub use authoring::transition::{
@@ -126,7 +127,8 @@ pub mod prelude {
         camera, try_camera,
     };
     pub use crate::{
-        BoundaryAdjustment, BoundaryEdge, Clip, Soundtrack, Timeline, Track, TrackBuilder,
+        BoundaryAdjustment, BoundaryEdge, Clip, Soundtrack, Timeline, TimelineBuilder,
+        TimelineWarning, Track, TrackBuilder,
     };
     pub use crate::{
         Canvas, DrawCommand, DrawContext, Drawable, FillRule, LineCap, LineJoin, Paint, PathClip,

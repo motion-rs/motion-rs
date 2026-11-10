@@ -234,19 +234,22 @@ fn memo_reuses_nodes_and_distinguishes_float_inputs() {
 #[test]
 fn track_scene_accepts_drawables_tuples_and_result_outputs() {
     use crate::{Color, Scene, TimeLiteral, Timeline};
-    let timeline = Timeline::new(crate::Size::new(8.0, 8.0), 30).track(|track| {
-        track
-            .scene(1.seconds(), |_| {
-                Rect::new(0.0, 0.0, 2.0, 2.0).fill(Color::WHITE)
-            })
-            .scene(1.seconds(), |_| {
-                (
-                    Node::empty(),
-                    Rect::new(0.0, 0.0, 3.0, 3.0).fill(Color::WHITE),
-                )
-            })
-            .scene(1.seconds(), |_| Ok::<_, crate::Error>(Node::empty()))
-    });
+    let timeline = Timeline::new(crate::Size::new(8.0, 8.0), 30)
+        .track(|track| {
+            track
+                .scene(1.seconds(), |_| {
+                    Rect::new(0.0, 0.0, 2.0, 2.0).fill(Color::WHITE)
+                })
+                .scene(1.seconds(), |_| {
+                    (
+                        Node::empty(),
+                        Rect::new(0.0, 0.0, 3.0, 3.0).fill(Color::WHITE),
+                    )
+                })
+                .scene(1.seconds(), |_| Ok::<_, crate::Error>(Node::empty()))
+        })
+        .build()
+        .unwrap();
     assert_eq!(Scene::duration(&timeline), Some(3.seconds()));
     assert!(timeline.validate().is_ok());
 }
