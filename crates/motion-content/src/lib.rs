@@ -36,9 +36,9 @@ pub use image::{Fit, Image, ImageAsset, ImageLevel, Sampling};
 pub use particles::{
     Attractor, Ballistic, BounceBox, BurstEmitter, ColorOverLifetime, Converge, CurlNoise,
     DiskEmitter, Drag, Gravity, NoiseDrift, Orbit, Particle, ParticleEmitter, ParticleModifier,
-    ParticleSimulation, ParticleStyle, ParticleTrajectory, PathEmitter, PointEmitter, RectEmitter,
-    Seek, SimulationLimits, SimulationStats, SizeOverLifetime, SurfaceEmitter, TrajectoryModel,
-    Vortex, Wind,
+    ParticleSimulation, ParticleSimulationBuilder, ParticleStyle, ParticleTrajectory, PathEmitter,
+    PointEmitter, RectEmitter, Seek, SimulationLimits, SimulationStats, SizeOverLifetime,
+    SurfaceEmitter, TrajectoryModel, Vortex, Wind,
 };
 
 #[cfg(feature = "svg")]

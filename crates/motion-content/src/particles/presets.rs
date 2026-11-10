@@ -3,7 +3,7 @@
 //! ```
 //! use motion_content::particles::presets::{Preset, PresetOptions};
 //! use motion_core::{Rect, TimeLiteral};
-//! let sparks = Preset::Sparks.simulation(PresetOptions::new(7, 2.seconds(), Rect::new(0.0, 0.0, 320.0, 180.0)))?;
+//! let sparks = Preset::Sparks.simulation(PresetOptions::new(7, 2.seconds(), Rect::new(0.0, 0.0, 320.0, 180.0)))?.build()?;
 //! assert!(!sparks.sample(100.milliseconds())?.is_empty());
 //! # Ok::<(), motion_core::Error>(())
 //! ```
@@ -113,8 +113,11 @@ impl Preset {
         }
     }
 
-    /// Builds a lazy simulation; callers can append operators, replace style or override limits.
-    pub fn simulation(self, options: PresetOptions) -> Result<ParticleSimulation, ValidationError> {
+    /// Starts a lazy simulation; callers can append operators, replace style or override limits.
+    pub fn simulation(
+        self,
+        options: PresetOptions,
+    ) -> Result<ParticleSimulationBuilder, ValidationError> {
         motion_core::drawing::validate_rect(options.bounds, "particles.preset", "bounds")?;
         if options.duration <= Time::ZERO
             || options.duration.as_seconds() > 3600.0

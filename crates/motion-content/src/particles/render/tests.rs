@@ -146,17 +146,25 @@ fn configured_eight_segment_trails_match_plain_trail_upload_bytes() -> motion_co
     .with_clip_duration(1.seconds());
     let system = ParticleSimulation::new(7)
         .duration(1.seconds())
-        .emitter(BurstEmitter::new(Time::ZERO, 3, Point::new(16.0, 12.0)));
+        .emitter(BurstEmitter::new(Time::ZERO, 3, Point::new(16.0, 12.0)))
+        .build()?;
     let plain = ParticleStyle::Trails {
         length: 100.milliseconds(),
         width: 1.0,
     };
-    let first = system.clone().style(plain.clone()).try_render(&context)?;
+    let first = system
+        .clone()
+        .to_builder()
+        .style(plain.clone())
+        .build()?
+        .try_render(&context)?;
     let second = system
+        .to_builder()
         .style(plain.trails(TrailOptions {
             segments: 8,
             ..Default::default()
         }))
+        .build()?
         .try_render(&context)?;
     let first = first.compile(
         Size::new(32.0, 24.0),
@@ -689,12 +697,15 @@ mod gpu {
             &cache,
         )
         .with_clip_duration(1.seconds());
-        let system = ParticleSimulation::new(7).duration(1.seconds()).emitter(
-            BurstEmitter::new(Time::ZERO, 257, Point::new(16.0, 12.0))
-                .speed(2.0)
-                .depth_range(-1.0, 1.0)
-                .color([1.5, 0.2, 0.1, 0.2]),
-        );
+        let system = ParticleSimulation::new(7)
+            .duration(1.seconds())
+            .emitter(
+                BurstEmitter::new(Time::ZERO, 257, Point::new(16.0, 12.0))
+                    .speed(2.0)
+                    .depth_range(-1.0, 1.0)
+                    .color([1.5, 0.2, 0.1, 0.2]),
+            )
+            .build()?;
         let atlas = SpriteAtlas::new(
             &[
                 ProceduralSprite::SoftCircle.generate(4, 7)?,
@@ -785,14 +796,18 @@ mod gpu {
                 let input = if matches!(blend, ParticleBlend::Screen | ParticleBlend::Multiply) {
                     system
                         .clone()
+                        .to_builder()
                         .modifier(ColorOverLifetime::new(Arc::from([[0.08, 0.04, 0.02, 0.2]])))
+                        .build()?
                 } else {
                     system.clone()
                 };
                 let frame = prepared(
                     input
                         .clone()
+                        .to_builder()
                         .style(style.clone().blend(blend))
+                        .build()?
                         .try_render(&context)?,
                 )?;
                 let expected = frame.render_linear(limits)?;
@@ -1218,7 +1233,8 @@ mod gpu {
         let simulation = ParticleSimulation::new(42)
             .duration(1.seconds())
             .emitter(BurstEmitter::new(Time::ZERO, 3, Point::new(16.0, 12.0)).speed(3.0))
-            .modifier(Gravity::new(motion_core::Vector2::new(0.0, 4.0)));
+            .modifier(Gravity::new(motion_core::Vector2::new(0.0, 4.0)))
+            .build()?;
         for style in [styles[0].clone(), styles[3].clone()] {
             for space in [
                 motion_core::BlendSpace::LinearRgb,
@@ -1234,7 +1250,9 @@ mod gpu {
                 let frame = prepared(
                     simulation
                         .clone()
+                        .to_builder()
                         .style(style.clone())
+                        .build()?
                         .try_render(&context)?,
                 )?
                 .blend_space(space);

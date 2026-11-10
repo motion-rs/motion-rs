@@ -59,7 +59,7 @@ Then, once for the whole mix:
    effects, applies static gain, then its ducking. Unbussed clips bypass buses. A clip
    naming an undeclared bus fails.
 2. Bus meters record 50 ms RMS and sample-peak traces after effects, gain and ducking.
-3. Master (`MixedAudio::master`): static gain → optional loudness normalization →
+3. Master (`MixedAudio::apply_master`): static gain → optional loudness normalization →
    optional lookahead limiter → a reconstructed-peak correction below the ceiling.
    `Master::default()` is identity; `Master::safe()` is a -1 dB limiter without
    normalization.
@@ -86,7 +86,7 @@ implement `validate` without processing PCM.
 Consequence: `MixedAudio::from_window` is only a direct window when there are no
 effects, ducking, buses or master settings; otherwise it prepares the full timeline
 and crops, so effect and normalization clocks never restart at the window edge.
-`MixedAudio::window` likewise crops prepared output.
+`MixedAudio::crop` likewise crops prepared output.
 
 ## Determinism and Seek-Replay
 

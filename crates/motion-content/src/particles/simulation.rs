@@ -50,9 +50,9 @@ pub struct SimulationStats {
     pub work: u64,
 }
 
-/// Lazy fixed-step replay. The first clip duration fixes a shared preparation;
-/// reusing one cache instance with a different duration is rejected explicitly.
-/// Mutating any builder setting creates a fresh preparation identity.
+/// Lazy fixed-step replay, created by [`ParticleSimulationBuilder::build`]. The first clip
+/// duration fixes a shared preparation; reusing one cache instance with a different
+/// duration is rejected explicitly. The configuration never changes after building.
 #[derive(Clone)]
 pub struct ParticleSimulation {
     config: Arc<Config>,
@@ -61,12 +61,27 @@ pub struct ParticleSimulation {
     prepared: Arc<OnceLock<Result<Prepared, ValidationError>>>,
 }
 
+/// Collects a particle simulation's settings; [`build`](Self::build) validates them.
+#[derive(Clone)]
+pub struct ParticleSimulationBuilder {
+    config: Config,
+    pub(crate) style: Arc<ParticleStyle>,
+}
+
 impl ParticleSimulation {
-    /// Creates a lazy fixed-step simulation with an explicit deterministic seed. Cache the result in
-    /// `SceneContext::cache` rather than constructing one afresh for every frame.
+    /// Starts a lazy fixed-step simulation with an explicit deterministic seed. Cache the
+    /// built value with `SceneContext::try_cache` rather than building one afresh for every frame.
+    #[allow(clippy::new_ret_no_self)]
+    pub fn new(seed: u64) -> ParticleSimulationBuilder {
+        ParticleSimulationBuilder::new(seed)
+    }
+}
+
+impl ParticleSimulationBuilder {
+    /// Starts a simulation with an explicit deterministic seed.
     pub fn new(seed: u64) -> Self {
         Self {
-            config: Arc::new(Config {
+            config: Config {
                 seed,
                 duration: None,
                 step: Time::from_ticks(motion_core::TICKS_PER_SECOND / 240),
@@ -82,15 +97,13 @@ impl ParticleSimulation {
                 allow_reverse: false,
                 workers: 1,
                 limits: SimulationLimits::default(),
-            }),
+            },
             style: Arc::new(ParticleStyle::default()),
-            prepared: Arc::new(OnceLock::new()),
         }
     }
 
     fn change(mut self, update: impl FnOnce(&mut Config)) -> Self {
-        update(Arc::make_mut(&mut self.config));
-        self.prepared = Arc::new(OnceLock::new());
+        update(&mut self.config);
         self
     }
 
@@ -156,6 +169,43 @@ impl ParticleSimulation {
     /// Requests 1..=64 CPU workers; independent updates retain stable IDs and event order.
     pub fn workers(self, workers: usize) -> Self {
         self.change(|config| config.workers = workers)
+    }
+
+    /// Checks everything that does not depend on the clip duration and freezes the
+    /// simulation. Duration-dependent limits are checked when it is first sampled.
+    pub fn build(self) -> Result<ParticleSimulation, ValidationError> {
+        let config = &self.config;
+        if config
+            .duration
+            .is_some_and(|duration| duration <= Time::ZERO)
+            || config.step <= Time::ZERO
+            || config.interval == 0
+            || config.limits.max_particles == 0
+            || config.limits.max_work == 0
+            || config.emitters.len() > 32
+            || config.modifiers.len() > 32
+            || !config.time_scale.is_finite()
+        {
+            return Err(invalid(
+                "configuration",
+                "Invalid simulation duration/step/components/limits",
+            ));
+        }
+        Ok(ParticleSimulation {
+            config: Arc::new(self.config),
+            style: self.style,
+            prepared: Arc::new(OnceLock::new()),
+        })
+    }
+}
+
+impl ParticleSimulation {
+    /// Reopens the settings for editing; the new simulation prepares afresh.
+    pub fn to_builder(&self) -> ParticleSimulationBuilder {
+        ParticleSimulationBuilder {
+            config: self.config.as_ref().clone(),
+            style: self.style.clone(),
+        }
     }
 
     fn prepared(&self, duration: Option<Duration>) -> Result<&Prepared, ValidationError> {
@@ -535,7 +585,8 @@ mod tests {
                 max_bytes: 2048,
                 ..Default::default()
             })
-            .snapshot_interval(1);
+            .snapshot_interval(1)
+            .build()?;
         std::thread::scope(|scope| {
             for _ in 0..4 {
                 let simulation = &simulation;
@@ -559,10 +610,12 @@ mod tests {
         assert!(
             simulation
                 .clone()
+                .to_builder()
                 .limits(SimulationLimits {
                     max_bytes: 1,
                     ..Default::default()
                 })
+                .build()?
                 .sample(Time::ZERO)
                 .is_err()
         );
@@ -578,11 +631,12 @@ mod tests {
                     .speed(3.0)
                     .lifetime(700.milliseconds()),
             )
-            .modifier(Acceleration);
+            .modifier(Acceleration)
+            .build()?;
         let simulations = [
             plain.clone(),
-            plain.clone().workers(2),
-            plain.loop_period(900.milliseconds()),
+            plain.clone().to_builder().workers(2).build()?,
+            plain.to_builder().loop_period(900.milliseconds()).build()?,
         ];
         // Ascending runs that cross snapshots, repeat a time, jump back and wrap the loop.
         let times = [

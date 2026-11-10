@@ -6,9 +6,9 @@ use motion::particles::{
     Attractor, Boids, BounceBox, BurstEmitter, CircleCollider, CollisionResponse, CurlNoise,
     DiskEmitter, Drag, FlowField, FlowSource, ForceFalloff, Gravity, Inherit, Particle,
     ParticleCollisions, ParticleCurve, ParticleEmitter, ParticleEvent, ParticleEventKind,
-    ParticleSimulation, ParticleStyle, PointEmitter, PolygonCollider, RadialForce, RectEmitter,
-    SdfCollider, Seek, SegmentCollider, SignedDistanceGrid, SimulationLimits, Spring, SubEmitter,
-    Vortex, Wind,
+    ParticleSimulationBuilder, ParticleStyle, PointEmitter, PolygonCollider, RadialForce,
+    RectEmitter, SdfCollider, Seek, SegmentCollider, SignedDistanceGrid, SimulationLimits, Spring,
+    SubEmitter, Vortex, Wind,
 };
 use motion::prelude::*;
 use std::sync::Arc;
@@ -32,7 +32,7 @@ pub(super) fn gravity(parameters: DemoParameters) -> motion::Result<Study> {
     ))
 }
 
-fn cloud(parameters: DemoParameters) -> ParticleSimulation {
+fn cloud(parameters: DemoParameters) -> ParticleSimulationBuilder {
     base(parameters).emitter(
         DiskEmitter::new(VIEWPORT.center(), 102.0)
             .rate(f64::from(parameters.count))
@@ -259,7 +259,7 @@ pub(super) fn bounce(parameters: DemoParameters) -> motion::Result<Study> {
     Ok(study)
 }
 
-fn falling(parameters: DemoParameters, rate: f64) -> ParticleSimulation {
+fn falling(parameters: DemoParameters, rate: f64) -> ParticleSimulationBuilder {
     base(parameters)
         .emitter(
             RectEmitter::new(Rect::new(112.0, 16.0, 400.0, 18.0))

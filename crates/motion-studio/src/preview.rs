@@ -305,8 +305,8 @@ impl PreviewRenderer {
             let node = build(context);
             if settings.inspect {
                 let drawing = motion_core::DrawContext::default()
-                    .quality(settings.quality)
-                    .render_cache(
+                    .with_quality(settings.quality)
+                    .with_render_cache(
                         scene
                             .composition
                             .studio_render_options(motion_render::BackendPreference::automatic())

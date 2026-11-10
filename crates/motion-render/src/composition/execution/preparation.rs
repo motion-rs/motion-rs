@@ -20,8 +20,8 @@ impl FrameExecution<'_> {
             .as_ref()
             .unwrap_or_else(|| self.context().assets());
         let mut drawing = motion_core::DrawContext::default()
-            .quality(self.composition.options.quality)
-            .render_cache(self.options.cache.clone())
+            .with_quality(self.composition.options.quality)
+            .with_render_cache(self.options.cache.clone())
             .with_font_usage(self.options.font_usage.clone())
             .with_diagnostics(self.diagnostics.clone())
             .with_assets(assets);
@@ -91,7 +91,7 @@ impl FrameExecution<'_> {
         .with_clip_duration(self.duration)
         .with_assets(&assets)
         .with_diagnostics(&diagnostics)
-        .quality(self.composition.options.quality);
+        .with_quality(self.composition.options.quality);
         let started = self.timings.map(|_| std::time::Instant::now());
         let node = build(&context).with_scene_time(context.time());
         if let Some(started) = started {

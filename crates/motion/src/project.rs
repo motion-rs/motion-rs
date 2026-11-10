@@ -50,31 +50,31 @@ struct Entry {
     build_film: Arc<dyn Fn(Option<Value>) -> Result<Film> + Send + Sync>,
 }
 
-/// A bounded registry of lazy timeline factories. Registration/listing never
-/// invokes a timeline builder or initializes fonts, devices or encoders.
+/// A validated, immutable registry of lazy timeline factories. Listing never
+/// invokes a timeline builder or initializes fonts, devices or encoders. Create one
+/// with [`Project::new`] and [`ProjectBuilder::build`].
 #[derive(Clone)]
 pub struct Project {
     name: String,
     entries: Vec<Entry>,
     options: RenderOptions,
-    errors: motion_core::deferred::DeferredErrors,
 }
 
 impl Default for Project {
     fn default() -> Self {
-        Self::new("motion")
+        Self {
+            name: "motion".into(),
+            entries: Vec::new(),
+            options: RenderOptions::default(),
+        }
     }
 }
 
 impl Project {
-    /// Creates an empty registry with CPU/transparent still defaults.
-    pub fn new(name: impl Into<String>) -> Self {
-        Self {
-            name: name.into(),
-            entries: Vec::new(),
-            options: RenderOptions::default(),
-            errors: Default::default(),
-        }
+    /// Starts an empty registry with CPU/transparent still defaults.
+    #[allow(clippy::new_ret_no_self)]
+    pub fn new(name: impl Into<String>) -> ProjectBuilder {
+        ProjectBuilder::new(name)
     }
 
     /// Project name used by command-line help and diagnostics.
@@ -82,137 +82,9 @@ impl Project {
         &self.name
     }
 
-    /// Reports all deferred registration failures without invoking factories.
-    pub fn validate(&self) -> Result<()> {
-        let mut errors = self.errors.as_slice().to_vec();
-        if self.name.trim().is_empty() || self.name.len() > 256 {
-            errors.push(Arc::new(invalid("Project name requires 1..=256 bytes")));
-        }
-        if errors.is_empty() {
-            Ok(())
-        } else {
-            Err(crate::Error::BuildErrors(errors))
-        }
-    }
-
-    /// Registers a lazy factory returning a timeline builder, deferring duplicate/name
-    /// errors. Builder failures are reported when the timeline is built.
-    pub fn timeline(
-        self,
-        name: impl Into<String>,
-        build: impl Fn() -> TimelineBuilder + Send + Sync + 'static,
-    ) -> Self {
-        self.defer(|project| project.try_timeline(name, move || build().build()))
-    }
-
-    /// Registers a factory borrowing bounded, deserialized typed parameters.
-    pub fn timeline_with<P: Default + Serialize + DeserializeOwned + 'static>(
-        self,
-        name: impl Into<String>,
-        build: impl Fn(&P) -> TimelineBuilder + Send + Sync + 'static,
-    ) -> Self {
-        self.defer(|project| {
-            project.try_timeline_with::<P>(name, move |parameters| build(&parameters).build())
-        })
-    }
-
-    /// Sets rendering/resources shared by this project's CLI commands.
-    pub fn render_options(mut self, options: RenderOptions) -> Self {
-        self.options = options;
-        self
-    }
-
     /// Returns the same defaults available to programmatic render/export callers.
     pub fn options(&self) -> &RenderOptions {
         &self.options
-    }
-
-    /// Registers a fallible, non-parameterized timeline builder.
-    pub fn try_timeline(
-        self,
-        name: impl Into<String>,
-        build: impl Fn() -> Result<Timeline> + Send + Sync + 'static,
-    ) -> Result<Self> {
-        self.register(
-            ProjectTimelineInfo {
-                name: name.into(),
-                defaults: None,
-            },
-            move |parameters| {
-                if parameters.is_some() {
-                    return Err(invalid("Timeline does not accept parameters"));
-                }
-                build().map(Film::plain)
-            },
-        )
-    }
-
-    /// Registers typed serde object parameters. Top-level overrides merge over
-    /// Default's serialized fields; unknown fields fail before calling the builder.
-    /// Defaults/custom deserializers must be deterministic and free of side effects.
-    pub fn try_timeline_with<P: Default + Serialize + DeserializeOwned + 'static>(
-        self,
-        name: impl Into<String>,
-        build: impl Fn(P) -> Result<Timeline> + Send + Sync + 'static,
-    ) -> Result<Self> {
-        let defaults = serde_json::to_value(P::default()).map_err(json_error)?;
-        if !defaults.is_object()
-            || serde_json::to_vec(&defaults).map_err(json_error)?.len() > MAX_PARAMETERS
-        {
-            return Err(invalid(
-                "Parameters require a serializable object no larger than 1 MiB",
-            ));
-        }
-        let saved = defaults.clone();
-        self.register(
-            ProjectTimelineInfo {
-                name: name.into(),
-                defaults: Some(defaults),
-            },
-            move |parameters| {
-                let mut merged = saved.clone();
-                if let Some(parameters) = parameters {
-                    let values = parameters
-                        .as_object()
-                        .ok_or_else(|| invalid("Parameters must be a JSON object"))?;
-                    let target = merged.as_object_mut().expect("validated defaults");
-                    for (key, value) in values {
-                        if !target.contains_key(key) {
-                            return Err(invalid(format!("Unknown parameter: {key}")));
-                        }
-                        target.insert(key.clone(), value.clone());
-                    }
-                }
-                build(serde_json::from_value(merged).map_err(json_error)?).map(Film::plain)
-            },
-        )
-    }
-
-    /// Registers a declarative JSON document, read and compiled lazily on each build.
-    /// Relative resources resolve against the document's directory; its look's
-    /// display stage applies to this project's stills and exports. `--params`
-    /// overrides the parameters the document declares; `list` cannot show them
-    /// because listing never reads files.
-    #[cfg(feature = "declarative")]
-    pub fn document(self, name: impl Into<String>, path: impl Into<std::path::PathBuf>) -> Self {
-        self.defer(|project| project.try_document(name, path))
-    }
-
-    /// Registers a declarative JSON document, failing immediately for invalid names.
-    #[cfg(feature = "declarative")]
-    pub fn try_document(
-        self,
-        name: impl Into<String>,
-        path: impl Into<std::path::PathBuf>,
-    ) -> Result<Self> {
-        let path = path.into();
-        self.register(
-            ProjectTimelineInfo {
-                name: name.into(),
-                defaults: None,
-            },
-            move |parameters| Film::document(&path, parameters.as_ref()),
-        )
     }
 
     /// Lists registration metadata without constructing any timeline.
@@ -226,7 +98,7 @@ impl Project {
     /// Builds one selected timeline after bounded parameter validation.
     ///
     /// With feature `declarative`, an unregistered name ending in `.json` loads
-    /// that document file; see [`Project::document`].
+    /// that document file; see [`ProjectBuilder::document`].
     pub fn build(&self, name: &str, parameters: Option<Value>) -> Result<Timeline> {
         Ok(self.film(name, parameters)?.timeline)
     }
@@ -317,7 +189,6 @@ impl Project {
     }
 
     fn film(&self, name: &str, parameters: Option<Value>) -> Result<Film> {
-        self.validate()?;
         if let Some(parameters) = &parameters
             && serde_json::to_vec(parameters).map_err(json_error)?.len() > MAX_PARAMETERS
         {
@@ -332,6 +203,178 @@ impl Project {
             None => return Err(invalid(format!("Unknown timeline: {name}"))),
         };
         Ok(film)
+    }
+}
+
+/// Collects timeline registrations and render defaults; [`build`](Self::build) validates
+/// them and returns the [`Project`].
+#[derive(Clone)]
+pub struct ProjectBuilder {
+    name: String,
+    entries: Vec<Entry>,
+    options: RenderOptions,
+    errors: motion_core::deferred::DeferredErrors,
+}
+
+impl Default for ProjectBuilder {
+    fn default() -> Self {
+        Self::new("motion")
+    }
+}
+
+impl ProjectBuilder {
+    /// Starts an empty registry with CPU/transparent still defaults.
+    pub fn new(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            entries: Vec::new(),
+            options: RenderOptions::default(),
+            errors: Default::default(),
+        }
+    }
+
+    /// Checks every registration made so far, reporting all deferred failures at once
+    /// without invoking factories, and freezes the registry.
+    pub fn build(self) -> Result<Project> {
+        let mut errors = self.errors.as_slice().to_vec();
+        if self.name.trim().is_empty() || self.name.len() > 256 {
+            errors.push(Arc::new(invalid("Project name requires 1..=256 bytes")));
+        }
+        if !errors.is_empty() {
+            return Err(crate::Error::BuildErrors(errors));
+        }
+        Ok(Project {
+            name: self.name,
+            entries: self.entries,
+            options: self.options,
+        })
+    }
+
+    /// Builds the project and runs its command line, printing errors with Display and
+    /// returning a process exit code.
+    pub fn run(self) -> std::process::ExitCode {
+        match self.build() {
+            Ok(project) => project.run(),
+            Err(error) => {
+                eprintln!("{error}");
+                std::process::ExitCode::FAILURE
+            }
+        }
+    }
+
+    /// Registers a lazy factory returning a timeline builder, deferring duplicate/name
+    /// errors. Builder failures are reported when the timeline is built.
+    pub fn timeline(
+        self,
+        name: impl Into<String>,
+        build: impl Fn() -> TimelineBuilder + Send + Sync + 'static,
+    ) -> Self {
+        self.defer(|project| project.try_timeline(name, move || build().build()))
+    }
+
+    /// Registers a factory borrowing bounded, deserialized typed parameters.
+    pub fn timeline_with<P: Default + Serialize + DeserializeOwned + 'static>(
+        self,
+        name: impl Into<String>,
+        build: impl Fn(&P) -> TimelineBuilder + Send + Sync + 'static,
+    ) -> Self {
+        self.defer(|project| {
+            project.try_timeline_with::<P>(name, move |parameters| build(&parameters).build())
+        })
+    }
+
+    /// Sets rendering/resources shared by this project's CLI commands.
+    pub fn render_options(mut self, options: RenderOptions) -> Self {
+        self.options = options;
+        self
+    }
+
+    /// Registers a fallible, non-parameterized timeline builder.
+    pub fn try_timeline(
+        self,
+        name: impl Into<String>,
+        build: impl Fn() -> Result<Timeline> + Send + Sync + 'static,
+    ) -> Result<Self> {
+        self.register(
+            ProjectTimelineInfo {
+                name: name.into(),
+                defaults: None,
+            },
+            move |parameters| {
+                if parameters.is_some() {
+                    return Err(invalid("Timeline does not accept parameters"));
+                }
+                build().map(Film::plain)
+            },
+        )
+    }
+
+    /// Registers typed serde object parameters. Top-level overrides merge over
+    /// Default's serialized fields; unknown fields fail before calling the builder.
+    /// Defaults/custom deserializers must be deterministic and free of side effects.
+    pub fn try_timeline_with<P: Default + Serialize + DeserializeOwned + 'static>(
+        self,
+        name: impl Into<String>,
+        build: impl Fn(P) -> Result<Timeline> + Send + Sync + 'static,
+    ) -> Result<Self> {
+        let defaults = serde_json::to_value(P::default()).map_err(json_error)?;
+        if !defaults.is_object()
+            || serde_json::to_vec(&defaults).map_err(json_error)?.len() > MAX_PARAMETERS
+        {
+            return Err(invalid(
+                "Parameters require a serializable object no larger than 1 MiB",
+            ));
+        }
+        let saved = defaults.clone();
+        self.register(
+            ProjectTimelineInfo {
+                name: name.into(),
+                defaults: Some(defaults),
+            },
+            move |parameters| {
+                let mut merged = saved.clone();
+                if let Some(parameters) = parameters {
+                    let values = parameters
+                        .as_object()
+                        .ok_or_else(|| invalid("Parameters must be a JSON object"))?;
+                    let target = merged.as_object_mut().expect("validated defaults");
+                    for (key, value) in values {
+                        if !target.contains_key(key) {
+                            return Err(invalid(format!("Unknown parameter: {key}")));
+                        }
+                        target.insert(key.clone(), value.clone());
+                    }
+                }
+                build(serde_json::from_value(merged).map_err(json_error)?).map(Film::plain)
+            },
+        )
+    }
+
+    /// Registers a declarative JSON document, read and compiled lazily on each build.
+    /// Relative resources resolve against the document's directory; its look's
+    /// display stage applies to this project's stills and exports. `--params`
+    /// overrides the parameters the document declares; `list` cannot show them
+    /// because listing never reads files.
+    #[cfg(feature = "declarative")]
+    pub fn document(self, name: impl Into<String>, path: impl Into<std::path::PathBuf>) -> Self {
+        self.defer(|project| project.try_document(name, path))
+    }
+
+    /// Registers a declarative JSON document, failing immediately for invalid names.
+    #[cfg(feature = "declarative")]
+    pub fn try_document(
+        self,
+        name: impl Into<String>,
+        path: impl Into<std::path::PathBuf>,
+    ) -> Result<Self> {
+        let path = path.into();
+        self.register(
+            ProjectTimelineInfo {
+                name: name.into(),
+                defaults: None,
+            },
+            move |parameters| Film::document(&path, parameters.as_ref()),
+        )
     }
 
     fn register(
@@ -420,12 +463,14 @@ mod tests {
         use super::*;
         let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let observed = calls.clone();
-        let project = Project::new("cli-fixture").timeline("main", move || {
-            observed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            Timeline::new(Size::new(3.0, 3.0), 4).track(|track| {
-                track.push(crate::scene(|_| Node::empty()).with_duration(1.seconds()))
+        let project = Project::new("cli-fixture")
+            .timeline("main", move || {
+                observed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                Timeline::new(Size::new(3.0, 3.0), 4).track(|track| {
+                    track.push(crate::scene(|_| Node::empty()).with_duration(1.seconds()))
+                })
             })
-        });
+            .build()?;
         assert!(
             matches!(project.cli(["--help".into()])?, ProjectOutcome::Help(help) if help.contains("cli-fixture") && help.contains("validate") && !help.contains("<app>"))
         );
@@ -491,17 +536,22 @@ mod tests {
     #[test]
     fn fluent_registration_collects_errors_without_invoking_factories() {
         use super::*;
-        let project = Project::new("deferred")
+        let error = Project::new("deferred")
             .timeline("main", || Timeline::new(Size::new(8.0, 4.0), 30))
             .timeline("main", || panic!("duplicate factory must stay lazy"))
-            .timeline("", || panic!("invalid factory must stay lazy"));
-        assert_eq!(project.validate().unwrap_err().build_errors().len(), 2);
-        assert!(project.cli(["list".into()]).is_err());
-        let project = Project::new("valid").timeline("main", || {
-            Timeline::new(Size::new(8.0, 4.0), 30).track(|track| {
-                track.push(crate::scene(|_| Node::empty()).with_duration(1.seconds()))
+            .timeline("", || panic!("invalid factory must stay lazy"))
+            .build()
+            .err()
+            .unwrap();
+        assert_eq!(error.build_errors().len(), 2);
+        let project = Project::new("valid")
+            .timeline("main", || {
+                Timeline::new(Size::new(8.0, 4.0), 30).track(|track| {
+                    track.push(crate::scene(|_| Node::empty()).with_duration(1.seconds()))
+                })
             })
-        });
+            .build()
+            .unwrap();
         assert_eq!(project.build("main", None).unwrap().frame_count(), 30);
     }
 
@@ -526,9 +576,8 @@ mod tests {
     fn registry_listing_parameters_and_cli_share_config_without_loading_resources() -> Result<()> {
         let calls = Arc::new(AtomicUsize::new(0));
         let count = calls.clone();
-        let project = Project::new("motion").try_timeline_with::<Parameters>(
-            "geometry",
-            move |parameters| {
+        let project = Project::new("motion")
+            .try_timeline_with::<Parameters>("geometry", move |parameters| {
                 count.fetch_add(1, Ordering::SeqCst);
                 if parameters.seconds == 0 || parameters.seconds > 4 {
                     return Err(invalid("seconds must be 1..=4"));
@@ -541,8 +590,8 @@ mod tests {
                         )
                     })?
                     .build()
-            },
-        )?;
+            })?
+            .build()?;
         assert_eq!(
             project.list()[0].defaults,
             Some(serde_json::json!({"seconds": 1}))

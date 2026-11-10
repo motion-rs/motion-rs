@@ -4,6 +4,8 @@ use super::Compiler;
 use super::element::Built;
 use super::style::Style;
 use crate::particles::{ParticlesSpec, TrajectorySpec};
+#[cfg(feature = "particles")]
+use motion_content::ParticleSimulationBuilder;
 use std::sync::Arc;
 
 #[cfg(feature = "particles")]
@@ -128,7 +130,13 @@ impl Compiler<'_> {
                 ..SimulationLimits::default()
             });
         }
-        let simulation = simulation.style(particle_style?);
+        let simulation = match simulation.style(particle_style?).build() {
+            Ok(simulation) => simulation,
+            Err(error) => {
+                self.error(path, "simulation", error.to_string());
+                return None;
+            }
+        };
         Some(Built::with_context(true, move |context| {
             simulation.try_render(context).unwrap_or_else(failure_node)
         }))
@@ -339,10 +347,10 @@ impl Compiler<'_> {
     #[cfg(feature = "particles")]
     fn modifier(
         &mut self,
-        simulation: ParticleSimulation,
+        simulation: ParticleSimulationBuilder,
         modifier: &ModifierSpec,
         path: &str,
-    ) -> Option<ParticleSimulation> {
+    ) -> Option<ParticleSimulationBuilder> {
         let vector = |[x, y]: [f64; 2]| Vector2::new(x, y);
         Some(match modifier {
             ModifierSpec::Gravity(value) => simulation.modifier(Gravity::new(vector(*value))),

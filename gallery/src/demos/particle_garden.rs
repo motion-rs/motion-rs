@@ -90,7 +90,7 @@ struct Rig {
 pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
     let scale = f64::from(parameters.seconds) / 8.0;
     let window = |index: usize| seconds((ACTS[index].1 - ACTS[index].0) * scale);
-    let (dust, ember_sim) = embers(parameters.seed, window(3));
+    let (dust, ember_sim) = embers(parameters.seed, window(3))?;
     let mut look = Look::cinematic();
     look.shutter = None;
     // Bloom and vignette carry the cinematic feel; grade, halation and dispersion cost more than they add.
@@ -102,7 +102,7 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
     });
     let rig = Arc::new(Rig {
         fireworks: fireworks(parameters.seed, window(0))?,
-        flock: murmuration(parameters.seed, window(1)),
+        flock: murmuration(parameters.seed, window(1))?,
         dissolve: OnceLock::new(),
         dust,
         embers: ember_sim,

@@ -357,3 +357,40 @@ fn explicit_duration_shorter_than_content_warns_and_audio_extends_inferred_lengt
     assert!(with_audio.diagnostics().is_empty());
     Ok(())
 }
+
+#[test]
+fn clips_take_their_duration_at_placement_and_can_start_inside_the_scene() -> crate::Result {
+    let observed = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let calls = observed.clone();
+    let probe = move |context: &SceneContext<'_>| {
+        calls.lock().unwrap().push(context.time());
+        Node::empty()
+    };
+    let timeline = Timeline::try_new(size(), 10)?
+        .try_track(|track| {
+            track
+                .try_push_for(1.seconds(), probe.clone())?
+                .try_push_trimmed(500.milliseconds(), 1.seconds(), probe.clone())
+        })?
+        .build()?;
+    assert_eq!(timeline.duration(), 2.seconds());
+    let clips = timeline.tracks()[0].clips();
+    assert_eq!(clips[0].offset(), Time::ZERO);
+    assert_eq!(clips[1].offset(), 500.milliseconds());
+    let cache = SceneCache::new(0);
+    for time in [200.milliseconds(), 1200.milliseconds()] {
+        let context = SceneContext::new(time, FrameRate::from(10), size(), &cache);
+        timeline.render(&context);
+    }
+    assert_eq!(
+        observed.lock().unwrap().as_slice(),
+        [200.milliseconds(), 700.milliseconds()]
+    );
+    assert!(
+        Timeline::try_new(size(), 10)?
+            .try_track(|track| track.try_push_trimmed((-1).seconds(), 1.seconds(), probe.clone()))
+            .is_err()
+    );
+    assert!(probe.clone().try_with_duration((-1).seconds()).is_err());
+    Ok(())
+}

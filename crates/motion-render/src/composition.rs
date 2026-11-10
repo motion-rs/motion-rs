@@ -47,7 +47,7 @@ impl FrameClock {
 /// Scene callbacks are pure functions of [`motion_core::SceneContext`].
 /// The frame clock is explicit. Dimensions are output pixels.
 ///
-/// Rendering policy lives in one [`RenderOptions`]: defaults select CPU rendering
+/// Rendering policy lives in one [`crate::RenderOptions`]: defaults select CPU rendering
 /// without font discovery, and the opaque Snapshot background is white unless
 /// `RenderOptions::background` is set. Validation happens in preflight and rendering.
 /// Scene callbacks must be deterministic functions of their time and fixed inputs;

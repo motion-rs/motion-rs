@@ -218,6 +218,8 @@ fn blend_source(style: ParticleStyle) -> ParticleSimulation {
                 .color([0.5, 0.1, 0.05, 0.6]),
         )
         .style(style)
+        .build()
+        .unwrap()
 }
 
 #[test]

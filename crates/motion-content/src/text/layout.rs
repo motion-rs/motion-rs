@@ -190,7 +190,7 @@ impl Text {
             return self.layout(fonts);
         }
         let fonts = context
-            .configured_render_cache()
+            .render_cache()
             .map_or_else(|| fonts.clone(), |cache| fonts.with_render_cache(cache));
         self.validate_layout()?;
         let key = self.layout_key();

@@ -17,13 +17,14 @@
 //!     &cache,
 //! )
 //! .with_clip_duration(100.milliseconds());
-//! let simulation = context.cache(("sparks", 42_u64, 100_i64), || {
+//! let simulation = context.try_cache(("sparks", 42_u64, 100_i64), || {
 //!     ParticleSimulation::new(42)
 //!         .duration(100.milliseconds())
 //!         .emitter(BurstEmitter::new(Time::ZERO, 4, Point::new(8.0, 8.0)).speed(0.0))
 //!         .modifier(Gravity::new(Vector2::new(0.0, 10.0)))
 //!         .style(ParticleStyle::Dots { radius: 2.0 })
-//! });
+//!         .build()
+//! })?;
 //! assert_eq!(simulation.sample(50.milliseconds())?.len(), 4);
 //! let frame = simulation
 //!     .try_render(&context)?
@@ -78,7 +79,9 @@ pub use events::{Inherit, ParticleEvent, ParticleEventKind, SubEmitter};
 pub use forces::{
     Boids, CurlNoise, FlowField, FlowSource, ForceFalloff, ParticleCollisions, RadialForce, Spring,
 };
-pub use simulation::{ParticleSimulation, SimulationLimits, SimulationStats};
+pub use simulation::{
+    ParticleSimulation, ParticleSimulationBuilder, SimulationLimits, SimulationStats,
+};
 pub use sprites::{ProceduralSprite, SpriteAtlas, SpriteSheet, SpriteSheetMode};
 pub use style::{
     BokehShape, ParticleBlend, ParticleShape, ParticleStyle, SpeedStretch, StyleOptions,

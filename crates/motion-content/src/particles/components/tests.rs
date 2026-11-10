@@ -24,7 +24,8 @@ fn emitters_modifiers_paths_and_surfaces_share_fixed_step_protocol() -> motion_c
         .modifier(SizeOverLifetime {
             start: 1.0,
             end: 0.0,
-        });
+        })
+        .build()?;
     assert!(simulation.sample(Time::ZERO)?.is_empty());
     assert_eq!(simulation.sample(50.milliseconds())?.len(), 2);
     assert!(simulation.sample(50.milliseconds())?[0].position[1] > 0.0);
@@ -83,7 +84,8 @@ fn surface_animation_rates_and_all_modifier_callbacks_replay_without_hidden_stat
             targets: Arc::from([Point::new(2.0, 2.0)]),
             strength: 0.5,
         })
-        .modifier(ColorOverLifetime::new(Arc::from([[1.0; 4], [0.0; 4]])));
+        .modifier(ColorOverLifetime::new(Arc::from([[1.0; 4], [0.0; 4]])))
+        .build()?;
     let expected = simulation.sample(150.milliseconds())?;
     assert!(!expected.is_empty());
     simulation.sample(10.milliseconds())?;

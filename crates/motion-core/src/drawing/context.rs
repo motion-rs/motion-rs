@@ -75,7 +75,7 @@ impl DrawContext {
     }
 
     /// Selects an explicit approximation policy for deferred content recording.
-    pub fn quality(mut self, quality: RenderQuality) -> Self {
+    pub fn with_quality(mut self, quality: RenderQuality) -> Self {
         self.quality = quality;
         self
     }
@@ -190,14 +190,14 @@ impl DrawContext {
     }
 
     /// Supplies partitioned pure caches shared by rendering workers.
-    pub fn render_cache(mut self, cache: crate::RenderCache) -> Self {
+    pub fn with_render_cache(mut self, cache: crate::RenderCache) -> Self {
         self.layout_cache = Some(cache.partition(crate::CachePartition::Paragraph).clone());
         self.render_cache = Some(cache);
         self
     }
 
     /// Shared cache partitions, absent for standalone uncached drawing.
-    pub fn configured_render_cache(&self) -> Option<&crate::RenderCache> {
+    pub fn render_cache(&self) -> Option<&crate::RenderCache> {
         self.render_cache.as_ref()
     }
 
@@ -307,7 +307,9 @@ mod quality_tests {
             DrawContext::default().render_quality(),
             RenderQuality::Final
         );
-        let context = DrawContext::new(0.5).unwrap().quality(RenderQuality::Draft);
+        let context = DrawContext::new(0.5)
+            .unwrap()
+            .with_quality(RenderQuality::Draft);
         assert_eq!(context.clone().render_quality(), RenderQuality::Draft);
         assert_eq!(context.device_scale(), 0.5);
     }

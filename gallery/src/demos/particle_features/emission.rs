@@ -102,12 +102,14 @@ pub(super) fn text(
         .family("")
         .size(76.0)
         .fill(Color::from_hex(0x54dfb2));
-    Ok(base(parameters).emitter(
-        SurfaceEmitter::from_text(&text, &draw)?
-            .rate(f64::from(parameters.count) * 4.0)
-            .speed(4.0)
-            .lifetime(3.seconds()),
-    ))
+    base(parameters)
+        .emitter(
+            SurfaceEmitter::from_text(&text, &draw)?
+                .rate(f64::from(parameters.count) * 4.0)
+                .speed(4.0)
+                .lifetime(3.seconds()),
+        )
+        .build()
 }
 
 pub(super) fn ballistic(parameters: DemoParameters) -> motion::Result<Study> {

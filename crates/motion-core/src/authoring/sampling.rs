@@ -360,16 +360,21 @@ mod tests {
             (crate::RenderQuality::Final, 4),
         ] {
             let mut calls = 0;
-            capture(&context.quality(quality), Time::from_ticks(100), 4, |_| {
-                calls += 1;
-                Node::empty()
-            })
+            capture(
+                &context.with_quality(quality),
+                Time::from_ticks(100),
+                4,
+                |_| {
+                    calls += 1;
+                    Node::empty()
+                },
+            )
             .unwrap();
             assert_eq!(calls, expected);
         }
         assert!(
             capture(
-                &context.quality(crate::RenderQuality::Draft),
+                &context.with_quality(crate::RenderQuality::Draft),
                 Time::from_ticks(100),
                 0,
                 |_| panic!("invalid shutter must not evaluate")

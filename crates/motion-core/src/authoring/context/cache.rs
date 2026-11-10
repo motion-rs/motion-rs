@@ -127,6 +127,29 @@ impl SceneCache {
         key: Key,
         build: impl FnOnce() -> Value,
     ) -> Arc<Value> {
+        match self.get_cached(
+            key,
+            || Ok::<_, std::convert::Infallible>(build()),
+            |_| 0,
+            false,
+            Location::caller(),
+        ) {
+            Ok(value) => value,
+            Err(never) => match never {},
+        }
+    }
+
+    /// Like [`get`](Self::get) for a fallible builder; failures are returned and never cached.
+    #[track_caller]
+    pub(super) fn try_get<
+        Key: Eq + Hash + Send + Sync + 'static,
+        Value: Send + Sync + 'static,
+        Error,
+    >(
+        &self,
+        key: Key,
+        build: impl FnOnce() -> Result<Value, Error>,
+    ) -> Result<Arc<Value>, Error> {
         self.get_cached(key, build, |_| 0, false, Location::caller())
     }
 
@@ -138,7 +161,16 @@ impl SceneCache {
         build: impl FnOnce() -> Value,
         cost: impl FnOnce(&Value) -> usize,
     ) -> Arc<Value> {
-        self.get_cached(key, build, cost, true, Location::caller())
+        match self.get_cached(
+            key,
+            || Ok::<_, std::convert::Infallible>(build()),
+            cost,
+            true,
+            Location::caller(),
+        ) {
+            Ok(value) => value,
+            Err(never) => match never {},
+        }
     }
 
     fn content_location() -> &'static Location<'static> {
@@ -172,20 +204,29 @@ impl SceneCache {
         value: Value,
         cost: impl FnOnce(&Value) -> usize,
     ) -> Arc<Value> {
-        self.get_cached(key, || value, cost, true, Self::content_location())
+        match self.get_cached(
+            key,
+            || Ok::<_, std::convert::Infallible>(value),
+            cost,
+            true,
+            Self::content_location(),
+        ) {
+            Ok(value) => value,
+            Err(never) => match never {},
+        }
     }
 
     #[track_caller]
-    fn get_cached<Key: Eq + Hash + Send + Sync + 'static, Value: Send + Sync + 'static>(
+    fn get_cached<Key: Eq + Hash + Send + Sync + 'static, Value: Send + Sync + 'static, Error>(
         &self,
         key: Key,
-        build: impl FnOnce() -> Value,
+        build: impl FnOnce() -> Result<Value, Error>,
         cost: impl FnOnce(&Value) -> usize,
         accounted: bool,
         location: &'static Location<'static>,
-    ) -> Arc<Value> {
+    ) -> Result<Arc<Value>, Error> {
         if self.capacity == 0 || (accounted && self.max_bytes == 0) {
-            return Arc::new(build());
+            return build().map(Arc::new);
         }
         let mut hasher = DefaultHasher::new();
         key.hash(&mut hasher);
@@ -195,9 +236,9 @@ impl SceneCache {
             hash: hasher.finish(),
         };
         if let Some(value) = self.find(&cache_key, &key) {
-            return value;
+            return Ok(value);
         }
-        let value = Arc::new(build());
+        let value = Arc::new(build()?);
         let bytes = if accounted {
             cost(value.as_ref())
                 .max(std::mem::size_of::<Value>().saturating_add(std::mem::size_of::<Key>()))
@@ -205,7 +246,7 @@ impl SceneCache {
             0
         };
         if bytes > self.max_bytes {
-            return value;
+            return Ok(value);
         }
         let mut entries = self.entries.lock().expect("scene cache lock poisoned");
         if let Some(index) = entries
@@ -216,7 +257,7 @@ impl SceneCache {
             let stored = entry.value.clone();
             entries.push_back(entry);
             drop(entries);
-            return stored.downcast().unwrap_or_else(|_| unreachable!());
+            return Ok(stored.downcast().unwrap_or_else(|_| unreachable!()));
         }
         let mut retained: usize = entries.iter().map(|entry| entry.bytes).sum();
         let mut evicted = Vec::new();
@@ -235,7 +276,7 @@ impl SceneCache {
         });
         drop(entries);
         drop(evicted);
-        value
+        Ok(value)
     }
 
     fn find<Key: Eq + 'static, Value: Send + Sync + 'static>(

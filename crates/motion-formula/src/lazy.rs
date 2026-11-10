@@ -120,7 +120,7 @@ impl Formula {
         if self.selections.len() > 1024 {
             return Err(invalid("Formula exceeds 1024 authored selections"));
         }
-        let compiled = if let Some(cache) = context.configured_render_cache() {
+        let compiled = if let Some(cache) = context.render_cache() {
             static COMPILER: OnceLock<FormulaCompiler> = OnceLock::new();
             COMPILER
                 .get_or_init(FormulaCompiler::new)

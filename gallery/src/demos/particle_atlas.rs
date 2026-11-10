@@ -38,7 +38,7 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
                 PresetOptions::new(parameters.seed, SIMULATION_SECONDS.seconds(), VIEWPORT);
             options.density = f64::from(parameters.count) / 72.0;
             options.logo = Some(logo.clone());
-            preset.simulation(options)
+            preset.simulation(options)?.build()
         })
         .collect::<Result<Vec<_>, _>>()?;
     Timeline::new(Size::new(960.0, 540.0), 30)
@@ -277,11 +277,13 @@ mod tests {
 
     #[test]
     fn fireworks_page_reaches_secondary_bursts() -> motion::Result {
-        let simulation = Preset::Fireworks.simulation(PresetOptions::new(
-            DemoParameters::default().seed,
-            SIMULATION_SECONDS.seconds(),
-            VIEWPORT,
-        ))?;
+        let simulation = Preset::Fireworks
+            .simulation(PresetOptions::new(
+                DemoParameters::default().seed,
+                SIMULATION_SECONDS.seconds(),
+                VIEWPORT,
+            ))?
+            .build()?;
         let particles = simulation.sample(sample_time(Preset::Fireworks, 0.95))?;
         assert!(particles.iter().any(|particle| particle.custom[3] == 2.0));
         Ok(())
@@ -315,7 +317,8 @@ mod tests {
         })?;
         let empty_simulations = vec![
             ParticleSimulation::new(0)
-                .duration(SIMULATION_SECONDS.seconds());
+                .duration(SIMULATION_SECONDS.seconds())
+                .build()?;
             Preset::ALL.len()
         ];
         let background = Timeline::new(Size::new(960.0, 540.0), 30)

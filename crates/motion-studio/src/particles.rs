@@ -14,7 +14,7 @@ pub fn particle_presets(
 ) -> motion_core::Result<Vec<StudioScene>> {
     let mut scenes = Vec::new();
     for preset in Preset::ALL {
-        let simulation = preset.simulation(options.clone())?;
+        let simulation = preset.simulation(options.clone())?.build()?;
         let design = Size::new(options.bounds.width(), options.bounds.height());
         scenes.push(StudioScene::new(
             preset.name(),

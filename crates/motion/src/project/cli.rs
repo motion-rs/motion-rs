@@ -44,7 +44,6 @@ impl Project {
     /// `arguments` excludes the program name. Help requests, including no arguments at all,
     /// return [`ProjectOutcome::Help`]; malformed arguments are errors.
     pub fn cli(&self, arguments: impl IntoIterator<Item = String>) -> Result<ProjectOutcome> {
-        self.validate()?;
         let program = self.program_name();
         let arguments = std::iter::once(program).chain(arguments);
         let mut matches = match self.command().try_get_matches_from(arguments) {
@@ -67,7 +66,6 @@ impl Project {
     /// Executes a command parsed by clap, for programs that embed [`ProjectCommand`] in their
     /// own command line.
     pub fn execute(&self, command: ProjectCommand) -> Result<ProjectOutcome> {
-        self.validate()?;
         match command {
             ProjectCommand::List => Ok(ProjectOutcome::Listed(self.list())),
             #[cfg(feature = "declarative")]

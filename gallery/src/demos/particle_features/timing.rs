@@ -3,11 +3,11 @@
 use super::{SOURCE_SECONDS, Specimen, Study, VIEWPORT, base, text};
 use crate::DemoParameters;
 use motion::particles::{
-    BounceBox, BurstEmitter, Gravity, ParticleSimulation, ParticleStyle, PointEmitter,
+    BounceBox, BurstEmitter, Gravity, ParticleSimulationBuilder, ParticleStyle, PointEmitter,
 };
 use motion::prelude::*;
 
-fn stream(parameters: DemoParameters) -> ParticleSimulation {
+fn stream(parameters: DemoParameters) -> ParticleSimulationBuilder {
     base(parameters).emitter(
         PointEmitter::new(Point::new(84.0, 152.0))
             .rate(f64::from(parameters.count))
@@ -59,8 +59,11 @@ pub(super) fn workers(parameters: DemoParameters) -> motion::Result<Study> {
         .style(ParticleStyle::Dots { radius: 1.8 });
     Ok(Study {
         source: Specimen::Layers(vec![
-            (simulation.clone().workers(1), Point::new(-116.0, 0.0)),
-            (simulation.workers(4), Point::new(116.0, 0.0)),
+            (
+                simulation.clone().workers(1).build(),
+                Point::new(-116.0, 0.0),
+            ),
+            (simulation.workers(4).build(), Point::new(116.0, 0.0)),
         ]),
         guides: Node::group([
             text("1 worker", 14.0, 0xb4c8bd, 108.0, 268.0),
@@ -81,8 +84,8 @@ mod tests {
         };
         for moment in [2.8, 0.25, 1.1, 2.8] {
             assert_eq!(
-                layers[0].0.sample(moment.seconds())?,
-                layers[1].0.sample(moment.seconds())?
+                layers[0].0.as_ref().unwrap().sample(moment.seconds())?,
+                layers[1].0.as_ref().unwrap().sample(moment.seconds())?
             );
         }
         Ok(())
@@ -91,10 +94,14 @@ mod tests {
     #[test]
     fn prewarm_and_reverse_use_explicit_source_time() -> motion::Result {
         let source = stream(DemoParameters::default());
-        let warm = source.clone().prewarm(1.5.seconds());
+        let warm = source.clone().prewarm(1.5.seconds()).build()?;
         assert!(!warm.sample(Time::ZERO)?.is_empty());
-        let reversed = source.clone().time_remap(-0.75, 3.seconds(), true);
-        let slowed = source.clone().time_remap(0.35, Time::ZERO, false);
+        let reversed = source
+            .clone()
+            .time_remap(-0.75, 3.seconds(), true)
+            .build()?;
+        let slowed = source.clone().time_remap(0.35, Time::ZERO, false).build()?;
+        let source = source.build()?;
         let reversed_state = reversed.sample(1.seconds())?;
         let forward_state = source.sample(2.25.seconds())?;
         assert!(

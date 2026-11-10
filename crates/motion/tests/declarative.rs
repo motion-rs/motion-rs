@@ -38,7 +38,7 @@ fn projects_register_and_render_documents() -> motion::Result {
             Element::rect([0.0, 0.0, 8.0, 8.0]).fill(Color::WHITE),
         )))
         .write(&path)?;
-    let project = Project::new("documents").document("film", &path);
+    let project = Project::new("documents").document("film", &path).build()?;
     assert!(project.list()[0].defaults.is_none());
     let still = project.render_still("film", None, Time::ZERO, &RenderOptions::default())?;
     let compiled = motion::declarative::load(&path)?;
@@ -214,10 +214,12 @@ fn validate_checks_documents_without_rendering() -> motion::Result {
         "nothing rendered"
     );
 
-    let project = Project::new("p").timeline("code", || {
-        Timeline::new(Size::new(4.0, 4.0), 2)
-            .track(|track| track.scene(1.seconds(), |_| Node::empty()))
-    });
+    let project = Project::new("p")
+        .timeline("code", || {
+            Timeline::new(Size::new(4.0, 4.0), 2)
+                .track(|track| track.scene(1.seconds(), |_| Node::empty()))
+        })
+        .build()?;
     assert!(matches!(
         project.cli(arguments(&["validate", "code"]))?,
         ProjectOutcome::Validated(report) if report.resources.is_empty() && report.frames == 2
@@ -269,13 +271,15 @@ fn studio_scenes_for_documents_are_reloadable() -> motion::Result {
         &path,
         r##"{"rect": {"bounds": [0, 0, 16, 16]}, "fill": "#fff"}"##,
     );
-    let project = Project::default().document("film", &path);
+    let project = Project::new("motion").document("film", &path).build()?;
     let scene = project.studio_scene("film")?;
     assert!(scene.supports_video_export() && scene.is_reloadable());
-    let code = Project::new("p").timeline("code", || {
-        Timeline::new(Size::new(4.0, 4.0), 2)
-            .track(|track| track.scene(1.seconds(), |_| Node::empty()))
-    });
+    let code = Project::new("p")
+        .timeline("code", || {
+            Timeline::new(Size::new(4.0, 4.0), 2)
+                .track(|track| track.scene(1.seconds(), |_| Node::empty()))
+        })
+        .build()?;
     assert!(!code.studio_scene("code")?.is_reloadable());
     Ok(())
 }

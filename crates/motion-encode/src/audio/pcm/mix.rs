@@ -51,7 +51,7 @@ impl MixedAudio {
     ) -> motion_core::Result<Self> {
         Self::new_with(resolved.clips(), rate, resolved.duration(), quality)?
             .process_buses(timeline.soundtrack().buses())?
-            .master(timeline.soundtrack().master())
+            .apply_master(timeline.soundtrack().master())
     }
 
     /// Mixes only a selected timeline interval while preserving original fade/envelope clocks.
@@ -91,7 +91,7 @@ impl MixedAudio {
                 !clip.parameters().effects.is_empty() || !clip.parameters().ducking.is_empty()
             })
         {
-            return Self::from_resolved(timeline, resolved, rate, quality)?.window(range);
+            return Self::from_resolved(timeline, resolved, rate, quality)?.crop(range);
         }
         Self::new_window(clips, rate, range.end - range.start, range.start, quality)
     }
@@ -368,15 +368,15 @@ impl MixedAudio {
     }
 
     /// Applies a static master gain without changing seek order or summation order.
-    pub fn gain_db(self, gain: f64) -> motion_core::Result<Self> {
-        self.master(motion_core::Master {
+    pub fn apply_gain(self, gain: f64) -> motion_core::Result<Self> {
+        self.apply_master(motion_core::Master {
             gain_db: gain,
             ..Default::default()
         })
     }
 
     /// Bakes the master once, preserving exact query-order-independent reads.
-    pub fn master(mut self, master: motion_core::Master) -> motion_core::Result<Self> {
+    pub fn apply_master(mut self, master: motion_core::Master) -> motion_core::Result<Self> {
         master.validate()?;
         if master == motion_core::Master::default() {
             return Ok(self);
@@ -403,7 +403,7 @@ impl MixedAudio {
     }
 
     /// Crops a prepared output without restarting effects or normalization clocks.
-    pub fn window(mut self, range: std::ops::Range<Time>) -> motion_core::Result<Self> {
+    pub fn crop(mut self, range: std::ops::Range<Time>) -> motion_core::Result<Self> {
         if range.start < Time::ZERO || range.end < range.start {
             return Err(invalid("range", "Invalid audio window").into());
         }

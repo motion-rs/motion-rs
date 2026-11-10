@@ -43,7 +43,7 @@ Analytic trajectories evaluate stable IDs, explicit birth times, ages and model 
 
 Simulation requires an explicit seed, finite duration, emitters, ordered modifiers and `SimulationLimits`. Its fixed step is `1/240` second. Arbitrary queries use the fixed boundary containing that time, not a floating playback cursor.
 
-Store prepared simulations outside callbacks or cache them with keys covering every configuration value and the duration. Backward and repeated seeks reproduce the same state; memory admission also affects cached snapshot spacing.
+`ParticleSimulation::new(seed)` starts a `ParticleSimulationBuilder`; `build()` validates it into an immutable simulation that prepares lazily (`to_builder()` reopens the settings). Store built simulations outside callbacks or cache them with `SceneContext::try_cache`, using keys covering every configuration value and the duration. Backward and repeated seeks reproduce the same state; memory admission also affects cached snapshot spacing.
 
 ## Emitter and Modifier Order
 
@@ -119,7 +119,7 @@ let simulation = ParticleSimulation::new(7).duration(1.seconds())
         response: CollisionResponse { restitution: 0.5, friction: 0.2, kill_on_hit: true } })
     .sub_emitter(SubEmitter { on: ParticleEventKind::Collision,
         emitter: Arc::new(BurstEmitter::new(Time::ZERO, 2, Point::ORIGIN).lifetime(100.milliseconds())),
-        inherit: Inherit::Position, probability: 1.0 });
+        inherit: Inherit::Position, probability: 1.0 }).build()?;
 assert_eq!(simulation.sample(100.milliseconds())?, simulation.sample(100.milliseconds())?);
 # Ok::<(), motion::Error>(())
 ```
@@ -148,7 +148,7 @@ use motion::render::RasterLimits;
 let simulation = ParticleSimulation::new(7).duration(200.milliseconds())
     .emitter(BurstEmitter::new(Time::ZERO, 16, Point::new(4.0, 4.0)).speed(2.0))
     .modifier(CurlNoise { frequency: 0.13, strength: 2.0, seed: 42, phase_speed: 1.0 })
-    .modifier(FlowField::curl(19, 0.17, 0.5));
+    .modifier(FlowField::curl(19, 0.17, 0.5)).build()?;
 assert_eq!(simulation.sample(150.milliseconds())?, simulation.sample(150.milliseconds())?);
 let material = ProceduralSprite::Smoke {
     scale: 3.0, evolution: 0.5, fractal: Fractal::default(),
@@ -187,7 +187,7 @@ use motion::particles::presets::{Preset, PresetOptions};
 let mut options = PresetOptions::new(7, 2.seconds(), Rect::new(0.0, 0.0, 320.0, 180.0));
 options.density = 0.5;
 let sparks = Preset::Sparks.simulation(options)?;
-let customized = sparks.modifier(motion::particles::Drag::new(0.3));
+let customized = sparks.modifier(motion::particles::Drag::new(0.3)).build()?;
 # Ok::<(), motion::Error>(())
 ```
 

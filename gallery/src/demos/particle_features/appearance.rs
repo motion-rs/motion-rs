@@ -5,7 +5,7 @@ use crate::DemoParameters;
 use motion::particles::{
     BokehShape, ColorField, ColorOverLifetime, CurlNoise, DiskEmitter, FieldCoordinate, Gravity,
     IntensityOverLifetime, Particle, ParticleBlend, ParticleCurve, ParticleModifier, ParticleShape,
-    ParticleSimulation, ParticleStyle, PointEmitter, ProceduralSprite, RectEmitter,
+    ParticleSimulationBuilder, ParticleStyle, PointEmitter, ProceduralSprite, RectEmitter,
     SizeOverLifetime, SpriteAtlas, SpriteSheetMode, Temperature, TrailOptions,
 };
 use motion::prelude::*;
@@ -36,7 +36,7 @@ pub(super) fn shapes(parameters: DemoParameters) -> motion::Result<Study> {
                         .color([0.3, 0.75, 0.95, 1.0]),
                 )
                 .style(ParticleStyle::Shape { radius: 5.0, shape });
-            (simulation, Point::ORIGIN)
+            (simulation.build(), Point::ORIGIN)
         })
         .collect();
     Ok(Study {
@@ -45,7 +45,7 @@ pub(super) fn shapes(parameters: DemoParameters) -> motion::Result<Study> {
     })
 }
 
-fn streaming(parameters: DemoParameters) -> ParticleSimulation {
+fn streaming(parameters: DemoParameters) -> ParticleSimulationBuilder {
     base(parameters)
         .emitter(
             PointEmitter::new(Point::new(100.0, 208.0))
@@ -135,7 +135,8 @@ pub(super) fn bokeh(parameters: DemoParameters) -> motion::Result<Study> {
                         }
                         .parallax([10.0, 0.0])
                         .blend(ParticleBlend::Screen),
-                    ),
+                    )
+                    .build(),
                 Point::ORIGIN,
             )
         })
@@ -179,7 +180,8 @@ pub(super) fn blends(parameters: DemoParameters) -> motion::Result<Study> {
                             .lifetime(3.8.seconds())
                             .color([0.05, 0.2, 0.35, 0.5]),
                     )
-                    .style(ParticleStyle::Dots { radius: 10.0 }.blend(blend)),
+                    .style(ParticleStyle::Dots { radius: 10.0 }.blend(blend))
+                    .build(),
                 Point::ORIGIN,
             )
         })
@@ -208,7 +210,7 @@ fn materials(seed: u64) -> Result<SpriteAtlas, ValidationError> {
     )
 }
 
-fn sprites(parameters: DemoParameters, style: ParticleStyle) -> ParticleSimulation {
+fn sprites(parameters: DemoParameters, style: ParticleStyle) -> ParticleSimulationBuilder {
     base(parameters)
         .emitter(
             RectEmitter::new(Rect::new(96.0, 72.0, 416.0, 232.0))
@@ -248,7 +250,8 @@ pub(super) fn sheets(parameters: DemoParameters) -> motion::Result<Study> {
                         .lifetime(3.8.seconds()),
                 )
                 .modifier(AtlasPhase)
-                .style(atlas.style(32.0, false)?),
+                .style(atlas.style(32.0, false)?)
+                .build(),
             Point::ORIGIN,
         ));
         guides.push(text(
@@ -323,7 +326,10 @@ pub(super) fn stretch(parameters: DemoParameters) -> motion::Result<Study> {
             .flip(),
         );
     Ok(Study {
-        source: Specimen::Layers(vec![(capsule, Point::ORIGIN), (quads, Point::ORIGIN)]),
+        source: Specimen::Layers(vec![
+            (capsule.build(), Point::ORIGIN),
+            (quads.build(), Point::ORIGIN),
+        ]),
         guides: Node::empty(),
     })
 }
@@ -383,7 +389,8 @@ pub(super) fn color(parameters: DemoParameters) -> motion::Result<Study> {
                     },
                     colors: colors.clone(),
                 })
-                .style(ParticleStyle::Dots { radius: 4.0 }),
+                .style(ParticleStyle::Dots { radius: 4.0 })
+                .build(),
             Point::ORIGIN,
         ));
     }
@@ -396,7 +403,8 @@ pub(super) fn color(parameters: DemoParameters) -> motion::Result<Study> {
                     .lifetime(3.5.seconds()),
             )
             .modifier(Temperature::new(ParticleCurve::linear(8500.0, 1200.0)))
-            .style(ParticleStyle::GlowDots { radius: 3.2 }),
+            .style(ParticleStyle::GlowDots { radius: 3.2 })
+            .build(),
         Point::ORIGIN,
     ));
     Ok(Study {

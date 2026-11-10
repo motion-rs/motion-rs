@@ -255,8 +255,8 @@ pub use motion_studio as studio;
 
 pub use crate::catalog::{SceneDescriptor, VisualCheckPolicy, VisualRegion};
 pub use crate::project::{
-    Backend, ExportArgs, OutputArgs, ParameterArgs, Project, ProjectCommand, ProjectOutcome,
-    ProjectTimelineInfo, RenderArgs, StillArgs, StudioArgs, ValidateArgs,
+    Backend, ExportArgs, OutputArgs, ParameterArgs, Project, ProjectBuilder, ProjectCommand,
+    ProjectOutcome, ProjectTimelineInfo, RenderArgs, StillArgs, StudioArgs, ValidateArgs,
 };
 
 #[cfg(feature = "captions")]
@@ -333,14 +333,14 @@ pub mod prelude {
         FunctionGraph, GradientExtend, GradientSpace, GradientUnits, ImagePattern, Interpolate,
         Iris, IrisShape, Keyframes, Layout, Line, LineCap, LineJoin, LinearGradient, MaskMode,
         MotionBlur, Node, NodeModifiers, Noise, Oscillator, Paint, Path2D, PathSample, Pivot,
-        PixelSize, Point, Polygon, Polyline, Pose, Project, ProjectOutcome, ProjectTimelineInfo,
-        Push, RadialGradient, Random, Rect, RegularPolygon, RenderOptions, RenderQuality, Renderer,
-        Ring, RoundedRect, Row, Sampling, Scene, SceneContext, SceneDescriptor, Shape, Side, Size,
-        Skeleton, Slide, Source, Spline, Spring, Star, StrokeStyle, Styled, SweepGradient, Time,
-        TimeLiteral, Timeline, TimelineBuilder, TimelineWarning, Track, TrackBuilder, Transform,
-        TransformComponents, Tween, ValidationError, Vector2, VisualCheckPolicy, VisualRegion,
-        Waveform, Wipe, ZoomBlur, camera, export, group, key, math, piecewise, remap, render_still,
-        scene,
+        PixelSize, Point, Polygon, Polyline, Pose, Project, ProjectBuilder, ProjectOutcome,
+        ProjectTimelineInfo, Push, RadialGradient, Random, Rect, RegularPolygon, RenderOptions,
+        RenderQuality, Renderer, Ring, RoundedRect, Row, Sampling, Scene, SceneContext,
+        SceneDescriptor, Shape, Side, Size, Skeleton, Slide, Source, Spline, Spring, Star,
+        StrokeStyle, Styled, SweepGradient, Time, TimeLiteral, Timeline, TimelineBuilder,
+        TimelineWarning, Track, TrackBuilder, Transform, TransformComponents, Tween,
+        ValidationError, Vector2, VisualCheckPolicy, VisualRegion, Waveform, Wipe, ZoomBlur,
+        camera, export, group, key, math, piecewise, remap, render_still, scene,
     };
     pub use crate::{
         ApertureShape, BitDepth, Cdl, ColorWheels, DepthOfField, DepthPlane, DisplayTransform,

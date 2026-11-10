@@ -35,7 +35,7 @@ pub fn comparison_frames(directory: &std::path::Path, options: &RenderOptions) -
     for preset in Preset::ALL {
         let mut recipe = PresetOptions::new(7, 3.seconds(), bounds);
         recipe.logo = Some(source.clone());
-        let simulation = preset.simulation(recipe)?;
+        let simulation = preset.simulation(recipe)?.build()?;
         let time = if matches!(preset, Preset::Sparks) {
             0.35.seconds()
         } else if preset == Preset::Fireworks {

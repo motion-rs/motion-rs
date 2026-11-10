@@ -106,7 +106,7 @@ impl<'a> SceneContext<'a> {
     }
 
     /// Selects preview approximations, preserved by nested and sampled contexts.
-    pub fn quality(mut self, quality: crate::RenderQuality) -> Self {
+    pub fn with_quality(mut self, quality: crate::RenderQuality) -> Self {
         self.quality = quality;
         self
     }
@@ -514,6 +514,21 @@ impl<'a> SceneContext<'a> {
         build: impl FnOnce() -> Value,
     ) -> Arc<Value> {
         self.cache.get(key, build)
+    }
+
+    /// Like [`cache`](Self::cache) for a fallible builder, for example a validated
+    /// `build()`. A failure is returned and not retained, so the next call tries again.
+    #[track_caller]
+    pub fn try_cache<
+        Key: Eq + Hash + Send + Sync + 'static,
+        Value: Send + Sync + 'static,
+        Error,
+    >(
+        &self,
+        key: Key,
+        build: impl FnOnce() -> Result<Value, Error>,
+    ) -> Result<Arc<Value>, Error> {
+        self.cache.try_get(key, build)
     }
 
     /// Reuses a pure static subtree without exposing its shared Arc handle.

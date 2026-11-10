@@ -165,13 +165,15 @@ fn render(
     Ok(Node::from(batch))
 }
 
-impl ParticleSimulation {
-    /// Replaces presentation without invalidating the immutable physics snapshots.
+impl ParticleSimulationBuilder {
+    /// Sets presentation; it does not affect the physics snapshots.
     pub fn style(mut self, style: ParticleStyle) -> Self {
         self.style = Arc::new(style);
         self
     }
+}
 
+impl ParticleSimulation {
     /// Renders through the instance protocol using explicit clip metadata.
     pub fn try_render(&self, context: &SceneContext<'_>) -> Result<Node, ValidationError> {
         let duration = context.clip_duration();

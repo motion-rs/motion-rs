@@ -143,9 +143,29 @@ pub trait Scene: Send + Sync {
         None
     }
 
+    /// Like [`with_duration`](Self::with_duration), reporting a negative duration as an error.
+    fn try_with_duration(self, duration: Duration) -> Result<WithDuration<Self>, ValidationError>
+    where
+        Self: Sized,
+    {
+        if duration < Time::ZERO {
+            return Err(ValidationError::invalid(
+                "scene",
+                "duration",
+                "Scene duration must be nonnegative",
+            ));
+        }
+        Ok(WithDuration {
+            scene: self,
+            duration,
+        })
+    }
+
     /// Overrides clip metadata without retiming or clamping the callback.
     ///
-    /// Panics for negative duration. Zero duration has an empty active interval.
+    /// Panics for negative duration; prefer [`try_with_duration`](Self::try_with_duration) or a
+    /// duration given at placement (`TrackBuilder::push_for`). Zero duration has an empty
+    /// active interval.
     fn with_duration(self, duration: Duration) -> WithDuration<Self>
     where
         Self: Sized,

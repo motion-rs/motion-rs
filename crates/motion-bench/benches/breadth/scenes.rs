@@ -393,6 +393,8 @@ pub(super) fn artwork(kind: &str, context: &SceneContext<'_>) -> Node {
                     .modifier(Gravity::new(Vector2::new(0.0, 90.0)))
                     .modifier(Drag::new(0.3))
                     .style(ParticleStyle::GlowDots { radius: 1.8 })
+                    .build()
+                    .unwrap()
             });
             Node::group([
                 Node::from(context.bounds().fill(Color::BLACK)),
@@ -418,6 +420,8 @@ pub(super) fn artwork(kind: &str, context: &SceneContext<'_>) -> Node {
                 } else {
                     system
                 }
+                .build()
+                .unwrap()
             });
             Node::group([
                 context.bounds().fill(Color::BLACK).into(),

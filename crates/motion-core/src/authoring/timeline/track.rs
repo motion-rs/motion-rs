@@ -12,6 +12,7 @@ pub struct Clip {
     pub(super) id: usize,
     pub(super) start: Time,
     pub(super) duration: Duration,
+    pub(super) offset: Time,
     pub(super) scene: Arc<dyn Scene>,
     pub(super) transition_in: Option<TransitionIn>,
 }
@@ -47,6 +48,11 @@ impl Clip {
     /// Snapped active duration, also supplied as clip metadata to the callback.
     pub fn duration(&self) -> Duration {
         self.duration
+    }
+
+    /// Scene-local time at the clip's first frame; zero unless the clip was placed trimmed.
+    pub fn offset(&self) -> Time {
+        self.offset
     }
 
     /// Exclusive end; validated at construction.
@@ -107,7 +113,14 @@ impl Track {
             return None;
         }
         let render = |clip: &Clip| {
-            context.during(clip.start, clip.duration, |local| clip.scene.render(local))
+            context.during(clip.start, clip.duration, |local| {
+                if clip.offset == Time::ZERO {
+                    clip.scene.render(local)
+                } else {
+                    clip.scene
+                        .render(&local.shifted(Time::from_ticks(-clip.offset.ticks())))
+                }
+            })
         };
         let node = if let Some(transition) = clip
             .transition_in
@@ -163,7 +176,7 @@ impl TrackBuilder {
     /// Appends a finite scene, retaining invalid input for validate().
     pub fn push(self, scene: impl Scene + 'static) -> Self {
         let cursor = self.cursor;
-        self.defer(|builder| builder.place_checked(cursor, scene))
+        self.defer(|builder| builder.place_checked(cursor, None, Time::ZERO, scene))
     }
 
     /// Appends a finite authoring callback accepting drawables or Result outputs.
@@ -173,6 +186,62 @@ impl TrackBuilder {
         build: impl Fn(&SceneContext<'_>) -> Output + Send + Sync + 'static,
     ) -> Self {
         self.push(scene::scene(build).with_duration(duration))
+    }
+
+    /// Appends a scene at the cursor for `duration`, whatever its natural duration.
+    pub fn push_for(self, duration: Duration, scene: impl Scene + 'static) -> Self {
+        let cursor = self.cursor;
+        self.defer(|builder| builder.place_checked(cursor, Some(duration), Time::ZERO, scene))
+    }
+
+    /// Places a scene at absolute ticks for `duration`, whatever its natural duration.
+    pub fn place_for(self, start: Time, duration: Duration, scene: impl Scene + 'static) -> Self {
+        self.defer(|builder| builder.place_checked(start, Some(duration), Time::ZERO, scene))
+    }
+
+    /// Appends a scene at the cursor that starts `offset` into its own timeline.
+    pub fn push_trimmed(
+        self,
+        offset: Time,
+        duration: Duration,
+        scene: impl Scene + 'static,
+    ) -> Self {
+        let cursor = self.cursor;
+        self.defer(|builder| builder.place_checked(cursor, Some(duration), offset, scene))
+    }
+
+    /// Immediately checks and appends a scene for `duration`.
+    pub fn try_push_for(
+        mut self,
+        duration: Duration,
+        scene: impl Scene + 'static,
+    ) -> crate::Result<Self> {
+        let cursor = self.cursor;
+        self.place_checked(cursor, Some(duration), Time::ZERO, scene)?;
+        Ok(self)
+    }
+
+    /// Immediately checks and places a scene for `duration`.
+    pub fn try_place_for(
+        mut self,
+        start: Time,
+        duration: Duration,
+        scene: impl Scene + 'static,
+    ) -> crate::Result<Self> {
+        self.place_checked(start, Some(duration), Time::ZERO, scene)?;
+        Ok(self)
+    }
+
+    /// Immediately checks and appends a scene that starts `offset` into its own timeline.
+    pub fn try_push_trimmed(
+        mut self,
+        offset: Time,
+        duration: Duration,
+        scene: impl Scene + 'static,
+    ) -> crate::Result<Self> {
+        let cursor = self.cursor;
+        self.place_checked(cursor, Some(duration), offset, scene)?;
+        Ok(self)
     }
 
     /// Appends a nested timeline at the cursor, using its own duration. Its picture
@@ -223,8 +292,10 @@ impl TrackBuilder {
     ) -> crate::Result<()> {
         let id = self.clips.len();
         match duration {
-            Some(duration) => self.place_checked(start, child.visual().with_duration(duration))?,
-            None => self.place_checked(start, child.visual())?,
+            Some(duration) => {
+                self.place_checked(start, Some(duration), Time::ZERO, child.visual())?
+            }
+            None => self.place_checked(start, None, Time::ZERO, child.visual())?,
         }
         let clip = self
             .clips
@@ -258,7 +329,7 @@ impl TrackBuilder {
 
     /// Places a scene at absolute ticks, retaining invalid input for validate().
     pub fn place(self, start: Time, scene: impl Scene + 'static) -> Self {
-        self.defer(|builder| builder.place_checked(start, scene))
+        self.defer(|builder| builder.place_checked(start, None, Time::ZERO, scene))
     }
 
     /// Advances the cursor, retaining invalid input for validate().
@@ -278,7 +349,7 @@ impl TrackBuilder {
 
     /// Immediately checks and places one scene.
     pub fn try_place(mut self, start: Time, scene: impl Scene + 'static) -> crate::Result<Self> {
-        self.place_checked(start, scene)?;
+        self.place_checked(start, None, Time::ZERO, scene)?;
         Ok(self)
     }
 
@@ -342,21 +413,30 @@ impl TrackBuilder {
     /// Places at an absolute nonnegative tick time and sorts by snapped start.
     /// The cursor advances to max(previous cursor, requested end), never backwards.
     /// Invalid or rounding-collapsed clips and same-track overlaps fail immediately.
-    fn place_checked(&mut self, start: Time, scene: impl Scene + 'static) -> crate::Result<()> {
+    fn place_checked(
+        &mut self,
+        start: Time,
+        duration: Option<Duration>,
+        offset: Time,
+        scene: impl Scene + 'static,
+    ) -> crate::Result<()> {
         if self.clips.len() >= MAX_CLIPS {
             return Err(on_track(self.index, "At most 16384 clips are allowed"));
         }
         if start < Time::ZERO {
             return Err(on_track(self.index, "Clip start must be nonnegative"));
         }
-        let duration = scene.duration().ok_or_else(|| {
+        if offset < Time::ZERO {
+            return Err(on_track(self.index, "Clip offset must be nonnegative"));
+        }
+        let duration = duration.or_else(|| scene.duration()).ok_or_else(|| {
             on_track(
                 self.index,
-                "Scene has no finite duration; use with_duration",
+                "Scene has no finite duration; use push_for or with_duration",
             )
         })?;
         if duration <= Time::ZERO {
-            return Err(on_track(self.index, "Scene duration must be positive"));
+            return Err(on_track(self.index, "Clip duration must be positive"));
         }
         let requested_end =
             add_time(start, duration).map_err(|error| on_track(self.index, error))?;
@@ -444,6 +524,7 @@ impl TrackBuilder {
                 id,
                 start: aligned_start,
                 duration: aligned_end - aligned_start,
+                offset,
                 scene: Arc::new(scene),
                 transition_in,
             },

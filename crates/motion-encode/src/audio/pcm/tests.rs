@@ -63,7 +63,7 @@ fn bus_tails_meter_windows_and_spatial_controls_are_preserved() -> motion_core::
     mixed.read(8400, &mut tail);
     assert!(tail[0] > 0.0);
     let expected = mixed.bus_meters()[0].level(625.milliseconds());
-    let cropped = mixed.window(625.milliseconds()..1125.milliseconds())?;
+    let cropped = mixed.crop(625.milliseconds()..1125.milliseconds())?;
     assert_eq!(cropped.bus_meters()[0].level(Time::ZERO), expected);
     assert_eq!(
         cropped.bus_meters()[0].level(500.milliseconds()),
@@ -125,16 +125,16 @@ fn master_gain_identity_and_random_access() -> motion_core::Result {
     let mut original = [0.0; 200];
     mixed.read(0, &mut original);
     let mut identity = [0.0; 200];
-    mixed.clone().gain_db(0.0)?.read(0, &mut identity);
+    mixed.clone().apply_gain(0.0)?.read(0, &mut identity);
     assert_eq!(identity, original);
-    let gained = mixed.gain_db(-6.0)?;
+    let gained = mixed.apply_gain(-6.0)?;
     let mut whole = [0.0; 200];
     gained.read(0, &mut whole);
     let mut window = [0.0; 18];
     gained.read(31, &mut window);
     assert_eq!(window, whole[62..80]);
     assert!((whole[0] - 0.1252968).abs() < 1e-6);
-    assert!(gained.gain_db(f64::NAN).is_err());
+    assert!(gained.apply_gain(f64::NAN).is_err());
     Ok(())
 }
 

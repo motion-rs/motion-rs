@@ -4,8 +4,8 @@ use super::atlas::text;
 use crate::{DemoMetadata, DemoParameters};
 use catalog::PAGES;
 use motion::particles::{
-    BurstEmitter, DiskEmitter, ParticleSimulation, ParticleStyle, ParticleTrajectory, PointEmitter,
-    RectEmitter, SimulationLimits,
+    BurstEmitter, DiskEmitter, ParticleSimulation, ParticleSimulationBuilder, ParticleStyle,
+    ParticleTrajectory, PointEmitter, RectEmitter, SimulationLimits,
 };
 use motion::prelude::*;
 
@@ -55,9 +55,9 @@ struct Study {
 }
 
 impl Study {
-    fn new(simulation: ParticleSimulation) -> Self {
+    fn new(simulation: ParticleSimulationBuilder) -> Self {
         Self {
-            source: Specimen::Simulation(simulation),
+            source: Specimen::Simulation(simulation.build()),
             guides: Node::empty(),
         }
     }
@@ -71,13 +71,18 @@ impl Study {
 
     fn render(&self, context: &SceneContext<'_>) -> motion::Result<Node> {
         Ok(match &self.source {
-            Specimen::Simulation(simulation) => simulation.try_render(context)?,
+            Specimen::Simulation(simulation) => simulation
+                .as_ref()
+                .map_err(Clone::clone)?
+                .try_render(context)?,
             Specimen::Trajectory(trajectory) => trajectory.try_render(context)?,
             Specimen::Layers(layers) => Node::group(
                 layers
                     .iter()
                     .map(|(simulation, offset)| {
                         simulation
+                            .as_ref()
+                            .map_err(Clone::clone)?
                             .try_render(context)
                             .map(|node| node.translate(offset.x, offset.y))
                     })
@@ -96,9 +101,9 @@ impl Study {
 }
 
 enum Specimen {
-    Simulation(ParticleSimulation),
+    Simulation(Result<ParticleSimulation, ValidationError>),
     Trajectory(ParticleTrajectory),
-    Layers(Vec<(ParticleSimulation, Point)>),
+    Layers(Vec<(Result<ParticleSimulation, ValidationError>, Point)>),
     Text(DemoParameters),
 }
 
@@ -150,7 +155,7 @@ fn page_at(progress: f64) -> (usize, f64) {
     (page, (scaled - page as f64).clamp(0.0, 1.0))
 }
 
-fn base(parameters: DemoParameters) -> ParticleSimulation {
+fn base(parameters: DemoParameters) -> ParticleSimulationBuilder {
     ParticleSimulation::new(parameters.seed)
         .duration(SOURCE_SECONDS.seconds())
         .limits(SimulationLimits {
@@ -278,7 +283,7 @@ mod tests {
             .iter()
             .map(|page| {
                 let mut study = (page.build)(parameters)?;
-                study.source = Specimen::Simulation(base(parameters));
+                study.source = Specimen::Simulation(base(parameters).build());
                 Ok(study)
             })
             .collect::<motion::Result<Vec<_>>>()?;

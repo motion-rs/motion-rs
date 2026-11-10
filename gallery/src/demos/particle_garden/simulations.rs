@@ -112,7 +112,7 @@ pub(super) fn fireworks(seed: u64, duration: Duration) -> motion::Result<Particl
     for slab in slabs() {
         simulation = simulation.modifier(Solid(PolygonCollider::new(Arc::from(slab), response)?));
     }
-    Ok(simulation
+    simulation
         .limits(limits())
         .sub_emitter(SubEmitter {
             on: ParticleEventKind::Death,
@@ -166,10 +166,12 @@ pub(super) fn fireworks(seed: u64, duration: Duration) -> motion::Result<Particl
             inherit: Inherit::Color,
             probability: 0.4,
         })
-        .style(trail(0.14, 2.6, 12)))
+        .style(trail(0.14, 2.6, 12))
+        .build()
+        .map_err(Into::into)
 }
 
-pub(super) fn murmuration(seed: u64, duration: Duration) -> ParticleSimulation {
+pub(super) fn murmuration(seed: u64, duration: Duration) -> motion::Result<ParticleSimulation> {
     let palette: Arc<[[f32; 4]]> = Arc::from([
         [0.1, 0.75, 0.9, 1.0],
         [0.3, 0.5, 1.0, 1.0],
@@ -207,6 +209,8 @@ pub(super) fn murmuration(seed: u64, duration: Duration) -> ParticleSimulation {
         .limits(limits())
         .prewarm(seconds(1.4))
         .style(trail(0.42, 3.0, 16))
+        .build()
+        .map_err(Into::into)
 }
 
 /// The one-pixel-wide parts of the flower: a five-petal rosette with a warm core.
@@ -314,7 +318,7 @@ pub(super) fn dissolve(
         .lifetime(seconds(1.6))
         .size(0.9)
         .paint(ribbon, Rect::new(360.0, 300.0, 900.0, 520.0))?;
-    Ok(ParticleSimulation::new(seed + 2)
+    ParticleSimulation::new(seed + 2)
         .duration(duration)
         .emitter(Placed {
             inner: Box::new(text_emitter),
@@ -336,10 +340,15 @@ pub(super) fn dissolve(
             (0.5, 1.0),
             (1.0, 0.0),
         ])))
-        .style(atlas.style(13.0, false)?.blend(ParticleBlend::Plus)))
+        .style(atlas.style(13.0, false)?.blend(ParticleBlend::Plus))
+        .build()
+        .map_err(Into::into)
 }
 
-pub(super) fn embers(seed: u64, duration: Duration) -> (ParticleSimulation, ParticleSimulation) {
+pub(super) fn embers(
+    seed: u64,
+    duration: Duration,
+) -> motion::Result<(ParticleSimulation, ParticleSimulation)> {
     let bottom = Rect::new(0.0, HEIGHT - 6.0, WIDTH, HEIGHT);
     let dust = ParticleSimulation::new(seed + 4)
         .duration(duration)
@@ -370,7 +379,9 @@ pub(super) fn embers(seed: u64, duration: Duration) -> (ParticleSimulation, Part
             }
             .parallax([14.0, 5.0])
             .blend(ParticleBlend::Screen),
-        );
+        )
+        .build()?;
+
     let sparks = ParticleSimulation::new(seed + 5)
         .duration(duration)
         .emitter(
@@ -398,6 +409,7 @@ pub(super) fn embers(seed: u64, duration: Duration) -> (ParticleSimulation, Part
             (1.0, 0.0),
         ])))
         .prewarm(seconds(2.0))
-        .style(ParticleStyle::GlowDots { radius: 2.2 }.blend(ParticleBlend::Plus));
-    (dust, sparks)
+        .style(ParticleStyle::GlowDots { radius: 2.2 }.blend(ParticleBlend::Plus))
+        .build()?;
+    Ok((dust, sparks))
 }

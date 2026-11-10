@@ -111,8 +111,9 @@ fn shared_noise_simulation_budget_parallel_seek_and_smoke_pixels() -> motion_cor
             seed: 42,
             phase_speed: 1.0,
         })
-        .modifier(FlowField::curl(19, 0.17, 0.5));
-    let parallel = system.clone().workers(4);
+        .modifier(FlowField::curl(19, 0.17, 0.5))
+        .build()?;
+    let parallel = system.clone().to_builder().workers(4).build()?;
     for time in [
         150.milliseconds(),
         10.milliseconds(),
@@ -124,10 +125,12 @@ fn shared_noise_simulation_budget_parallel_seek_and_smoke_pixels() -> motion_cor
     }
     assert!(
         system
+            .to_builder()
             .limits(SimulationLimits {
                 max_work: 100,
                 ..Default::default()
             })
+            .build()?
             .sample(100.milliseconds())
             .is_err()
     );
@@ -265,7 +268,8 @@ fn counter_workers_and_seek_replay_match_exactly() -> motion_core::Result {
             seed: 0,
             phase_speed: 1.0,
         })
-        .modifier(Drag::new(0.1));
+        .modifier(Drag::new(0.1))
+        .build()?;
     for time in [
         200.milliseconds(),
         10.milliseconds(),
@@ -276,7 +280,12 @@ fn counter_workers_and_seek_replay_match_exactly() -> motion_core::Result {
         for workers in [2, 4] {
             assert_eq!(
                 &*expected,
-                &*original.clone().workers(workers).sample(time)?
+                &*original
+                    .clone()
+                    .to_builder()
+                    .workers(workers)
+                    .build()?
+                    .sample(time)?
             );
         }
     }
@@ -300,7 +309,8 @@ fn events_are_sorted_and_birth_depth_count_limits_fail_explicitly() -> motion_co
             ),
             inherit: Inherit::All,
             probability: 1.0,
-        });
+        })
+        .build()?;
     let events = system.events(50.milliseconds())?;
     assert_eq!(
         events
@@ -313,20 +323,24 @@ fn events_are_sorted_and_birth_depth_count_limits_fail_explicitly() -> motion_co
     assert!(
         system
             .clone()
+            .to_builder()
             .limits(SimulationLimits {
                 max_births: 3,
                 ..Default::default()
             })
+            .build()?
             .sample(Time::ZERO)
             .is_err()
     );
     assert!(
         system
             .clone()
+            .to_builder()
             .limits(SimulationLimits {
                 max_events: 2,
                 ..Default::default()
             })
+            .build()?
             .sample(Time::ZERO)
             .is_err()
     );
@@ -342,37 +356,53 @@ fn events_are_sorted_and_birth_depth_count_limits_fail_explicitly() -> motion_co
         .limits(SimulationLimits {
             max_sub_depth: 2,
             ..Default::default()
-        });
+        })
+        .build()?;
     assert!(recursive.sample(Time::ZERO).is_err());
     Ok(())
 }
 
 #[test]
 fn prewarm_loop_and_explicit_reverse_are_random_access() -> motion_core::Result {
-    let base = ParticleSimulation::new(2).duration(1.seconds()).emitter(
-        PointEmitter::new(Point::ORIGIN)
-            .speed(1.0)
-            .lifetime(1.seconds()),
-    );
+    let base = ParticleSimulation::new(2)
+        .duration(1.seconds())
+        .emitter(
+            PointEmitter::new(Point::ORIGIN)
+                .speed(1.0)
+                .lifetime(1.seconds()),
+        )
+        .build()?;
     assert!(
         base.clone()
+            .to_builder()
             .prewarm(250.milliseconds())
+            .build()?
             .sample(Time::ZERO)?
             .len()
             > base.sample(Time::ZERO)?.len()
     );
-    let looping = base.clone().loop_period(500.milliseconds());
+    let looping = base
+        .clone()
+        .to_builder()
+        .loop_period(500.milliseconds())
+        .build()?;
     assert_eq!(
         &*looping.sample(100.milliseconds())?,
         &*looping.sample(600.milliseconds())?
     );
     assert!(
         base.clone()
+            .to_builder()
             .time_remap(-1.0, 1.seconds(), false)
+            .build()?
             .sample(Time::ZERO)
             .is_err()
     );
-    let reverse = base.clone().time_remap(-1.0, 900.milliseconds(), true);
+    let reverse = base
+        .clone()
+        .to_builder()
+        .time_remap(-1.0, 900.milliseconds(), true)
+        .build()?;
     assert_eq!(
         &*reverse.sample(100.milliseconds())?,
         &*base.sample(800.milliseconds())?
@@ -419,7 +449,8 @@ fn curves_temperature_hdr_and_field_have_bounded_absolute_values() -> motion_cor
     let system = ParticleSimulation::new(1)
         .duration(1.seconds())
         .emitter(BurstEmitter::new(Time::ZERO, 1, Point::ORIGIN))
-        .modifier(IntensityOverLifetime::new(ParticleCurve::linear(4.0, 4.0)));
+        .modifier(IntensityOverLifetime::new(ParticleCurve::linear(4.0, 4.0)))
+        .build()?;
     assert_eq!(
         system.sample(100.milliseconds())?[0].color,
         [4.0, 4.0, 4.0, 1.0]
@@ -691,7 +722,8 @@ fn flow_radial_forces_and_age_events_follow_authored_controls() -> motion_core::
             ),
             inherit: Inherit::Position,
             probability: 1.0,
-        });
+        })
+        .build()?;
     let events = system.events(600.milliseconds())?;
     let mut age_events = 0;
     for boundary in 118..=123 {
@@ -752,7 +784,7 @@ fn population_forces_contacts_and_recipe_catalog_are_bounded_and_seekable() -> m
             presets::PresetOptions::new(7, 2.seconds(), Rect::new(0.0, 0.0, 64.0, 48.0));
         options.density = 0.1;
         options.logo = Some(colored_tree()?);
-        let system = preset.simulation(options)?;
+        let system = preset.simulation(options)?.build()?;
         let first = system.sample(500.milliseconds())?;
         let _later = system.sample(1500.milliseconds())?;
         assert_eq!(&*first, &*system.sample(500.milliseconds())?, "{preset:?}");
@@ -784,7 +816,8 @@ fn mixed_size_atlas_pads_cells_and_builds_a_sheet_style() -> motion_core::Result
     let system = ParticleSimulation::new(5)
         .duration(1.seconds())
         .emitter(BurstEmitter::new(Time::ZERO, 12, Point::new(16.0, 16.0)).speed(4.0))
-        .style(style);
+        .style(style)
+        .build()?;
     let cache = motion_core::SceneCache::default();
     let context = motion_core::SceneContext::new(
         100.milliseconds(),
@@ -894,13 +927,19 @@ fn group_modifiers_are_identical_for_any_worker_count() -> motion_core::Result {
         .group_modifier(Boids {
             radius: 4.0,
             ..Boids::default()
-        });
+        })
+        .build()?;
     let expected = system.sample(250.milliseconds())?;
     assert!(expected.len() >= 128);
     for workers in [2, 3, 8] {
         assert_eq!(
             &*expected,
-            &*system.clone().workers(workers).sample(250.milliseconds())?,
+            &*system
+                .clone()
+                .to_builder()
+                .workers(workers)
+                .build()?
+                .sample(250.milliseconds())?,
             "{workers} workers"
         );
     }
@@ -928,7 +967,8 @@ fn ribbon_trails_subdivide_bends_more_finely_than_round_trails() -> motion_core:
                     ribbon,
                     ..Default::default()
                 }),
-            );
+            )
+            .build()?;
         let cache = motion_core::SceneCache::default();
         let context = motion_core::SceneContext::new(
             600.milliseconds(),
