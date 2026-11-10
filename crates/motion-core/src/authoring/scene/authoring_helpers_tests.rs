@@ -233,7 +233,7 @@ fn memo_reuses_nodes_and_distinguishes_float_inputs() {
 
 #[test]
 fn track_scene_accepts_drawables_tuples_and_result_outputs() {
-    use crate::{Color, Scene, TimeLiteral, Timeline};
+    use crate::{Color, TimeLiteral, Timeline};
     let timeline = Timeline::new(crate::Size::new(8.0, 8.0), 30)
         .track(|track| {
             track
@@ -250,8 +250,7 @@ fn track_scene_accepts_drawables_tuples_and_result_outputs() {
         })
         .build()
         .unwrap();
-    assert_eq!(Scene::duration(&timeline), Some(3.seconds()));
-    assert!(timeline.validate().is_ok());
+    assert_eq!(timeline.duration(), 3.seconds());
 }
 
 #[test]

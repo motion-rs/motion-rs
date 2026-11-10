@@ -35,6 +35,7 @@ use std::{fmt, sync::Arc};
 
 mod builder;
 mod diagnostics;
+mod resolved;
 mod soundtrack;
 #[cfg(test)]
 mod tests;
@@ -42,6 +43,7 @@ mod track;
 
 pub use builder::TimelineBuilder;
 pub use diagnostics::{BoundaryAdjustment, BoundaryEdge, Diagnostics, TimelineWarning};
+pub use resolved::ResolvedAudio;
 pub use soundtrack::Soundtrack;
 pub use track::{Clip, Track, TrackBuilder};
 
@@ -110,7 +112,6 @@ pub struct Timeline {
     inferred_duration: bool,
     diagnostics: Diagnostics,
     soundtrack: Soundtrack,
-    resolved_audio: Option<Arc<Vec<crate::AudioClip>>>,
 }
 
 impl Timeline {
@@ -177,68 +178,44 @@ impl Timeline {
         &self.diagnostics
     }
 
-    /// Resolves flattened audio at an I/O boundary while preserving visual scene clocks.
+    /// Resolves the soundtrack's clips at an I/O boundary, for example by reading
+    /// files. The timeline itself is unchanged; the result carries the clips and the
+    /// output duration they require.
     pub fn resolve_audio(
         &self,
         mut resolve: impl FnMut(&crate::AudioClip) -> crate::Result<crate::AudioClip>,
-    ) -> crate::Result<Self> {
+    ) -> crate::Result<ResolvedAudio> {
         let clips = self
-            .audio_clips()?
+            .soundtrack
+            .clips
             .iter()
             .map(&mut resolve)
             .collect::<crate::Result<Vec<_>>>()?;
-        let mut timeline = self.clone();
-        if timeline.inferred_duration {
+        let mut duration = self.duration;
+        if self.inferred_duration {
             for clip in &clips {
-                timeline.duration = timeline
-                    .duration
-                    .max(timeline.soundtrack.clip_end(clip, timeline.rate)?);
+                duration = duration.max(self.soundtrack.clip_end(clip, self.rate)?);
             }
         }
-        timeline.resolved_audio = Some(Arc::new(clips));
-        Ok(timeline)
-    }
-}
-
-impl Scene for Timeline {
-    fn audio_composition(&self) -> Option<&Timeline> {
-        Some(self)
+        Ok(ResolvedAudio { clips, duration })
     }
 
-    fn duration(&self) -> Option<Duration> {
-        Some(self.duration)
+    /// Wraps this timeline as a picture-only [`Scene`], for embedding where audio
+    /// must not follow, for example `SceneContext::embed`.
+    pub fn visual(&self) -> TimelineVisual {
+        TimelineVisual(self.clone())
     }
 
-    fn audio_clips(&self) -> crate::Result<Vec<crate::AudioClip>> {
-        if let Some(clips) = &self.resolved_audio {
-            return Ok(clips.as_ref().clone());
-        }
-        let mut audio = self.soundtrack.clips.as_ref().clone();
-        for track in self.tracks.iter() {
-            for clip in track.clips.iter() {
-                let sources = if let Some(child) = clip.scene.audio_composition().filter(|child| {
-                    child.soundtrack().master() != crate::Master::default()
-                        || !child.soundtrack().buses().is_empty()
-                }) {
-                    vec![crate::AudioClip::composition(child.clone()).duration(clip.duration)]
-                } else {
-                    clip.scene.audio_clips()?
-                };
-                for source in sources {
-                    if let Some(source) = source.relocated(clip.start, clip.duration)? {
-                        audio.push(source);
-                    }
-                    if audio.len() > 256 {
-                        return Err(invalid("Nested timeline exceeds 256 audio clips"));
-                    }
-                }
-            }
-        }
-        Ok(audio)
+    /// Builds one snapshot without retaining previous-frame state. Times at or after
+    /// [`duration`](Self::duration) produce nothing.
+    pub fn render(&self, context: &SceneContext<'_>) -> Node {
+        self.render_until(context, self.duration)
     }
 
-    fn render(&self, context: &SceneContext<'_>) -> Node {
-        if context.time() < Time::ZERO || context.time() >= self.duration {
+    /// Like [`render`](Self::render) but keeps drawing until `end`, for exports whose
+    /// resolved audio outlasts the picture.
+    pub fn render_until(&self, context: &SceneContext<'_>, end: Duration) -> Node {
+        if context.time() < Time::ZERO || context.time() >= end {
             return Node::empty();
         }
         let parent_size = context.size();
@@ -273,5 +250,22 @@ impl Scene for Timeline {
                 (parent_size.width - self.size.width * scale) * 0.5,
                 (parent_size.height - self.size.height * scale) * 0.5,
             )
+    }
+}
+
+/// Picture-only view of a [`Timeline`], created by [`Timeline::visual`].
+///
+/// Clips and nested scenes see the timeline's own size and frame rate; its audio is
+/// not carried along.
+#[derive(Clone, Debug)]
+pub struct TimelineVisual(Timeline);
+
+impl Scene for TimelineVisual {
+    fn render(&self, context: &SceneContext<'_>) -> Node {
+        self.0.render(context)
+    }
+
+    fn duration(&self) -> Option<Duration> {
+        Some(self.0.duration)
     }
 }

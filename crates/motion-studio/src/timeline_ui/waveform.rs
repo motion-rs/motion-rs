@@ -3,7 +3,6 @@
 //! meters into a shared slot the timeline panel polls while painting.
 
 use eframe::egui;
-use motion_core::Scene;
 use std::sync::{Arc, Mutex};
 
 #[derive(Default)]
@@ -33,7 +32,7 @@ pub(super) fn spawn_analysis(
         .spawn(move || {
             let sampled = std::panic::catch_unwind(std::panic::AssertUnwindSafe(
                 || -> motion_core::Result<AudioOverview> {
-                    if timeline.audio_clips()?.is_empty() {
+                    if timeline.soundtrack().clips().is_empty() {
                         return Ok(AudioOverview::default());
                     }
                     let mixed = motion_encode::MixedAudio::from_timeline(&timeline, 8000)?;

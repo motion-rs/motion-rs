@@ -3,7 +3,7 @@
 use super::{BoundaryAdjustment, BoundaryEdge, MAX_CLIPS, Scene, add_time, align, on_track};
 use crate::authoring::{scene, transition};
 use crate::deferred::DeferredErrors;
-use crate::{Duration, Error, FrameRate, Node, SceneContext, Time};
+use crate::{AudioClip, Duration, Error, FrameRate, Node, SceneContext, Time, Timeline};
 use std::{fmt, sync::Arc};
 
 /// One immutable, positive-duration scene occurrence.
@@ -146,6 +146,7 @@ pub struct TrackBuilder {
     pub(super) adjustments: Vec<BoundaryAdjustment>,
     pub(super) pending: Option<Arc<dyn transition::Transition>>,
     pub(super) errors: DeferredErrors,
+    pub(super) audio: Vec<AudioClip>,
 }
 
 impl TrackBuilder {
@@ -172,6 +173,78 @@ impl TrackBuilder {
         build: impl Fn(&SceneContext<'_>) -> Output + Send + Sync + 'static,
     ) -> Self {
         self.push(scene::scene(build).with_duration(duration))
+    }
+
+    /// Appends a nested timeline at the cursor, using its own duration. Its picture
+    /// is clipped and fitted into this timeline's design space; its audio joins this
+    /// timeline's soundtrack, shifted and cropped to the clip.
+    pub fn nest(self, child: Timeline) -> Self {
+        let cursor = self.cursor;
+        self.defer(|builder| builder.nest_checked(cursor, None, child))
+    }
+
+    /// Like [`nest`](Self::nest) with an explicit clip duration: the child's picture
+    /// and audio are cropped to it, or padded with silence when it is longer.
+    pub fn nest_for(self, duration: Duration, child: Timeline) -> Self {
+        let cursor = self.cursor;
+        self.defer(|builder| builder.nest_checked(cursor, Some(duration), child))
+    }
+
+    /// Places a nested timeline at an absolute time, like [`nest`](Self::nest).
+    pub fn place_timeline(self, start: Time, child: Timeline) -> Self {
+        self.defer(|builder| builder.nest_checked(start, None, child))
+    }
+
+    /// Immediately checks and appends a nested timeline at the cursor.
+    pub fn try_nest(mut self, child: Timeline) -> crate::Result<Self> {
+        let cursor = self.cursor;
+        self.nest_checked(cursor, None, child)?;
+        Ok(self)
+    }
+
+    /// Immediately checks and appends a nested timeline with an explicit duration.
+    pub fn try_nest_for(mut self, duration: Duration, child: Timeline) -> crate::Result<Self> {
+        let cursor = self.cursor;
+        self.nest_checked(cursor, Some(duration), child)?;
+        Ok(self)
+    }
+
+    /// Immediately checks and places a nested timeline.
+    pub fn try_place_timeline(mut self, start: Time, child: Timeline) -> crate::Result<Self> {
+        self.nest_checked(start, None, child)?;
+        Ok(self)
+    }
+
+    fn nest_checked(
+        &mut self,
+        start: Time,
+        duration: Option<Duration>,
+        child: Timeline,
+    ) -> crate::Result<()> {
+        let id = self.clips.len();
+        match duration {
+            Some(duration) => self.place_checked(start, child.visual().with_duration(duration))?,
+            None => self.place_checked(start, child.visual())?,
+        }
+        let clip = self
+            .clips
+            .iter()
+            .find(|clip| clip.id == id)
+            .ok_or_else(|| on_track(self.index, "Nested clip was not placed"))?;
+        let (start, duration) = (clip.start, clip.duration);
+        let soundtrack = child.soundtrack();
+        let sources =
+            if soundtrack.master() != crate::Master::default() || !soundtrack.buses().is_empty() {
+                vec![AudioClip::composition(child.clone()).duration(duration)]
+            } else {
+                soundtrack.clips().to_vec()
+            };
+        for source in sources {
+            if let Some(source) = source.relocated(start, duration)? {
+                self.audio.push(source);
+            }
+        }
+        Ok(())
     }
 
     /// Adds an adjacent transition, retaining invalid input for validate().
@@ -401,7 +474,9 @@ impl TrackBuilder {
         self.cursor
     }
 
-    pub(super) fn finish(mut self) -> crate::Result<(Track, Vec<BoundaryAdjustment>)> {
+    pub(super) fn finish(
+        mut self,
+    ) -> crate::Result<(Track, Vec<BoundaryAdjustment>, Vec<AudioClip>)> {
         if !self.errors.is_empty() {
             return Err(Error::BuildErrors(self.errors.into_vec()));
         }
@@ -429,6 +504,7 @@ impl TrackBuilder {
                 duration,
             },
             self.adjustments,
+            self.audio,
         ))
     }
 }

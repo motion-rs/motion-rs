@@ -1,7 +1,7 @@
 //! Bounded CPU preparation followed by single-caller GPU submission and ordered encoding.
 
 use super::*;
-use motion_core::{FrameRate, Scene, Time};
+use motion_core::{FrameRate, Time};
 use motion_render::PixelFormat;
 use std::ops::Range;
 

@@ -1,7 +1,7 @@
 //! Frame-range selection, worker sizing and per-frame rendering for export.
 
 use super::{Codec, ExportOptions, invalid};
-use motion_core::{FrameRate, Result, Scene, Time, Timeline};
+use motion_core::{FrameRate, Result, Time, Timeline};
 use motion_render::{FrameBuffer, PixelFormat};
 
 pub(super) fn selected(
@@ -15,7 +15,6 @@ pub(super) fn selected(
             "Require 1..=64 workers and positive parallel allowance",
         ));
     }
-    timeline.validate()?;
     let range = options
         .range
         .clone()

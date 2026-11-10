@@ -108,7 +108,7 @@ mod canonical_api_tests {
                 })
             })
             .build()?;
-        assert_eq!(Scene::duration(&timeline), Some(1.seconds()));
+        assert_eq!(timeline.duration(), 1.seconds());
         render_still(&timeline, Time::ZERO, &RenderOptions::default())?;
         Ok(())
     }

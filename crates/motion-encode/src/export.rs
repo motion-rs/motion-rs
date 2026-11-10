@@ -23,7 +23,6 @@ pub use motion_render::{RenderOptions, composition, render_still};
 
 use motion_core::{Result, Timeline};
 
-use motion_core::Scene;
 use motion_render::FrameBuffer;
 
 #[cfg(feature = "gpu")]
@@ -73,8 +72,9 @@ pub fn export_with_encoder(
     cancelled(progress)?;
     progress.phase(ExportPhase::Preparing);
     cancelled(progress)?;
-    let prepared_timeline = crate::audio::prepare_timeline(timeline)?;
-    let timeline = &prepared_timeline;
+    let resolved = crate::audio::prepare_timeline(timeline)?;
+    let fitted_timeline = crate::audio::fitted(timeline, &resolved)?;
+    let timeline = fitted_timeline.as_ref();
     let (mut options, first, end) = selected(timeline, options)?;
     options.render.font_usage = motion_core::FontUsage::default();
     let output_rate = output_rate(timeline, &options);
@@ -88,10 +88,10 @@ pub fn export_with_encoder(
     let capabilities = encoder.capabilities();
     capabilities.validate_size(options.render.size.expect("normalized size"))?;
     let mut renderer = composition(timeline, &options.render)?.frame_renderer(timeline.size())?;
-    let clips = timeline.audio_clips()?;
+    let clips = resolved.clips();
     if options.path.try_exists()? {
         let destination = options.path.canonicalize()?;
-        for clip in &clips {
+        for clip in clips {
             if let Some(path) = clip.parameters().source.file_path()
                 && path.canonicalize()? == destination
             {
@@ -107,8 +107,9 @@ pub fn export_with_encoder(
         None
     } else {
         let range = options.range.as_ref().expect("normalized range");
-        Some(crate::MixedAudio::from_window_with(
+        Some(crate::MixedAudio::from_resolved_window(
             timeline,
+            &resolved,
             range.clone(),
             options.audio_sample_rate,
             options.audio_resampler,

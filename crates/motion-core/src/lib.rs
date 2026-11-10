@@ -56,11 +56,11 @@ pub use authoring::context::{CacheLimits, CachePartition, RenderCache, SceneCach
 pub use authoring::elevation::{Elevation, ShadowLayer};
 pub use authoring::sampling::{MotionBlur, ShutterCurve, ShutterSampling, sample_offsets};
 pub use authoring::scene::IntoSceneOutput;
-pub use authoring::scene::{SoundScene, scene, scene_with_sound};
+pub use authoring::scene::scene;
 pub use authoring::skeleton::{Bone, BonePose, BoneTransform, Pose, Skeleton};
 pub use authoring::timeline::{
-    BoundaryAdjustment, BoundaryEdge, Clip, Diagnostics, Soundtrack, Timeline, TimelineBuilder,
-    TimelineWarning, Track, TrackBuilder,
+    BoundaryAdjustment, BoundaryEdge, Clip, Diagnostics, ResolvedAudio, Soundtrack, Timeline,
+    TimelineBuilder, TimelineVisual, TimelineWarning, Track, TrackBuilder,
 };
 pub use authoring::transition::Direction;
 pub use authoring::transition::{

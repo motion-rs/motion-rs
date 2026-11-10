@@ -141,7 +141,7 @@ fn master_gain_identity_and_random_access() -> motion_core::Result {
 #[test]
 #[cfg(feature = "audio")]
 fn buses_nested_master_and_local_sound_declarations_are_preserved() -> motion_core::Result {
-    use motion_core::{AudioBus, Master, Node, Scene, Size, Timeline};
+    use motion_core::{AudioBus, Master, Node, Size, Timeline};
     let pcm = PcmBuffer::new(8000, 2, vec![0.1; 16000])?;
     let mut bus = AudioBus::new("voice");
     bus.gain_db = -6.0;
@@ -154,7 +154,7 @@ fn buses_nested_master_and_local_sound_declarations_are_preserved() -> motion_co
         })
         .build()?;
     let parent = Timeline::new(Size::new(8.0, 8.0), 30)
-        .track(|track| track.push(child.clone()))
+        .track(|track| track.nest(child.clone()))
         .master(Master {
             gain_db: -6.0,
             ..Default::default()
@@ -169,24 +169,15 @@ fn buses_nested_master_and_local_sound_declarations_are_preserved() -> motion_co
     let mut seek = [0.0; 2];
     window.read(0, &mut seek);
     assert_eq!(samples, seek);
-    let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-    let counter = calls.clone();
-    let scene = motion_core::scene_with_sound(
-        move |context| -> motion_core::Result<Node> {
-            counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            context.sound(AudioClip::source(pcm.clone()).start(100.milliseconds()))?;
-            Ok(Node::empty())
-        },
-        1.seconds(),
-        Size::new(8.0, 8.0),
-        30,
-    );
-    assert_eq!(scene.audio_clips()?.len(), 1);
-    assert_eq!(scene.audio_clips()?.len(), 1);
-    assert_eq!(calls.load(std::sync::atomic::Ordering::Relaxed), 1);
-    let timeline = Timeline::new(Size::new(8.0, 8.0), 30)
-        .track(|track| track.gap(1.seconds()).push(scene))
+    let child = Timeline::new(Size::new(8.0, 8.0), 30)
+        .track(|track| track.scene(1.seconds(), |_| Node::empty()))
+        .audio(AudioClip::source(pcm.clone()).start(100.milliseconds()))
         .build()?;
+    assert_eq!(child.soundtrack().clips().len(), 1);
+    let timeline = Timeline::new(Size::new(8.0, 8.0), 30)
+        .track(|track| track.gap(1.seconds()).nest(child))
+        .build()?;
+    assert_eq!(timeline.soundtrack().clips().len(), 1);
     let mix = MixedAudio::from_timeline(&timeline, 8000)?;
     mix.read(4000, &mut samples);
     assert_eq!(samples, [0.0; 2]);
@@ -477,7 +468,6 @@ fn wav_decode_and_lazy_asset_handles_freeze_exact_pcm() -> motion_core::Result {
 #[cfg(feature = "ffmpeg")]
 #[ignore = "requires native FFmpeg/libx264/AAC; no devices, fonts or media executables"]
 fn timeline_audio_exports_decodes_aac_and_protects_existing_output() -> motion_core::Result {
-    use motion_core::authoring::Scene as _;
     let input = (0..4410)
         .map(|index| {
             (libm::sin(std::f64::consts::TAU * 1000.0 * f64::from(index) / 44_100.0) * 0.25) as f32
@@ -557,7 +547,7 @@ fn timeline_audio_exports_decodes_aac_and_protects_existing_output() -> motion_c
     );
     assert_eq!(std::fs::read(&path)?, previous);
     assert_eq!(directory.path().read_dir()?.count(), 1);
-    assert_eq!(timeline.audio_clips()?.len(), 1);
+    assert_eq!(timeline.soundtrack().clips().len(), 1);
     println!(
         "audio export: frames=7 AAC=48000/stereo expected_samples={expected} decoded={} symphonia_frames={} pan/resample/fades/failure/cleanup=pass",
         samples.len(),

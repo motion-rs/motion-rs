@@ -6,7 +6,7 @@ use super::resample::resample;
 use super::{AudioClip, AudioSource, MAX_SAMPLES, ResampleQuality, ceil_frames, frames, invalid};
 #[cfg(not(feature = "audio"))]
 use crate::audio::resample_disabled::resample;
-use motion_core::{Duration, Scene, Time};
+use motion_core::{Duration, Time};
 use std::sync::Arc;
 
 #[derive(Clone, Debug)]
@@ -39,8 +39,17 @@ impl MixedAudio {
         rate: u32,
         quality: ResampleQuality,
     ) -> motion_core::Result<Self> {
-        let timeline = crate::audio::prepare_timeline(timeline)?;
-        Self::new_with(&timeline.audio_clips()?, rate, timeline.duration(), quality)?
+        let resolved = crate::audio::prepare_timeline(timeline)?;
+        Self::from_resolved(timeline, &resolved, rate, quality)
+    }
+
+    pub(crate) fn from_resolved(
+        timeline: &motion_core::Timeline,
+        resolved: &motion_core::ResolvedAudio,
+        rate: u32,
+        quality: ResampleQuality,
+    ) -> motion_core::Result<Self> {
+        Self::new_with(resolved.clips(), rate, resolved.duration(), quality)?
             .process_buses(timeline.soundtrack().buses())?
             .master(timeline.soundtrack().master())
     }
@@ -61,19 +70,30 @@ impl MixedAudio {
         rate: u32,
         quality: ResampleQuality,
     ) -> motion_core::Result<Self> {
+        let resolved = crate::audio::prepare_timeline(timeline)?;
+        Self::from_resolved_window(timeline, &resolved, range, rate, quality)
+    }
+
+    pub(crate) fn from_resolved_window(
+        timeline: &motion_core::Timeline,
+        resolved: &motion_core::ResolvedAudio,
+        range: std::ops::Range<Time>,
+        rate: u32,
+        quality: ResampleQuality,
+    ) -> motion_core::Result<Self> {
         if range.start < Time::ZERO || range.end < range.start {
             return Err(invalid("range", "Invalid audio window").into());
         }
-        let clips = timeline.audio_clips()?;
+        let clips = resolved.clips();
         if timeline.soundtrack().master() != motion_core::Master::default()
             || !timeline.soundtrack().buses().is_empty()
             || clips.iter().any(|clip| {
                 !clip.parameters().effects.is_empty() || !clip.parameters().ducking.is_empty()
             })
         {
-            return Self::from_timeline_with(timeline, rate, quality)?.window(range);
+            return Self::from_resolved(timeline, resolved, rate, quality)?.window(range);
         }
-        Self::new_window(&clips, rate, range.end - range.start, range.start, quality)
+        Self::new_window(clips, rate, range.end - range.start, range.start, quality)
     }
 
     /// Prepares at most [`MAX_CLIPS`](crate::audio::MAX_CLIPS) clips / 128 MiB stereo PCM. Timeline gaps and EOF are

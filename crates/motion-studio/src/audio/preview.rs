@@ -15,7 +15,6 @@ use eframe::egui;
 use crate::AudioOptions;
 use crate::audio::settings::AudioForm;
 use motion_core::AudioClip;
-use motion_core::Scene;
 use motion_encode::audio;
 
 /// Stereo sample frames mixed per producer step.
@@ -403,7 +402,7 @@ impl PreviewMix {
             builder = builder.try_audio(clip.clone()).map_err(io::Error::other)?;
         }
         let timeline = builder.build().map_err(io::Error::other)?;
-        let timeline = if timeline.audio_clips().map_err(io::Error::other)?.is_empty() {
+        let timeline = if timeline.soundtrack().clips().is_empty() {
             None
         } else {
             Some(timeline)
@@ -411,11 +410,11 @@ impl PreviewMix {
         let processed = timeline.as_ref().is_some_and(|timeline| {
             timeline.soundtrack().master() != motion_core::Master::default()
                 || !timeline.soundtrack().buses().is_empty()
-                || timeline.audio_clips().is_ok_and(|clips| {
-                    clips
-                        .iter()
-                        .any(|clip| !clip.parameters().effects.is_empty())
-                })
+                || timeline
+                    .soundtrack()
+                    .clips()
+                    .iter()
+                    .any(|clip| !clip.parameters().effects.is_empty())
         });
         let prepared = if let Some(timeline) = timeline.as_ref().filter(|_| processed) {
             Some(

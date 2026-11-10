@@ -195,7 +195,6 @@ pub use motion_core::ClipMode;
 pub use motion_core::IntoSceneOutput;
 pub use motion_core::{
     AudioBus, AudioChapter, AudioEffect, AudioMetadata, Limiter, Loudness, Master, PanLaw,
-    scene_with_sound,
 };
 pub use motion_core::{
     Extrapolate, FollowPath, Noise, Oscillator, PathSample, Waveform, piecewise, remap,
@@ -350,7 +349,6 @@ pub mod prelude {
     };
     pub use crate::{
         AudioBus, AudioChapter, AudioEffect, AudioMetadata, Limiter, Loudness, Master, PanLaw,
-        scene_with_sound,
     };
     #[cfg(feature = "svg")]
     pub use motion_content::Svg;

@@ -62,47 +62,9 @@ pub struct SceneContext<'a> {
     cache: &'a SceneCache,
 
     diagnostics: Option<&'a crate::RequestDiagnostics>,
-    sounds: Option<&'a std::sync::Mutex<Vec<crate::AudioClip>>>,
 }
 
 impl<'a> SceneContext<'a> {
-    pub(crate) fn collecting_sounds(
-        mut self,
-        sounds: &'a std::sync::Mutex<Vec<crate::AudioClip>>,
-    ) -> Self {
-        self.sounds = Some(sounds);
-        self
-    }
-
-    /// Declares local audio in a `scene_with_sound` metadata pass; visual snapshots never play sound.
-    /// Declare outside time-dependent branches so arbitrary frame order cannot change the track.
-    pub fn sound(&self, clip: crate::AudioClip) -> crate::Result {
-        if let Some(sounds) = self.sounds {
-            let mut sounds = sounds.lock().map_err(|_| {
-                crate::ValidationError::invalid(
-                    "scene_audio",
-                    "lock",
-                    "Sound declaration lock is poisoned",
-                )
-            })?;
-            if sounds.len() >= 256 {
-                return Err(crate::ValidationError::invalid(
-                    "scene_audio",
-                    "count",
-                    "At most 256 local sound declarations",
-                )
-                .into());
-            }
-            if let Some(clip) = clip.relocated(
-                self.global_time - self.time,
-                self.clip_duration.unwrap_or(Time::from_seconds(86400.0)),
-            )? {
-                sounds.push(clip);
-            }
-        }
-        Ok(())
-    }
-
     /// Creates root evaluation inputs with matching local/global time.
     ///
     /// Panics unless both design dimensions are finite and strictly positive.
@@ -140,7 +102,6 @@ impl<'a> SceneContext<'a> {
             assets: None,
             cache,
             diagnostics: None,
-            sounds: None,
         })
     }
 

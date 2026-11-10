@@ -1,6 +1,5 @@
 //! Shared renderer selection and still, export and session configuration.
 use crate::*;
-use motion_core::Scene;
 use motion_core::{Color, PixelSize, Result, Time, Timeline, ValidationError};
 
 /// Shared render-session configuration for stills, exports and direct compositions.
@@ -219,7 +218,9 @@ pub fn render_still(timeline: &Timeline, time: Time, options: &RenderOptions) ->
 #[cfg(test)]
 mod tests {
     use super::*;
-    use motion_core::{Circle, FrameRate, Node, Point, SceneContext, Shape, Size, TimeLiteral};
+    use motion_core::{
+        Circle, FrameRate, Node, Point, Scene, SceneContext, Shape, Size, TimeLiteral,
+    };
 
     #[test]
     fn draft_disables_global_shutter_and_final_remains_exact() -> Result<()> {

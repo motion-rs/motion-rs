@@ -99,14 +99,15 @@ fn main() -> motion::Result {
     let timeline = Timeline::new(Size::new(320.0, 180.0), 30)
         .audio(narration)
         .audio(music)
-        .duration(6.seconds()).build()?;
-    let resolved = motion::audio::prepare_timeline(&timeline)?;
-    let _mixed = MixedAudio::from_timeline(&resolved, 48_000)?;
+        .duration(6.seconds())
+        .build()?;
+    let _resolved = motion::audio::prepare_timeline(&timeline)?;
+    let _mixed = MixedAudio::from_timeline(&timeline, 48_000)?;
     Ok(())
 }
 ```
 
-Preparation resolves file metadata and required windows. A file source remains a random-access file, not permanently frozen PCM. Keep inputs unchanged during execution. Use explicit eager PCM decoding for a snapshot independent of the file's lifetime.
+`prepare_timeline` returns a `ResolvedAudio` (resolved clips plus the output duration they need); the timeline itself never changes. Preparation resolves file metadata and required windows. A file source remains a random-access file, not permanently frozen PCM. Keep inputs unchanged during execution. Use explicit eager PCM decoding for a snapshot independent of the file's lifetime.
 
 Native timeline output defaults to 48 kHz stereo; `ExportOptions::audio_sample_rate` also accepts 44.1 and 96 kHz for AAC. Different source rates are resampled. Preserve exact timing with integer ticks and sample boundaries rather than rounding rational video rates before calculating audio length.
 
@@ -151,7 +152,7 @@ Stateful DSP is baked from the clip origin once, not approximated with a finite 
 
 Import `motion::audio::AudioClipExt` for `speed`, `reverse`, `loop_until`, `crossfade` and `pitch_shift`. Transforms freeze the trimmed source before clip effects. Speed uses windowed sinc interpolation; independent pitch/tempo uses bounded WSOLA, not formant-preserving voice processing. Speed scales clip fades but leaves explicitly authored envelope/pan animations on their original time clock. Loop seams use equal-power crossfades; clip crossfade convenience uses occurrence fades.
 
-`scene_with_sound(build, duration, size, rate)` opts into one cached declaration pass at local time zero. Call `context.sound(clip)?` unconditionally during that pass; do not hide declarations in time-dependent branches. Normal visual snapshots remain silent. Scene nesting relocates/crops sounds and preserves child master/bus ownership.
+Scenes are picture only. To reuse a picture together with its sound, build a small `Timeline` with the audio and place it with `TrackBuilder::nest` (or `nest_for` for an explicit clip duration): nesting relocates and crops the child's sounds once, at build time, and preserves child master/bus ownership. `Timeline::visual()` embeds only the picture, for example with `SceneContext::embed`.
 
 ## Analysis Without Playback
 

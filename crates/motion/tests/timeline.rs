@@ -575,7 +575,7 @@ mod scenes {
                 .try_track(|track| {
                     track
                         .try_gap(500.milliseconds())?
-                        .try_push(child.with_duration(1.seconds()))?
+                        .try_nest_for(1.seconds(), child)?
                         .try_gap(1.seconds())
                 })?
                 .build()?;
@@ -770,7 +770,7 @@ mod scenes {
                     SceneContext::new(Time::ZERO, FrameRate::from(30), parent_size, &cache);
                 let pixels = PixelSize::new(parent_size.width as u32, parent_size.height as u32);
                 let frame = context
-                    .embed(&child, Time::ZERO)
+                    .embed(&child.visual(), Time::ZERO)
                     .compile(parent_size, pixels, ValidationLimits::default())?
                     .prepare(ValidationLimits::default(), RasterLimits::default())?
                     .render_linear(RasterLimits::default())?;
@@ -806,7 +806,7 @@ mod scenes {
                 .build()?;
             let context = SceneContext::new(Time::ZERO, FrameRate::from(30), child.size(), &cache);
             let shifted = context
-                .embed(&child, Time::ZERO)
+                .embed(&child.visual(), Time::ZERO)
                 .translate(4.0, 0.0)
                 .compile(
                     child.size(),
@@ -826,10 +826,10 @@ mod scenes {
                 .try_duration(1.seconds())?
                 .build()?;
             let middle = Timeline::try_new(Size::new(16.0, 8.0), 30)?
-                .try_track(|track| track.try_push(inner))?
+                .try_track(|track| track.try_nest(inner))?
                 .build()?;
             let outer = Timeline::try_new(Size::new(8.0, 12.0), 60)?
-                .try_track(|track| track.try_push(middle))?
+                .try_track(|track| track.try_nest(middle))?
                 .build()?;
             let context = SceneContext::new(Time::ZERO, FrameRate::from(60), outer.size(), &cache);
             let frame = outer
@@ -913,7 +913,6 @@ mod scenes {
                 })?
                 .build()?;
             assert_eq!(timeline.duration(), 2500.milliseconds());
-            assert_eq!(Scene::duration(&timeline), Some(timeline.duration()));
             let cache = SceneCache::new(0);
             for (time, color, ids) in [
                 (Time::from_ticks(-1), [0.0; 4], vec![]),
@@ -1221,7 +1220,7 @@ mod scenes {
                 Size::new(64.0, 128.0),
             ] {
                 let parent = Timeline::try_new(design, FrameRate::NTSC)?
-                    .try_track(|track| track.try_gap(500.milliseconds())?.try_push(child.clone()))?
+                    .try_track(|track| track.try_gap(500.milliseconds())?.try_nest(child.clone()))?
                     .build()?;
                 let start = parent.tracks()[0].clips()[0].start();
                 let scale =

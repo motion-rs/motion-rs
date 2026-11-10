@@ -17,7 +17,6 @@
 //!         .transition(CrossFade, 500.milliseconds())
 //!         .push(next)
 //! }).build()?;
-//! timeline.validate()?;
 //! assert_eq!(timeline.frame_count(), 45);
 //! let cache = SceneCache::default();
 //! let context = SceneContext::new(Time::ZERO, timeline.frame_rate(), timeline.size(), &cache);

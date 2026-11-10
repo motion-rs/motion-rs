@@ -92,7 +92,7 @@ fn nested_push_and_embed_preserve_global_ticks_and_child_rate_without_retiming()
         })?
         .build()?;
     let parent = Timeline::try_new(Size::new(12.0, 12.0), FrameRate::NTSC)?
-        .try_track(|track| track.try_gap(1.seconds())?.try_push(child.clone()))?
+        .try_track(|track| track.try_gap(1.seconds())?.try_nest(child.clone()))?
         .build()?;
     let cache = SceneCache::new(0);
     let context =
@@ -103,7 +103,7 @@ fn nested_push_and_embed_preserve_global_ticks_and_child_rate_without_retiming()
         PixelSize::new(12, 12),
         ValidationLimits::default(),
     )?;
-    let embedded = context.embed(&child, start).compile(
+    let embedded = context.embed(&child.visual(), start).compile(
         parent.size(),
         PixelSize::new(12, 12),
         ValidationLimits::default(),
@@ -127,7 +127,7 @@ fn nested_push_and_embed_preserve_global_ticks_and_child_rate_without_retiming()
     );
     assert!(
         at_end
-            .embed(&child, start)
+            .embed(&child.visual(), start)
             .compile(
                 parent.size(),
                 PixelSize::new(12, 12),

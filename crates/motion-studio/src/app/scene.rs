@@ -150,7 +150,8 @@ impl StudioScene {
         composition: Composition,
         timeline: motion_core::Timeline,
     ) -> Result<Self> {
-        let timeline = motion_encode::audio::prepare_timeline(&timeline)?;
+        let resolved = motion_encode::audio::prepare_timeline(&timeline)?;
+        let timeline = motion_encode::audio::fitted(&timeline, &resolved)?.into_owned();
         let count = u32::try_from(timeline.frame_count()).map_err(|_| {
             motion_core::ValidationError::invalid(
                 "audio",
@@ -166,7 +167,7 @@ impl StudioScene {
         let timeline = Arc::new(timeline);
         let visual = timeline.clone();
         let mut scene = Self::new(name, composition, size, move |context| {
-            motion_core::authoring::Scene::render(visual.as_ref(), context)
+            visual.render(context)
         });
         let SceneDefinition { audio_timeline, .. } = &mut scene.definition;
         *audio_timeline = Some(timeline);

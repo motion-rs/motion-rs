@@ -143,17 +143,6 @@ pub trait Scene: Send + Sync {
         None
     }
 
-    /// Returns pure audio metadata for precomposition/export, not playback.
-    /// Default scenes are silent; callers must preserve local clip coordinates.
-    fn audio_clips(&self) -> crate::Result<Vec<crate::AudioClip>> {
-        Ok(Vec::new())
-    }
-
-    /// Optional nested timeline ownership, preserved when its audio is relocated.
-    fn audio_composition(&self) -> Option<&crate::Timeline> {
-        None
-    }
-
     /// Overrides clip metadata without retiming or clamping the callback.
     ///
     /// Panics for negative duration. Zero duration has an empty active interval.
@@ -179,10 +168,6 @@ where
 }
 
 impl Scene for Arc<dyn Scene> {
-    fn audio_composition(&self) -> Option<&crate::Timeline> {
-        self.as_ref().audio_composition()
-    }
-
     fn validate(&self) -> crate::Result<()> {
         self.as_ref().validate()
     }
@@ -194,10 +179,6 @@ impl Scene for Arc<dyn Scene> {
     fn duration(&self) -> Option<Duration> {
         self.as_ref().duration()
     }
-
-    fn audio_clips(&self) -> crate::Result<Vec<crate::AudioClip>> {
-        self.as_ref().audio_clips()
-    }
 }
 
 /// A scene with an explicit finite authoring duration.
@@ -207,10 +188,6 @@ pub struct WithDuration<Content> {
 }
 
 impl<Content: Scene> Scene for WithDuration<Content> {
-    fn audio_composition(&self) -> Option<&crate::Timeline> {
-        self.scene.audio_composition()
-    }
-
     fn validate(&self) -> crate::Result<()> {
         self.scene.validate()
     }
@@ -221,100 +198,5 @@ impl<Content: Scene> Scene for WithDuration<Content> {
 
     fn duration(&self) -> Option<Duration> {
         Some(self.duration)
-    }
-
-    fn audio_clips(&self) -> crate::Result<Vec<crate::AudioClip>> {
-        self.scene
-            .audio_clips()?
-            .iter()
-            .filter_map(|clip| clip.relocated(Time::ZERO, self.duration).transpose())
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(Into::into)
-    }
-}
-
-/// Explicit sound-declaration scene; the time-zero metadata pass is cached once.
-pub struct SoundScene<Build> {
-    build: Build,
-    duration: Duration,
-    size: crate::Size,
-    rate: crate::FrameRate,
-    sounds: std::sync::Mutex<Option<Vec<crate::AudioClip>>>,
-}
-
-/// Opts a scene into local `SceneContext::sound` declarations without changing silent closure scenes.
-/// The declaration pass has time zero and no rendering/device initialization.
-pub fn scene_with_sound<Build, Output>(
-    build: Build,
-    duration: Duration,
-    size: crate::Size,
-    rate: impl Into<crate::FrameRate>,
-) -> SoundScene<Build>
-where
-    Build: Fn(&SceneContext<'_>) -> Output + Send + Sync,
-    Output: IntoSceneOutput,
-{
-    SoundScene {
-        build,
-        duration,
-        size,
-        rate: rate.into(),
-        sounds: std::sync::Mutex::new(None),
-    }
-}
-
-impl<Build, Output> Scene for SoundScene<Build>
-where
-    Build: Fn(&SceneContext<'_>) -> Output + Send + Sync,
-    Output: IntoSceneOutput,
-{
-    fn validate(&self) -> crate::Result {
-        if self.duration <= Time::ZERO || self.duration.as_seconds() > 86400.0 {
-            return Err(ValidationError::invalid(
-                "scene_audio",
-                "duration",
-                "Require duration in (0,24h]",
-            )
-            .into());
-        }
-        SceneContext::try_new(
-            Time::ZERO,
-            self.rate,
-            self.size,
-            &crate::SceneCache::default(),
-        )?;
-        Ok(())
-    }
-
-    fn duration(&self) -> Option<Duration> {
-        Some(self.duration)
-    }
-
-    fn render(&self, context: &SceneContext<'_>) -> Node {
-        match (self.build)(context).into_scene_output() {
-            Ok(node) => node,
-            Err(error) => failure(error),
-        }
-    }
-
-    fn audio_clips(&self) -> crate::Result<Vec<crate::AudioClip>> {
-        self.validate()?;
-        let mut cached = self.sounds.lock().map_err(|_| {
-            ValidationError::invalid("scene_audio", "lock", "Sound scene cache is poisoned")
-        })?;
-        if let Some(sounds) = cached.as_ref() {
-            return Ok(sounds.clone());
-        }
-        let cache = crate::SceneCache::default();
-        let sounds = std::sync::Mutex::new(Vec::new());
-        let context = SceneContext::try_new(Time::ZERO, self.rate, self.size, &cache)?
-            .with_clip_duration(self.duration)
-            .collecting_sounds(&sounds);
-        (self.build)(&context).into_scene_output()?;
-        let sounds = sounds.into_inner().map_err(|_| {
-            ValidationError::invalid("scene_audio", "lock", "Sound declaration lock is poisoned")
-        })?;
-        *cached = Some(sounds.clone());
-        Ok(sounds)
     }
 }

@@ -80,9 +80,8 @@ impl Project {
         checked.dedup();
         if frames > 0 {
             for index in &checked {
-                composition.preflight_frame(*index, timeline.size(), |context| {
-                    crate::authoring::Scene::render(timeline, context)
-                })?;
+                composition
+                    .preflight_frame(*index, timeline.size(), |context| timeline.render(context))?;
             }
         } else {
             checked.clear();

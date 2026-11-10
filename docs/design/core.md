@@ -84,7 +84,9 @@ dimensions, rational rate, tracks, a Soundtrack (audio occurrences, buses, maste
 its final duration. Clip boundaries align independently to frame ticks with warnings
 in Diagnostics.
 Transitions admit two neighboring clips, not arbitrary triple overlaps; both
-endpoints keep their local clocks and share global resources. Nested timelines clip
+endpoints keep their local clocks and share global resources. Scene is picture only
+(render, duration, validate); Timeline is not a Scene. TrackBuilder::nest places a child
+Timeline as a picture-only clip and appends its audio to the parent's Soundtrack. Nested timelines clip
 their own viewport before centered contain mapping; child rates do not retime the
 parent clock implicitly.
 

@@ -79,11 +79,28 @@ pub fn resolve_clip(clip: &AudioClip) -> motion_core::Result<AudioClip> {
     }
 }
 
-/// Resolves flattened timeline audio before output scheduling and encoder startup.
+/// Resolves the timeline's flattened audio before output scheduling and encoder startup.
 pub fn prepare_timeline(
     timeline: &motion_core::Timeline,
-) -> motion_core::Result<motion_core::Timeline> {
+) -> motion_core::Result<motion_core::ResolvedAudio> {
     timeline.resolve_audio(resolve_clip)
+}
+
+/// The timeline itself, or a copy lasting as long as its resolved audio when that is longer.
+/// Only timelines with an inferred duration are ever extended.
+pub fn fitted<'a>(
+    timeline: &'a motion_core::Timeline,
+    resolved: &motion_core::ResolvedAudio,
+) -> motion_core::Result<std::borrow::Cow<'a, motion_core::Timeline>> {
+    if resolved.duration() <= timeline.duration() {
+        return Ok(std::borrow::Cow::Borrowed(timeline));
+    }
+    Ok(std::borrow::Cow::Owned(
+        timeline
+            .to_builder()
+            .try_duration(resolved.duration())?
+            .build()?,
+    ))
 }
 
 struct CompositionGuard;

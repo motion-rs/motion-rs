@@ -113,21 +113,10 @@ impl ExportJob {
                         motion_encode::Codec::Gif { .. } | motion_encode::Codec::PngSequence
                     );
                     if silent {
-                        let visual = timeline.clone();
-                        let duration = timeline.duration();
+                        let visual = timeline.visual();
                         timeline = Arc::new(
                             motion_core::Timeline::try_new(timeline.size(), timeline.frame_rate())?
-                                .try_track(|track| {
-                                    track.try_push(motion_core::authoring::Scene::with_duration(
-                                        move |context: &motion_core::SceneContext<'_>| {
-                                            motion_core::authoring::Scene::render(
-                                                visual.as_ref(),
-                                                context,
-                                            )
-                                        },
-                                        duration,
-                                    ))
-                                })?
+                                .try_track(|track| track.try_push(visual))?
                                 .build()?,
                         );
                     }

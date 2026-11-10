@@ -243,23 +243,26 @@ mod tests {
             wav.write_all(&((index as i16 % 100) * 100).to_le_bytes())?;
         }
         drop(wav);
-        let prepared = super::super::prepare_timeline(&timeline)?;
-        assert_eq!(prepared.frame_count(), 30);
+        let resolved = super::super::prepare_timeline(&timeline)?;
+        assert_eq!(
+            resolved.duration(),
+            motion_core::Time::from_frame(30, motion_core::FrameRate::from(30))
+        );
         let original = std::fs::read(&path)?;
         let mut options = crate::ExportOptions::new(&path).overwrite(true);
         options.codec = crate::Codec::default();
-        assert!(crate::export(&prepared, &options, &crate::NoProgress).is_err());
+        assert!(crate::export(&timeline, &options, &crate::NoProgress).is_err());
         assert_eq!(std::fs::read(&path)?, original);
-        let full = MixedAudio::from_timeline(&prepared, 8000)?;
+        let full = MixedAudio::from_timeline(&timeline, 8000)?;
         let window =
-            MixedAudio::from_window(&prepared, 50.milliseconds()..150.milliseconds(), 8000)?;
+            MixedAudio::from_window(&timeline, 50.milliseconds()..150.milliseconds(), 8000)?;
         let mut expected = vec![0.0; 1600];
         let mut actual = vec![0.0; 1600];
         full.read(400, &mut expected);
         window.read(0, &mut actual);
         assert_eq!(expected, actual);
         std::fs::remove_file(path)?;
-        assert!(MixedAudio::from_timeline(&prepared, 8000).is_err());
+        assert!(MixedAudio::from_timeline(&timeline, 8000).is_err());
         Ok(())
     }
 }

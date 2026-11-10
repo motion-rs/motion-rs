@@ -21,7 +21,8 @@ rules are in [Rendering and export](rendering.md#video-and-audio).
 - `AudioSource` is a pure, concurrent, random-access interleaved f32 source. Repeated
   reads must not depend on earlier reads; short reads and EOF leave the rest of the
   buffer silent; returned samples must be finite. Mixing supports mono and stereo.
-- File and nested-timeline sources are deferred. `resolve_clip` and
+- File and nested-timeline sources are deferred. `Timeline::resolve_audio` returns a
+  `ResolvedAudio` (clips plus the output duration they need) without changing the timeline. `resolve_clip` and
   `prepare_timeline` turn them into resolved sources at an execution boundary
   (export, `MixedAudio`), never during scene evaluation. File sources are decoded
   lazily in windows and must not change while executing; explicit `PcmBuffer` data is

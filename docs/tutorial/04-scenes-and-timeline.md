@@ -99,7 +99,7 @@ or reversed views share source frames rather than duplicating endpoint durations
 
 ## Nesting, Cameras, Skeletons and Spaces
 
-Nested timelines clip the child viewport before applying a centered contain mapping. A different child frame rate does not implicitly reset the parent clock or automatically retime all content.
+`Timeline` is not a `Scene`. Place a child timeline with `track.nest(child)` (or `nest_for(duration, child)` / `place_timeline(start, child)`): its picture clips the child viewport before a centered contain mapping, and its audio joins the parent's soundtrack once, at build time. Inside a scene, `context.embed(&child.visual(), offset)` embeds the picture only, so dropping the sound is visible at the call site. A different child frame rate does not implicitly reset the parent clock or automatically retime all content.
 
 `camera(context, content, view)` applies an inverse view transform. Keep HUD content outside the camera node and use `ClipMode::Geometric` for a fixed viewport. `Camera` world/screen conversion excludes external ancestor transforms and requires a finite, invertible mapping.
 

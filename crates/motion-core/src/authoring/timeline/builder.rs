@@ -26,6 +26,7 @@ pub struct TimelineBuilder {
     track_end: Duration,
     adjustments: Arc<Vec<BoundaryAdjustment>>,
     soundtrack: Soundtrack,
+    nested_audio: Arc<Vec<crate::AudioClip>>,
     duration: Option<Duration>,
     errors: Arc<DeferredErrors>,
 }
@@ -40,6 +41,7 @@ impl TimelineBuilder {
             track_end: Time::ZERO,
             adjustments: Arc::new(Vec::new()),
             soundtrack: Soundtrack::default(),
+            nested_audio: Arc::default(),
             duration: None,
             errors: Arc::default(),
         }
@@ -66,6 +68,7 @@ impl TimelineBuilder {
                     .collect(),
             ),
             soundtrack: timeline.soundtrack.clone(),
+            nested_audio: Arc::default(),
             duration: (!timeline.inferred_duration).then_some(timeline.duration),
             errors: Arc::default(),
         }
@@ -133,6 +136,7 @@ impl TimelineBuilder {
             adjustments: Vec::new(),
             pending: None,
             errors: DeferredErrors::default(),
+            audio: Vec::new(),
         };
         let builder = build(builder)?;
         if builder.index != self.tracks.len() || builder.rate != self.rate {
@@ -140,7 +144,7 @@ impl TimelineBuilder {
                 "Track builder belongs to a different index or frame grid",
             ));
         }
-        let (track, adjustments) = builder.finish()?;
+        let (track, adjustments, audio) = builder.finish()?;
         let total = self
             .tracks
             .iter()
@@ -153,6 +157,7 @@ impl TimelineBuilder {
         self.track_end = self.track_end.max(track.duration);
         Arc::make_mut(&mut self.tracks).push(track);
         Arc::make_mut(&mut self.adjustments).extend(adjustments);
+        Arc::make_mut(&mut self.nested_audio).extend(audio);
         Ok(self)
     }
 
@@ -246,6 +251,15 @@ impl TimelineBuilder {
         if !errors.is_empty() {
             return Err(Error::BuildErrors(errors.into_vec()));
         }
+        let mut soundtrack = self.soundtrack;
+        if !self.nested_audio.is_empty() {
+            let mut clips = soundtrack.clips.as_ref().clone();
+            clips.extend(self.nested_audio.iter().cloned());
+            if clips.len() > 256 {
+                return Err(invalid("Nested timeline exceeds 256 audio clips"));
+            }
+            soundtrack.clips = Arc::new(clips);
+        }
         let content = self.track_end.max(audio_end);
         let mut warnings = self
             .adjustments
@@ -264,8 +278,7 @@ impl TimelineBuilder {
             duration: self.duration.unwrap_or(content),
             inferred_duration: self.duration.is_none(),
             diagnostics: Diagnostics::new(warnings),
-            soundtrack: self.soundtrack,
-            resolved_audio: None,
+            soundtrack,
         })
     }
 }

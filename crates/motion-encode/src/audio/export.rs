@@ -4,7 +4,7 @@
 //! exposes the AAC encoder, so they would need new bindings.
 
 use super::pcm::{MixedAudio, ResampleQuality, ceil_frames, invalid};
-use motion_core::{AudioMetadata, AudioSource, Scene, Time, Timeline};
+use motion_core::{AudioMetadata, AudioSource, Time, Timeline};
 use std::{io::Write, ops::Range, path::PathBuf};
 
 /// Sample encoding of the written WAV file.
@@ -286,7 +286,7 @@ pub fn export_audio(
     options: &AudioExportOptions,
 ) -> motion_core::Result<AudioExportReport> {
     options.validate()?;
-    let clips = timeline.audio_clips()?;
+    let clips = timeline.soundtrack().clips();
     if clips.is_empty() {
         return Err(invalid("export", "Timeline has no audio to export").into());
     }
@@ -306,7 +306,7 @@ pub fn export_audio(
     }
     if options.path.try_exists()? {
         let destination = options.path.canonicalize()?;
-        for clip in &clips {
+        for clip in clips {
             if let Some(path) = clip.parameters().source.file_path()
                 && path.canonicalize()? == destination
             {

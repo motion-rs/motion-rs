@@ -151,7 +151,7 @@ fn lazy_parts_use_nested_scene_time_and_replay_without_explicit_context() -> mot
         .track(|track| {
             track
                 .gap(1.seconds())
-                .push(child.with_duration(1.seconds()))
+                .push(child.visual().with_duration(1.seconds()))
         })
         .build()?;
     let first = motion_render::render_still(
