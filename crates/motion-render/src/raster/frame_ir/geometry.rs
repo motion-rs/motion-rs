@@ -103,7 +103,7 @@ impl<'a> FrameIr<'a> {
                 transform,
                 rule,
                 bounds,
-                device,
+                device_verbs: device,
                 segment_upper_bound: segments,
             },
             path,

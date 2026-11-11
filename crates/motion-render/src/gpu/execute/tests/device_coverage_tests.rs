@@ -108,6 +108,23 @@ fn prepare_node(
 }
 
 #[test]
+fn coverage_shader_constants_match_the_host_planner() {
+    use crate::raster::device::{COVERAGE_CARRY_STRIDE, COVERAGE_TILE_SIZE};
+    let source = include_str!("../../shaders/coverage.wgsl");
+    let constant = |name: &str| -> u64 {
+        let prefix = format!("const {name} = ");
+        let line = source
+            .lines()
+            .find_map(|line| line.strip_prefix(prefix.as_str()))
+            .unwrap_or_else(|| panic!("{name} missing"));
+        line.trim_end_matches("u;").parse().unwrap()
+    };
+    assert_eq!(constant("TILE_SIZE"), u64::from(COVERAGE_TILE_SIZE));
+    assert_eq!(constant("CARRY_STRIDE"), COVERAGE_CARRY_STRIDE);
+    assert_eq!(constant("CARRY_STRIDE"), constant("WINDING_SAMPLES") + 1);
+}
+
+#[test]
 fn coverage_shader_validates_without_a_device() {
     let shader =
         wgpu::naga::front::wgsl::parse_str(include_str!("../../shaders/coverage.wgsl")).unwrap();

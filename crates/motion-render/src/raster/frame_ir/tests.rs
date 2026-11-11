@@ -51,23 +51,23 @@ fn ir_preserves_device_f64_curves_and_reference_recipe() -> Result<(), Validatio
     assert_eq!(geometry.rule, FillRule::EvenOdd);
     assert_eq!(geometry.transform, transform);
     assert_eq!(
-        geometry.device[0],
+        geometry.device_verbs[0],
         PathVerb::MoveTo(transform.apply(Point::new(0.25, 0.5)))
     );
     assert_eq!(
-        geometry.device[1],
+        geometry.device_verbs[1],
         PathVerb::QuadraticTo(
             transform.apply(Point::new(4.5, 12.25)),
             transform.apply(Point::new(8.75, 0.5)),
         )
     );
-    assert_eq!(geometry.device.len(), 3);
-    assert!(geometry.segment_upper_bound > geometry.device.len() as u64);
+    assert_eq!(geometry.device_verbs.len(), 3);
+    assert!(geometry.segment_upper_bound > geometry.device_verbs.len() as u64);
     assert_eq!(ir.segments, geometry.segment_upper_bound);
     assert!(
         ir.stats().retained_bytes
             >= std::mem::size_of_val(&ir) as u64
-                + std::mem::size_of_val(geometry.device.as_slice()) as u64
+                + std::mem::size_of_val(geometry.device_verbs.as_slice()) as u64
     );
     Ok(())
 }

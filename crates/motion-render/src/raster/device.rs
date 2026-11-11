@@ -45,13 +45,22 @@ const DEVICE_MAX_FILL_VISITS: u64 = 1 << 26;
 /// Most conservatively admitted tile coverage work units in one frame.
 const DEVICE_MAX_FRAME_VISITS: u64 = 1 << 28;
 
+/// Frame-wide device coverage admitted so far.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct DeviceTotals {
+    /// Padded pixels covered by device fills.
+    pub(crate) pixels: u64,
+    /// Conservative tile coverage work units.
+    pub(crate) visits: u64,
+}
+
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct DeviceGeometry {
     pub(crate) coverage_enabled: bool,
     pub(crate) device_fills: Vec<DeviceFill>,
     pub(crate) device_edges: Vec<[f64; 5]>,
     pub(crate) device_curves: Vec<DeviceCurve>,
-    pub(crate) device_totals: [u64; 2],
+    pub(crate) device_totals: DeviceTotals,
     pub(crate) fallback_paths: GpuFallbackCounts,
     pub(crate) analytic_cpu_fallbacks: u64,
 }
@@ -68,7 +77,7 @@ impl DeviceGeometry {
         tolerance: f64,
         scope: &mut RasterScope<'_>,
     ) -> Result<bool, ValidationError> {
-        if geometry.device.iter().any(|verb| {
+        if geometry.device_verbs.iter().any(|verb| {
             matches!(
                 verb,
                 motion_core::PathVerb::QuadraticTo(..) | motion_core::PathVerb::CubicTo(..)
@@ -78,7 +87,7 @@ impl DeviceGeometry {
         }
         let (budget, path) = (&mut *scope.budget, scope.path);
         let edges = path_edges(
-            geometry.device.iter().copied(),
+            geometry.device_verbs.iter().copied(),
             Transform::IDENTITY,
             tolerance,
             budget,
@@ -94,7 +103,7 @@ impl DeviceGeometry {
         }
         let area = pixels.pixels();
         let within = |value: f64| value.abs() <= DEVICE_COORDINATE_LIMIT;
-        let [used_pixels, used_visits] = self.device_totals;
+        let used = self.device_totals;
         if !edges.iter().all(|edge| {
             within(edge.top.x - f64::from(pixels.left))
                 && within(edge.bottom.x - f64::from(pixels.left))
@@ -105,7 +114,7 @@ impl DeviceGeometry {
             budget.release(charged);
             return Ok(false);
         }
-        if self.device_fills.len() >= DEVICE_MAX_FILLS || used_pixels + area > DEVICE_MAX_PIXELS {
+        if self.device_fills.len() >= DEVICE_MAX_FILLS || used.pixels + area > DEVICE_MAX_PIXELS {
             self.fallback_paths.frame_limit += 1;
             budget.release(charged);
             return Ok(false);
@@ -116,7 +125,7 @@ impl DeviceGeometry {
             return Ok(false);
         };
         let visits = tiles.work;
-        if visits > DEVICE_MAX_FILL_VISITS || used_visits + visits > DEVICE_MAX_FRAME_VISITS {
+        if visits > DEVICE_MAX_FILL_VISITS || used.visits + visits > DEVICE_MAX_FRAME_VISITS {
             self.fallback_paths.work_limit += 1;
             budget.release(charged);
             return Ok(false);
@@ -161,7 +170,10 @@ impl DeviceGeometry {
             path,
         )?;
         budget.push(&mut scene.strips, strip, path)?;
-        self.device_totals = [used_pixels + area, used_visits + visits];
+        self.device_totals = DeviceTotals {
+            pixels: used.pixels + area,
+            visits: used.visits + visits,
+        };
         Ok(true)
     }
 

@@ -159,7 +159,7 @@ pub(super) struct IrPath<'a> {
     pub(super) transform: Transform,
     pub(super) rule: FillRule,
     pub(super) bounds: Rect,
-    pub(super) device: Vec<PathVerb>,
+    pub(super) device_verbs: Vec<PathVerb>,
     pub(super) segment_upper_bound: u64,
 }
 

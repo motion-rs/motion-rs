@@ -76,7 +76,7 @@ impl Planner<'_> {
         self.budget.work(
             frame.device_edges.len() as u64
                 + generated * CURVE_FLATTEN_WORK_PER_SEGMENT
-                + frame.device_totals[1],
+                + frame.device_totals.visits,
             path,
         )?;
         device

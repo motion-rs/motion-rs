@@ -9,7 +9,7 @@ pub(crate) struct FrameView<'a> {
     pub(super) device_fills: &'a [DeviceFill],
     pub(super) device_edges: &'a [[f64; 5]],
     pub(super) device_curves: &'a [crate::raster::device::DeviceCurve],
-    pub(super) device_totals: [u64; 2],
+    pub(super) device_totals: crate::raster::device::DeviceTotals,
 }
 
 impl FrameView<'_> {
@@ -43,7 +43,7 @@ impl FrameInput for PreparedFrame {
             device_fills: &[],
             device_edges: &[],
             device_curves: &[],
-            device_totals: [0; 2],
+            device_totals: Default::default(),
         }
     }
 }

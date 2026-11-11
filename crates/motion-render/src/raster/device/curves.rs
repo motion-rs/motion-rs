@@ -2,7 +2,7 @@
 
 use super::{
     DEVICE_COORDINATE_LIMIT, DEVICE_MAX_FILL_VISITS, DEVICE_MAX_FILLS, DEVICE_MAX_FRAME_VISITS,
-    DEVICE_MAX_PIXELS, DeviceGeometry, TileLayout,
+    DEVICE_MAX_PIXELS, DeviceGeometry, DeviceTotals, TileLayout,
 };
 use crate::prepared::{DeviceFill, PreparedScene, Strip};
 use crate::raster::{RasterScope, frame_ir, pixel_bounds};
@@ -29,9 +29,9 @@ impl DeviceGeometry {
         if pixels.is_empty() {
             return Ok(true);
         }
-        let [used_pixels, used_visits] = self.device_totals;
+        let used = self.device_totals;
         if self.device_fills.len() >= DEVICE_MAX_FILLS
-            || used_pixels + pixels.pixels() > DEVICE_MAX_PIXELS
+            || used.pixels + pixels.pixels() > DEVICE_MAX_PIXELS
         {
             self.fallback_paths.frame_limit += 1;
             return Ok(false);
@@ -43,7 +43,7 @@ impl DeviceGeometry {
                 && (point.x - f64::from(pixels.left)).abs() <= DEVICE_COORDINATE_LIMIT
                 && (point.y - f64::from(pixels.top)).abs() <= DEVICE_COORDINATE_LIMIT
         };
-        if !geometry.device.iter().all(|verb| match *verb {
+        if !geometry.device_verbs.iter().all(|verb| match *verb {
             PathVerb::MoveTo(a) | PathVerb::LineTo(a) => within(a),
             PathVerb::QuadraticTo(a, b) => within(a) && within(b),
             PathVerb::CubicTo(a, b, c) => within(a) && within(b) && within(c),
@@ -52,15 +52,16 @@ impl DeviceGeometry {
             self.fallback_paths.coordinate_range += 1;
             return Ok(false);
         }
-        let bytes = (geometry.device.len() as u64 + 1) * std::mem::size_of::<DeviceCurve>() as u64;
+        let bytes =
+            (geometry.device_verbs.len() as u64 + 1) * std::mem::size_of::<DeviceCurve>() as u64;
         budget.bytes(bytes, path)?;
         budget.work(
-            geometry.device.len() as u64 + geometry.segment_upper_bound,
+            geometry.device_verbs.len() as u64 + geometry.segment_upper_bound,
             path,
         )?;
         let mut curves = Vec::new();
         curves
-            .try_reserve_exact(geometry.device.len() + 1)
+            .try_reserve_exact(geometry.device_verbs.len() + 1)
             .map_err(|_| {
                 ValidationError::limit(path, "max_bytes", "Could not reserve device curves")
             })?;
@@ -84,7 +85,7 @@ impl DeviceGeometry {
             });
             Ok(())
         };
-        for verb in &geometry.device {
+        for verb in &geometry.device_verbs {
             match *verb {
                 PathVerb::MoveTo(point) => {
                     if open && current != start {
@@ -137,7 +138,7 @@ impl DeviceGeometry {
             budget.release(bytes);
             return Ok(false);
         };
-        if tiles.work > DEVICE_MAX_FILL_VISITS || used_visits + tiles.work > DEVICE_MAX_FRAME_VISITS
+        if tiles.work > DEVICE_MAX_FILL_VISITS || used.visits + tiles.work > DEVICE_MAX_FRAME_VISITS
         {
             self.fallback_paths.work_limit += 1;
             budget.release(bytes);
@@ -178,7 +179,10 @@ impl DeviceGeometry {
             },
             path,
         )?;
-        self.device_totals = [used_pixels + pixels.pixels(), used_visits + tiles.work];
+        self.device_totals = DeviceTotals {
+            pixels: used.pixels + pixels.pixels(),
+            visits: used.visits + tiles.work,
+        };
         Ok(true)
     }
 }
