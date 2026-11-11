@@ -73,9 +73,7 @@ where
         Ok(node) => node,
         Err(error) => {
             let failure = SceneFailure::new(error);
-            if let Some(diagnostics) = context.diagnostics() {
-                diagnostics.record_scene(failure.error.clone());
-            }
+            context.diagnostics().record_scene(failure.error.clone());
             Node::from(failure)
         }
     }

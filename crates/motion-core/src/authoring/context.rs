@@ -49,9 +49,9 @@ pub use partition::{CacheLimits, CachePartition, RenderCache};
 /// assert_eq!((late, early, again), (100.0, 0.0, 100.0));
 /// assert!(Arc::ptr_eq(&first, &second) && Arc::ptr_eq(&first, &third));
 /// ```
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct SceneContext<'a> {
-    quality: crate::RenderQuality,
+    evaluation: Arc<crate::Evaluation>,
     time: Time,
     global_time: Time,
     clip_duration: Option<Duration>,
@@ -59,11 +59,7 @@ pub struct SceneContext<'a> {
     size: Size,
     nested_scene: bool,
 
-    assets: Option<&'a crate::Assets>,
-
     cache: &'a SceneCache,
-
-    diagnostics: Option<&'a crate::RequestDiagnostics>,
 }
 
 impl<'a> SceneContext<'a> {
@@ -94,50 +90,64 @@ impl<'a> SceneContext<'a> {
             ));
         }
         Ok(Self {
-            quality: crate::RenderQuality::Final,
+            evaluation: Arc::default(),
             time,
             global_time: time,
             clip_duration: None,
             frame_rate,
             size,
             nested_scene: false,
-            assets: None,
             cache,
-            diagnostics: None,
         })
     }
 
-    /// Selects preview approximations, preserved by nested and sampled contexts.
-    pub fn with_quality(mut self, quality: crate::RenderQuality) -> Self {
-        self.quality = quality;
+    /// Shares an evaluation environment; its own time is ignored in favor of local time.
+    pub fn with_evaluation(mut self, evaluation: Arc<crate::Evaluation>) -> Self {
+        self.evaluation = evaluation;
         self
+    }
+
+    /// Shared quality, resources, diagnostics and caches, retained by shifted, sampled and
+    /// nested contexts.
+    pub fn evaluation(&self) -> &Arc<crate::Evaluation> {
+        &self.evaluation
+    }
+
+    fn edit(mut self, edit: impl FnOnce(crate::Evaluation) -> crate::Evaluation) -> Self {
+        let current = Arc::try_unwrap(std::mem::take(&mut self.evaluation))
+            .unwrap_or_else(|shared| crate::Evaluation::clone(&shared));
+        self.evaluation = Arc::new(edit(current));
+        self
+    }
+
+    /// Selects preview approximations, preserved by nested and sampled contexts.
+    pub fn with_quality(self, quality: crate::RenderQuality) -> Self {
+        self.edit(|evaluation| evaluation.with_quality(quality))
     }
 
     /// Explicit rendering quality; manually constructed contexts default to Final.
     pub fn render_quality(&self) -> crate::RenderQuality {
-        self.quality
+        self.evaluation.quality()
     }
 
     /// Always available resources; an unconfigured context uses an empty owner.
-    pub fn assets(&self) -> &'a crate::Assets {
-        self.assets.unwrap_or(&self.cache.empty_assets)
+    pub fn assets(&self) -> &crate::Assets {
+        self.evaluation.assets()
     }
 
     /// Attaches the common resource owner without reading or decoding.
-    pub fn with_assets(mut self, assets: &'a crate::Assets) -> Self {
-        self.assets = Some(assets);
-        self
+    pub fn with_assets(self, assets: &crate::Assets) -> Self {
+        self.edit(|evaluation| evaluation.with_assets(assets))
     }
 
     /// Attaches a request-owned sink suitable for explicit background resource reads.
-    pub fn with_diagnostics(mut self, diagnostics: &'a crate::RequestDiagnostics) -> Self {
-        self.diagnostics = Some(diagnostics);
-        self
+    pub fn with_diagnostics(self, diagnostics: &crate::RequestDiagnostics) -> Self {
+        self.edit(|evaluation| evaluation.with_diagnostics(diagnostics.clone()))
     }
 
     /// Diagnostic scope retained by shifted, sampled and nested contexts.
-    pub fn diagnostics(&self) -> Option<&'a crate::RequestDiagnostics> {
-        self.diagnostics
+    pub fn diagnostics(&self) -> &crate::RequestDiagnostics {
+        self.evaluation.diagnostics()
     }
 
     /// Sets finite clip metadata; zero denotes an instantaneous clip.
@@ -206,7 +216,7 @@ impl<'a> SceneContext<'a> {
             frame_rate,
             size,
             nested_scene: true,
-            ..*self
+            ..self.clone()
         }
     }
 
@@ -230,7 +240,7 @@ impl<'a> SceneContext<'a> {
     pub fn shifted(&self, offset: TimeOffset) -> Self {
         Self {
             time: self.time - offset,
-            ..*self
+            ..self.clone()
         }
     }
 
@@ -249,7 +259,7 @@ impl<'a> SceneContext<'a> {
             })?;
         Ok(Self {
             time: Time::from_ticks(ticks),
-            ..*self
+            ..self.clone()
         })
     }
 
@@ -269,7 +279,7 @@ impl<'a> SceneContext<'a> {
         Ok(Self {
             time: shift(self.time)?,
             global_time: shift(self.global_time)?,
-            ..*self
+            ..self.clone()
         })
     }
 
@@ -358,17 +368,6 @@ impl<'a> SceneContext<'a> {
         self.bounds().center()
     }
 
-    /// Shared evaluation environment: local time, quality, assets and diagnostics.
-    pub fn evaluation(&self) -> crate::Evaluation {
-        let mut evaluation = crate::Evaluation::new()
-            .with_time(self.time)
-            .with_quality(self.quality);
-        if let Some(diagnostics) = self.diagnostics {
-            evaluation = evaluation.with_diagnostics(diagnostics.clone());
-        }
-        evaluation.with_assets(self.assets())
-    }
-
     /// Measures content or declared layout in parent coordinates.
     ///
     /// Deferred content sees this context's local time, quality, assets and
@@ -378,7 +377,9 @@ impl<'a> SceneContext<'a> {
     /// with the shared explicit font environment. This does not invoke drawing
     /// or infer filter extents; command validation occurs during compilation.
     pub fn measure(&self, node: &Node) -> Result<Rect, crate::ValidationError> {
-        let drawing = crate::DrawContext::default().with_evaluation(self.evaluation().shared());
+        let drawing = crate::DrawContext::default()
+            .with_evaluation(self.evaluation.clone())
+            .with_time(self.time);
         node.measure_with(&drawing, crate::ValidationLimits::default())
     }
 

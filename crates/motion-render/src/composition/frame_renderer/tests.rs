@@ -116,7 +116,6 @@ fn explicit_requests_preserve_exact_time_project_diagnostics_and_atomic_targets(
     session.render(request(&mut target), |context| {
         assert_eq!(context.time(), 1.milliseconds().after_origin());
         assert_eq!(context.clip_duration(), Some(1.seconds()));
-        assert!(context.diagnostics().is_some());
         assert!(context.assets().store().same_store(&pool));
         Node::from(context.bounds().fill(Color::WHITE))
     })?;
@@ -124,7 +123,7 @@ fn explicit_requests_preserve_exact_time_project_diagnostics_and_atomic_targets(
     assert!(
         session
             .render(request(&mut target), |context| {
-                let _ = missing.get_with(context.diagnostics().unwrap());
+                let _ = missing.get_with(context.diagnostics());
                 Node::empty()
             })
             .is_err()

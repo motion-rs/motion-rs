@@ -362,7 +362,7 @@ mod tests {
         ] {
             let mut calls = 0;
             capture(
-                &context.with_quality(quality),
+                &context.clone().with_quality(quality),
                 Duration::from_ticks(100),
                 4,
                 |_| {
@@ -375,7 +375,7 @@ mod tests {
         }
         assert!(
             capture(
-                &context.with_quality(crate::RenderQuality::Draft),
+                &context.clone().with_quality(crate::RenderQuality::Draft),
                 Duration::from_ticks(100),
                 0,
                 |_| panic!("invalid shutter must not evaluate")

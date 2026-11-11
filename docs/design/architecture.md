@@ -7,7 +7,7 @@ resources, not an object advanced by a playback clock.
 ## Evaluation and Ownership
 
 SceneContext supplies signed local/global ticks, rational frame rate, logical bounds,
-explicit resource snapshots, keyed random streams and a bounded cache. Node snapshots
+a shared `Evaluation` (quality, resources, diagnostics), keyed random streams and a bounded cache. Node snapshots
 are immutable and copy-on-write. Compilation measures layout, resolves placement,
 expands `DeferredContent` into ordinary nodes, records Drawable commands and validates all branches, including invisible content.
 
@@ -105,7 +105,7 @@ exports render every selected frame. GPU contexts share a device and serialize s
 submissions. Device loss aborts the frame rather than silently switching backends.
 
 RequestDiagnostics can be shared explicitly with background resource reads through
-Handle::get_with. DrawContext holds a shared immutable `Evaluation` (time, quality, resources, fonts, diagnostics and the RenderCache) plus device scale and validation limits; `SceneContext::measure` builds the same `Evaluation` from its local time and quality. `cache_layout` always uses `CachePartition::Paragraph` of that single cache;
+Handle::get_with. DrawContext holds a shared immutable `Evaluation` (time, quality, resources, fonts, diagnostics and the RenderCache) plus device scale and validation limits; `SceneContext` shares one `Arc<Evaluation>` and keeps only local/global time, clip duration, frame rate, size and its `SceneCache`; `SceneContext::measure` hands that evaluation to a `DrawContext` with the local time. `cache_layout` always uses `CachePartition::Paragraph` of that single cache;
 there is no FrameAssets or ambient frame diagnostic bridge. Request-owned Assets
 views and their handles inherit the sink; older handles need get_with at the draw boundary.
 RenderContext carries assets and structural limits; RenderOptions.gpu_context injects

@@ -25,7 +25,6 @@ pub struct SceneCache {
     capacity: usize,
     max_bytes: usize,
     pub(super) entries: Mutex<VecDeque<CacheEntry>>,
-    pub(super) empty_assets: crate::Assets,
 }
 
 impl std::fmt::Debug for SceneCache {
@@ -81,7 +80,6 @@ impl SceneCache {
             capacity: limits.max_entries,
             max_bytes: limits.max_bytes,
             entries: Mutex::new(VecDeque::new()),
-            empty_assets: crate::Assets::default(),
         }
     }
 
