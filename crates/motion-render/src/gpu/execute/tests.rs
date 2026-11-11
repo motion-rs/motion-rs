@@ -1786,17 +1786,13 @@ fn packed_output_yuv_depth_alignment_and_budget() -> motion_core::Result {
     );
     for bit_depth in [8, 10] {
         let format = crate::PixelFormat::Yuv420 { bit_depth };
-        for width in [8, 16, 1920] {
+        for width in [2, 8, 10, 16, 1920] {
             assert!(Gpu::supports_packed_output(
                 PixelSize::new(width, 2),
                 format
             ));
         }
-        for invalid_size in [
-            PixelSize::new(2, 2),
-            PixelSize::new(10, 2),
-            PixelSize::new(16, 3),
-        ] {
+        for invalid_size in [PixelSize::new(3, 2), PixelSize::new(16, 3)] {
             assert!(!Gpu::supports_packed_output(invalid_size, format));
             assert!(plan.packed_stats(invalid_size, format).is_err());
         }
@@ -2276,6 +2272,51 @@ fn packed_yuv10_gpu_output_preserves_layout_and_replay() -> motion_core::Result 
                     assert_eq!(gpu.readback.as_ref().unwrap().0, bytes);
                     assert_eq!(gpu.packed_output.as_ref().unwrap().0, bytes);
                 }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+#[ignore = "requires native GPU; compares word-per-invocation YUV packing at widths not divisible by 8"]
+fn packed_yuv_unaligned_widths_match_linear_conversion() -> motion_core::Result<()> {
+    let mut gpu = Gpu::from_context(GpuContext::new()?);
+    let limits = RasterLimits::default();
+    for (width, height) in [(10, 6), (2, 2), (18, 4)] {
+        let mut frame = motion_core::Node::from(
+            motion_core::Rect::new(0.5, 0.5, f64::from(width) - 1.0, f64::from(height) - 1.0)
+                .fill(motion_core::Color::rgb(190, 40, 125)),
+        )
+        .compile(
+            motion_core::Size::new(f64::from(width), f64::from(height)),
+            PixelSize::new(width, height),
+            motion_core::ValidationLimits::default(),
+        )?
+        .prepare(motion_core::ValidationLimits::default(), limits)?;
+        frame.background = Some(PaintRecord {
+            linear_premultiplied: [0.1, 0.2, 0.3, 1.0],
+        });
+        for bit_depth in [8, 10] {
+            let format = crate::PixelFormat::Yuv420 { bit_depth };
+            let expected = crate::FrameBuffer::from_linear(
+                &gpu.render(&frame, Plan::new(&frame, limits)?)?,
+                format,
+                limits,
+            )?;
+            let actual = gpu
+                .submit_output(&frame, Plan::new(&frame, limits)?, format)?
+                .finish()?;
+            for (a, b) in expected.planes().iter().zip(actual.planes()) {
+                assert_eq!(a.bytes().len(), b.bytes().len());
+                let tolerance = if bit_depth == 8 { 1 } else { 4 };
+                assert!(
+                    a.bytes()
+                        .iter()
+                        .zip(b.bytes())
+                        .all(|(a, b)| a.abs_diff(*b) <= tolerance),
+                    "{width}x{height} depth {bit_depth}"
+                );
             }
         }
     }

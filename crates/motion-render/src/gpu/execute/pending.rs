@@ -306,7 +306,8 @@ impl PendingOutputFrame {
                         [
                             mapped[..luma_bytes].to_vec(),
                             mapped[luma_bytes..luma_bytes + luma_bytes / 4].to_vec(),
-                            mapped[luma_bytes + luma_bytes / 4..].to_vec(),
+                            mapped[luma_bytes + luma_bytes / 4..luma_bytes + luma_bytes / 2]
+                                .to_vec(),
                         ],
                         bit_depth,
                         self.limits,

@@ -10,7 +10,7 @@ impl Gpu {
         match format {
             crate::PixelFormat::SrgbRgba8 { .. } => true,
             crate::PixelFormat::Yuv420 { bit_depth: 8 | 10 } => {
-                size.width.is_multiple_of(8) && size.height.is_multiple_of(2)
+                size.width.is_multiple_of(2) && size.height.is_multiple_of(2)
             }
             _ => false,
         }
@@ -54,12 +54,18 @@ impl Gpu {
         };
         let size = frame.size();
         let count = u64::from(size.width) * u64::from(size.height);
+        let tiled = size.width.is_multiple_of(8);
         let (bytes, mode, invocations) = match format {
             crate::PixelFormat::SrgbRgba8 { premultiplied } => {
                 (count * 4, u32::from(premultiplied), count)
             }
-            crate::PixelFormat::Yuv420 { bit_depth: 8 } => (count * 3 / 2, 2, count / 16),
-            crate::PixelFormat::Yuv420 { bit_depth: 10 } => (count * 3, 3, count / 16),
+            crate::PixelFormat::Yuv420 { bit_depth: 8 } if tiled => (count * 3 / 2, 2, count / 16),
+            crate::PixelFormat::Yuv420 { bit_depth: 8 } => {
+                let bytes = (count * 3 / 2).next_multiple_of(4);
+                (bytes, 4, bytes / 4)
+            }
+            crate::PixelFormat::Yuv420 { bit_depth: 10 } if tiled => (count * 3, 3, count / 16),
+            crate::PixelFormat::Yuv420 { bit_depth: 10 } => (count * 3, 5, count * 3 / 4),
             _ => unreachable!("validated packing format"),
         };
         let packed = self

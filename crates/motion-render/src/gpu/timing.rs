@@ -170,7 +170,8 @@ fn timestamp_delta(start: u64, end: u64, period: f32) -> motion_core::Result<Dur
     if !period.is_finite() || period <= 0.0 {
         return Err(timing_error("Invalid GPU timestamp period"));
     }
-    let seconds = end.wrapping_sub(start) as f64 * f64::from(period) * 1.0e-9;
+    // An end below the start means the stage wrote no closing timestamp, not a counter wrap.
+    let seconds = end.saturating_sub(start) as f64 * f64::from(period) * 1.0e-9;
     Duration::try_from_secs_f64(seconds).map_err(|error| motion_core::Error::Gpu(Box::new(error)))
 }
 
@@ -217,6 +218,15 @@ mod tests {
         for period in [0.0, -1.0, f32::NAN, f32::INFINITY] {
             assert!(timestamp_delta(0, 1, period).is_err());
         }
+    }
+
+    #[test]
+    fn reversed_timestamps_measure_zero_instead_of_wrapping() {
+        assert_eq!(timestamp_delta(10, 3, 1.0).unwrap(), Duration::ZERO);
+        assert_eq!(
+            timestamp_delta(10, 1_000_010, 1.0).unwrap(),
+            Duration::from_millis(1)
+        );
     }
 
     #[test]
