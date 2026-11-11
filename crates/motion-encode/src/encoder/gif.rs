@@ -233,10 +233,8 @@ mod tests {
                 ))
             })
             .build()?;
-        let options = ExportOptions::new(directory.path().join("output.gif")).codec(Codec::Gif {
-            frame_rate: motion_core::fps!(10),
-            colors: 16,
-        });
+        let options = ExportOptions::new(directory.path().join("output.gif"))
+            .codec(Codec::gif(motion_core::fps!(10), 16));
         let report = crate::export(&timeline, &options, &crate::NoProgress)?;
         assert_eq!(report.frames, 10);
         let mut decoder = gif::DecodeOptions::new();

@@ -132,6 +132,9 @@ impl Path2D {
     }
 
     /// Starts a chainable builder that reports its first error from `build`.
+    ///
+    /// This is the public way to author paths. The in-place `try_*` appenders on `Path2D`
+    /// are hidden from the documentation and exist for content crates that grow a path in a loop.
     pub fn builder() -> PathBuilder {
         PathBuilder::new()
     }

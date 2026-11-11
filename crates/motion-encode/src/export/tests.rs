@@ -33,12 +33,11 @@ fn native_main10_export_renders_display() -> motion_core::Result {
     for (index, backend) in backends.into_iter().enumerate() {
         let destination = directory.path().join(format!("main10-{index}.mp4"));
         let options = super::ExportOptions::new(&destination)
-            .codec(super::Codec::H265 {
-                quality: 0,
-                preset: super::EncoderPreset::Medium,
-                bit_depth: super::BitDepth::Ten,
-                params: Some("lossless=1:log-level=error:pools=none:frame-threads=1".into()),
-            })
+            .codec(
+                super::Codec::h265(0)
+                    .ten_bit()
+                    .with_x265_params("lossless=1:log-level=error:pools=none:frame-threads=1"),
+            )
             .backend(backend)
             .range(motion_core::Time::ZERO..motion_core::Time::from_frame(2, motion_core::fps!(24)))
             .render(|options| {
@@ -274,7 +273,8 @@ fn parallel_export_matches_serial_pixels_ntsc_ranges_and_progress() -> Result<()
         options.render.backend = motion_render::BackendPreference::automatic();
     }
     let mut reference_renderer =
-        composition(&changing, &options.render)?.frame_renderer(changing.size())?;
+        motion_render::Composition::for_timeline(&changing, &options.render)?
+            .frame_renderer(changing.size())?;
     render_frame(
         &mut reference_renderer,
         &changing,
@@ -497,13 +497,7 @@ fn output_permissions_follow_umask_for_stills_sequences_gif_and_video() -> Resul
         );
         for (name, codec) in [
             ("video.mp4", Codec::default()),
-            (
-                "animation.gif",
-                Codec::Gif {
-                    frame_rate: motion_core::fps!(1),
-                    colors: 16,
-                },
-            ),
+            ("animation.gif", Codec::gif(motion_core::fps!(1), 16)),
             ("frames", Codec::PngSequence),
         ] {
             let path = directory.path().join(name);

@@ -117,6 +117,13 @@ pub trait Signal<Value>: Send + Sync {
     /// Samples without advancing a clock or changing playback state.
     fn sample(&self, time: Time) -> Value;
 
+    /// Samples `elapsed` after the time origin, shorthand for `sample(elapsed.after_origin())`.
+    ///
+    /// Panics if `elapsed` is beyond the representable time range, like [`Duration::after_origin`].
+    fn sample_at(&self, elapsed: Duration) -> Value {
+        self.sample(elapsed.after_origin())
+    }
+
     /// Transforms values without changing timing.
     fn map<Output, Function>(self, function: Function) -> Map<Self, Function, Value>
     where

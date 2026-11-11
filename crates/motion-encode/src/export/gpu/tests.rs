@@ -239,8 +239,8 @@ fn gpu_export_pipeline_matches_linear_reference_and_cancels_transactionally() ->
     let context = motion_render::GpuContext::new()?;
     let mut gpu = motion_render::gpu::Gpu::from_context(context.clone());
     let mut expected = Vec::new();
-    let mut preparation =
-        composition(&timeline, &options.render)?.frame_renderer(timeline.size())?;
+    let mut preparation = motion_render::Composition::for_timeline(&timeline, &options.render)?
+        .frame_renderer(timeline.size())?;
     for index in 0..12 {
         let (frame, limits) = preparation.prepare_output_at(
             Time::from_frame(index, rate),
@@ -335,8 +335,8 @@ fn gpu_export_pipeline_matches_linear_reference_and_cancels_transactionally() ->
     let mut changing_options = options.clone();
     changing_options.path = "unused-heavier-gpu-pipeline".into();
     let context = changing_options.render.gpu_context.clone().unwrap();
-    let mut oracle =
-        composition(&changing, &changing_options.render)?.frame_renderer(changing.size())?;
+    let mut oracle = motion_render::Composition::for_timeline(&changing, &changing_options.render)?
+        .frame_renderer(changing.size())?;
     let mut serial_queue =
         motion_render::gpu::FrameQueue::new(context, changing_options.render.limits.max_bytes)?;
     let mut expected = Vec::new();

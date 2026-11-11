@@ -26,7 +26,7 @@ pub use display::{Cdl, DisplayTransform, FilmGrain, OutputTransfer, ToneMap};
 pub use gpu::GpuContext;
 pub use look::{GateWeave, Look, SceneEffects};
 pub use motion_core::{CachePartition, RenderCache, RenderQuality};
-pub use options::{RenderOptions, composition, render_still};
+pub use options::{RenderOptions, render_still};
 pub use output::{FrameBuffer, PixelFormat, PixelPlane, RenderTarget};
 pub use prepared::{
     PixelRect, PreparationStats, PreparedFrame, RasterLimits, RenderPrepare, WorkStats,

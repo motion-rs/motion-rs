@@ -63,6 +63,16 @@ private types and helpers
   names identical and assert sizes/offsets at compile time.
 - `match` arms follow the enum's declaration order where practical.
 
+## Construction
+
+- `new` / `try_new` take only the required inputs and apply defaults for everything else.
+- `builder()` is the configuration path: optional settings are chained, and `build()` validates once
+  (`Spring`, `Noise`, `Oscillator`, `BrushStroke`, `Path2D`).
+- A type with only required inputs has no builder. Novice examples use `new` / `try_new`; reach for
+  `builder()` only when a default must change.
+- `Codec` follows the same rule through presets (`Codec::h265(18)`) refined with chained methods
+  (`.ten_bit()`, `.with_preset(..)`).
+
 ## Errors And Panics
 
 - Fallible operations return `Result<_, ValidationError>` (or the crate error).

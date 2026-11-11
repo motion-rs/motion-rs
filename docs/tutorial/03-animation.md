@@ -34,7 +34,7 @@ Request times in any order: the animation samples the same time function. `ping_
 
 ## Animation and Interpolate
 
-`Signal<Value>` returns a value for an explicit local `Time` and has no end. `FiniteAnimation<Value>` is a `Signal` with a nonnegative `duration()`; `Tween`, `Keyframes`, `FollowPath` and the combinators below are finite. `Spring`, `Oscillator`, `Noise`, `Constant` and plain closures are signals only.
+`Signal<Value>` returns a value for an explicit local `Time` and has no end. `sample_at(duration)` is shorthand for `sample(duration.after_origin())`. `FiniteAnimation<Value>` is a `Signal` with a nonnegative `duration()`; `Tween`, `Keyframes`, `FollowPath` and the combinators below are finite. `Spring`, `Oscillator`, `Noise`, `Constant` and plain closures are signals only.
 `Interval { start, duration }` maps a `Time` to clamped progress (`progress`) or eased progress (`ease`); `Tween`, `SceneContext::progress_in` and `ease_in` share it.
 `Interpolate` defines how two values interpolate using f64 progress. It does not automatically clamp every progress value to `[0, 1]`; springs and easing may intentionally overshoot.
 

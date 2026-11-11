@@ -97,6 +97,52 @@ impl Codec {
         }
     }
 
+    /// VP9/WebM with the given constant-quality factor, flattening transparency.
+    pub fn vp9(quality: u8) -> Self {
+        Self::Vp9 {
+            quality,
+            alpha: false,
+        }
+    }
+
+    /// VP9/WebM with the given constant-quality factor, retaining the alpha plane.
+    pub fn vp9_alpha(quality: u8) -> Self {
+        Self::Vp9 {
+            quality,
+            alpha: true,
+        }
+    }
+
+    /// Palette GIF sampled at `frame_rate` with at most `colors` palette entries.
+    pub fn gif(frame_rate: FrameRate, colors: u16) -> Self {
+        Self::Gif { frame_rate, colors }
+    }
+
+    /// Selects the encoder preset; codecs without a preset (VP9, ProRes, PNG, GIF) are unchanged.
+    pub fn with_preset(mut self, value: EncoderPreset) -> Self {
+        if let Self::H264 { preset, .. } | Self::H265 { preset, .. } = &mut self {
+            *preset = value;
+        }
+        self
+    }
+
+    /// Selects ten-bit Main10 output; only H.265 has the option, so other codecs are unchanged
+    /// and [`Self::bit_depth`] keeps reporting eight bits for them.
+    pub fn ten_bit(mut self) -> Self {
+        if let Self::H265 { bit_depth, .. } = &mut self {
+            *bit_depth = BitDepth::Ten;
+        }
+        self
+    }
+
+    /// Sets explicit native x265 parameters; other codecs are unchanged.
+    pub fn with_x265_params(mut self, value: impl Into<String>) -> Self {
+        if let Self::H265 { params, .. } = &mut self {
+            *params = Some(value.into());
+        }
+        self
+    }
+
     /// Video sample precision this codec requests; only H.265 offers ten-bit.
     pub fn bit_depth(&self) -> BitDepth {
         match self {

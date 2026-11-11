@@ -194,7 +194,7 @@ impl Project {
         let options = film.options(options);
         let scene = crate::studio::StudioScene::new(
             name,
-            crate::export::composition(&film.timeline, &options)?,
+            crate::render::Composition::for_timeline(&film.timeline, &options)?,
             film.timeline,
         )?;
         Ok((scene, film.watch))

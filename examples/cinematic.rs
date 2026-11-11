@@ -68,12 +68,7 @@ fn main() -> motion::Result {
         return Ok(());
     }
     let options = ExportOptions::new(format!("cinematic-{mode}.mp4"))
-        .codec(Codec::H265 {
-            quality: 18,
-            preset: EncoderPreset::Medium,
-            bit_depth: BitDepth::Ten,
-            params: None,
-        })
+        .codec(Codec::h265(18).ten_bit())
         .render(|options| look.render_options(options));
     export(&timeline, &options, &motion::encode::NoProgress)?;
     Ok(())

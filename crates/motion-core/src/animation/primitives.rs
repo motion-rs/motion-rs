@@ -41,6 +41,13 @@ pub struct Oscillator {
 }
 
 impl Oscillator {
+    /// Creates a unit-amplitude oscillator with zero phase and offset.
+    /// Use [`Oscillator::builder`] to configure those; `frequency_hertz` must be finite,
+    /// nonnegative and at most 1e290.
+    pub fn try_new(waveform: Waveform, frequency_hertz: f64) -> Result<Self, ValidationError> {
+        Self::builder(waveform, frequency_hertz).build()
+    }
+
     /// Starts a builder for a waveform with the given frequency in hertz.
     pub fn builder(waveform: Waveform, frequency_hertz: f64) -> OscillatorBuilder {
         OscillatorBuilder {

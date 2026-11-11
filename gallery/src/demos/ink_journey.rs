@@ -381,10 +381,10 @@ mod tests {
                 )
             })
             .build()?;
-        let mut actual =
-            motion::export::composition(&optimized, &options)?.frame_renderer(optimized.size())?;
-        let mut expected =
-            motion::export::composition(&reference, &options)?.frame_renderer(reference.size())?;
+        let mut actual = motion::render::Composition::for_timeline(&optimized, &options)?
+            .frame_renderer(optimized.size())?;
+        let mut expected = motion::render::Composition::for_timeline(&reference, &options)?
+            .frame_renderer(reference.size())?;
         for index in [220, 180, 40, 90, 220, 40, 180] {
             let actual = actual.render_frame(index, |context| optimized.render(context))?;
             let expected = expected.render_frame(index, |context| reference.render(context))?;

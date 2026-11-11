@@ -27,6 +27,18 @@ raster admission. Image paints reference immutable pixel data without deferred
 production callbacks. Preflight cannot prove arbitrary user callbacks are device-free
 or bounded.
 
+## Who Returns What
+
+| Type | Returned by | Meaning |
+| --- | --- | --- |
+| `ValidationError` | Constructors, `try_*` methods, `build` of value builders (`Spring`, `Oscillator`, `Path2D`) | One invalid property with its structural path; no frame context |
+| `ErrorReport` | `TimelineBuilder::build`, `ProjectBuilder::build` | Every failure collected while assembling a timeline or project; fatal |
+| `Diagnostics` | `Timeline::diagnostics` and scene evaluation | Non-fatal warnings and recorded errors that stay attached to a built value |
+| `Error` | Rendering, export and I/O (`motion::Result`) | Category (`kind`), optional frame and the original source; wraps the three above |
+
+Scene closures may return `Result<Node, ValidationError>` (any `IntoSceneOutput`), so `?` on a shape
+constructor flows into the frame error without an infallible twin.
+
 ## Ownership and Transactions
 
 Resources are explicit immutable snapshots. Cache identity includes the environment

@@ -133,7 +133,8 @@ pub(super) fn render(
             |_| {
                 let slot_options = &slot_options;
                 let mut renderer =
-                    composition(timeline, &slot_options.render)?.frame_renderer(timeline.size())?;
+                    motion_render::Composition::for_timeline(timeline, &slot_options.render)?
+                        .frame_renderer(timeline.size())?;
                 Ok(move |frame| {
                     let frame_index = frame;
                     match renderer

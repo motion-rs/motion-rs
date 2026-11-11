@@ -38,6 +38,10 @@ Output is written to a memory target in the declared format. Another request can
 
 ## Choosing an API Level
 
+Use `render_still` for a single image and `RenderSession` for everything repeated. The other
+levels are for integer-indexed clocks and extensions. A checked `Composition` comes from
+`Composition::for_timeline(timeline, options)`; there is no separate free function for it.
+
 | API | Suitable Use |
 | --- | --- |
 | `render_still(timeline, time, options)` | A single transparent image |

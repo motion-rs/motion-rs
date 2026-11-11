@@ -205,19 +205,13 @@ pub fn size(timeline: &Timeline, options: &RenderOptions) -> Result<PixelSize> {
     Ok(size)
 }
 
-/// Creates a checked session template using the timeline's exact rate and frame count.
-/// Carries resources, structural/raster limits, backend policy and optional shutter settings.
-pub fn composition(timeline: &Timeline, options: &RenderOptions) -> Result<crate::Composition> {
-    crate::Composition::for_timeline(timeline, options)
-}
-
 /// Renders an arbitrary in-range tick to straight sRGB RGBA with preserved alpha.
 pub fn render_still(
     timeline: &Timeline,
     time: Time,
     options: &RenderOptions,
 ) -> Result<FrameBuffer> {
-    composition(timeline, options)?
+    crate::Composition::for_timeline(timeline, options)?
         .frame_renderer(timeline.size())?
         .render_output_at(
             time,

@@ -299,7 +299,7 @@ fn signal_studies(seed: u64) -> motion::Result<Vec<Arc<dyn Signal<f64>>>> {
         Waveform::Square,
         Waveform::Sawtooth,
     ] {
-        studies.push(Oscillator::builder(waveform, 0.85).build()?.boxed());
+        studies.push(Oscillator::try_new(waveform, 0.85)?.boxed());
     }
     studies.push(
         Noise::builder(seed)

@@ -19,7 +19,7 @@
 
 use crate::encoder::ffmpeg::FfmpegEncoder;
 
-pub use motion_render::{RenderOptions, composition, render_still};
+pub use motion_render::{RenderOptions, render_still};
 
 use motion_core::{Result, Timeline};
 
@@ -84,7 +84,8 @@ fn export_through(
     }
     let capabilities = encoder.capabilities();
     capabilities.validate_size(options.render.size.expect("normalized size"))?;
-    let mut renderer = composition(timeline, &options.render)?.frame_renderer(timeline.size())?;
+    let mut renderer = motion_render::Composition::for_timeline(timeline, &options.render)?
+        .frame_renderer(timeline.size())?;
     let clips = resolved.clips();
     if options.path.try_exists()? {
         let destination = options.path.canonicalize()?;
@@ -216,7 +217,8 @@ fn export_through(
             |_| {
                 let slot_options = &slot_options;
                 let mut renderer =
-                    composition(timeline, &slot_options.render)?.frame_renderer(timeline.size())?;
+                    motion_render::Composition::for_timeline(timeline, &slot_options.render)?
+                        .frame_renderer(timeline.size())?;
                 Ok(move |frame| {
                     match render_frame(
                         &mut renderer,

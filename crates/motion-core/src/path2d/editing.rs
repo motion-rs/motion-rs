@@ -5,21 +5,25 @@ use crate::{Point, ValidationError, Vector2};
 
 impl Path2D {
     /// Starts a new subpath.
+    #[doc(hidden)]
     pub fn try_move_to(&mut self, point: Point) -> Result<(), ValidationError> {
         self.push(PathVerb::MoveTo(point))
     }
 
     /// Adds a line; requires a preceding move.
+    #[doc(hidden)]
     pub fn try_line_to(&mut self, point: Point) -> Result<(), ValidationError> {
         self.push(PathVerb::LineTo(point))
     }
 
     /// Adds a quadratic Bezier; requires a preceding move.
+    #[doc(hidden)]
     pub fn try_quadratic_to(&mut self, control: Point, end: Point) -> Result<(), ValidationError> {
         self.push(PathVerb::QuadraticTo(control, end))
     }
 
     /// Adds a cubic Bezier; requires a preceding move.
+    #[doc(hidden)]
     pub fn try_cubic_to(
         &mut self,
         first: Point,
@@ -48,6 +52,7 @@ impl Path2D {
     /// assert!((middle.length() - path.length() * 0.5).abs() < 1e-7);
     /// # Ok::<(), motion_core::ValidationError>(())
     /// ```
+    #[doc(hidden)]
     pub fn try_arc_to(
         &mut self,
         center: Point,
@@ -136,6 +141,7 @@ impl Path2D {
     }
 
     /// Closes the current subpath; requires a preceding move.
+    #[doc(hidden)]
     pub fn try_close(&mut self) -> Result<(), ValidationError> {
         self.push(PathVerb::Close)
     }

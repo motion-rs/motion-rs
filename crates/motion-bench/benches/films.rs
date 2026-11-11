@@ -38,7 +38,7 @@ fn texture_playback(
     report: &mut support::Report,
     name: &str,
 ) -> motion::Result {
-    let composition = motion::export::composition(timeline, options)?;
+    let composition = motion::render::Composition::for_timeline(timeline, options)?;
     let mut renderer = composition.frame_renderer(timeline.size())?;
     let context = renderer
         .selected_gpu_context()?
@@ -304,7 +304,7 @@ fn main() -> motion::Result {
                 )?;
                 continue;
             }
-            let composition = motion::export::composition(&timeline, &selected)?;
+            let composition = motion::render::Composition::for_timeline(&timeline, &selected)?;
             let mut session = composition.frame_renderer(timeline.size())?;
             for frame in [24, 120, 216] {
                 let expected = session.render_frame(frame, |context| timeline.render(context))?;

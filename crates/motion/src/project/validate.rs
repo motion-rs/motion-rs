@@ -70,7 +70,7 @@ impl Project {
         }
         let options = film.options(self.options.clone());
         let timeline = &film.timeline;
-        let composition = crate::export::composition(timeline, &options)?;
+        let composition = crate::render::Composition::for_timeline(timeline, &options)?;
         let frames = timeline.frame_count();
         let mut checked: Vec<u32> = [0, frames / 2, frames.saturating_sub(1)]
             .into_iter()

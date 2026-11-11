@@ -189,12 +189,7 @@ structure. Such content should use an explicit fixed sample count.
 use motion::prelude::*;
 let look = Look::film(42);
 let options = ExportOptions::new("film.mp4")
-    .codec(Codec::H265 {
-        quality: 18,
-        preset: EncoderPreset::Slow,
-        bit_depth: BitDepth::Ten,
-        params: None,
-    })
+    .codec(Codec::h265(18).with_preset(EncoderPreset::Slow).ten_bit())
     .render(|options| look.render_options(options));
 ```
 
