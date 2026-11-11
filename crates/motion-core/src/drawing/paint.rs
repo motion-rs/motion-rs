@@ -20,7 +20,7 @@
 
 use std::sync::Arc;
 
-use crate::{Color, Point, Rect, Transform, ValidationError};
+use crate::{Color, MeshPaint, Point, Rect, Transform, ValidationError};
 
 /// A preloaded static image sampled in local pixel coordinates, without I/O.
 #[derive(Clone, Debug)]
@@ -549,6 +549,8 @@ pub enum Paint {
     Sweep(SweepGradient),
     /// Bilinear linear-premultiplied sampling of a preloaded image.
     Pattern(ImagePattern),
+    /// Mesh gradient baked to an image over the painted bounds when a frame is prepared.
+    Mesh(MeshPaint),
 }
 
 impl Paint {
@@ -570,6 +572,7 @@ impl Paint {
             Self::Radial(value) => value.0.validate(),
             Self::Sweep(value) => value.0.validate(),
             Self::Pattern(value) => value.validate(),
+            Self::Mesh(value) => value.validate(),
         }
     }
 }

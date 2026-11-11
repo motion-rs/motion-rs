@@ -19,7 +19,7 @@ pub use context::{DeferredContent, DrawContext, Drawable, RenderQuality};
 pub use evaluation::Evaluation;
 
 pub use mesh::{
-    MAX_MESH_POINTS_PER_AXIS, MAX_MESH_SUBDIVISIONS, MeshGradient, MeshImage, MeshVertex,
+    MAX_MESH_POINTS_PER_AXIS, MAX_MESH_SUBDIVISIONS, MeshGradient, MeshImage, MeshPaint, MeshVertex,
 };
 pub use paint::{
     GradientExtend, GradientSpace, GradientUnits, ImagePattern, LinearGradient, Paint,

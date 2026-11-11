@@ -18,6 +18,60 @@ pub const MAX_MESH_POINTS_PER_AXIS: u32 = 64;
 /// Maximum subdivisions per lattice cell edge when rasterizing a [`MeshGradient`].
 pub const MAX_MESH_SUBDIVISIONS: u32 = 32;
 
+/// A [`MeshGradient`] used as a paint, baked at a fixed resolution over the painted bounds.
+///
+/// Backends bake it with [`MeshGradient::pattern`] when a frame is prepared, so the baked
+/// resolution and subdivisions are part of the paint and output stays deterministic.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MeshPaint {
+    /// Control lattice to paint with.
+    pub mesh: MeshGradient,
+    /// Baked image size in pixels.
+    pub size: PixelSize,
+    /// Subdivisions per lattice cell edge, in `1..=`[`MAX_MESH_SUBDIVISIONS`].
+    pub subdivisions: u32,
+}
+
+impl MeshPaint {
+    /// Pairs a mesh with its bake resolution.
+    pub fn new(mesh: MeshGradient, size: PixelSize, subdivisions: u32) -> Self {
+        Self {
+            mesh,
+            size,
+            subdivisions,
+        }
+    }
+
+    /// Checks the bake parameters without allocating.
+    pub fn validate(&self) -> Result<(), ValidationError> {
+        if !(1..=MAX_MESH_SUBDIVISIONS).contains(&self.subdivisions) {
+            return Err(ValidationError::limit(
+                LABEL,
+                "subdivisions",
+                "Subdivisions must be between 1 and 32",
+            ));
+        }
+        if self.size.width == 0 || self.size.height == 0 {
+            return Err(ValidationError::invalid(
+                LABEL,
+                "size",
+                "Mesh image must have positive dimensions",
+            ));
+        }
+        Ok(())
+    }
+
+    /// Bakes the mesh over `bounds` as an extend-padded bilinear pattern.
+    pub fn pattern(
+        &self,
+        bounds: Rect,
+        limits: RasterLimits,
+    ) -> Result<ImagePattern, ValidationError> {
+        self.mesh
+            .pattern(bounds, self.size, self.subdivisions, limits)
+    }
+}
+
 /// Barycentric slack that keeps pixels on shared triangle edges covered.
 const EDGE_SLACK: f64 = 1e-9;
 

@@ -453,6 +453,13 @@ impl PreparedFrame {
         path: &str,
         cache: Option<&mut TableCache>,
     ) -> Result<usize, ValidationError> {
+        let baked;
+        let paint = if let Paint::Mesh(mesh) = paint {
+            baked = Paint::Pattern(mesh.pattern(bounds, budget.limits)?);
+            &baked
+        } else {
+            paint
+        };
         let (record, source) = match paint {
             Paint::Solid(color) => (paint_record(*color, path)?, None),
             _ => {
