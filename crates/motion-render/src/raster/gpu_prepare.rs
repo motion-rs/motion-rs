@@ -3,7 +3,7 @@
 use super::CoverageCache;
 use super::device::DeviceGeometry;
 use super::frame_ir::FrameIr;
-use super::prepare::prepare_scene;
+use super::prepare::{DeviceBackend, prepare_scene};
 #[cfg(test)]
 use crate::prepared::PreparedFrame;
 use crate::prepared::PreparedScene;
@@ -27,7 +27,14 @@ impl GpuFrame {
             coverage_enabled: device,
             ..Default::default()
         };
-        let scene = prepare_scene(ir, limits, cache, Some(&mut geometry))?;
+        let scene = prepare_scene(
+            ir,
+            limits,
+            &mut DeviceBackend {
+                geometry: &mut geometry,
+                cache,
+            },
+        )?;
         Ok(Self { scene, geometry })
     }
 

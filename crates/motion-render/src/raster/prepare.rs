@@ -1,9 +1,12 @@
 //! CPU preparation APIs and shared consumption of normalized frame semantics.
 
 use super::device::DeviceGeometry;
-use super::frame_ir::{COMMAND_PATH_BYTES, FrameIr, GeometrySource, IrClip, IrItem};
+use super::frame_ir::{
+    COMMAND_PATH_BYTES, FrameIr, GeometrySource, IrClip, IrItem, IrPaint, IrPath,
+};
 #[cfg(feature = "gpu")]
 use super::gpu_prepare::GpuFrame;
+use super::paint::TableCache;
 use super::{CoverageCache, RasterScope, rect_clip};
 use crate::prepared::{
     PreparationStats, PreparedFilters, PreparedFrame, PreparedItem, PreparedLayer, PreparedScene,
@@ -186,16 +189,122 @@ pub(crate) fn prepare_ir(
     cache: Option<&mut CoverageCache>,
 ) -> Result<PreparedFrame, ValidationError> {
     Ok(PreparedFrame {
-        scene: prepare_scene(ir, limits, cache, None)?,
+        scene: prepare_scene(ir, limits, &mut CpuBackend { cache })?,
     })
 }
 
+/// The parts of a scene walk where CPU and GPU preparation differ.
+pub(super) trait SceneBackend {
+    /// Fixed result storage beyond the shared scene.
+    fn fixed_bytes(&self) -> u64;
+
+    /// IR resource bytes that stay live in the prepared result.
+    fn kept_resource_bytes(&self, ir: &FrameIr<'_>) -> u64;
+
+    /// Paint table cache shared across frames, if any.
+    fn paint_cache(&mut self) -> Option<&mut TableCache>;
+
+    /// Observes a particle batch before it is recorded.
+    fn particles(&mut self, analytic_fallback: bool);
+
+    /// Generates the coverage of one fill into `frame`.
+    fn fill(
+        &mut self,
+        frame: &mut PreparedScene,
+        geometry: &IrPath<'_>,
+        paint: &IrPaint<'_>,
+        tolerance: f64,
+        scope: &mut RasterScope<'_>,
+    ) -> Result<(), ValidationError>;
+}
+
+/// Preparation that borrows immutable resources and flattens every fill on the CPU.
+struct CpuBackend<'a> {
+    cache: Option<&'a mut CoverageCache>,
+}
+
+impl SceneBackend for CpuBackend<'_> {
+    fn fixed_bytes(&self) -> u64 {
+        0
+    }
+
+    fn kept_resource_bytes(&self, _: &FrameIr<'_>) -> u64 {
+        0
+    }
+
+    fn paint_cache(&mut self) -> Option<&mut TableCache> {
+        self.cache.as_deref_mut().map(|cache| &mut cache.paints)
+    }
+
+    fn particles(&mut self, _: bool) {}
+
+    fn fill(
+        &mut self,
+        frame: &mut PreparedScene,
+        geometry: &IrPath<'_>,
+        _: &IrPaint<'_>,
+        tolerance: f64,
+        scope: &mut RasterScope<'_>,
+    ) -> Result<(), ValidationError> {
+        prepare_geometry(frame, geometry, tolerance, self.cache.as_deref_mut(), scope)
+    }
+}
+
+/// Preparation that keeps resources for upload and emits device coverage when admitted.
+pub(super) struct DeviceBackend<'a> {
+    pub(super) geometry: &'a mut DeviceGeometry,
+    pub(super) cache: Option<&'a mut CoverageCache>,
+}
+
+impl SceneBackend for DeviceBackend<'_> {
+    fn fixed_bytes(&self) -> u64 {
+        size_of::<DeviceGeometry>() as u64
+    }
+
+    fn kept_resource_bytes(&self, ir: &FrameIr<'_>) -> u64 {
+        ir.resource_bytes()
+    }
+
+    fn paint_cache(&mut self) -> Option<&mut TableCache> {
+        self.cache.as_deref_mut().map(|cache| &mut cache.paints)
+    }
+
+    fn particles(&mut self, analytic_fallback: bool) {
+        self.geometry.analytic_cpu_fallbacks += u64::from(analytic_fallback);
+    }
+
+    fn fill(
+        &mut self,
+        frame: &mut PreparedScene,
+        geometry: &IrPath<'_>,
+        paint: &IrPaint<'_>,
+        tolerance: f64,
+        scope: &mut RasterScope<'_>,
+    ) -> Result<(), ValidationError> {
+        let device = &mut *self.geometry;
+        let on_device = if !matches!(geometry.source, GeometrySource::Path(_)) {
+            false
+        } else if !device.coverage_enabled {
+            device.fallback_paths.coverage_disabled += 1;
+            false
+        } else if matches!(paint.source, motion_core::Paint::Pattern(pattern) if pattern.decal) {
+            device.fallback_paths.unsupported_paint += 1;
+            false
+        } else {
+            device.device_fill(frame, geometry, tolerance, scope)?
+        };
+        if on_device {
+            return Ok(());
+        }
+        prepare_geometry(frame, geometry, tolerance, self.cache.as_deref_mut(), scope)
+    }
+}
+
 /// A single scope walk shares semantics, not backend preparation results.
-pub(crate) fn prepare_scene(
+pub(super) fn prepare_scene(
     ir: &FrameIr<'_>,
     limits: RasterLimits,
-    mut cache: Option<&mut CoverageCache>,
-    mut device: Option<&mut DeviceGeometry>,
+    backend: &mut impl SceneBackend,
 ) -> Result<PreparedScene, ValidationError> {
     let mut budget = Budget::new(ir.size(), limits)?;
     let ir_stats = ir.stats();
@@ -203,8 +312,8 @@ pub(crate) fn prepare_scene(
     budget.work(ir_stats.work, "frame_ir")?;
     budget.merge_peak(ir_stats.peak_bytes);
     budget.bytes(size_of::<PreparedFrame>() as u64, "prepared")?;
-    if device.is_some() {
-        budget.bytes(size_of::<DeviceGeometry>() as u64, "prepared.gpu")?;
+    if backend.fixed_bytes() > 0 {
+        budget.bytes(backend.fixed_bytes(), "prepared.gpu")?;
     }
     let mut frame = PreparedScene {
         quality: motion_core::RenderQuality::Final,
@@ -230,11 +339,7 @@ pub(crate) fn prepare_scene(
         budget.work(1, &path)?;
         let item = match item {
             IrItem::ParticleInstances { batch, transform } => {
-                if batch.analytic_fallback().is_some()
-                    && let Some(device) = device.as_deref_mut()
-                {
-                    device.analytic_cpu_fallbacks += 1;
-                }
+                backend.particles(batch.analytic_fallback().is_some());
                 if transform.inverse().is_none() {
                     budget.release(COMMAND_PATH_BYTES);
                     continue;
@@ -256,67 +361,15 @@ pub(crate) fn prepare_scene(
                 }
                 let mut layer = copy_layer(layer, &mut budget, &path)?;
                 if layer.filters.is_none() {
-                    layer.alpha_clip = alpha_clip
-                        .map(|index| match ir.clip(index) {
-                            IrClip::Alpha {
-                                source,
-                                path: geometry,
-                            } => frame.prepare_ir_clip(
-                                source,
-                                ir.path(*geometry),
-                                ir.tolerance(),
-                                &mut budget,
-                                &path,
-                            ),
-                            _ => Err(ValidationError::invalid(
-                                &path,
-                                "clip",
-                                "Expected alpha clip",
-                            )),
-                        })
-                        .transpose()?;
-                    let rectangle = rectangle_clip
-                        .map(|index| match ir.clip(index) {
-                            IrClip::Rectangle {
-                                source,
-                                path: geometry,
-                            } => {
-                                debug_assert!(ir.path(*geometry).segment_upper_bound > 0);
-                                Ok(source)
-                            }
-                            _ => Err(ValidationError::invalid(
-                                &path,
-                                "clip",
-                                "Expected rectangle clip",
-                            )),
-                        })
-                        .transpose()?;
-                    let shape = shape_clip
-                        .map(|index| match ir.clip(index) {
-                            IrClip::Shape {
-                                source,
-                                path: geometry,
-                            } => {
-                                debug_assert!(ir.path(*geometry).segment_upper_bound > 0);
-                                Ok(source)
-                            }
-                            _ => Err(ValidationError::invalid(
-                                &path,
-                                "clip",
-                                "Expected shape clip",
-                            )),
-                        })
-                        .transpose()?;
-                    let geometric = rectangles.push(
-                        rectangle,
-                        shape,
+                    prepare_layer_clips(
+                        ir,
+                        &mut layer,
+                        [*alpha_clip, *rectangle_clip, *shape_clip],
                         &mut frame,
-                        ir.tolerance(),
+                        &mut rectangles,
                         &mut budget,
                         &path,
                     )?;
-                    layer.geometric_clip =
-                        geometric.filter(|_| shape.is_some() || rectangle.is_some());
                 }
                 has_plus_layers |= layer.filters.is_none()
                     && matches!(
@@ -346,38 +399,14 @@ pub(crate) fn prepare_scene(
                 let strip_start = frame.strips.len();
                 let span_start = frame.spans.len();
                 let mut scope = RasterScope::new(&mut budget, &path);
-                let device_fill = if let Some(device) = device.as_deref_mut() {
-                    if !matches!(geometry.source, GeometrySource::Path(_)) {
-                        false
-                    } else if !device.coverage_enabled {
-                        device.fallback_paths.coverage_disabled += 1;
-                        false
-                    } else if matches!(paint.source, motion_core::Paint::Pattern(pattern) if pattern.decal)
-                    {
-                        device.fallback_paths.unsupported_paint += 1;
-                        false
-                    } else {
-                        device.device_fill(&mut frame, geometry, ir.tolerance(), &mut scope)?
-                    }
-                } else {
-                    false
-                };
-                if !device_fill {
-                    prepare_geometry(
-                        &mut frame,
-                        geometry,
-                        ir.tolerance(),
-                        cache.as_deref_mut(),
-                        &mut scope,
-                    )?;
-                }
+                backend.fill(&mut frame, geometry, paint, ir.tolerance(), &mut scope)?;
                 let paint = frame.add_paint(
                     paint.source,
                     paint.bounds,
                     paint.transform,
                     &mut budget,
                     &path,
-                    cache.as_deref_mut().map(|cache| &mut cache.paints),
+                    backend.paint_cache(),
                 )?;
                 PreparedItem::Fill {
                     strips: strip_start..frame.strips.len(),
@@ -395,18 +424,73 @@ pub(crate) fn prepare_scene(
     }
     // The IR dies after preparation. Only a GPU frame keeps its admitted resource bytes for
     // upload; a CPU frame borrows the immutable resources and owns no copy of them.
-    let kept = if device.is_some() {
-        ir.resource_bytes()
-    } else {
-        0
-    };
-    budget.release(ir_stats.retained_bytes - kept);
+    budget.release(ir_stats.retained_bytes - backend.kept_resource_bytes(ir));
     frame.stats = PreparationStats {
         retained_bytes: budget.live_bytes(),
         peak_bytes: budget.peak_bytes(),
         work: budget.work_done(),
     };
     Ok(frame)
+}
+
+/// Resolves a layer's alpha, rectangle and shape clips into prepared storage and geometry.
+fn prepare_layer_clips(
+    ir: &FrameIr<'_>,
+    layer: &mut PreparedLayer,
+    [alpha_clip, rectangle_clip, shape_clip]: [Option<usize>; 3],
+    frame: &mut PreparedScene,
+    rectangles: &mut rect_clip::Preparation,
+    budget: &mut Budget,
+    path: &str,
+) -> Result<(), ValidationError> {
+    layer.alpha_clip = alpha_clip
+        .map(|index| match ir.clip(index) {
+            IrClip::Alpha {
+                source,
+                path: geometry,
+            } => frame.prepare_ir_clip(source, ir.path(*geometry), ir.tolerance(), budget, path),
+            _ => Err(ValidationError::invalid(
+                path,
+                "clip",
+                "Expected alpha clip",
+            )),
+        })
+        .transpose()?;
+    let rectangle = rectangle_clip
+        .map(|index| match ir.clip(index) {
+            IrClip::Rectangle {
+                source,
+                path: geometry,
+            } => {
+                debug_assert!(ir.path(*geometry).segment_upper_bound > 0);
+                Ok(source)
+            }
+            _ => Err(ValidationError::invalid(
+                path,
+                "clip",
+                "Expected rectangle clip",
+            )),
+        })
+        .transpose()?;
+    let shape = shape_clip
+        .map(|index| match ir.clip(index) {
+            IrClip::Shape {
+                source,
+                path: geometry,
+            } => {
+                debug_assert!(ir.path(*geometry).segment_upper_bound > 0);
+                Ok(source)
+            }
+            _ => Err(ValidationError::invalid(
+                path,
+                "clip",
+                "Expected shape clip",
+            )),
+        })
+        .transpose()?;
+    let geometric = rectangles.push(rectangle, shape, frame, ir.tolerance(), budget, path)?;
+    layer.geometric_clip = geometric.filter(|_| shape.is_some() || rectangle.is_some());
+    Ok(())
 }
 
 fn copy_layer(
