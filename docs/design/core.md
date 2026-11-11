@@ -124,6 +124,9 @@ intersection work are admitted through `Budget` first.
 linear-premultiplied `MeshImage` and reaches renderers as an ordinary `ImagePattern`, so the
 CPU path, GPU plan and WGSL shader need no mesh-specific code and cannot disagree. Colors blend
 in Oklab with smoothstep weights and alpha blends linearly; cells are bilinear patches.
+`Paint::Mesh(MeshPaint)` carries the mesh with its bake size and subdivisions; preparation bakes
+it with `MeshGradient::pattern` over the painted bounds, so it renders exactly like the explicit
+pattern. The bake runs on the CPU at every preparation.
 
 `Perspective` rotates a flat layer about a pivot and projects it through a pinhole camera.
 It maps path geometry, not pixels: lines stay lines, curves become subdivided cubics, and a

@@ -27,8 +27,12 @@ GPU planning rejects unsupported precision or budgets before initialization. Ord
 draw/compute operations use finite linear-premultiplied pixels in RGBA32F working
 textures. Particle states and ordered tile metadata remain storage buffers, as do
 coverage/paint uploads and the final output boundary. These payloads are charged
-explicitly. Coverage generation still runs during CPU preparation; this migration
-does not implement GPU rasterization.
+explicitly. CPU preparation flattens paths. Eligible fills keep their f64 flattened edges
+and the GPU computes their 8-bit coverage in a compute pass before composition; all other
+coverage is still generated on the CPU and uploaded. Where contours cross inside a pixel the
+GPU sums signed areas rather than reproducing the exact CPU sweep, so such pixels may differ
+by more than 2 LSB (12 of 38,400 in the star fixture). CPU rendering materializes the same
+coverage itself and is unchanged.
 
 Each dispatch uses a 256-byte `#[repr(C)]`/Pod `GpuUniforms` rather than a raw
 word array. Frame, bounds, operation, value rows, source rectangles and flags
@@ -55,7 +59,7 @@ clips use dense packed coverage, whose lookup does not grow with the record coun
 1080p transition with a few hundred clip records would otherwise exceed the work
 budget. Fully opaque and span-only payloads
 retain compact constants or sparse/packed records. Decals retain CPU f64 rejection
-and compact local payloads. Coverage generation remains on the CPU.
+and compact local payloads. Decals and coverage-cache hits keep CPU coverage.
 Shader decoding reproduces the original CPU f32 alpha bits. Geometric clip ratios
 retain their original f32 operation order. Conditional clips retain an eight-word
 bounded header and three independent alpha/child/ancestor payloads, which can
