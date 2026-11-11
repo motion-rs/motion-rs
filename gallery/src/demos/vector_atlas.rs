@@ -2,8 +2,11 @@
 
 use super::atlas::{self, Page};
 use crate::{DemoMetadata, DemoParameters};
+use motion::Perspective;
 use motion::eager::{Morph, WriteOptions};
+use motion::math;
 use motion::prelude::*;
+use motion::render::RasterLimits;
 use motion::svg::SvgAsset;
 
 pub(super) const METADATA: DemoMetadata = DemoMetadata::new(
@@ -17,6 +20,9 @@ pub(super) const METADATA: DemoMetadata = DemoMetadata::new(
         "svg",
         "vector-morph",
         "vector-write",
+        "path-boolean",
+        "mesh-gradient",
+        "perspective",
     ],
 );
 
@@ -129,6 +135,30 @@ pub(super) const PAGES: &[Page] = &[
             "then hands off to the fill.",
         ],
     },
+    Page {
+        title: "Path booleans",
+        lines: [
+            "Union, intersection,",
+            "difference and xor combine",
+            "two moving filled shapes.",
+        ],
+    },
+    Page {
+        title: "Mesh gradient",
+        lines: [
+            "A lattice of colored points",
+            "blends smoothly while its",
+            "interior points drift.",
+        ],
+    },
+    Page {
+        title: "Planar perspective",
+        lines: [
+            "A flat card turns about its",
+            "pivot and projects through",
+            "a pinhole camera.",
+        ],
+    },
 ];
 
 pub(super) fn timeline(parameters: DemoParameters) -> Result<Timeline, motion::ErrorReport> {
@@ -202,13 +232,16 @@ pub(super) fn timeline(parameters: DemoParameters) -> Result<Timeline, motion::E
                 .rotate((progress - 0.5) * 0.9)
                 .scale(0.8 + 0.2 * progress),
             11 => morph.sample(Easing::CubicInOut.apply(progress))?,
-            _ => source.write(
+            12 => source.write(
                 progress,
                 WriteOptions {
                     width: 3.0,
                     outline_fraction: 0.8,
                 },
             )?,
+            13 => booleans(progress)?,
+            14 => mesh(bounds, progress)?,
+            _ => perspective(progress)?,
         })
     })
 }
@@ -334,4 +367,116 @@ fn interpolation(progress: f64) -> Node {
         ));
     }
     Node::group(nodes)
+}
+
+fn booleans(progress: f64) -> motion::Result<Node> {
+    let ops = [
+        (PathBooleanOp::Union, "Union"),
+        (PathBooleanOp::Intersection, "Intersection"),
+        (PathBooleanOp::Difference, "Difference"),
+        (PathBooleanOp::Xor, "Xor"),
+    ];
+    let mut nodes = Vec::new();
+    for (index, (op, name)) in ops.into_iter().enumerate() {
+        let left = 20.0 + index as f64 * 122.0;
+        let center = Point::new(left + 56.0, 140.0);
+        let circle = Path2D::builder()
+            .arc_to(
+                Point::new(center.x - 14.0, center.y),
+                Vector2::new(34.0, 34.0),
+                0.0,
+                std::f64::consts::TAU,
+            )
+            .close()
+            .build()?;
+        let square = Path2D::from_rect(Rect::new(-30.0, -30.0, 30.0, 30.0))?.transformed(
+            &Transform::rotate(progress * std::f64::consts::TAU).then(Transform::translate(
+                center.x + 14.0 + 10.0 * math::sin(progress * std::f64::consts::TAU),
+                center.y,
+            )),
+        )?;
+        let result = circle.boolean(&square, op, PathBooleanOptions::default())?;
+        nodes.push(Node::from(circle.stroke(1.5, Color::from_hex(atlas::BLUE))));
+        nodes.push(Node::from(square.stroke(1.5, Color::from_hex(atlas::GOLD))));
+        nodes.push(
+            result
+                .fill(Color::from_hex(atlas::MINT))
+                .translate(0.0, 70.0),
+        );
+        nodes.push(atlas::text(name, 13.0, 0xb9cec5, left + 8.0, 262.0));
+    }
+    Ok(Node::group(nodes))
+}
+
+fn mesh(bounds: Rect, progress: f64) -> motion::Result<Node> {
+    let phase = progress * std::f64::consts::TAU;
+    let palette = [
+        0x66e0c2, 0x8bd5f3, 0xffc777, 0xd64b36, 0x3564c4, 0x66e0c2, 0xffc777, 0x8bd5f3, 0xd64b36,
+    ];
+    let vertices = palette
+        .iter()
+        .enumerate()
+        .map(|(index, color)| {
+            let next = palette[(index + 1) % palette.len()];
+            let (column, row) = ((index % 3) as f64, (index / 3) as f64);
+            let drift = if index == 4 { 0.18 } else { 0.0 };
+            MeshVertex {
+                position: Point::new(
+                    column * 0.5 + drift * math::cos(phase),
+                    row * 0.5 + drift * math::sin(phase),
+                ),
+                color: Color::from_hex(*color).interpolate(&Color::from_hex(next), progress),
+            }
+        })
+        .collect();
+    let mesh = MeshGradient::new(3, 3, vertices)?;
+    let pattern = mesh.pattern(bounds, PixelSize::new(128, 76), 6, RasterLimits::default())?;
+    Ok(bounds.fill(pattern).into())
+}
+
+fn perspective(progress: f64) -> motion::Result<Node> {
+    let camera = Perspective::new(
+        Point::new(256.0, 152.0),
+        0.25 * math::sin(progress * std::f64::consts::TAU),
+        (progress - 0.5) * 2.2,
+        0.0,
+        520.0,
+    )?;
+    let mut parts = vec![
+        (
+            Path2D::from_rect(Rect::new(146.0, 82.0, 366.0, 222.0))?,
+            if camera.faces_camera() {
+                atlas::GOLD
+            } else {
+                0x8a6d3b
+            },
+        ),
+        (
+            Path2D::from_rect(Rect::new(166.0, 102.0, 266.0, 112.0))?,
+            atlas::DARK,
+        ),
+        (
+            Path2D::from_rect(Rect::new(166.0, 122.0, 226.0, 132.0))?,
+            atlas::DARK,
+        ),
+    ];
+    parts.push((
+        Path2D::builder()
+            .arc_to(
+                Point::new(316.0, 172.0),
+                Vector2::new(32.0, 32.0),
+                0.0,
+                std::f64::consts::TAU,
+            )
+            .close()
+            .build()?,
+        atlas::MINT,
+    ));
+    let mut nodes = Vec::new();
+    for (path, color) in parts {
+        nodes.push(Node::from(
+            camera.project_path(&path, 8)?.fill(Color::from_hex(color)),
+        ));
+    }
+    Ok(Node::group(nodes))
 }
