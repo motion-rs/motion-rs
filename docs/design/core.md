@@ -114,6 +114,11 @@ Shape describes geometry; styling makes it drawable. Path2D retains curves, fill
 rules, trimming, dashes and stroke outlines. Copy-on-write path edits preserve old
 snapshots; a later valid edit cannot erase an earlier retained authoring error.
 Source paths and generated stroke outlines both undergo structural admission.
+`Path2D::boolean` computes union, intersection, difference and xor before pixel execution.
+It flattens both operands, splits edges at every intersection, keeps edges whose two sides
+differ in the combined region and chains them into line-only contours. Backends only see
+the resulting path, so CPU and GPU output agree. Edge count, storage and quadratic
+intersection work are admitted through `Budget` first.
 
 Selected curve, stroke and arc operations use kurbo. Shared coverage remains
 Motion-owned, not a complete third-party raster backend. Arc-length lookup, curve

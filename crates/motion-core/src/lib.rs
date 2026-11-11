@@ -94,7 +94,10 @@ pub use geometry::bounds::{Pivot, Rect, Size};
 pub use geometry::{AngleLiteral, Point, Transform, TransformComponents, Vector2};
 pub use grading::{Cdl, ColorWheels, Lut1d, Lut3d, LutInput};
 pub use optics::{ApertureShape, HeightFrom, Optics};
-pub use path2d::{MAX_PATH_VERBS, MAX_SVG_PATH_BYTES, MorphPath, Path2D, PathBuilder, PathVerb};
+pub use path2d::{
+    MAX_BOOLEAN_EDGES, MAX_PATH_VERBS, MAX_SVG_PATH_BYTES, MorphPath, Path2D, PathBooleanOp,
+    PathBooleanOptions, PathBuilder, PathVerb,
+};
 pub use pixels::{ImagePixels, Sampling};
 pub use random::Random;
 pub use report::ErrorReport;
@@ -160,7 +163,7 @@ pub mod prelude {
         GradientExtend, GradientSpace, GradientUnits, ImagePattern, LinearGradient, RadialGradient,
         SweepGradient,
     };
-    pub use crate::{MorphPath, Path2D, PathVerb};
+    pub use crate::{MorphPath, Path2D, PathBooleanOp, PathBooleanOptions, PathVerb};
     pub use crate::{group, scene};
     pub use crate::{linear_to_srgb, premultiply, rec709_luminance, srgb_to_linear, unpremultiply};
 }

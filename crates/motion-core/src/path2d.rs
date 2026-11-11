@@ -7,6 +7,7 @@ use kurbo::Shape as _;
 
 use crate::{Pivot, Point, Rect, Transform, ValidationError, Vector2};
 
+mod boolean;
 mod builder;
 mod construction;
 mod editing;
@@ -16,6 +17,7 @@ mod morph;
 mod tests;
 mod validation;
 
+pub use boolean::{MAX_BOOLEAN_EDGES, PathBooleanOp, PathBooleanOptions};
 pub use builder::PathBuilder;
 pub use morph::MorphPath;
 
