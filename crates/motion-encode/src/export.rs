@@ -12,7 +12,7 @@
 //! let timeline = Timeline::new(Size::new(4.0, 2.0), 30).track(|track| {
 //!     track.push((|_: &SceneContext<'_>| Node::empty()).with_duration(1.seconds()))
 //! }).build()?;
-//! let bitmap = render_still(&timeline, 250.milliseconds(), &RenderOptions::default())?;
+//! let bitmap = render_still(&timeline, 250.milliseconds().after_origin(), &RenderOptions::default())?;
 //! assert_eq!(bitmap.bytes(), &[0; 32]);
 //! # Ok::<(), motion_core::Error>(())
 //! ```
@@ -53,11 +53,7 @@ pub fn export(
     let encoder: Box<dyn Encoder + '_> = match options.codec {
         Codec::PngSequence => Box::new(crate::encoder::png::PngSequenceEncoder::new()),
         Codec::Gif { .. } => Box::new(crate::encoder::gif::GifEncoder::new()),
-        _ => Box::new(
-            FfmpegEncoder::new(progress)
-                .codec(options.codec)
-                .bit_depth(options.bit_depth),
-        ),
+        _ => Box::new(FfmpegEncoder::new(progress).codec(options.codec.clone())),
     };
     export_with_encoder(timeline, options, progress, encoder)
 }
@@ -110,7 +106,7 @@ pub fn export_with_encoder(
         Some(crate::MixedAudio::from_resolved_window(
             timeline,
             &resolved,
-            range.clone(),
+            range.start.since_origin()..range.end.since_origin(),
             options.audio_sample_rate,
             options.audio_resampler,
         )?)

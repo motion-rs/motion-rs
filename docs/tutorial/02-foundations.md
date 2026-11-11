@@ -37,12 +37,13 @@ The random marker's position is determined by its key. Repeated evaluation and b
 
 ## Time Is Not an Accumulator of Floating-Point Seconds
 
-`Time` and `Duration` use signed ticks, with `705600000` ticks per second. Seconds are a convenient view, not internal playback state.
+`Time` (a point on a timeline) and `Duration` (a span) are distinct types over signed ticks, with `705600000` ticks per second. `Time - Time` is a `Duration` and `Time + Duration` is a `Time`; adding two `Time`s does not compile. Seconds are a convenient view, not internal playback state.
 
 | API | Purpose |
 | --- | --- |
-| `1.seconds()` / `250.milliseconds()` | Construct tick values from time literals |
+| `1.seconds()` / `250.milliseconds()` | Construct `Duration` values from time literals |
 | `Time::ZERO` | Time zero |
+| `duration.after_origin()` / `time.since_origin()` | Convert explicitly between a span and a point measured from zero |
 | `Time::from_frame(index, rate)` | Calculate a frame boundary independently |
 | `FrameRate::NTSC` | Rational frame rate of `30000/1001` |
 | `context.time()` | Scene-local time |
@@ -112,7 +113,7 @@ Successive values from one stream depend on sampling order. Use different keys f
 
 ## Common Pitfalls
 
-- Do not mix `Duration`, time points and frame indices. Establish what an interface expects before converting.
+- Do not mix `Duration`, `Time` and frame indices; the compiler rejects the first two, so convert explicitly. Establish what an interface expects before converting.
 - Approximating NTSC as 30.0 and accumulating seconds causes drift in long outputs and audio/video boundaries.
 - Do not hard-code preview pixel widths into scenes. Use logical dimensions or geometry from `context`.
 - Infinity, NaN and noninvertible mappings need input validation, not an expectation of silent repair.

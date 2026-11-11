@@ -310,7 +310,7 @@ fn custom_curves_clone_across_threads_without_debug_evaluating_them() {
 
 #[test]
 fn inputs_preserve_double_precision_across_clip_durations() {
-    use crate::{Animation, Keyframes, Time, TimeLiteral, Tween};
+    use crate::{Animation, Duration, Keyframes, TimeLiteral, Tween};
     for curve in [
         Easing::Linear,
         Easing::QuadraticIn,
@@ -327,13 +327,13 @@ fn inputs_preserve_double_precision_across_clip_durations() {
             let tween = Tween::new(10.0_f64, 20.0, duration).easing(curve.clone());
             let track = Keyframes::new(10.0_f64).to(duration, 20.0, curve.clone());
             for time in [
-                Time::from_ticks(i64::MIN),
-                Time::ZERO,
-                Time::from_ticks(1),
+                Duration::from_ticks(i64::MIN),
+                Duration::ZERO,
+                Duration::from_ticks(1),
                 duration / 4.0,
                 duration / 2.0,
                 duration,
-                Time::from_ticks(i64::MAX),
+                Duration::from_ticks(i64::MAX),
             ] {
                 let progress = curve.apply(time / duration);
                 let expected = 10.0 * (1.0 - progress) + 20.0 * progress;

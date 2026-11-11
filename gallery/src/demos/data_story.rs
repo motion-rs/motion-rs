@@ -154,9 +154,9 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
                     nodes.push(line_chart(context, progress, horizontal, vertical)?);
 
                     let cards = window(progress, 0.10, 0.10);
-                    let riders = riders.sample(time);
-                    let growth = growth.sample(time);
-                    let saved = saved.sample(time);
+                    let riders = riders.sample(time.since_origin());
+                    let growth = growth.sample(time.since_origin());
+                    let saved = saved.sample(time.since_origin());
                     let stat = |value: String, caption: &str, hex: u32| {
                         // The invisible strut fixes the column width so ticking digits
                         // never shift neighbouring cards inside the measured row.
@@ -370,14 +370,14 @@ mod tests {
         for size in [PixelSize::new(960, 540), PixelSize::new(1920, 1080)] {
             let options = options.clone().size(size);
             for seconds in [1.5, 15.0, 25.8, 29.0] {
-                let first = render_still(&film, seconds.seconds(), &options)?;
+                let first = render_still(&film, seconds.seconds().after_origin(), &options)?;
                 render_still(&film, Time::ZERO, &options)?;
-                let replay = render_still(&film, seconds.seconds(), &options)?;
+                let replay = render_still(&film, seconds.seconds().after_origin(), &options)?;
                 assert_eq!(first.bytes(), replay.bytes());
                 #[cfg(feature = "gpu")]
                 {
                     let gpu_options = options.clone().backend(BackendPreference::gpu());
-                    let gpu = render_still(&film, seconds.seconds(), &gpu_options)?;
+                    let gpu = render_still(&film, seconds.seconds().after_origin(), &gpu_options)?;
                     let difference = first
                         .bytes()
                         .iter()
@@ -386,7 +386,8 @@ mod tests {
                         .max()
                         .unwrap_or(0);
                     assert!(difference <= 2, "CPU/GPU difference: {difference}");
-                    let replay = render_still(&film, seconds.seconds(), &gpu_options)?;
+                    let replay =
+                        render_still(&film, seconds.seconds().after_origin(), &gpu_options)?;
                     assert_eq!(gpu.bytes(), replay.bytes());
                 }
             }

@@ -7,7 +7,7 @@
 //! use motion_content::{Image, atmosphere::Atmosphere};
 //! use motion_core::{BlendMode, Node, NodeModifiers, PixelSize, RasterLimits, TimeLiteral};
 //! let asset = Atmosphere::light_leak(42).render(
-//!     PixelSize::new(32, 24), 1.seconds(), RasterLimits::sandbox(),
+//!     PixelSize::new(32, 24), 1.seconds().after_origin(), RasterLimits::sandbox(),
 //! )?;
 //! let overlay = Node::from(Image::from_asset(std::sync::Arc::new(asset)))
 //!     .blend_mode(BlendMode::Plus);
@@ -375,7 +375,8 @@ mod tests {
         assert_eq!(Atmosphere::light_leak(1).blend_mode(), BlendMode::Plus);
         let size = PixelSize::new(64, 48);
         for recipe in [Atmosphere::fog(7), Atmosphere::light_leak(7)] {
-            let overlay = recipe.overlay(size, 1.seconds(), RasterLimits::default())?;
+            let overlay =
+                recipe.overlay(size, 1.seconds().after_origin(), RasterLimits::default())?;
             let frame = Composition::new(64, 48, motion_render::FrameClock::new(30, 150))
                 .with_options(
                     motion_render::RenderOptions::default().backend(Renderer::Cpu.into()),
@@ -388,7 +389,12 @@ mod tests {
                         overlay.clone(),
                     ])
                 })?;
-            let manual = compose(recipe, recipe.blend_mode(), Renderer::Cpu, 1.seconds())?;
+            let manual = compose(
+                recipe,
+                recipe.blend_mode(),
+                Renderer::Cpu,
+                1.seconds().after_origin(),
+            )?;
             assert_eq!(frame.pixels(), manual.pixels());
         }
         let invalid = Atmosphere {
@@ -397,7 +403,7 @@ mod tests {
         };
         assert!(
             invalid
-                .overlay(size, 0.seconds(), RasterLimits::default())
+                .overlay(size, 0.seconds().after_origin(), RasterLimits::default())
                 .is_err()
         );
         Ok(())
@@ -411,14 +417,14 @@ mod tests {
             Atmosphere::light_leak(42),
         ] {
             for mode in [BlendMode::Plus, BlendMode::Screen] {
-                let frame = compose(recipe, mode, Renderer::Cpu, 0.seconds())?;
+                let frame = compose(recipe, mode, Renderer::Cpu, 0.seconds().after_origin())?;
                 assert_eq!(
                     frame.pixels(),
-                    compose(recipe, mode, Renderer::Cpu, 0.seconds())?.pixels()
+                    compose(recipe, mode, Renderer::Cpu, 0.seconds().after_origin())?.pixels()
                 );
                 assert_ne!(
                     frame.pixels(),
-                    compose(recipe, mode, Renderer::Cpu, 1.seconds())?.pixels()
+                    compose(recipe, mode, Renderer::Cpu, 1.seconds().after_origin())?.pixels()
                 );
                 assert!(
                     frame
@@ -440,11 +446,11 @@ mod tests {
             Atmosphere::light_leak(42),
         ] {
             for mode in [BlendMode::Plus, BlendMode::Screen] {
-                let cpu = compose(recipe, mode, Renderer::Cpu, 1.seconds())?;
-                let gpu = compose(recipe, mode, Renderer::Gpu, 1.seconds())?;
+                let cpu = compose(recipe, mode, Renderer::Cpu, 1.seconds().after_origin())?;
+                let gpu = compose(recipe, mode, Renderer::Gpu, 1.seconds().after_origin())?;
                 assert_eq!(
                     gpu.pixels(),
-                    compose(recipe, mode, Renderer::Gpu, 1.seconds())?.pixels()
+                    compose(recipe, mode, Renderer::Gpu, 1.seconds().after_origin())?.pixels()
                 );
                 for (cpu, gpu) in cpu.pixels().iter().zip(gpu.pixels()) {
                     for (cpu, gpu) in cpu.to_le_bytes().into_iter().zip(gpu.to_le_bytes()) {
@@ -476,17 +482,20 @@ mod tests {
                 recipe.scale = 12.0;
             }
             let time = 0.seconds();
-            let full = recipe.render(size, time, RasterLimits::default())?;
-            assert_eq!(full, recipe.render(size, time, RasterLimits::default())?);
+            let full = recipe.render(size, time.after_origin(), RasterLimits::default())?;
+            assert_eq!(
+                full,
+                recipe.render(size, time.after_origin(), RasterLimits::default())?
+            );
             assert_ne!(
                 full,
-                recipe.render(size, 1.seconds(), RasterLimits::default())?
+                recipe.render(size, 1.seconds().after_origin(), RasterLimits::default())?
             );
             let region = recipe.render_region(
                 size,
                 [17, 11],
                 PixelSize::new(31, 23),
-                time,
+                time.after_origin(),
                 RasterLimits::default(),
             )?;
             let mut energy = 0.0;
@@ -508,7 +517,10 @@ mod tests {
                 }
             }
             recipe.seed += 1;
-            assert_ne!(full, recipe.render(size, time, RasterLimits::default())?);
+            assert_ne!(
+                full,
+                recipe.render(size, time.after_origin(), RasterLimits::default())?
+            );
         }
         Ok(())
     }
@@ -532,15 +544,25 @@ mod tests {
                 ..RasterLimits::default()
             },
         ] {
-            assert!(base.render(size, time, limits).is_err());
+            assert!(base.render(size, time.after_origin(), limits).is_err());
         }
         assert!(
-            base.render(PixelSize::new(0, 1), time, RasterLimits::default())
-                .is_err()
+            base.render(
+                PixelSize::new(0, 1),
+                time.after_origin(),
+                RasterLimits::default()
+            )
+            .is_err()
         );
         assert!(
-            base.render_region(size, [8, 0], size, time, RasterLimits::default())
-                .is_err()
+            base.render_region(
+                size,
+                [8, 0],
+                size,
+                time.after_origin(),
+                RasterLimits::default()
+            )
+            .is_err()
         );
         for recipe in [
             Atmosphere { scale: 0.0, ..base },
@@ -569,7 +591,7 @@ mod tests {
         ] {
             assert!(
                 recipe
-                    .render(size, 1.seconds(), RasterLimits::default())
+                    .render(size, 1.seconds().after_origin(), RasterLimits::default())
                     .is_err()
             );
         }
@@ -584,7 +606,7 @@ mod tests {
             Atmosphere::light_leak(1),
         ] {
             recipe.opacity = 0.0;
-            let image = recipe.render(size, 0.seconds(), RasterLimits::default())?;
+            let image = recipe.render(size, 0.seconds().after_origin(), RasterLimits::default())?;
             for level in image.levels() {
                 for row in 0..level.height() {
                     for column in 0..level.width() {
@@ -595,7 +617,7 @@ mod tests {
         }
         let mut leak = Atmosphere::light_leak(42);
         leak.intensity = 16.0;
-        let image = leak.render(size, 0.seconds(), RasterLimits::default())?;
+        let image = leak.render(size, 0.seconds().after_origin(), RasterLimits::default())?;
         assert!(image.levels()[0].pixel(0, 8).unwrap()[0] > 1.0);
         Ok(())
     }

@@ -9,7 +9,7 @@
 //! };
 //! use motion_render::{Composition, RenderPrepare, RenderOptions, Renderer, render_still};
 //! let source = PcmBuffer::new(48_000, 1, vec![0.25; 4800])?;
-//! let clip = AudioClip::source(source).start(50.milliseconds()).pan(-1.0);
+//! let clip = AudioClip::source(source).start(50.milliseconds().after_origin()).pan(-1.0);
 //! let timeline = Timeline::new(Size::new(8.0, 4.0), 30).audio(clip).build()?;
 //! let mixed = MixedAudio::from_timeline(&timeline, 48_000)?;
 //! let mut pcm = [0.0; 2];
@@ -19,7 +19,7 @@
 //! ```
 
 pub use motion_core::audio::{AudioClip, AudioSource, ceil_frames, frames};
-use motion_core::{Duration, Time, ValidationError};
+use motion_core::{Duration, ValidationError};
 use std::sync::Arc;
 
 mod meter;
@@ -285,7 +285,7 @@ impl AudioSource for PcmBuffer {
     }
 
     fn duration(&self) -> Option<Duration> {
-        Some(Time::from_ticks(
+        Some(Duration::from_ticks(
             ((u128::from(self.frames()) * motion_core::TICKS_PER_SECOND as u128)
                 .div_ceil(u128::from(self.rate))) as i64,
         ))

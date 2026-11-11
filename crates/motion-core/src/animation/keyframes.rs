@@ -1,11 +1,11 @@
 //! Finite tick-addressed keyframe tracks with explicit interpolation and holds.
 
 use super::{Animation, Easing};
-use crate::{Duration, Interpolate, Time};
+use crate::{Duration, Interpolate};
 
 #[derive(Clone, Debug)]
 struct Keyframe<Value> {
-    at: Time,
+    at: Duration,
     value: Value,
     easing: Option<Easing>,
 }
@@ -44,7 +44,7 @@ impl<Value> Keyframes<Value> {
     pub fn new(value: Value) -> Self {
         Self {
             points: vec![Keyframe {
-                at: Time::ZERO,
+                at: Duration::ZERO,
                 value,
                 easing: None,
             }],
@@ -58,7 +58,7 @@ impl<Value> Keyframes<Value> {
     /// Panics unless `at` is strictly later than the previous point, including
     /// any appended hold, or for invalid easing parameters. Equal, negative
     /// and descending times are not sorted or converted into instantaneous jumps.
-    pub fn to(mut self, at: Time, value: Value, easing: Easing) -> Self {
+    pub fn to(mut self, at: Duration, value: Value, easing: Easing) -> Self {
         assert!(
             at > self.last().at,
             "keyframe times must be strictly increasing"
@@ -85,8 +85,11 @@ impl<Value: Clone> Keyframes<Value> {
     /// # Panics
     /// Panics for a negative duration or signed tick overflow.
     pub fn hold(mut self, duration: Duration) -> Self {
-        assert!(duration >= Time::ZERO, "keyframe hold must be nonnegative");
-        if duration == Time::ZERO {
+        assert!(
+            duration >= Duration::ZERO,
+            "keyframe hold must be nonnegative"
+        );
+        if duration == Duration::ZERO {
             return self;
         }
         let last = self.last();
@@ -101,7 +104,7 @@ impl<Value: Clone> Keyframes<Value> {
 }
 
 impl<Value: Interpolate + Send + Sync> Animation<Value> for Keyframes<Value> {
-    fn sample(&self, time: Time) -> Value {
+    fn sample(&self, time: Duration) -> Value {
         let upper = self.points.partition_point(|point| point.at <= time);
         if upper == 0 {
             return self.points[0].value.clone();
@@ -148,34 +151,34 @@ mod tests {
         ] {
             assert_eq!(track.sample(milliseconds.milliseconds()), expected);
         }
-        assert_eq!(track.sample(Time::from_ticks(i64::MIN)), 0.0);
-        assert_eq!(track.sample(Time::from_ticks(i64::MAX)), 20.0);
+        assert_eq!(track.sample(Duration::from_ticks(i64::MIN)), 0.0);
+        assert_eq!(track.sample(Duration::from_ticks(i64::MAX)), 20.0);
     }
 
     #[test]
     fn progress_and_adjacent_ticks_survive_large_absolute_timestamps() {
         let track =
-            Keyframes::new(0.0_f64).to(Time::from_ticks(10_000_000_000), 1.0, Easing::Linear);
-        let progress = track.sample(Time::from_ticks(5_000_000_001));
+            Keyframes::new(0.0_f64).to(Duration::from_ticks(10_000_000_000), 1.0, Easing::Linear);
+        let progress = track.sample(Duration::from_ticks(5_000_000_001));
         assert_eq!(progress, 0.500_000_000_1);
         assert_ne!(progress, f64::from(progress as f32));
-        let start = Time::from_ticks(1_i64 << 53);
-        let end = start + Time::from_ticks(3);
+        let start = Duration::from_ticks(1_i64 << 53);
+        let end = start + Duration::from_ticks(3);
         let track = Keyframes::new(0.0_f64)
             .hold(start)
             .to(end, 3.0, Easing::Linear)
-            .hold(Time::from_ticks(i64::MAX) - end);
-        assert_eq!(track.duration(), Some(Time::from_ticks(i64::MAX)));
+            .hold(Duration::from_ticks(i64::MAX) - end);
+        assert_eq!(track.duration(), Some(Duration::from_ticks(i64::MAX)));
         assert_eq!(track.sample(start), 0.0);
-        assert_eq!(track.sample(start + Time::from_ticks(1)), 1.0);
-        assert_eq!(track.sample(start + Time::from_ticks(2)), 2.0);
+        assert_eq!(track.sample(start + Duration::from_ticks(1)), 1.0);
+        assert_eq!(track.sample(start + Duration::from_ticks(2)), 2.0);
         assert_eq!(track.sample(end), 3.0);
-        assert_eq!(track.sample(Time::from_ticks(i64::MAX)), 3.0);
+        assert_eq!(track.sample(Duration::from_ticks(i64::MAX)), 3.0);
         let last_tick = Keyframes::new(2.0_f64)
-            .hold(Time::from_ticks(i64::MAX - 1))
-            .to(Time::from_ticks(i64::MAX), 7.0, Easing::Linear);
-        assert_eq!(last_tick.sample(Time::from_ticks(i64::MAX - 1)), 2.0);
-        assert_eq!(last_tick.sample(Time::from_ticks(i64::MAX)), 7.0);
+            .hold(Duration::from_ticks(i64::MAX - 1))
+            .to(Duration::from_ticks(i64::MAX), 7.0, Easing::Linear);
+        assert_eq!(last_tick.sample(Duration::from_ticks(i64::MAX - 1)), 2.0);
+        assert_eq!(last_tick.sample(Duration::from_ticks(i64::MAX)), 7.0);
     }
 
     #[test]
@@ -189,8 +192,8 @@ mod tests {
             }
         }
         let track = Keyframes::new(ExactOnly(1))
-            .to(Time::from_ticks(10), ExactOnly(2), Easing::QuadraticOut)
-            .hold(Time::from_ticks(5));
+            .to(Duration::from_ticks(10), ExactOnly(2), Easing::QuadraticOut)
+            .hold(Duration::from_ticks(5));
         for (ticks, expected) in [
             (i64::MIN, 1),
             (0, 1),
@@ -199,12 +202,18 @@ mod tests {
             (15, 2),
             (i64::MAX, 2),
         ] {
-            assert_eq!(track.sample(Time::from_ticks(ticks)), ExactOnly(expected));
+            assert_eq!(
+                track.sample(Duration::from_ticks(ticks)),
+                ExactOnly(expected)
+            );
         }
         let constant = Keyframes::new(ExactOnly(3));
-        assert_eq!(constant.duration(), Some(Time::ZERO));
-        assert_eq!(constant.sample(Time::ZERO), ExactOnly(3));
-        assert_eq!(constant.sample(Time::from_ticks(i64::MAX)), ExactOnly(3));
+        assert_eq!(constant.duration(), Some(Duration::ZERO));
+        assert_eq!(constant.sample(Duration::ZERO), ExactOnly(3));
+        assert_eq!(
+            constant.sample(Duration::from_ticks(i64::MAX)),
+            ExactOnly(3)
+        );
     }
 
     #[test]
@@ -212,32 +221,32 @@ mod tests {
         for ticks in [i64::MIN, -1, 0] {
             assert!(
                 std::panic::catch_unwind(|| {
-                    Keyframes::new(0.0_f64).to(Time::from_ticks(ticks), 1.0, Easing::Linear)
+                    Keyframes::new(0.0_f64).to(Duration::from_ticks(ticks), 1.0, Easing::Linear)
                 })
                 .is_err()
             );
         }
 
         fn track() -> Keyframes<f64> {
-            Keyframes::new(0.0_f64).hold(Time::from_ticks(10))
+            Keyframes::new(0.0_f64).hold(Duration::from_ticks(10))
         }
         for ticks in [9, 10] {
             assert!(
                 std::panic::catch_unwind(|| {
-                    track().to(Time::from_ticks(ticks), 1.0, Easing::Linear)
+                    track().to(Duration::from_ticks(ticks), 1.0, Easing::Linear)
                 })
                 .is_err()
             );
         }
-        assert!(std::panic::catch_unwind(|| track().hold(Time::from_ticks(-1))).is_err());
-        let unchanged = track().hold(Time::ZERO);
+        assert!(std::panic::catch_unwind(|| track().hold(Duration::from_ticks(-1))).is_err());
+        let unchanged = track().hold(Duration::ZERO);
         assert_eq!(unchanged.points.len(), 2);
-        assert_eq!(unchanged.duration(), Some(Time::from_ticks(10)));
+        assert_eq!(unchanged.duration(), Some(Duration::from_ticks(10)));
         assert!(
             std::panic::catch_unwind(|| {
                 Keyframes::new(0.0_f64)
-                    .hold(Time::from_ticks(i64::MAX))
-                    .hold(Time::from_ticks(1))
+                    .hold(Duration::from_ticks(i64::MAX))
+                    .hold(Duration::from_ticks(1))
             })
             .is_err()
         );
@@ -251,7 +260,7 @@ mod tests {
             .to(2.seconds(), 20.0, Easing::Linear);
         let cache = crate::SceneCache::new(0);
         let local = crate::SceneContext::new(
-            1500.milliseconds(),
+            1500.milliseconds().after_origin(),
             crate::FrameRate::from(60),
             crate::Size::new(64.0, 64.0),
             &cache,

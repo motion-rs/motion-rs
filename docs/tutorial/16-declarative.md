@@ -55,7 +55,7 @@ use motion::prelude::*;
 fn main() -> motion::Result {
     let film = motion::declarative::load("examples/documents/intro.json")?;
     let options = film.render_options(RenderOptions::default());
-    render_still(film.timeline(), 1.seconds(), &options)?.save_png("document.png")
+    render_still(film.timeline(), 1.seconds().after_origin(), &options)?.save_png("document.png")
 }
 ```
 

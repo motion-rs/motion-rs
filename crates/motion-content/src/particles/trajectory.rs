@@ -299,7 +299,7 @@ macro_rules! common {
             fn duration(&self) -> Option<Duration> {
                 if self.0.lifetime.is_finite() && self.0.lifetime > 0.0 && self.0.lifetime <= 3600.0
                 {
-                    Some(Time::from_seconds(f64::from(self.0.lifetime)))
+                    Some(Duration::from_seconds(f64::from(self.0.lifetime)))
                 } else {
                     None
                 }
@@ -475,8 +475,8 @@ mod tests {
         }
         let trajectory = ParticleTrajectory::new(orbit);
         assert_eq!(
-            trajectory.sample(1.seconds())?,
-            trajectory.sample(1.seconds())?
+            trajectory.sample(1.seconds().after_origin())?,
+            trajectory.sample(1.seconds().after_origin())?
         );
         Ok(())
     }

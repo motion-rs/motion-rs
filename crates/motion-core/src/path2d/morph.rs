@@ -672,12 +672,12 @@ mod tests {
 
     #[test]
     fn prepared_morphs_support_tweens_reverse_queries_and_checked_failures() {
-        use crate::{Animation, Time, Tween};
+        use crate::{Animation, Duration, Tween};
         let source = Path2D::parse_svg("M1 1H5V5H1Z").unwrap();
         let target = Path2D::parse_svg("M3 3H9V9H3Z").unwrap();
         let (first, second) = MorphPath::pair(source.clone(), target.clone()).unwrap();
-        let animation = Tween::new(first.clone(), second.clone(), Time::from_ticks(100));
-        let expected = animation.sample(Time::from_ticks(50));
+        let animation = Tween::new(first.clone(), second.clone(), Duration::from_ticks(100));
+        let expected = animation.sample(Duration::from_ticks(50));
         assert_eq!(
             MorphPath::new(source.clone())
                 .unwrap()
@@ -694,9 +694,9 @@ mod tests {
             }
         });
         for ticks in [100, 25, 0, 75, 50] {
-            let _result = animation.sample(Time::from_ticks(ticks));
+            let _result = animation.sample(Duration::from_ticks(ticks));
         }
-        assert_eq!(animation.sample(Time::from_ticks(50)), expected);
+        assert_eq!(animation.sample(Duration::from_ticks(50)), expected);
         assert_eq!(
             first.interpolate(&second, 0.25),
             second.interpolate(&first, 0.75)

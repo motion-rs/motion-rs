@@ -72,13 +72,13 @@ impl Default for NativeOptions {
 impl NativeOptions {
     #[cfg(feature = "ffmpeg")]
     pub(crate) fn encoding(mut self, options: &crate::ExportOptions) -> Self {
-        self.bit_depth = options.bit_depth;
-        self.preset = match options.codec {
-            crate::Codec::H264 { preset, .. } => preset,
-            _ => options.encoder_preset,
+        self.bit_depth = options.codec.bit_depth();
+        (self.preset, self.x265_params) = match &options.codec {
+            crate::Codec::H264 { preset, .. } => (*preset, None),
+            crate::Codec::H265 { preset, params, .. } => (*preset, params.clone()),
+            _ => (crate::EncoderPreset::Medium, None),
         };
         self.gamma24 = options.render.display.transfer == motion_render::OutputTransfer::Gamma24;
-        self.x265_params = options.x265_params.clone();
         self.metadata = options.audio_metadata.clone();
         if let Some(range) = &options.range {
             self.metadata.chapters = self
@@ -91,8 +91,8 @@ impl NativeOptions {
                     if chapter.start >= chapter.end {
                         return None;
                     }
-                    chapter.start -= range.start;
-                    chapter.end -= range.start;
+                    chapter.start = (chapter.start - range.start).after_origin();
+                    chapter.end = (chapter.end - range.start).after_origin();
                     Some(chapter)
                 })
                 .collect();
@@ -137,20 +137,17 @@ impl NativeOptions {
 }
 
 #[cfg(feature = "ffmpeg")]
-pub(crate) fn video_codec(
-    codec: crate::Codec,
-    bit_depth: crate::BitDepth,
-) -> Result<motion_ffmpeg::VideoCodec> {
+pub(crate) fn video_codec(codec: &crate::Codec) -> Result<motion_ffmpeg::VideoCodec> {
     Ok(match codec {
         crate::Codec::H264 { .. } => motion_ffmpeg::VideoCodec::H264,
-        crate::Codec::H265 { .. } => motion_ffmpeg::VideoCodec::H265 {
-            profile: if bit_depth == crate::BitDepth::Ten {
+        crate::Codec::H265 { bit_depth, .. } => motion_ffmpeg::VideoCodec::H265 {
+            profile: if *bit_depth == crate::BitDepth::Ten {
                 motion_ffmpeg::H265Profile::Main10
             } else {
                 motion_ffmpeg::H265Profile::Main
             },
         },
-        crate::Codec::Vp9 { alpha, .. } => motion_ffmpeg::VideoCodec::Vp9 { alpha },
+        crate::Codec::Vp9 { alpha, .. } => motion_ffmpeg::VideoCodec::Vp9 { alpha: *alpha },
         crate::Codec::ProRes4444 => motion_ffmpeg::VideoCodec::ProRes4444,
         _ => {
             return Err(io::Error::new(
@@ -260,7 +257,7 @@ impl Encoder {
                 (rate.numerator(), rate.denominator()),
                 frames,
                 motion_ffmpeg::VideoSettings {
-                    codec: video_codec(options.codec, options.bit_depth)?,
+                    codec: video_codec(&options.codec)?,
                     quality: options.crf,
                     preset: match options.preset {
                         crate::EncoderPreset::Medium => "medium",

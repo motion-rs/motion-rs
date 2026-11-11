@@ -19,7 +19,7 @@ fn main() -> motion::Result {
     .style(ParticleStyle::GlowDots { radius: 2.0 });
     let timeline = Timeline::new(Size::new(480.0, 270.0), 30)
         .track(|track| track.push(firework.with_duration(3.seconds()))).build()?;
-    render_still(&timeline, 1.seconds(), &RenderOptions::default())?
+    render_still(&timeline, 1.seconds().after_origin(), &RenderOptions::default())?
         .save_png("tutorial-particles.png")
 }
 ```
@@ -120,7 +120,7 @@ let simulation = ParticleSimulation::new(7).duration(1.seconds())
     .sub_emitter(SubEmitter { on: ParticleEventKind::Collision,
         emitter: Arc::new(BurstEmitter::new(Time::ZERO, 2, Point::ORIGIN).lifetime(100.milliseconds())),
         inherit: Inherit::Position, probability: 1.0 }).build()?;
-assert_eq!(simulation.sample(100.milliseconds())?, simulation.sample(100.milliseconds())?);
+assert_eq!(simulation.sample(100.milliseconds().after_origin())?, simulation.sample(100.milliseconds().after_origin())?);
 # Ok::<(), motion::Error>(())
 ```
 
@@ -149,11 +149,11 @@ let simulation = ParticleSimulation::new(7).duration(200.milliseconds())
     .emitter(BurstEmitter::new(Time::ZERO, 16, Point::new(4.0, 4.0)).speed(2.0))
     .modifier(CurlNoise { frequency: 0.13, strength: 2.0, seed: 42, phase_speed: 1.0 })
     .modifier(FlowField::curl(19, 0.17, 0.5)).build()?;
-assert_eq!(simulation.sample(150.milliseconds())?, simulation.sample(150.milliseconds())?);
+assert_eq!(simulation.sample(150.milliseconds().after_origin())?, simulation.sample(150.milliseconds().after_origin())?);
 let material = ProceduralSprite::Smoke {
     scale: 3.0, evolution: 0.5, fractal: Fractal::default(),
 };
-let smoke = material.generate_at(32, 42, 250.milliseconds(), RasterLimits::sandbox())?;
+let smoke = material.generate_at(32, 42, 250.milliseconds().after_origin(), RasterLimits::sandbox())?;
 # let _ = smoke;
 # Ok::<(), motion::Error>(())
 ```

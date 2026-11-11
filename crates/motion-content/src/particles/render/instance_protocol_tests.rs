@@ -232,7 +232,7 @@ fn per_style_blend_reaches_instance_upload_and_cpu_pixels() -> motion_core::Resu
     ];
     let cache = motion_core::SceneCache::default();
     let context = SceneContext::new(
-        300.milliseconds(),
+        300.milliseconds().after_origin(),
         motion_core::FrameRate::from(30),
         Size::new(96.0, 72.0),
         &cache,

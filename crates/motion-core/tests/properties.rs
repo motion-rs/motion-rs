@@ -1,13 +1,13 @@
 //! Property tests for time arithmetic and animation sampling.
 
-use motion_core::{Animation, FrameRate, Time, Tween};
+use motion_core::{Animation, Duration, FrameRate, Time, Tween};
 use proptest::prelude::*;
 
 #[derive(Clone, Copy)]
 struct Infinite;
 
 impl Animation<f64> for Infinite {
-    fn sample(&self, time: Time) -> f64 {
+    fn sample(&self, time: Duration) -> f64 {
         time.as_seconds()
     }
 }
@@ -40,17 +40,17 @@ proptest! {
         second_ticks in 0_i64..=1_000_000,
         sample_ticks in -1_000_000_i64..=3_000_000,
     ) {
-        let first = Tween::new(0.0_f64, 1.0, Time::from_ticks(first_ticks));
-        let second = Tween::new(2.0_f64, 3.0, Time::from_ticks(second_ticks));
-        let sample = Time::from_ticks(sample_ticks);
+        let first = Tween::new(0.0_f64, 1.0, Duration::from_ticks(first_ticks));
+        let second = Tween::new(2.0_f64, 3.0, Duration::from_ticks(second_ticks));
+        let sample = Duration::from_ticks(sample_ticks);
         let zipped = first.clone().zip(second.clone());
-        prop_assert_eq!(zipped.duration(), Some(Time::from_ticks(first_ticks.max(second_ticks))));
+        prop_assert_eq!(zipped.duration(), Some(Duration::from_ticks(first_ticks.max(second_ticks))));
         prop_assert_eq!(zipped.sample(sample), (first.sample(sample), second.sample(sample)));
         prop_assert_eq!(first.clone().zip(Infinite).duration(), None);
         prop_assert_eq!(Infinite.zip(first.clone()).duration(), None);
         let chained = first.then(second.clone());
-        prop_assert_eq!(chained.duration(), Some(Time::from_ticks(first_ticks + second_ticks)));
-        prop_assert_eq!(chained.sample(Time::from_ticks(first_ticks)), second.sample(Time::ZERO));
-        prop_assert_eq!(chained.sample(Time::from_ticks(first_ticks + second_ticks)), 3.0);
+        prop_assert_eq!(chained.duration(), Some(Duration::from_ticks(first_ticks + second_ticks)));
+        prop_assert_eq!(chained.sample(Duration::from_ticks(first_ticks)), second.sample(Duration::ZERO));
+        prop_assert_eq!(chained.sample(Duration::from_ticks(first_ticks + second_ticks)), 3.0);
     }
 }

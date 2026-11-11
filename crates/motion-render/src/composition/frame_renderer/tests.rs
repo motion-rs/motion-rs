@@ -102,9 +102,9 @@ fn explicit_requests_preserve_exact_time_project_diagnostics_and_atomic_targets(
 
     fn request(target: &mut crate::FrameBuffer) -> FrameRequest<'_> {
         FrameRequest {
-            time: 1.milliseconds(),
+            time: 1.milliseconds().after_origin(),
             frame_rate: motion_core::FrameRate::NTSC,
-            duration: 1.seconds(),
+            duration: 1.seconds().after_origin().since_origin(),
             background: None,
             target: crate::RenderTarget::Memory(target),
             format: crate::PixelFormat::SrgbRgba8 {
@@ -113,7 +113,7 @@ fn explicit_requests_preserve_exact_time_project_diagnostics_and_atomic_targets(
         }
     }
     session.render(request(&mut target), |context| {
-        assert_eq!(context.time(), 1.milliseconds());
+        assert_eq!(context.time(), 1.milliseconds().after_origin());
         assert_eq!(context.clip_duration(), Some(1.seconds()));
         assert!(context.diagnostics().is_some());
         assert!(context.assets().pool().same_pool(&pool));
@@ -135,7 +135,8 @@ fn explicit_requests_preserve_exact_time_project_diagnostics_and_atomic_targets(
     assert!(session.asset_diagnostics().is_empty());
     assert!(session.diagnostics().errors().is_empty());
     assert!(target.planes()[0].bytes().iter().all(|byte| *byte == 0));
-    let duration = Time::from_frame(i64::from(u32::MAX), motion_core::FrameRate::NTSC);
+    let duration =
+        motion_core::Duration::from_frame(i64::from(u32::MAX), motion_core::FrameRate::NTSC);
     session.render(
         FrameRequest {
             duration,
@@ -175,19 +176,23 @@ fn global_shutter_averages_complete_frames_and_preserves_old_once_contract() -> 
                 context.global_time(),
                 context.clip_duration(),
             ));
-            Node::from(context.bounds().fill(if context.time() < 1.seconds() {
-                Color::rgb(255, 0, 0).with_alpha(0.5)
-            } else {
-                Color::rgb(0, 0, 255).with_alpha(0.5)
-            }))
+            Node::from(
+                context
+                    .bounds()
+                    .fill(if context.time() < 1.seconds().after_origin() {
+                        Color::rgb(255, 0, 0).with_alpha(0.5)
+                    } else {
+                        Color::rgb(0, 0, 255).with_alpha(0.5)
+                    }),
+            )
         })?;
         assert_eq!(
             observed.iter().map(|sample| sample.0).collect::<Vec<_>>(),
             [
-                625.milliseconds(),
-                875.milliseconds(),
-                1125.milliseconds(),
-                1375.milliseconds()
+                625.milliseconds().after_origin(),
+                875.milliseconds().after_origin(),
+                1125.milliseconds().after_origin(),
+                1375.milliseconds().after_origin()
             ]
         );
         assert!(
@@ -270,8 +275,14 @@ fn rational_clock_is_exact_for_fractional_rates() -> Result {
                 assert_eq!(context.time(), Time::from_frame(i64::from(index), rate));
                 assert_eq!(context.time().to_frame(rate), i64::from(index));
                 assert_eq!(context.global_time(), context.time());
-                assert_eq!(context.clip_duration(), Some(Time::from_frame(1001, rate)));
-                assert_eq!(context.frames(12), Time::from_frame(12, rate));
+                assert_eq!(
+                    context.clip_duration(),
+                    Some(motion_core::Duration::from_frame(1001, rate))
+                );
+                assert_eq!(
+                    context.frames(12),
+                    motion_core::Duration::from_frame(12, rate)
+                );
                 tile()
             })?;
         }

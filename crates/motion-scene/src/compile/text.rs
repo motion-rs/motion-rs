@@ -13,7 +13,7 @@ use crate::content::{PartsSpec, TextSplitSpec};
 #[cfg(feature = "text")]
 use crate::options::TextAlignmentSpec;
 #[cfg(feature = "text")]
-use motion_core::{Node, Time};
+use motion_core::{Duration, Node};
 
 /// Most styled runs one rich paragraph may contain.
 #[cfg(feature = "text")]
@@ -204,7 +204,7 @@ impl Compiler<'_> {
 /// Compiled per-part animation, evaluated by the engine at draw time.
 #[cfg(feature = "text")]
 struct PartProps {
-    delay: Time,
+    delay: Duration,
     offset: Option<Prop<[f64; 2]>>,
     scale: Option<Prop<f64>>,
     rotate: Option<Prop<f64>>,
@@ -220,17 +220,17 @@ impl PartProps {
             let time = part.time();
             let mut style = motion_content::PartStyle::new();
             if let Some(offset) = &props.offset {
-                let [horizontal, vertical] = offset.at(time);
+                let [horizontal, vertical] = offset.at(time.since_origin());
                 style = style.offset(horizontal, vertical);
             }
             if let Some(scale) = &props.scale {
-                style = style.scale(scale.at(time));
+                style = style.scale(scale.at(time.since_origin()));
             }
             if let Some(rotate) = &props.rotate {
-                style = style.rotate(rotate.at(time).to_radians());
+                style = style.rotate(rotate.at(time.since_origin()).to_radians());
             }
             if let Some(opacity) = &props.opacity {
-                style = style.opacity(opacity.at(time));
+                style = style.opacity(opacity.at(time.since_origin()));
             }
             style
         })

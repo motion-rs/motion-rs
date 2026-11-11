@@ -9,7 +9,7 @@ use super::sampling::support;
 use motion_core::instances::{
     ExtendedInstanceRecord, InstanceBatch, InstanceBlend, InstanceKind, InstanceRecord,
 };
-use motion_core::{Node, SceneContext, Time, ValidationError};
+use motion_core::{Duration, Node, SceneContext, Time, ValidationError};
 use std::sync::Arc;
 
 pub(crate) fn render(
@@ -261,7 +261,7 @@ pub(crate) fn render(
         Ok(())
     };
     if let ParticleStyle::Trails { length, .. } = style {
-        if *length <= Time::ZERO || length.as_seconds() > 60.0 {
+        if *length <= Duration::ZERO || length.as_seconds() > 60.0 {
             return Err(invalid("trail", "Trail duration must be in (0,60]"));
         }
         let count = options.trails.segments;
@@ -272,7 +272,9 @@ pub(crate) fn render(
             .map(|index| {
                 let states = sample(
                     context.time() - *length
-                        + Time::from_ticks(length.ticks() * i64::from(index) / i64::from(count)),
+                        + Duration::from_ticks(
+                            length.ticks() * i64::from(index) / i64::from(count),
+                        ),
                 )?;
                 retained = retained
                     .checked_add(states.len() as u64 * 160)

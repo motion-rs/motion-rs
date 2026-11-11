@@ -124,7 +124,7 @@ use motion::atmosphere::Atmosphere;
 use motion::render::RasterLimits;
 let mut fog = Atmosphere::fog(42);
 fog.scale = 80.0;
-let asset = fog.render(PixelSize::new(64, 48), 1.seconds(), RasterLimits::sandbox())?;
+let asset = fog.render(PixelSize::new(64, 48), 1.seconds().after_origin(), RasterLimits::sandbox())?;
 let overlay = Node::from(Image::from_asset(std::sync::Arc::new(asset)))
     .blend_mode(BlendMode::Screen);
 # let _ = overlay;
@@ -189,9 +189,12 @@ structure. Such content should use an explicit fixed sample count.
 use motion::prelude::*;
 let look = Look::film(42);
 let options = ExportOptions::new("film.mp4")
-    .codec(Codec::H265 { quality: 18 })
-    .bit_depth(BitDepth::Ten)
-    .encoder_preset(EncoderPreset::Slow)
+    .codec(Codec::H265 {
+        quality: 18,
+        preset: EncoderPreset::Slow,
+        bit_depth: BitDepth::Ten,
+        params: None,
+    })
     .render(|options| look.render_options(options));
 ```
 
@@ -203,7 +206,7 @@ adds encoded grain and gate drift. Recipes remain editable pure data.
 
 Main10 is restricted to H.265. The native path writes little-endian 16-bit plane
 bytes using FFmpeg byte strides. GPU rendering packs 10-bit Y/U/V (the GPU export pipeline honours
-`ExportOptions::bit_depth`, and agrees with the CPU export within one code value)
+`Codec::H265 { bit_depth, .. }`, and agrees with the CPU export within one code value)
 directly from
 the final linear texture when width is a multiple of 8 and height is even.
 Each sample occupies the low 10 bits of a little-endian u16, not a P010 high-bit
@@ -214,7 +217,7 @@ and limited range; sRGB transfer is tagged IEC 61966-2-1. `OutputTransfer::Gamma
 is encoded as a pure 2.4 power for YUV and tagged BT.709, the conventional SDR
 delivery tag (not an assertion that BT.709 OETF equals gamma 2.4). Transformed
 RGBA8 also follows the selected transfer; the identity path remains sRGB.
-`x265_params` is explicit, size-bounded and HEVC-only.
+`params` (the x265 parameter string) is explicit, size-bounded and exists only on `Codec::H265`.
 
 Run the comparison with
 `cargo run -p motion-rs --all-features --example cinematic -- clean` and

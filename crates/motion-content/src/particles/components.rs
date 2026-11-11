@@ -322,7 +322,7 @@ impl EmitterSettings {
         Self {
             source,
             rate: EmissionRate::Constant(DEFAULT_RATE),
-            lifetime: Time::from_seconds(DEFAULT_LIFETIME_SECONDS),
+            lifetime: Duration::from_seconds(DEFAULT_LIFETIME_SECONDS),
             speed: DEFAULT_SPEED,
             velocity: Vector2::ZERO,
             inherit_color: false,
@@ -353,7 +353,7 @@ impl EmitterSettings {
     }
 
     fn particle(&self, random: &mut Random, time: Time) -> Result<Particle, ValidationError> {
-        if self.lifetime <= Time::ZERO
+        if self.lifetime <= Duration::ZERO
             || self.lifetime.as_seconds() > f64::from(MAX_LIFETIME_SECONDS)
             || !self.speed.is_finite()
             || self.speed < 0.0
@@ -386,7 +386,7 @@ impl EmitterSettings {
             }
             EmitterSource::Path(path) => {
                 let progress = if let Some(animation) = &self.path_progress {
-                    animation.sample(time)
+                    animation.sample(time.since_origin())
                 } else {
                     random.next_float()
                 };
@@ -464,7 +464,7 @@ impl EmitterSettings {
     ) -> Result<(), ValidationError> {
         let rate = match &self.rate {
             EmissionRate::Constant(rate) => *rate,
-            EmissionRate::Animated(animation) => animation.sample(time),
+            EmissionRate::Animated(animation) => animation.sample(time.since_origin()),
         };
         if !rate.is_finite() || !(0.0..=1_000_000.0).contains(&rate) {
             return Err(invalid(

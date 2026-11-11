@@ -55,7 +55,7 @@
 //!         .with_duration(3.seconds()),
 //!     )
 //! }).build()?;
-//! render_still(&timeline, 1500.milliseconds(), &RenderOptions::default())?
+//! render_still(&timeline, 1500.milliseconds().after_origin(), &RenderOptions::default())?
 //!     .save_png("frame.png")?;
 //! # Ok(())
 //! # }
@@ -336,12 +336,11 @@ pub mod prelude {
         MotionBlur, Node, NodeModifiers, Noise, Oscillator, Paint, Path2D, PathSample, Pivot,
         PixelSize, Point, Polygon, Polyline, Pose, Project, ProjectBuilder, ProjectOutcome,
         ProjectTimelineInfo, Push, RadialGradient, Random, Rect, RegularPolygon, RenderOptions,
-        RenderQuality, Renderer, Ring, RoundedRect, Row, Sampling, Scene, SceneContext,
-        SceneDescriptor, Shape, Side, Size, Skeleton, Slide, Source, Spline, Spring, Star,
-        StrokeStyle, Styled, SweepGradient, Time, TimeLiteral, Timeline, TimelineBuilder,
-        TimelineWarning, Track, TrackBuilder, Transform, TransformComponents, Tween,
-        ValidationError, Vector2, VisualCheckPolicy, VisualRegion, Waveform, Wipe, ZoomBlur,
-        camera, export, group, key, math, piecewise, remap, render_still, scene,
+        RenderQuality, Renderer, Ring, RoundedRect, Row, Sampling, Scene, SceneContext, Shape,
+        Side, Size, Skeleton, Slide, Source, Spline, Spring, Star, StrokeStyle, Styled,
+        SweepGradient, Time, TimeLiteral, Timeline, TimelineBuilder, TimelineWarning, Track,
+        TrackBuilder, Transform, TransformComponents, Tween, ValidationError, Vector2, Waveform,
+        Wipe, ZoomBlur, camera, export, group, key, math, piecewise, remap, render_still, scene,
     };
     pub use crate::{
         ApertureShape, BitDepth, Cdl, ColorWheels, DepthOfField, DepthPlane, DisplayTransform,

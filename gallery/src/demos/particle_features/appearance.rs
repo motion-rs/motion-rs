@@ -280,7 +280,7 @@ pub(super) fn smoke(parameters: DemoParameters) -> motion::Result<Study> {
             .generate_at(
                 48,
                 parameters.seed,
-                (phase as f64 * 0.2).seconds(),
+                (phase as f64 * 0.2).seconds().after_origin(),
                 RasterLimits::default(),
             )?,
         );

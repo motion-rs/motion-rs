@@ -38,7 +38,7 @@ impl BitDepth {
 }
 
 /// Output format of an export, selecting the codec, container and quality parameters.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Codec {
     /// H.264/MP4 limited-range BT.709 without alpha.
     H264 {
@@ -51,6 +51,12 @@ pub enum Codec {
     H265 {
         /// Constant-rate factor in 0..=51.
         quality: u8,
+        /// Encoder preset passed to libx265.
+        preset: EncoderPreset,
+        /// Sample precision; ten-bit selects Main10.
+        bit_depth: BitDepth,
+        /// Explicit native x265 parameter string such as `aq-mode=3`, at most 4096 bytes without NUL.
+        params: Option<String>,
     },
     /// VP9/WebM, optionally retaining alpha, with quality in 0..=63.
     Vp9 {
@@ -73,16 +79,49 @@ pub enum Codec {
 }
 
 impl Codec {
-    /// Checks codec parameters before any output is opened.
-    pub fn validate(self) -> Result<()> {
+    /// H.264 with the given CRF and the medium preset.
+    pub fn h264(quality: u8) -> Self {
+        Self::H264 {
+            quality,
+            preset: EncoderPreset::Medium,
+        }
+    }
+
+    /// Eight-bit H.265 with the given CRF, the medium preset and no extra x265 parameters.
+    pub fn h265(quality: u8) -> Self {
+        Self::H265 {
+            quality,
+            preset: EncoderPreset::Medium,
+            bit_depth: BitDepth::Eight,
+            params: None,
+        }
+    }
+
+    /// Video sample precision this codec requests; only H.265 offers ten-bit.
+    pub fn bit_depth(&self) -> BitDepth {
         match self {
-            Self::H264 { quality, .. } | Self::H265 { quality } if quality > 51 => {
+            Self::H265 { bit_depth, .. } => *bit_depth,
+            _ => BitDepth::Eight,
+        }
+    }
+
+    /// Checks codec parameters before any output is opened.
+    pub fn validate(&self) -> Result<()> {
+        match self {
+            Self::H264 { quality, .. } | Self::H265 { quality, .. } if *quality > 51 => {
                 Err(invalid("quality", "H264/H265 quality must be in 0..=51"))
             }
-            Self::Vp9 { quality, .. } if quality > 63 => {
+            Self::H265 {
+                params: Some(parameters),
+                ..
+            } if parameters.len() > 4096 || parameters.contains('\0') => Err(invalid(
+                "x265_params",
+                "Require at most 4096 bytes without NUL",
+            )),
+            Self::Vp9 { quality, .. } if *quality > 63 => {
                 Err(invalid("quality", "VP9 quality must be in 0..=63"))
             }
-            Self::Gif { colors, .. } if !(2..=256).contains(&colors) => {
+            Self::Gif { colors, .. } if !(2..=256).contains(colors) => {
                 Err(invalid("colors", "GIF needs 2..=256 colors"))
             }
             Self::Gif { frame_rate, .. }
@@ -104,10 +143,7 @@ impl Codec {
 
 impl Default for Codec {
     fn default() -> Self {
-        Self::H264 {
-            quality: 18,
-            preset: EncoderPreset::Medium,
-        }
+        Self::h264(18)
     }
 }
 
@@ -122,12 +158,6 @@ pub struct ExportOptions {
     pub range: Option<Range<Time>>,
     /// Current native codec capability.
     pub codec: Codec,
-    /// Ten-bit delivery requires H.265.
-    pub bit_depth: BitDepth,
-    /// HEVC preset; H.264 uses the preset in its codec variant.
-    pub encoder_preset: EncoderPreset,
-    /// Explicit native x265 parameter string, such as `aq-mode=3`.
-    pub x265_params: Option<String>,
     /// Audio delivery rate; supported AAC values are 44100, 48000 and 96000 Hz.
     pub audio_sample_rate: u32,
     /// Resampler used when audio sources differ from `audio_sample_rate`.
@@ -155,9 +185,6 @@ impl ExportOptions {
             },
             range: None,
             codec: Codec::default(),
-            bit_depth: BitDepth::Eight,
-            encoder_preset: EncoderPreset::Medium,
-            x265_params: None,
             audio_sample_rate: 48000,
             audio_resampler: Default::default(),
             audio_metadata: Default::default(),
@@ -171,7 +198,6 @@ impl ExportOptions {
 
     /// Selects the encoder and container.
     pub fn codec(mut self, codec: Codec) -> Self {
-        self.codec = codec;
         if matches!(
             codec,
             Codec::PngSequence
@@ -181,24 +207,7 @@ impl ExportOptions {
         ) {
             self.render.background = None;
         }
-        self
-    }
-
-    /// Selects HEVC precision; unsupported combinations fail before opening output.
-    pub fn bit_depth(mut self, depth: BitDepth) -> Self {
-        self.bit_depth = depth;
-        self
-    }
-
-    /// Selects the HEVC compression preset.
-    pub fn encoder_preset(mut self, preset: EncoderPreset) -> Self {
-        self.encoder_preset = preset;
-        self
-    }
-
-    /// Supplies an explicit bounded x265 parameter string.
-    pub fn x265_params(mut self, parameters: impl Into<String>) -> Self {
-        self.x265_params = Some(parameters.into());
+        self.codec = codec;
         self
     }
 
@@ -278,19 +287,6 @@ impl ExportOptions {
             return Err(invalid(
                 "audio_sample_rate",
                 "Require 44100, 48000 or 96000 Hz",
-            ));
-        }
-        if self.bit_depth == BitDepth::Ten && !matches!(self.codec, Codec::H265 { .. }) {
-            return Err(invalid("bit_depth", "Ten-bit delivery requires H.265"));
-        }
-        if let Some(parameters) = &self.x265_params
-            && (!matches!(self.codec, Codec::H265 { .. })
-                || parameters.len() > 4096
-                || parameters.contains('\0'))
-        {
-            return Err(invalid(
-                "x265_params",
-                "Require H.265 and at most 4096 bytes without NUL",
             ));
         }
         Ok(())

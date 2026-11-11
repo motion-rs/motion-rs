@@ -200,7 +200,7 @@ fn encode(
 ) -> Result<ExportReport> {
     let started = Instant::now();
     let quality = match options.codec {
-        Codec::H264 { quality, .. } | Codec::H265 { quality } | Codec::Vp9 { quality, .. } => {
+        Codec::H264 { quality, .. } | Codec::H265 { quality, .. } | Codec::Vp9 { quality, .. } => {
             quality
         }
         Codec::ProRes4444 => 18,
@@ -215,7 +215,7 @@ fn encode(
         .size
         .ok_or_else(|| failure("Encoder requires normalized size"))?;
     let mut settings = crate::NativeOptions::default()
-        .codec(options.codec)
+        .codec(options.codec.clone())
         .encoding(&options)
         .crf(quality)
         .overwrite(options.overwrite);

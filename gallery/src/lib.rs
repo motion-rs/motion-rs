@@ -246,7 +246,7 @@ mod tests {
         let timeline = project.build("signal-garden", Some(serde_json::json!({"seconds":1})))?;
         let mut request = ExportOptions::new(&path)
             .render(|_| options.size(PixelSize::new(96, 54)))
-            .range(Time::ZERO..100.milliseconds());
+            .range(Time::ZERO..100.milliseconds().after_origin());
         let report = export(&timeline, &request, &NoProgress)?;
         assert_eq!(report.frames, 3);
         let media = motion_ffmpeg::inspect::media(&path)?;
@@ -399,9 +399,9 @@ mod tests {
         {
             let timeline =
                 project.build(entry.id, Some(serde_json::json!({"seconds":4,"count":16})))?;
-            let first = render_still(&timeline, 1.seconds(), &options)?;
-            let later = render_still(&timeline, 2.seconds(), &options)?;
-            let replay = render_still(&timeline, 1.seconds(), &options)?;
+            let first = render_still(&timeline, 1.seconds().after_origin(), &options)?;
+            let later = render_still(&timeline, 2.seconds().after_origin(), &options)?;
+            let replay = render_still(&timeline, 1.seconds().after_origin(), &options)?;
             assert_eq!(first.bytes(), replay.bytes(), "seek replay: {}", entry.id);
             let pixels = first.bytes();
             let background = &pixels[..4];
@@ -433,8 +433,10 @@ mod tests {
         let parameters = DemoParameters::default();
         let times = [
             Time::ZERO,
-            (parameters.seconds / 2).seconds(),
-            (parameters.seconds * 1000 - 1).milliseconds(),
+            (parameters.seconds / 2).seconds().after_origin(),
+            (parameters.seconds * 1000 - 1)
+                .milliseconds()
+                .after_origin(),
         ];
         let mut cases = 0;
         for entry in catalog() {
@@ -486,9 +488,9 @@ mod tests {
             let timeline =
                 project.build(entry.id, Some(serde_json::json!({"seconds":4,"count":16})))?;
             for time in [600.milliseconds(), 2.seconds(), 3400.milliseconds()] {
-                let expected = render_still(&timeline, time, &cpu)?;
-                let actual = render_still(&timeline, time, &gpu)?;
-                let replay = render_still(&timeline, time, &gpu)?;
+                let expected = render_still(&timeline, time.after_origin(), &cpu)?;
+                let actual = render_still(&timeline, time.after_origin(), &gpu)?;
+                let replay = render_still(&timeline, time.after_origin(), &gpu)?;
                 assert_eq!(actual.bytes(), replay.bytes(), "GPU replay: {}", entry.id);
                 let difference = expected
                     .bytes()

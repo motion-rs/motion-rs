@@ -476,7 +476,7 @@ mod _contract_tests {
             let before = calls.get();
             context(index).during(
                 Time::from_frame(10, rate),
-                Time::from_frame(30, rate),
+                motion_core::Duration::from_frame(30, rate),
                 |local| {
                     calls.set(calls.get() + 1);
                     assert_eq!(local.time(), Time::from_frame(index - 10, rate));
@@ -487,9 +487,15 @@ mod _contract_tests {
             );
             assert_eq!(calls.get() - before, usize::from(active));
         }
-        assert_eq!(context(45).time(), 1.5.seconds());
-        assert_eq!(context(45).shifted(1.seconds()).time(), 500.milliseconds());
-        assert_eq!(Time::from_frame(11, FrameRate::from(11)), 1.seconds());
+        assert_eq!(context(45).time(), 1.5.seconds().after_origin());
+        assert_eq!(
+            context(45).shifted(1.seconds()).time(),
+            500.milliseconds().after_origin()
+        );
+        assert_eq!(
+            Time::from_frame(11, FrameRate::from(11)),
+            1.seconds().after_origin()
+        );
     }
 
     #[test]

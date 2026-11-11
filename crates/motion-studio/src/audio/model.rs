@@ -46,7 +46,7 @@ impl AudioReadout {
                 .bus_meters()
                 .iter()
                 .map(|meter| {
-                    let [rms_db, peak_db] = meter.level(time);
+                    let [rms_db, peak_db] = meter.level(time.since_origin());
                     BusReadout {
                         name: meter.name.clone(),
                         rms_db,
@@ -89,7 +89,7 @@ mod tests {
         assert_eq!(readout.buses.len(), 1);
         assert_eq!(readout.buses[0].name, "music");
         assert!(readout.buses[0].peak_db > -7.0);
-        assert!(AudioReadout::from_mix(&mix, 5.seconds()).is_ok());
+        assert!(AudioReadout::from_mix(&mix, 5.seconds().after_origin()).is_ok());
         Ok(())
     }
 }

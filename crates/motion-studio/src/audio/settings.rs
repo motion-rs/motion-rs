@@ -68,8 +68,8 @@ impl ClipSettings {
         }
         let offset = time(self.source_in)?;
         let end = time(self.source_out)?;
-        if motion_core::audio::frames(offset, 48_000).map_err(io::Error::other)?
-            >= motion_core::audio::frames(end, 48_000).map_err(io::Error::other)?
+        if motion_core::audio::frames(offset.since_origin(), 48_000).map_err(io::Error::other)?
+            >= motion_core::audio::frames(end.since_origin(), 48_000).map_err(io::Error::other)?
         {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -77,12 +77,12 @@ impl ClipSettings {
             ));
         }
         Ok(AudioClip::file(path)
-            .offset(offset)
+            .offset(offset.since_origin())
             .duration(end - offset)
             .start(time(self.start)?)
             .volume(f64::from(self.volume))
-            .fade_in(time(self.fade_in)?)
-            .fade_out(time(self.fade_out)?))
+            .fade_in((time(self.fade_in)?).since_origin())
+            .fade_out((time(self.fade_out)?).since_origin()))
     }
 }
 

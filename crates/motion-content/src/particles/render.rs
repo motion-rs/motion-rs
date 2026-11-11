@@ -106,12 +106,13 @@ fn render(
         Ok(())
     };
     if let ParticleStyle::Trails { length, .. } = style {
-        if *length <= Time::ZERO || length.as_seconds() > 60.0 {
+        if *length <= Duration::ZERO || length.as_seconds() > 60.0 {
             return Err(invalid("trail", "Trail duration must be in (0,60] seconds"));
         }
         let mut previous = sample(context.time() - *length)?;
         for segment in 1..=8 {
-            let time = context.time() - *length + Time::from_ticks(length.ticks() * segment / 8);
+            let time =
+                context.time() - *length + Duration::from_ticks(length.ticks() * segment / 8);
             let current = sample(time)?;
             let lookup = previous
                 .iter()

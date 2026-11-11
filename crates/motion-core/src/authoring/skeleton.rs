@@ -315,7 +315,7 @@ mod tests {
         close(first[1].position(), (0.0, 10.0));
         let _later = rig.solve(&track.sample(900.milliseconds()))?;
         assert_eq!(first, rig.solve(&track.sample(time))?);
-        assert_eq!(track.sample(crate::Time::ZERO), start);
+        assert_eq!(track.sample(crate::Duration::ZERO), start);
         assert_eq!(track.sample(1.seconds()), end);
         assert_eq!(
             start.interpolate(&end, 1.5).bones[0].rotation,

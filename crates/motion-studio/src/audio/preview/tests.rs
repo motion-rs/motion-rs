@@ -15,7 +15,7 @@ fn preview_uses_fractional_frame_sample_boundaries_and_same_mix() -> motion_core
     let timeline = Arc::new(
         motion_core::Timeline::try_new(motion_core::Size::new(16.0, 8.0), rate)?
             .try_audio(motion_core::AudioClip::source(pcm))?
-            .try_duration(motion_core::Time::from_frame(60, rate))?
+            .try_duration(motion_core::Duration::from_frame(60, rate))?
             .build()?,
     );
     let request = timeline_request(timeline.clone(), Vec::new(), 30)?;
@@ -162,7 +162,7 @@ fn timeline_and_file_preview_sources_are_mixed_in_order() -> motion_core::Result
             motion_core::FrameRate::NTSC,
         )?
         .try_audio(motion_core::AudioClip::source(pcm))?
-        .try_duration(motion_core::Time::from_frame(
+        .try_duration(motion_core::Duration::from_frame(
             3,
             motion_core::FrameRate::NTSC,
         ))?
@@ -206,7 +206,7 @@ fn file_preview_windows_preserve_offsets_fades_and_export_crop() -> motion_core:
         .write_wav(&mut std::fs::File::create(&path)?, 48_000)?;
     let clip = motion_core::AudioClip::file(path)
         .offset(50.milliseconds())
-        .start(20.milliseconds())
+        .start(20.milliseconds().after_origin())
         .duration(900.milliseconds())
         .volume(0.5)
         .fade_in(400.milliseconds())

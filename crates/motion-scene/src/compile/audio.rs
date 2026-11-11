@@ -10,8 +10,8 @@ use crate::audio::{
 };
 use crate::document::Document;
 use motion_core::{
-    Animation, AudioBus, AudioClip, Duck, DuckTrigger, Limiter, Loudness, Master, PanLaw, Point,
-    Time,
+    Animation, AudioBus, AudioClip, Duck, DuckTrigger, Duration, Limiter, Loudness, Master, PanLaw,
+    Point,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -91,7 +91,7 @@ impl Compiler<'_> {
                 continue;
             };
             clip = clip.map(|clip| match field {
-                "start" => clip.start(time),
+                "start" => clip.start(time.after_origin()),
                 "offset" => clip.offset(time),
                 "duration" => clip.duration(time),
                 "fade_in" => clip.fade_in(time),
@@ -143,9 +143,9 @@ impl Compiler<'_> {
             match (position, clip.take()) {
                 (Some(position), Some(next)) => {
                     let animation: Arc<dyn Animation<Point>> = match position {
-                        Prop::Fixed(value) => Arc::new(move |_: Time| point(value)),
+                        Prop::Fixed(value) => Arc::new(move |_: Duration| point(value)),
                         Prop::Varying(animation) => {
-                            Arc::new(move |time: Time| point(animation.sample(time)))
+                            Arc::new(move |time: Duration| point(animation.sample(time)))
                         }
                     };
                     match next.spatial(
@@ -342,10 +342,10 @@ impl Compiler<'_> {
     fn optional_seconds(
         &mut self,
         seconds: Option<f64>,
-        default: Time,
+        default: Duration,
         path: &str,
         field: &str,
-    ) -> Option<Time> {
+    ) -> Option<Duration> {
         match seconds {
             Some(seconds) => self.seconds(seconds, path, field),
             None => Some(default),
@@ -473,6 +473,6 @@ fn eq_kind(kind: crate::audio::EqKindSpec) -> EqKind {
 }
 
 #[cfg(feature = "audio")]
-fn seconds(value: f64) -> Time {
-    Time::from_seconds(value)
+fn seconds(value: f64) -> Duration {
+    Duration::from_seconds(value)
 }

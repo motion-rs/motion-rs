@@ -44,7 +44,7 @@ fn eq(kind: EqKind, frequency: f64, q: f64, gain_db: f64) -> Effect {
     }
 }
 
-fn kick(duration: Time, seed: u32) -> motion::Result<AudioClip> {
+fn kick(duration: Duration, seed: u32) -> motion::Result<AudioClip> {
     let mut steps = [0; 16];
     for step in [0, 4, 8, 12] {
         steps[step] = 1;
@@ -58,12 +58,12 @@ fn kick(duration: Time, seed: u32) -> motion::Result<AudioClip> {
 }
 
 /// The pad's low-pass opens over the film, so the garden "blooms" as it plays.
-fn bass_bus(duration: Time, ducked: Option<&AudioClip>) -> AudioBus {
+fn bass_bus(duration: Duration, ducked: Option<&AudioClip>) -> AudioBus {
     let length = duration.as_seconds();
     let mut bus = AudioBus::new("bass");
     bus.effects.push(Arc::new(AnimatedEq::new(
         EqKind::LowPass,
-        move |time: Time| 420.0 + 1100.0 * math::smoothstep(0.0, length, time.as_seconds()),
+        move |time: Duration| 420.0 + 1100.0 * math::smoothstep(0.0, length, time.as_seconds()),
         0.8,
         0.0,
     )));
@@ -77,7 +77,7 @@ fn bass_bus(duration: Time, ducked: Option<&AudioClip>) -> AudioBus {
 }
 
 /// Sub sine plus detuned saw pairs panned apart and widened, all on the bass bus.
-fn bass_clips(duration: Time, seed: u32) -> motion::Result<Vec<AudioClip>> {
+fn bass_clips(duration: Duration, seed: u32) -> motion::Result<Vec<AudioClip>> {
     let mut clips = vec![
         AudioClip::source(Synth::new(Wave::Sine, 55.0, RATE, seed)?.gain_db(-3.0)?)
             .duration(duration)
@@ -112,7 +112,11 @@ fn bass_clips(duration: Time, seed: u32) -> motion::Result<Vec<AudioClip>> {
 
 /// The complete mix. `ducked: false` keeps only the bass bus without its sidechain,
 /// the reference level used to measure the real duck gain.
-pub(super) fn soundtrack(duration: Time, ducked: bool, seed: u32) -> motion::Result<Soundtrack> {
+pub(super) fn soundtrack(
+    duration: Duration,
+    ducked: bool,
+    seed: u32,
+) -> motion::Result<Soundtrack> {
     if !ducked {
         return Ok(Soundtrack {
             buses: vec![bass_bus(duration, None)],
@@ -153,7 +157,7 @@ pub(super) fn soundtrack(duration: Time, ducked: bool, seed: u32) -> motion::Res
         AudioClip::source(Synth::drum_machine(BPM, hats, duration, seed + 1)?)
             .bus("hats")
             .volume(0.3)
-            .pan_animation(|time: Time| 0.6 * math::sin(TAU * time.as_seconds() / 2.0))
+            .pan_animation(|time: Duration| 0.6 * math::sin(TAU * time.as_seconds() / 2.0))
             .fade_out(100.milliseconds()),
     ];
     clips.extend(bass_clips(duration, seed)?);
@@ -187,7 +191,7 @@ pub(super) fn soundtrack(duration: Time, ducked: bool, seed: u32) -> motion::Res
         AudioClip::source(Synth::new(Wave::Sine, 1320.0, RATE, seed)?.gain_db(-30.0)?)
             .duration(duration)
             .bus("lead")
-            .pan_animation(|time: Time| 0.8 * math::sin(TAU * time.as_seconds() / 6.0))
+            .pan_animation(|time: Duration| 0.8 * math::sin(TAU * time.as_seconds() / 6.0))
             .stereo_width(1.4)
             .fade_in(300.milliseconds())
             .fade_out(100.milliseconds()),
@@ -195,7 +199,7 @@ pub(super) fn soundtrack(duration: Time, ducked: bool, seed: u32) -> motion::Res
     Ok(Soundtrack { buses, clips })
 }
 
-pub(super) fn audio_timeline(track: &Soundtrack, duration: Time) -> TimelineBuilder {
+pub(super) fn audio_timeline(track: &Soundtrack, duration: Duration) -> TimelineBuilder {
     let mut timeline = Timeline::new(Size::new(960.0, 540.0), 30);
     for bus in &track.buses {
         timeline = timeline.audio_bus(bus.clone());
@@ -218,7 +222,7 @@ pub(super) fn meter(mix: &MixedAudio, name: &str) -> motion::Result<BusMeter> {
 pub(super) fn rms_db(meter: &BusMeter, time: f64) -> f64 {
     let base = (time / METER_HOP).floor() * METER_HOP;
     let amount = (time - base) / METER_HOP;
-    let at = |position: f64| meter.level(Time::from_seconds(position.max(0.0)))[0];
+    let at = |position: f64| meter.level(Duration::from_seconds(position.max(0.0)))[0];
     at(base) + (at(base + METER_HOP) - at(base)) * amount
 }
 

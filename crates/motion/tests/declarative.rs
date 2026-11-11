@@ -22,7 +22,11 @@ fn arguments(values: &[&str]) -> Vec<String> {
 fn bundled_example_document_compiles() -> motion::Result {
     let compiled = motion::declarative::load(EXAMPLE)?;
     assert_eq!(compiled.timeline().size(), Size::new(640.0, 360.0));
-    let still = render_still(compiled.timeline(), 1.seconds(), &RenderOptions::default())?;
+    let still = render_still(
+        compiled.timeline(),
+        1.seconds().after_origin(),
+        &RenderOptions::default(),
+    )?;
     assert_eq!(still.size().width, 640);
     Ok(())
 }
@@ -130,7 +134,7 @@ fn parametric_example_follows_overrides() -> motion::Result {
         let bitmap = project.render_still(
             ORBIT,
             Some(parameters),
-            1.seconds(),
+            1.seconds().after_origin(),
             &RenderOptions::default(),
         )?;
         Ok(bitmap.bytes().to_vec())

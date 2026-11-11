@@ -96,7 +96,7 @@ impl FrameExecution<'_> {
                     if sample.time() < Time::ZERO
                         || sample
                             .clip_duration()
-                            .is_some_and(|duration| sample.time() >= duration)
+                            .is_some_and(|duration| sample.time() >= duration.after_origin())
                     {
                         background
                     } else {

@@ -167,27 +167,30 @@ fn recorded_timing_and_cached_material_identity() {
             position: Point::new(20.0, 0.0),
             pressure: 0.5,
             tilt: 0.3,
-            time: 1.seconds(),
+            time: 1.seconds().after_origin(),
         },
         InputSample {
             position: Point::new(40.0, 0.0),
             pressure: 1.0,
             tilt: 0.6,
-            time: 3.seconds(),
+            time: 3.seconds().after_origin(),
         },
     ];
     let builder = BrushStrokeBuilder::from_samples(&input, 8.0, Color::WHITE)
         .unwrap()
         .nib_mode(NibMode::Tilt);
     let stroke = builder.clone().build().unwrap();
-    let revealed = stroke.clone().write_with(2.seconds()).unwrap();
+    let revealed = stroke
+        .clone()
+        .write_with(2.seconds().after_origin())
+        .unwrap();
     assert!((revealed.progress - 0.75).abs() < 1e-9);
     assert!(Arc::ptr_eq(&stroke.full_material, &revealed.full_material));
     assert!(Arc::ptr_eq(
         &stroke.full_material,
         &stroke
             .clone()
-            .write_timed(1.seconds(), &BrushTiming::new(3.seconds()))
+            .write_timed(1.seconds().after_origin(), &BrushTiming::new(3.seconds()))
             .unwrap()
             .full_material
     ));
@@ -215,19 +218,19 @@ fn curved_recordings_pauses_tilt_and_flat_caps_are_analytic() -> motion_core::Re
             position: Point::new(20.0, 0.0),
             pressure: 1.0,
             tilt: 0.6,
-            time: 1.seconds(),
+            time: 1.seconds().after_origin(),
         },
         InputSample {
             position: Point::new(20.0, 0.0),
             pressure: 1.0,
             tilt: 0.6,
-            time: 2.seconds(),
+            time: 2.seconds().after_origin(),
         },
         InputSample {
             position: Point::new(30.0, 30.0),
             pressure: 0.5,
             tilt: 1.2,
-            time: 3.seconds(),
+            time: 3.seconds().after_origin(),
         },
     ];
     let stroke = BrushStrokeBuilder::from_samples(&input, 8.0, Color::WHITE)?
@@ -236,8 +239,14 @@ fn curved_recordings_pauses_tilt_and_flat_caps_are_analytic() -> motion_core::Re
     let options = &stroke.config.advanced;
     assert_eq!(options.input_arcs[1], options.input_arcs[2]);
     assert_eq!(
-        stroke.clone().write_with(1.seconds())?.progress,
-        stroke.clone().write_with(1500.milliseconds())?.progress
+        stroke
+            .clone()
+            .write_with(1.seconds().after_origin())?
+            .progress,
+        stroke
+            .clone()
+            .write_with(1500.milliseconds().after_origin())?
+            .progress
     );
     let halfway = samples(&stroke.config, 1.0)?;
     assert!(
@@ -253,14 +262,14 @@ fn curved_recordings_pauses_tilt_and_flat_caps_are_analytic() -> motion_core::Re
     assert_eq!(
         stroke
             .clone()
-            .write_timed(1500.milliseconds(), &timing)?
+            .write_timed(1500.milliseconds().after_origin(), &timing)?
             .progress,
         0.5
     );
     assert_eq!(
         stroke
             .clone()
-            .write_timed(2500.milliseconds(), &timing)?
+            .write_timed(2500.milliseconds().after_origin(), &timing)?
             .progress,
         0.75
     );

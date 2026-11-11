@@ -229,7 +229,7 @@ pub(super) const PAGES: &[Page] = &[
 struct Study {
     dry: Arc<MixedAudio>,
     processed: Arc<MixedAudio>,
-    duration: Time,
+    duration: Duration,
     envelopes: [Vec<f32>; 3],
 }
 
@@ -239,12 +239,12 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
     let mut studies = Vec::new();
     let mut clips = Vec::new();
     for page in 0..PAGES.len() {
-        let start = Time::from_ticks(duration.ticks() * page as i64 / PAGES.len() as i64);
-        let end = Time::from_ticks(duration.ticks() * (page + 1) as i64 / PAGES.len() as i64);
-        let study = prepare(page, end - start, seed)?;
+        let start = Duration::from_ticks(duration.ticks() * page as i64 / PAGES.len() as i64);
+        let end = Duration::from_ticks(duration.ticks() * (page + 1) as i64 / PAGES.len() as i64);
+        let study = prepare(page, (end - start).after_origin().since_origin(), seed)?;
         clips.push(
             AudioClip::source(study.processed.clone())
-                .start(start)
+                .start(start.after_origin())
                 .duration(end - start),
         );
         studies.push(study);
@@ -258,7 +258,7 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
     timeline.build()
 }
 
-fn prepare(page: usize, duration: Time, seed: u32) -> motion::Result<Study> {
+fn prepare(page: usize, duration: Duration, seed: u32) -> motion::Result<Study> {
     let length = duration.as_seconds();
     let wave = match page {
         0 => Wave::Sine,
@@ -304,7 +304,7 @@ fn prepare(page: usize, duration: Time, seed: u32) -> motion::Result<Study> {
             .volume(0.5);
     }
     if page == 11 || page == 12 {
-        dry = dry.volume_envelope(move |time: Time| {
+        dry = dry.volume_envelope(move |time: Duration| {
             0.05 + 0.95 * (0.5 + 0.5 * math::sin(time.as_seconds() / length * 18.0)).powi(2)
         });
     }
@@ -369,7 +369,7 @@ fn prepare(page: usize, duration: Time, seed: u32) -> motion::Result<Study> {
             })
         }
         17 => {
-            processed = processed.pan_animation(move |time: Time| {
+            processed = processed.pan_animation(move |time: Duration| {
                 math::sin(
                     time.as_seconds() / length * std::f64::consts::TAU
                         - std::f64::consts::FRAC_PI_2,
@@ -406,15 +406,16 @@ fn prepare(page: usize, duration: Time, seed: u32) -> motion::Result<Study> {
     } else if page == 20 {
         processed_timeline = blank();
         for (index, sound) in SOUNDS.into_iter().enumerate() {
-            let start = Time::from_ticks(duration.ticks() * index as i64 / SOUNDS.len() as i64);
-            let end = Time::from_ticks(duration.ticks() * (index + 1) as i64 / SOUNDS.len() as i64);
+            let start = Duration::from_ticks(duration.ticks() * index as i64 / SOUNDS.len() as i64);
+            let end =
+                Duration::from_ticks(duration.ticks() * (index + 1) as i64 / SOUNDS.len() as i64);
             processed_timeline = processed_timeline.audio(
                 AudioClip::source(Synth::sound(
                     sound,
                     end - start,
                     seed.wrapping_add(index as u32),
                 )?)
-                .start(start)
+                .start(start.after_origin())
                 .duration(end - start)
                 .volume(0.4),
             );
@@ -459,7 +460,7 @@ fn overview(dry: &MixedAudio, processed: &MixedAudio) -> [Vec<f32>; 3] {
     envelopes
 }
 
-fn stereo(duration: Time, seed: u32) -> motion::Result<PcmBuffer> {
+fn stereo(duration: Duration, seed: u32) -> motion::Result<PcmBuffer> {
     let frames = (duration.as_seconds() * f64::from(RATE)).ceil() as usize;
     let mut left = vec![0.0; frames];
     let mut right = vec![0.0; frames];
@@ -578,7 +579,7 @@ mod tests {
     #[test]
     fn audible_studies_are_finite_replayable_and_use_real_dsp() -> motion::Result {
         for page in 0..PAGES.len() {
-            let study = prepare(page, 0.6.seconds(), 17)?;
+            let study = prepare(page, 0.6.seconds().after_origin().since_origin(), 17)?;
             let mut first = vec![0.0; 28_800 * 2];
             let mut replay = first.clone();
             let mut dry = first.clone();

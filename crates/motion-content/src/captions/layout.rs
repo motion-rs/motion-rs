@@ -371,7 +371,7 @@ mod tests {
         );
         assert!(
             layout
-                .node(500.milliseconds())
+                .node(500.milliseconds().after_origin())
                 .measure(ValidationLimits::default())
                 .is_ok()
         );

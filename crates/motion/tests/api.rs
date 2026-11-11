@@ -124,7 +124,7 @@ mod canonical_api_tests {
                 let sampled: motion_core::Time = context.time();
                 assert_eq!(sampled, time);
                 assert_eq!(context.frame_rate(), rate);
-                assert_eq!(context.sample(&movement), time / duration);
+                assert_eq!(context.sample(&movement), time.since_origin() / duration);
                 Node::empty()
             })?;
         assert_eq!((output.width(), output.height()), (2, 1));

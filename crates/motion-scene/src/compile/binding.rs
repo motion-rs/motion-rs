@@ -5,7 +5,7 @@ use super::expr::{ExprAnimation, parse};
 use super::value::Prop;
 use crate::element::Element;
 use crate::value::Animated;
-use motion_core::{Animation, Time};
+use motion_core::{Animation, Duration};
 use serde::Deserialize;
 use serde_json::Value;
 use std::sync::Arc;
@@ -179,7 +179,7 @@ fn descend<'v>(mut value: &'v Value, segments: &[&str]) -> Option<&'v Value> {
 
 pub(super) fn scalar(property: Prop<f64>) -> Signal {
     match property {
-        Prop::Fixed(value) => Arc::new(move |_: Time| value),
+        Prop::Fixed(value) => Arc::new(move |_: Duration| value),
         Prop::Varying(animation) => animation,
     }
 }
@@ -188,8 +188,10 @@ fn project<const COUNT: usize>(property: Prop<[f64; COUNT]>, component: usize) -
     match property {
         Prop::Fixed(value) => {
             let value = value[component];
-            Arc::new(move |_: Time| value)
+            Arc::new(move |_: Duration| value)
         }
-        Prop::Varying(animation) => Arc::new(move |time: Time| animation.sample(time)[component]),
+        Prop::Varying(animation) => {
+            Arc::new(move |time: Duration| animation.sample(time)[component])
+        }
     }
 }

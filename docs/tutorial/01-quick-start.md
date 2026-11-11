@@ -50,7 +50,7 @@ fn main() -> motion::Result {
     }).build()?;
     let bitmap = render_still(
         &timeline,
-        1500.milliseconds(),
+        1500.milliseconds().after_origin(),
         &RenderOptions::default(),
     )?;
     bitmap.save_png("tutorial-first.png")

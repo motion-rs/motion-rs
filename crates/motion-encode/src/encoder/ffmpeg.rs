@@ -12,7 +12,6 @@ mod worker;
 /// Ordered bounded streaming adapter; the native codec stays on its encoding thread.
 pub struct FfmpegEncoder<'a> {
     codec: Codec,
-    bit_depth: crate::BitDepth,
     progress: &'a dyn ProgressSink,
     options: Option<ExportOptions>,
     #[cfg(feature = "ffmpeg")]
@@ -26,7 +25,6 @@ impl<'a> FfmpegEncoder<'a> {
     pub fn new(progress: &'a dyn ProgressSink) -> Self {
         Self {
             codec: Codec::default(),
-            bit_depth: crate::BitDepth::Eight,
             progress,
             options: None,
             #[cfg(feature = "ffmpeg")]
@@ -39,12 +37,6 @@ impl<'a> FfmpegEncoder<'a> {
     /// Selects native encoder input capabilities before opening the request.
     pub fn codec(mut self, codec: Codec) -> Self {
         self.codec = codec;
-        self
-    }
-
-    /// Selects input precision before the orchestrator queries capabilities.
-    pub fn bit_depth(mut self, depth: crate::BitDepth) -> Self {
-        self.bit_depth = depth;
         self
     }
 }
@@ -68,7 +60,7 @@ impl Encoder for FfmpegEncoder<'_> {
             }
         } else {
             PixelFormat::Yuv420 {
-                bit_depth: self.bit_depth.bits(),
+                bit_depth: self.codec.bit_depth().bits(),
             }
         }
     }
@@ -92,9 +84,8 @@ impl Encoder for FfmpegEncoder<'_> {
                 )
                 .into());
             }
-            self.codec = options.codec;
-            self.bit_depth = options.bit_depth;
-            let native_codec = native::video_codec(options.codec, options.bit_depth)?;
+            self.codec = options.codec.clone();
+            let native_codec = native::video_codec(&options.codec)?;
             if !native_codec.available() {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::Unsupported,
@@ -113,7 +104,7 @@ impl Encoder for FfmpegEncoder<'_> {
             let count = range.end.to_frame(rate) - range.start.to_frame(rate);
             let quality = match options.codec {
                 Codec::H264 { quality, .. }
-                | Codec::H265 { quality }
+                | Codec::H265 { quality, .. }
                 | Codec::Vp9 { quality, .. } => quality,
                 Codec::ProRes4444 => 18,
                 _ => {
@@ -221,7 +212,7 @@ mod codec_tests {
         std::fs::write(&path, b"existing destination")?;
         let mut options = ExportOptions::new(&path).overwrite(true);
         options.render.size = Some(motion_core::PixelSize::new(1920, 1080));
-        options.range = Some(motion_core::Time::ZERO..300.seconds());
+        options.range = Some(motion_core::Time::ZERO..300.seconds().after_origin());
         let mut encoder = FfmpegEncoder::new(&NoProgress);
         encoder.open(&options, FrameRate::from(30), None)?;
         let names = std::fs::read_dir(directory.path())?
@@ -251,7 +242,7 @@ mod codec_tests {
             .build()?;
         for (name, codec) in [
             ("h264.mp4", Codec::default()),
-            ("hevc.mp4", Codec::H265 { quality: 28 }),
+            ("hevc.mp4", Codec::h265(28)),
             (
                 "vp9.webm",
                 Codec::Vp9 {

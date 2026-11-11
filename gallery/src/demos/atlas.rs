@@ -424,19 +424,19 @@ mod tests {
             for (page, description) in pages.iter().enumerate() {
                 let moment =
                     |local: f64| ((page as f64 + local) * 60.0 / pages.len() as f64).seconds();
-                let early = render_still(&film, moment(0.15), options)?;
-                let late = render_still(&film, moment(0.7), options)?;
+                let early = render_still(&film, moment(0.15).after_origin(), options)?;
+                let late = render_still(&film, moment(0.7).after_origin(), options)?;
                 for local in [0.5, 0.95] {
-                    render_still(&film, moment(local), options)?;
+                    render_still(&film, moment(local).after_origin(), options)?;
                 }
-                let replay = render_still(&film, moment(0.15), options)?;
+                let replay = render_still(&film, moment(0.15).after_origin(), options)?;
                 assert_eq!(
                     early.bytes(),
                     replay.bytes(),
                     "{id} / {} replay",
                     description.title
                 );
-                let background = render_still(&empty, moment(0.15), options)?;
+                let background = render_still(&empty, moment(0.15).after_origin(), options)?;
                 let left = (SPECIMEN_BOUNDS.left * 0.3).ceil() as usize + 1;
                 let right = (SPECIMEN_BOUNDS.right * 0.3).floor() as usize;
                 let top = (SPECIMEN_BOUNDS.top * 0.3).ceil() as usize + 1;
@@ -519,9 +519,9 @@ mod tests {
             for (page, description) in pages.iter().enumerate() {
                 for local in [0.15, 0.7] {
                     let time = ((page as f64 + local) * 60.0 / pages.len() as f64).seconds();
-                    let expected = render_still(&film, time, cpu)?;
-                    let actual = render_still(&film, time, gpu)?;
-                    let replay = render_still(&film, time, gpu)?;
+                    let expected = render_still(&film, time.after_origin(), cpu)?;
+                    let actual = render_still(&film, time.after_origin(), gpu)?;
+                    let replay = render_still(&film, time.after_origin(), gpu)?;
                     assert_eq!(
                         actual.bytes(),
                         replay.bytes(),

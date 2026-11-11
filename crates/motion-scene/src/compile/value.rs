@@ -6,7 +6,7 @@ use crate::value::{
     OscillateSpec, TweenSpec,
 };
 use motion_core::{
-    Animation, Color, Easing, Interpolate, Keyframes, Noise, Oscillator, Time, Tween,
+    Animation, Color, Duration, Easing, Interpolate, Keyframes, Noise, Oscillator, Tween,
 };
 use std::sync::Arc;
 
@@ -23,7 +23,7 @@ pub(crate) enum Prop<Engine> {
 }
 
 impl<Engine: Clone> Prop<Engine> {
-    pub(crate) fn at(&self, time: Time) -> Engine {
+    pub(crate) fn at(&self, time: Duration) -> Engine {
         match self {
             Self::Fixed(value) => value.clone(),
             Self::Varying(animation) => animation.sample(time),
@@ -90,7 +90,7 @@ impl<const COUNT: usize> Value for [f64; COUNT] {
     fn from_signals(signals: &[Arc<dyn Animation<f64>>]) -> Option<Arc<dyn Animation<Self>>> {
         let signals: Vec<_> = signals.to_vec();
         (signals.len() == COUNT).then(|| {
-            Arc::new(move |time: Time| std::array::from_fn(|index| signals[index].sample(time)))
+            Arc::new(move |time: Duration| std::array::from_fn(|index| signals[index].sample(time)))
                 as Arc<dyn Animation<Self>>
         })
     }
@@ -322,7 +322,7 @@ impl Compiler<'_> {
         path: &str,
     ) -> Option<Arc<dyn Animation<Engine>>> {
         let mut animation = animation;
-        let mut length = animation.duration().map_or(0.0, Time::as_seconds);
+        let mut length = animation.duration().map_or(0.0, Duration::as_seconds);
         if timing.ping_pong {
             length *= 2.0;
             animation = Arc::new(animation.ping_pong());

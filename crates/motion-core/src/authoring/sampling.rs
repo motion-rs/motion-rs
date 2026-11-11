@@ -20,7 +20,7 @@
 //! # Ok::<(), motion_core::Error>(())
 //! ```
 
-use crate::{Duration, FrameRate, Node, SceneContext, Time, ValidationError};
+use crate::{Duration, FrameRate, Node, SceneContext, ValidationError};
 
 /// Global shutter configuration; with exact centered tick offsets.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -71,12 +71,12 @@ impl MotionBlur {
             .and_then(|scale| scale.checked_mul(i128::from(rate.numerator()) * 360))
             .filter(|value| *value > 0)
         else {
-            return Ok(Time::ZERO);
+            return Ok(Duration::ZERO);
         };
         let ticks = (numerator + denominator / 2) / denominator;
-        Ok(Time::from_ticks(i64::try_from(ticks).map_err(|_| {
-            invalid("shutter", "Exposure exceeds signed ticks")
-        })?))
+        Ok(Duration::from_ticks(i64::try_from(ticks).map_err(
+            |_| invalid("shutter", "Exposure exceeds signed ticks"),
+        )?))
     }
 }
 
@@ -122,9 +122,9 @@ impl ShutterSampling {
         if context.render_quality() == crate::RenderQuality::Draft {
             return Ok(build(context));
         }
-        let count = if self.adaptive && shutter > Time::ZERO {
-            let left = context.resampled(Time::from_ticks(-shutter.ticks() / 2))?;
-            let right = context.resampled(Time::from_ticks(shutter.ticks() / 2))?;
+        let count = if self.adaptive && shutter > Duration::ZERO {
+            let left = context.resampled(Duration::from_ticks(-shutter.ticks() / 2))?;
+            let right = context.resampled(Duration::from_ticks(shutter.ticks() / 2))?;
             let drawing = crate::DrawContext::default().with_assets(context.assets());
             let first = build(&left).compile_with_context(
                 context.size(),
@@ -148,7 +148,7 @@ impl ShutterSampling {
             for (index, offset) in offsets.iter_mut().enumerate() {
                 let random = shutter_random(seed ^ frame.rotate_left(17) ^ index as u64);
                 let numerator = (index as f64 + random) / f64::from(count) - 0.5;
-                *offset = Time::from_ticks((numerator * shutter.ticks() as f64).round() as i64);
+                *offset = Duration::from_ticks((numerator * shutter.ticks() as f64).round() as i64);
             }
         }
         let weights = (0..count)
@@ -232,7 +232,7 @@ fn displacement_samples(first: &crate::DisplayList, last: &crate::DisplayList) -
 
 /// Centered integer midpoint offsets, nearest-tick ties away from zero.
 pub fn sample_offsets(shutter: Duration, samples: u32) -> Result<Vec<Duration>, ValidationError> {
-    if shutter < Time::ZERO || !(1..=64).contains(&samples) {
+    if shutter < Duration::ZERO || !(1..=64).contains(&samples) {
         return Err(invalid(
             "samples",
             "Require nonnegative shutter and 1..=64 samples",
@@ -243,7 +243,7 @@ pub fn sample_offsets(shutter: Duration, samples: u32) -> Result<Vec<Duration>, 
         .map(|index| {
             let numerator =
                 (i128::from(index) * 2 + 1 - i128::from(samples)) * i128::from(shutter.ticks());
-            Time::from_ticks(
+            Duration::from_ticks(
                 (((numerator.abs() + denominator / 2) / denominator) * numerator.signum()) as i64,
             )
         })
@@ -271,14 +271,14 @@ pub(crate) fn capture(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Shape;
+    use crate::{Shape, Time};
 
     #[test]
     fn jittered_capture_replays_and_rejects_nested_scopes() {
         use crate::NodeModifiers;
         let cache = crate::SceneCache::default();
         let context = SceneContext::new(
-            Time::from_frame(5, 24.into()),
+            Duration::from_frame(5, 24.into()).after_origin(),
             24.into(),
             crate::Size::new(8.0, 8.0),
             &cache,
@@ -363,7 +363,7 @@ mod tests {
             let mut calls = 0;
             capture(
                 &context.with_quality(quality),
-                Time::from_ticks(100),
+                Duration::from_ticks(100),
                 4,
                 |_| {
                     calls += 1;
@@ -376,7 +376,7 @@ mod tests {
         assert!(
             capture(
                 &context.with_quality(crate::RenderQuality::Draft),
-                Time::from_ticks(100),
+                Duration::from_ticks(100),
                 0,
                 |_| panic!("invalid shutter must not evaluate")
             )

@@ -1,6 +1,6 @@
 //! Arithmetic expression parsing and evaluation over scene-local time.
 
-use motion_core::{Animation, Time};
+use motion_core::{Animation, Duration};
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -22,7 +22,7 @@ pub(crate) struct Parsed {
 
 pub(crate) enum Expr {
     Number(f64),
-    Time,
+    Duration,
     Reference(usize),
     Negate(Box<Expr>),
     Binary(Operator, Box<Expr>, Box<Expr>),
@@ -89,7 +89,7 @@ impl ExprAnimation {
 }
 
 impl Animation<f64> for ExprAnimation {
-    fn sample(&self, time: Time) -> f64 {
+    fn sample(&self, time: Duration) -> f64 {
         let values: Vec<f64> = self
             .references
             .iter()
@@ -103,7 +103,7 @@ impl Expr {
     fn eval(&self, time: f64, references: &[f64]) -> f64 {
         match self {
             Self::Number(value) => *value,
-            Self::Time => time,
+            Self::Duration => time,
             Self::Reference(index) => references[*index],
             Self::Negate(value) => -value.eval(time, references),
             Self::Binary(operator, left, right) => {
@@ -485,7 +485,7 @@ impl Parser<'_> {
         self.skip_space();
         if self.peek() != Some(b'(') {
             return match name.as_str() {
-                "t" => self.node(Expr::Time),
+                "t" => self.node(Expr::Duration),
                 "pi" => self.node(Expr::Number(std::f64::consts::PI)),
                 "tau" => self.node(Expr::Number(std::f64::consts::TAU)),
                 _ => Err(with_hint(

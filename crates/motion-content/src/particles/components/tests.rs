@@ -18,7 +18,7 @@ fn emitters_modifiers_paths_and_surfaces_share_fixed_step_protocol() -> motion_c
     }
     let simulation = ParticleSimulation::new(1)
         .duration(100.milliseconds())
-        .emitter(BurstEmitter::new(10.milliseconds(), 2, Point::ORIGIN).speed(0.0))
+        .emitter(BurstEmitter::new(10.milliseconds().after_origin(), 2, Point::ORIGIN).speed(0.0))
         .modifier(Gravity::new(Vector2::new(0.0, 10.0)))
         .modifier(Drag::new(0.5))
         .modifier(SizeOverLifetime {
@@ -27,8 +27,11 @@ fn emitters_modifiers_paths_and_surfaces_share_fixed_step_protocol() -> motion_c
         })
         .build()?;
     assert!(simulation.sample(Time::ZERO)?.is_empty());
-    assert_eq!(simulation.sample(50.milliseconds())?.len(), 2);
-    assert!(simulation.sample(50.milliseconds())?[0].position[1] > 0.0);
+    assert_eq!(
+        simulation.sample(50.milliseconds().after_origin())?.len(),
+        2
+    );
+    assert!(simulation.sample(50.milliseconds().after_origin())?[0].position[1] > 0.0);
     let mut particle = Particle {
         position: [0.5, 0.5],
         velocity: [100.0, 0.0],
@@ -86,10 +89,13 @@ fn surface_animation_rates_and_all_modifier_callbacks_replay_without_hidden_stat
         })
         .modifier(ColorOverLifetime::new(Arc::from([[1.0; 4], [0.0; 4]])))
         .build()?;
-    let expected = simulation.sample(150.milliseconds())?;
+    let expected = simulation.sample(150.milliseconds().after_origin())?;
     assert!(!expected.is_empty());
-    simulation.sample(10.milliseconds())?;
-    assert_eq!(expected, simulation.sample(150.milliseconds())?);
+    simulation.sample(10.milliseconds().after_origin())?;
+    assert_eq!(
+        expected,
+        simulation.sample(150.milliseconds().after_origin())?
+    );
     assert!(
         expected
             .iter()
@@ -101,7 +107,7 @@ fn surface_animation_rates_and_all_modifier_callbacks_replay_without_hidden_stat
     for step in 0..=100 {
         emitter.emit(
             step,
-            (step as i64 * 10).milliseconds(),
+            (step as i64 * 10).milliseconds().after_origin(),
             &mut Random::from_key(step),
             &mut output,
         )?;

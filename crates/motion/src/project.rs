@@ -480,8 +480,8 @@ mod tests {
         assert!(matches!(project.cli([])?, ProjectOutcome::Help(_)));
         assert_eq!(calls.load(std::sync::atomic::Ordering::Relaxed), 0);
         assert_eq!(project.options().backend, crate::BackendPreference::Cpu);
-        assert_eq!(parse_time("500ms")?, 500.milliseconds());
-        assert_eq!(parse_time("2s")?, 2.seconds());
+        assert_eq!(parse_time("500ms")?, 500.milliseconds().after_origin());
+        assert_eq!(parse_time("2s")?, 2.seconds().after_origin());
         assert!(parse_codec("h264", None, true, FrameRate::from(30)).is_err());
         assert!(parse_codec("vp9", Some(64), true, FrameRate::from(30)).is_err());
         let directory = tempfile::tempdir()?;

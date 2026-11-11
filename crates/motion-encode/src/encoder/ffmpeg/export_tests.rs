@@ -50,8 +50,9 @@ fn builder(
     frames: u32,
     build: impl Fn(&SceneContext<'_>) -> Node + Send + Sync + 'static,
 ) -> TimelineBuilder {
-    Timeline::new(size, rate)
-        .track(|track| track.push(build.with_duration(Time::from_frame(i64::from(frames), rate))))
+    Timeline::new(size, rate).track(|track| {
+        track.push(build.with_duration(motion_core::Duration::from_frame(i64::from(frames), rate)))
+    })
 }
 
 fn timeline(
@@ -313,8 +314,8 @@ fn fractional_video_acceptance(backend: BackendPreference) -> Result {
             observed.lock().unwrap().push(index);
             Rect::new(0.0, 0.0, 4.0, 4.0).fill(Color::WHITE).into()
         })
-        .audio(AudioClip::file(&source).duration(Time::from_seconds(0.5)))
-        .try_duration(Time::from_frame(7, rate))?
+        .audio(AudioClip::file(&source).duration(motion_core::Duration::from_seconds(0.5)))
+        .try_duration(motion_core::Duration::from_frame(7, rate))?
         .build()?;
         assert_eq!(
             export(

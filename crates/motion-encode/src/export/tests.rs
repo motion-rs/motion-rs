@@ -32,10 +32,13 @@ fn native_main10_export_renders_display() -> motion_core::Result {
     for (index, backend) in backends.into_iter().enumerate() {
         let destination = directory.path().join(format!("main10-{index}.mp4"));
         let options = super::ExportOptions::new(&destination)
-            .codec(super::Codec::H265 { quality: 0 })
-            .bit_depth(super::BitDepth::Ten)
+            .codec(super::Codec::H265 {
+                quality: 0,
+                preset: super::EncoderPreset::Medium,
+                bit_depth: super::BitDepth::Ten,
+                params: Some("lossless=1:log-level=error:pools=none:frame-threads=1".into()),
+            })
             .backend(backend)
-            .x265_params("lossless=1:log-level=error:pools=none:frame-threads=1")
             .range(motion_core::Time::ZERO..motion_core::Time::from_frame(2, 24.into()))
             .render(|options| {
                 options.display(motion_render::DisplayTransform {
@@ -116,7 +119,7 @@ fn parallel_export_matches_serial_pixels_ntsc_ranges_and_progress() -> Result<()
                     )
                     .opacity(0.3 + context.seconds())
                 })
-                .with_duration(Time::from_frame(12, rate)),
+                .with_duration(motion_core::Duration::from_frame(12, rate)),
             )
         })?
         .build()?;
@@ -256,7 +259,7 @@ fn parallel_export_matches_serial_pixels_ntsc_ranges_and_progress() -> Result<()
                             .opacity(0.5)
                     }
                 })
-                .with_duration(Time::from_frame(12, rate)),
+                .with_duration(motion_core::Duration::from_frame(12, rate)),
             )
         })
         .build()?;
@@ -374,7 +377,11 @@ fn still_and_custom_encoder_share_transparent_pixels_absolute_ticks_and_cancella
             )
         })?
         .build()?;
-    let bitmap = render_still(&timeline, 250.milliseconds(), &RenderOptions::default())?;
+    let bitmap = render_still(
+        &timeline,
+        250.milliseconds().after_origin(),
+        &RenderOptions::default(),
+    )?;
     assert_eq!(&bitmap.bytes()[..4], &[255, 0, 0, 64]);
 
     struct Sink;
@@ -392,7 +399,10 @@ fn still_and_custom_encoder_share_transparent_pixels_absolute_ticks_and_cancella
             _: FrameRate,
             _: Option<&crate::MixedAudio>,
         ) -> Result<()> {
-            assert_eq!(options.range, Some(200.milliseconds()..500.milliseconds()));
+            assert_eq!(
+                options.range,
+                Some(200.milliseconds().after_origin()..500.milliseconds().after_origin())
+            );
             Ok(())
         }
 
@@ -406,7 +416,7 @@ fn still_and_custom_encoder_share_transparent_pixels_absolute_ticks_and_cancella
             Ok(ExportReport {
                 path: "custom".into(),
                 frames: 3,
-                range: 200.milliseconds()..500.milliseconds(),
+                range: 200.milliseconds().after_origin()..500.milliseconds().after_origin(),
                 elapsed_seconds: 0.0,
                 bytes: 0,
                 fonts: Vec::new(),
@@ -415,7 +425,7 @@ fn still_and_custom_encoder_share_transparent_pixels_absolute_ticks_and_cancella
     }
     let mut options = ExportOptions::new("unused-custom-output");
     options.render.background = None;
-    options.range = Some(150.milliseconds()..450.milliseconds());
+    options.range = Some(150.milliseconds().after_origin()..450.milliseconds().after_origin());
     assert_eq!(
         export_with_encoder(&timeline, &options, &NoProgress, Box::new(Sink))?.frames,
         3
@@ -495,7 +505,9 @@ fn output_permissions_follow_umask_for_stills_sequences_gif_and_video() -> Resul
             let path = directory.path().join(name);
             export(
                 &timeline,
-                &ExportOptions::new(&path).codec(codec).overwrite(overwrite),
+                &ExportOptions::new(&path)
+                    .codec(codec.clone())
+                    .overwrite(overwrite),
                 &NoProgress,
             )?;
             if codec == Codec::PngSequence {
@@ -538,7 +550,7 @@ fn parallel_native_exports_match_serial_files_and_preserve_destinations() -> Res
                     )
                     .opacity(0.3 + context.seconds() * 0.5)
                 })
-                .with_duration(Time::from_frame(24, rate)),
+                .with_duration(motion_core::Duration::from_frame(24, rate)),
             )
         })?
         .build()?;
@@ -597,7 +609,7 @@ fn parallel_native_exports_match_serial_files_and_preserve_destinations() -> Res
                         );
                         Node::empty()
                     })
-                    .with_duration(Time::from_frame(24, rate)),
+                    .with_duration(motion_core::Duration::from_frame(24, rate)),
                 )
             })?
             .build()?;
@@ -637,7 +649,7 @@ fn encoder_streams_yuv_crops_fractional_audio_and_preserves_destinations() -> Re
                     Node::from(Rect::new(0.0, 0.0, 8.0, 4.0).fill(Color::rgb(255, 0, 0)))
                         .opacity(0.5)
                 })
-                .with_duration(duration),
+                .with_duration(duration.since_origin()),
             )
         })?
         .try_audio(motion_core::AudioClip::source(pcm))?
@@ -658,7 +670,7 @@ fn encoder_streams_yuv_crops_fractional_audio_and_preserves_destinations() -> Re
     let decoded = crate::PcmBuffer::open(&path)?;
     assert_eq!(
         decoded.duration(),
-        Some(Time::from_ticks(
+        Some(motion_core::Duration::from_ticks(
             4805 * motion_core::TICKS_PER_SECOND / 48000
         ))
     );

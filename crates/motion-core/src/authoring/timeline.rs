@@ -215,7 +215,7 @@ impl Timeline {
     /// Like [`render`](Self::render) but keeps drawing until `end`, for exports whose
     /// resolved audio outlasts the picture.
     pub fn render_until(&self, context: &SceneContext<'_>, end: Duration) -> Node {
-        if context.time() < Time::ZERO || context.time() >= end {
+        if context.time() < Time::ZERO || context.time().since_origin() >= end {
             return Node::empty();
         }
         let parent_size = context.size();

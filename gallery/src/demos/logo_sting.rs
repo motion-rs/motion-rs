@@ -76,8 +76,8 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
                     let time = context.time();
                     let progress = context.progress();
                     let design = context.seconds() / k;
-                    let scale = lockup_scale.sample(time);
-                    let centre = Point::new(480.0, lockup_y.sample(time));
+                    let scale = lockup_scale.sample(time.since_origin());
+                    let centre = Point::new(480.0, lockup_y.sample(time.since_origin()));
                     let window = |start: f64, end: f64, easing: Easing| {
                         easing.apply(((progress - start) / (end - start)).clamp(0.0, 1.0))
                     };
@@ -186,14 +186,14 @@ mod tests {
             })?;
             for progress in [0.1, 0.3, 0.5, 0.75, 0.975] {
                 let time = (f64::from(seconds) * progress).seconds();
-                let first = render_still(&film, time, &options)?;
+                let first = render_still(&film, time.after_origin(), &options)?;
                 render_still(&film, Time::ZERO, &options)?;
-                let replay = render_still(&film, time, &options)?;
+                let replay = render_still(&film, time.after_origin(), &options)?;
                 assert_eq!(first.bytes(), replay.bytes());
                 #[cfg(feature = "gpu")]
                 {
                     let gpu_options = options.clone().backend(BackendPreference::gpu());
-                    let gpu = render_still(&film, time, &gpu_options)?;
+                    let gpu = render_still(&film, time.after_origin(), &gpu_options)?;
                     let difference = first
                         .bytes()
                         .iter()
@@ -202,7 +202,7 @@ mod tests {
                         .max()
                         .unwrap_or(0);
                     assert!(difference <= 2, "CPU/GPU difference: {difference}");
-                    let replay = render_still(&film, time, &gpu_options)?;
+                    let replay = render_still(&film, time.after_origin(), &gpu_options)?;
                     assert_eq!(gpu.bytes(), replay.bytes());
                 }
             }

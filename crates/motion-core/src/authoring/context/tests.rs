@@ -210,7 +210,7 @@ fn checked_context_inputs_and_declared_cache_bytes_preserve_ownership() {
     assert!(context.try_with_clip_duration((-1).seconds()).is_err());
     assert_eq!(
         context.try_shifted(1.seconds()).unwrap().time(),
-        (-1).seconds()
+        (-1).seconds().after_origin()
     );
     let extreme = SceneContext::new(
         Time::from_ticks(i64::MIN),
@@ -218,7 +218,7 @@ fn checked_context_inputs_and_declared_cache_bytes_preserve_ownership() {
         Size::new(1.0, 1.0),
         &cache,
     );
-    assert!(extreme.try_shifted(Time::from_ticks(1)).is_err());
+    assert!(extreme.try_shifted(Duration::from_ticks(1)).is_err());
     let get = |key: u8, count: usize| {
         context.cache_with_cost(
             key,
@@ -356,7 +356,7 @@ fn relative_layout_is_independent_of_seek_order_and_checks_both_inputs() {
     let subject = layout_node(Rect::new(0.0, 0.0, 20.0, 10.0));
     let reference = layout_node(Rect::new(100.0, 200.0, 160.0, 240.0));
     for ticks in [100, -999, 0, 100] {
-        let context = root.shifted(Time::from_ticks(ticks));
+        let context = root.shifted(Duration::from_ticks(ticks));
         let placed = context
             .try_next_to(subject.clone(), &reference, Side::Right, 3.0)
             .unwrap();
@@ -381,9 +381,9 @@ fn node_layout_measurement_is_independent_of_context_time() {
     let node = layout_node(Rect::new(0.0, 0.0, 20.0, 10.0))
         .at(Point::new(60.0, 40.0))
         .translate(-0.25, 1.5);
-    for time in [(-5).seconds(), Time::ZERO, 100.seconds()] {
+    for time in [(-5).seconds(), Duration::ZERO, 100.seconds()] {
         assert_eq!(
-            context(&cache, time).measure(&node).unwrap(),
+            context(&cache, time.after_origin()).measure(&node).unwrap(),
             Rect::new(49.75, 36.5, 69.75, 46.5)
         );
     }
@@ -396,21 +396,24 @@ fn context(cache: &SceneCache, time: Time) -> SceneContext<'_> {
 #[test]
 fn local_shifts_preserve_global_inputs_and_sample_tick_animations() {
     let cache = SceneCache::default();
-    let root = context(&cache, 3.seconds()).with_clip_duration(4.seconds());
+    let root = context(&cache, 3.seconds().after_origin()).with_clip_duration(4.seconds());
     let local = root.shifted(1.seconds()).shifted(500.milliseconds());
-    assert_eq!(local.time(), 1500.milliseconds());
-    assert_eq!(local.global_time(), 3.seconds());
+    assert_eq!(local.time(), 1500.milliseconds().after_origin());
+    assert_eq!(local.global_time(), 3.seconds().after_origin());
     assert_eq!(local.seconds(), 1.5);
     assert_eq!(local.clip_duration(), Some(4.seconds()));
     assert_eq!(local.progress(), 0.375);
     assert_eq!(local.sample(&Tween::new(0.0, 10.0, 3.seconds())), 5.0);
-    let signal: Arc<dyn Animation<Time>> = Arc::new(|time| time);
-    assert_eq!(local.sample(&signal), local.time());
+    let signal: Arc<dyn Animation<Duration>> = Arc::new(|time| time);
+    assert_eq!(local.sample(&signal), local.elapsed());
     assert_eq!(local.size(), Size::new(640.5, 360.25));
     assert_eq!(local.bounds(), Rect::new(0.0, 0.0, 640.5, 360.25));
     assert_eq!(local.center(), Point::new(320.25, 180.125));
-    assert_eq!(root.shifted((-1).seconds()).time(), 4.seconds());
-    assert_eq!(root.time(), 3.seconds());
+    assert_eq!(
+        root.shifted((-1).seconds()).time(),
+        4.seconds().after_origin()
+    );
+    assert_eq!(root.time(), 3.seconds().after_origin());
 }
 
 #[test]
@@ -424,13 +427,13 @@ fn progress_uses_signed_integer_boundaries_including_extreme_queries() {
         (start.ticks() + 2, 1.0),
     ] {
         assert_eq!(
-            context(&cache, Time::from_ticks(ticks)).progress_in(start, Time::from_ticks(2)),
+            context(&cache, Time::from_ticks(ticks)).progress_in(start, Duration::from_ticks(2)),
             expected
         );
     }
     assert_eq!(
         context(&cache, Time::from_ticks(i64::MAX))
-            .progress_in(Time::from_ticks(i64::MIN), Time::from_ticks(i64::MAX)),
+            .progress_in(Time::from_ticks(i64::MIN), Duration::from_ticks(i64::MAX)),
         1.0
     );
     assert_eq!(
@@ -441,16 +444,16 @@ fn progress_uses_signed_integer_boundaries_including_extreme_queries() {
     for (time, expected) in [
         (Time::from_ticks(-1), 0.0),
         (Time::ZERO, 1.0),
-        (1.seconds(), 1.0),
+        (1.seconds().after_origin(), 1.0),
     ] {
         assert_eq!(
             context(&cache, time)
-                .with_clip_duration(Time::ZERO)
+                .with_clip_duration(Duration::ZERO)
                 .progress(),
             expected
         );
     }
-    assert_eq!(context(&cache, 10.seconds()).progress(), 0.0);
+    assert_eq!(context(&cache, 10.seconds().after_origin()).progress(), 0.0);
 }
 
 #[test]
@@ -462,13 +465,16 @@ fn frame_intervals_and_invalid_inputs_keep_checked_time_policy() {
     assert_eq!(context().frames(30_000), 1001.seconds());
     assert_eq!(context().frames(-30_000), (-1001).seconds());
     assert!(
-        std::panic::catch_unwind(|| context().with_clip_duration(Time::from_ticks(-1))).is_err()
-    );
-    assert!(
-        std::panic::catch_unwind(|| context().progress_in(Time::ZERO, Time::from_ticks(-1)))
+        std::panic::catch_unwind(|| context().with_clip_duration(Duration::from_ticks(-1)))
             .is_err()
     );
-    assert!(std::panic::catch_unwind(|| context().shifted(Time::from_ticks(i64::MIN))).is_err());
+    assert!(
+        std::panic::catch_unwind(|| context().progress_in(Time::ZERO, Duration::from_ticks(-1)))
+            .is_err()
+    );
+    assert!(
+        std::panic::catch_unwind(|| context().shifted(Duration::from_ticks(i64::MIN))).is_err()
+    );
     for width in [0.0, -1.0, f64::NAN, f64::INFINITY] {
         assert!(
             std::panic::catch_unwind(|| SceneContext::new(
@@ -577,7 +583,7 @@ fn keyed_randomness_is_identical_at_any_local_global_time_or_cache_capacity() {
         let cache = SceneCache::new(capacity);
         for ticks in [i64::MAX, 0, i64::MIN + 1, 782, -91, 0] {
             let root = context(&cache, Time::from_ticks(ticks));
-            let local = root.shifted(Time::from_ticks(1));
+            let local = root.shifted(Duration::from_ticks(1));
             assert_eq!(root.random(("position", 17_u64)), expected);
             assert_eq!(local.random(("position", 17_u64)), expected);
             let mut first = local.random_generator("stream");
@@ -623,27 +629,27 @@ fn during_is_half_open_and_nested_inputs_preserve_global_time_and_environment() 
     let mut calls = Vec::new();
     for ticks in [14, 9, 10, 13, 14, 10] {
         let root = context(&cache, Time::from_ticks(ticks)).with_clip_duration(100.seconds());
-        root.during(Time::from_ticks(10), Time::from_ticks(4), |local| {
+        root.during(Time::from_ticks(10), Duration::from_ticks(4), |local| {
             assert_eq!(local.global_time(), root.time());
-            assert_eq!(local.clip_duration(), Some(Time::from_ticks(4)));
+            assert_eq!(local.clip_duration(), Some(Duration::from_ticks(4)));
             assert_eq!(local.size(), root.size());
             assert_eq!(local.frame_rate(), root.frame_rate());
             assert!(std::ptr::eq(local.cache, root.cache));
             calls.push(local.time().ticks());
-            local.during(Time::from_ticks(2), Time::from_ticks(2), |nested| {
+            local.during(Time::from_ticks(2), Duration::from_ticks(2), |nested| {
                 assert_eq!(nested.time(), Time::from_ticks(1));
                 assert_eq!(nested.global_time(), root.time());
-                assert_eq!(nested.clip_duration(), Some(Time::from_ticks(2)));
+                assert_eq!(nested.clip_duration(), Some(Duration::from_ticks(2)));
                 Node::empty()
             })
         });
     }
     assert_eq!(calls, vec![0, 3, 0]);
-    context(&cache, Time::ZERO).during(Time::ZERO, Time::ZERO, |_| panic!("empty interval"));
+    context(&cache, Time::ZERO).during(Time::ZERO, Duration::ZERO, |_| panic!("empty interval"));
     let near_max = context(&cache, Time::from_ticks(i64::MAX));
     near_max.during(
         Time::from_ticks(i64::MAX - 1),
-        Time::from_ticks(4),
+        Duration::from_ticks(4),
         |local| {
             assert_eq!(local.time(), Time::from_ticks(1));
             Node::empty()
@@ -657,7 +663,7 @@ fn during_is_half_open_and_nested_inputs_preserve_global_time_and_environment() 
     assert!(
         std::panic::catch_unwind(|| context(&cache, Time::ZERO).during(
             Time::ZERO,
-            Time::from_ticks(-1),
+            Duration::from_ticks(-1),
             |_| Node::empty()
         ))
         .is_err()
@@ -677,21 +683,22 @@ fn embed_uses_child_duration_and_clears_metadata_for_infinite_children() {
     })
     .with_duration(2.seconds());
     for seconds in [3, 0, 1, 2, 3, 1] {
-        context(&cache, seconds.seconds()).embed(&finite, 1.seconds());
+        context(&cache, seconds.seconds().after_origin())
+            .embed(&finite, 1.seconds().after_origin());
     }
     assert_eq!(calls.load(Ordering::SeqCst), 3);
     let infinite = |local: &SceneContext<'_>| {
         calls.fetch_add(1, Ordering::SeqCst);
-        assert_eq!(local.time(), 1.seconds());
-        assert_eq!(local.global_time(), 2.seconds());
+        assert_eq!(local.time(), 1.seconds().after_origin());
+        assert_eq!(local.global_time(), 2.seconds().after_origin());
         assert_eq!(local.clip_duration(), None);
         Node::empty()
     };
-    context(&cache, Time::ZERO).embed(&infinite, 1.seconds());
-    context(&cache, 2.seconds())
+    context(&cache, Time::ZERO).embed(&infinite, 1.seconds().after_origin());
+    context(&cache, 2.seconds().after_origin())
         .with_clip_duration(7.seconds())
-        .embed(&infinite, 1.seconds());
+        .embed(&infinite, 1.seconds().after_origin());
     assert_eq!(calls.load(Ordering::SeqCst), 4);
-    let zero = (|_: &SceneContext<'_>| panic!("empty child")).with_duration(Time::ZERO);
+    let zero = (|_: &SceneContext<'_>| panic!("empty child")).with_duration(Duration::ZERO);
     context(&cache, Time::ZERO).embed(&zero, Time::ZERO);
 }

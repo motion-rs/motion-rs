@@ -66,7 +66,7 @@ fn main() -> motion::Result {
             equation.clone().write(context.progress()).translate(32.0, 60.0)
         })
     }).build()?;
-    render_still(&timeline, 1.seconds(), &RenderOptions::default())?
+    render_still(&timeline, 1.seconds().after_origin(), &RenderOptions::default())?
         .save_png("tutorial-formula-writing.png")
 }
 ```

@@ -4,7 +4,7 @@
 //! exposes the AAC encoder, so they would need new bindings.
 
 use super::pcm::{MixedAudio, ResampleQuality, ceil_frames, invalid};
-use motion_core::{AudioMetadata, AudioSource, Time, Timeline};
+use motion_core::{AudioMetadata, AudioSource, Duration, Timeline};
 use std::{io::Write, ops::Range, path::PathBuf};
 
 /// Sample encoding of the written WAV file.
@@ -60,7 +60,7 @@ pub struct AudioExportOptions {
     /// Output channels.
     pub channels: AudioChannels,
     /// Timeline interval; `None` exports the whole timeline.
-    pub range: Option<Range<Time>>,
+    pub range: Option<Range<Duration>>,
     /// Resampler for sources whose rate differs from `sample_rate`.
     pub resampler: ResampleQuality,
     /// Deterministic TPDF dither when quantizing to 16 bits.
@@ -107,7 +107,7 @@ impl AudioExportOptions {
     }
 
     /// Selects a timeline interval.
-    pub fn range(mut self, range: Range<Time>) -> Self {
+    pub fn range(mut self, range: Range<Duration>) -> Self {
         self.range = Some(range);
         self
     }
@@ -293,8 +293,8 @@ pub fn export_audio(
     let range = options
         .range
         .clone()
-        .unwrap_or(Time::ZERO..timeline.duration());
-    if range.start < Time::ZERO || range.end <= range.start {
+        .unwrap_or(Duration::ZERO..timeline.duration());
+    if range.start < Duration::ZERO || range.end <= range.start {
         return Err(invalid("range", "Audio export range must be nonempty").into());
     }
     if !options.overwrite && options.path.try_exists()? {

@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 #[derive(Default)]
 pub(super) struct AudioOverview {
     pub(super) peaks: Vec<f32>,
-    pub(super) markers: Vec<motion_core::Time>,
+    pub(super) markers: Vec<motion_core::Duration>,
     pub(super) beat: Option<motion_encode::audio::analysis::BeatGrid>,
     pub(super) report: Option<motion_encode::audio::LoudnessReport>,
     pub(super) analysis_error: Option<String>,

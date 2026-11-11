@@ -25,8 +25,8 @@ impl AudioSignal {
 
     /// Smooths the complete trace offline, preserving seek-independent output.
     pub fn attack_release(&self, attack: Duration, release: Duration) -> motion_core::Result<Self> {
-        if attack < Time::ZERO
-            || release < Time::ZERO
+        if attack < Duration::ZERO
+            || release < Duration::ZERO
             || attack.as_seconds() > 30.0
             || release.as_seconds() > 30.0
         {
@@ -38,7 +38,7 @@ impl AudioSignal {
         }
         let seconds = self.0.hop_frames as f64 / f64::from(self.0.sample_rate);
         let coefficient = |duration: Duration| {
-            if duration == Time::ZERO {
+            if duration == Duration::ZERO {
                 0.0
             } else {
                 libm::exp(-seconds / duration.as_seconds())
@@ -115,21 +115,21 @@ impl AudioSpectrum {
 /// Stable, ascending offline onset timestamps.
 #[derive(Clone, Debug, Default)]
 pub struct AudioMarkers {
-    times: Vec<Time>,
+    times: Vec<Duration>,
 }
 
 impl AudioMarkers {
     /// Timestamp-ordered events suitable for particle bursts and Studio cues.
-    pub fn times(&self) -> &[Time] {
+    pub fn times(&self) -> &[Duration] {
         &self.times
     }
 
     /// Creates ordered markers; duplicate, negative and beyond-24h times are rejected.
-    pub fn new(times: Vec<Time>) -> motion_core::Result<Self> {
+    pub fn new(times: Vec<Duration>) -> motion_core::Result<Self> {
         if times.len() > 1_000_000
             || times
                 .iter()
-                .any(|time| *time < Time::ZERO || time.as_seconds() > 86400.0)
+                .any(|time| *time < Duration::ZERO || time.as_seconds() > 86400.0)
             || times.windows(2).any(|pair| pair[0] >= pair[1])
         {
             return Err(invalid(
@@ -174,7 +174,7 @@ impl AudioMarkers {
             .map(|value| {
                 value
                     .as_i64()
-                    .map(Time::from_ticks)
+                    .map(Duration::from_ticks)
                     .ok_or_else(|| invalid("markers_json", "Require integer ticks"))
             })
             .collect::<Result<Vec<_>, _>>()?;
@@ -188,15 +188,15 @@ pub struct BeatGrid {
     /// Beats per minute.
     pub bpm: f64,
     /// First beat position.
-    pub offset: Time,
+    pub offset: Duration,
     /// Fraction of onset intervals agreeing with the estimated period.
     pub confidence: f64,
 }
 
 impl BeatGrid {
     /// Creates an explicit grid; automatic estimates may be replaced by this.
-    pub fn new(bpm: f64, offset: Time) -> motion_core::Result<Self> {
-        if !bpm.is_finite() || !(20.0..=400.0).contains(&bpm) || offset < Time::ZERO {
+    pub fn new(bpm: f64, offset: Duration) -> motion_core::Result<Self> {
+        if !bpm.is_finite() || !(20.0..=400.0).contains(&bpm) || offset < Duration::ZERO {
             return Err(invalid("beat_grid", "Invalid BPM or nonnegative offset").into());
         }
         Ok(Self {
@@ -209,7 +209,7 @@ impl BeatGrid {
     /// Returns bounded beat markers through a positive duration.
     pub fn markers(&self, duration: Duration) -> motion_core::Result<AudioMarkers> {
         Self::new(self.bpm, self.offset)?;
-        if duration < Time::ZERO || duration.as_seconds() > 86400.0 {
+        if duration < Duration::ZERO || duration.as_seconds() > 86400.0 {
             return Err(invalid("beat_duration", "Require duration in 0..=24h").into());
         }
         let count =
@@ -220,7 +220,7 @@ impl BeatGrid {
         Ok(AudioMarkers {
             times: (0..count)
                 .map(|index| {
-                    Time::from_ticks(
+                    Duration::from_ticks(
                         self.offset.ticks()
                             + (index as f64 * 60.0 / self.bpm
                                 * motion_core::TICKS_PER_SECOND as f64)
@@ -333,7 +333,7 @@ impl AudioAnalysis {
             values,
             sample_rate: self.pcm.sample_rate(),
             hop_frames: hop,
-            duration: self.pcm.duration().unwrap_or(Time::ZERO),
+            duration: self.pcm.duration().unwrap_or(Duration::ZERO),
         }))
     }
 
@@ -501,14 +501,14 @@ impl AudioAnalysis {
                 && *value >= values.get(index.wrapping_sub(1)).copied().unwrap_or(0.0)
                 && *value > values.get(index + 1).copied().unwrap_or(0.0)
             {
-                let time = Time::from_ticks(
+                let time = Duration::from_ticks(
                     (((index * hop + hop * 2) as u128 * motion_core::TICKS_PER_SECOND as u128)
                         / u128::from(self.pcm.sample_rate())) as i64,
                 );
                 if time < flux.0.duration
                     && times
                         .last()
-                        .is_none_or(|previous: &Time| (time - *previous).as_seconds() >= 0.1)
+                        .is_none_or(|previous: &Duration| (time - *previous).as_seconds() >= 0.1)
                 {
                     times.push(time);
                 }
@@ -585,7 +585,7 @@ impl AudioAnalysis {
             .copied()
             .take(64)
             .max_by(|left, right| {
-                let aligned = |origin: Time| {
+                let aligned = |origin: Duration| {
                     onsets
                         .times
                         .iter()
@@ -599,7 +599,7 @@ impl AudioAnalysis {
                     .cmp(&aligned(*right))
                     .then_with(|| right.cmp(left))
             })
-            .unwrap_or(Time::ZERO);
+            .unwrap_or(Duration::ZERO);
         let aligned = onsets
             .times
             .iter()
@@ -610,7 +610,7 @@ impl AudioAnalysis {
             .count();
         Ok(BeatGrid {
             bpm: 60.0 / period,
-            offset: Time::from_seconds(offset.as_seconds().rem_euclid(period)),
+            offset: Duration::from_seconds(offset.as_seconds().rem_euclid(period)),
             confidence: aligned as f64 / onsets.times.len() as f64,
         })
     }
@@ -661,7 +661,7 @@ mod tests {
         assert!((grid.bpm - 120.0).abs() < 2.0);
         assert!(grid.confidence > 0.8);
         assert_eq!(
-            BeatGrid::new(120.0, Time::ZERO)?
+            BeatGrid::new(120.0, Duration::ZERO)?
                 .markers(2.seconds())?
                 .times()
                 .len(),
@@ -672,14 +672,14 @@ mod tests {
 
     #[test]
     fn marker_json_and_cached_parameter_groups_are_exact() -> motion_core::Result {
-        let markers = AudioMarkers::new(vec![Time::ZERO, Time::from_ticks(12345)])?;
+        let markers = AudioMarkers::new(vec![Duration::ZERO, Duration::from_ticks(12345)])?;
         let mut json = Vec::new();
         markers.write_json(&mut json)?;
         assert_eq!(
             AudioMarkers::read_json(&mut json.as_slice())?.times(),
             markers.times()
         );
-        assert!(AudioMarkers::new(vec![1.seconds(), Time::ZERO]).is_err());
+        assert!(AudioMarkers::new(vec![1.seconds(), Duration::ZERO]).is_err());
         assert!(AudioMarkers::read_json(&mut b"{\"version\":2}".as_slice()).is_err());
         let analysis = AudioAnalysis::from_pcm(Arc::new(PcmBuffer::new(8000, 1, vec![0.1; 8000])?));
         let first = analysis.spectrum(32, 20.0, 4000.0)?;

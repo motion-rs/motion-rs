@@ -391,7 +391,7 @@ mod tests {
         })?;
         let frame = render_still(
             &film,
-            (11.5 * 60.0 / PAGES.len() as f64).seconds(),
+            (11.5 * 60.0 / PAGES.len() as f64).seconds().after_origin(),
             &options,
         )?;
         let mut cool = 0;

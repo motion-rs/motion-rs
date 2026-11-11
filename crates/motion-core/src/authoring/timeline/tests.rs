@@ -19,7 +19,7 @@ fn fluent_builders_retain_all_errors_and_valid_chains_need_no_question_marks() -
                 .push((|_: &SceneContext<'_>| Node::empty()).with_duration(1.seconds()))
                 .gap((-1).seconds())
                 .place(
-                    (-1).seconds(),
+                    (-1).seconds().after_origin(),
                     (|_: &SceneContext<'_>| Node::empty()).with_duration(1.seconds()),
                 )
         })
@@ -43,7 +43,7 @@ fn track_boundaries_are_half_open_and_sorted() -> crate::Result {
     let timeline = Timeline::try_new(size(), 10)?
         .try_track(|track| {
             track
-                .try_place(2.seconds(), scene(1.seconds()))?
+                .try_place(2.seconds().after_origin(), scene(1.seconds()))?
                 .try_place(Time::ZERO, scene(1.seconds()))?
                 .try_push(scene(1.seconds()))
         })?
@@ -59,9 +59,12 @@ fn track_boundaries_are_half_open_and_sorted() -> crate::Result {
     );
     let track = &timeline.tracks()[0];
     assert_eq!(track.active_clip(Time::ZERO).unwrap().id(), 1);
-    assert!(track.active_clip(1.seconds()).is_none());
-    assert_eq!(track.active_clip(3.seconds()).unwrap().id(), 2);
-    assert!(track.active_clip(4.seconds()).is_none());
+    assert!(track.active_clip(1.seconds().after_origin()).is_none());
+    assert_eq!(
+        track.active_clip(3.seconds().after_origin()).unwrap().id(),
+        2
+    );
+    assert!(track.active_clip(4.seconds().after_origin()).is_none());
     let cache = SceneCache::new(0);
     let context = SceneContext::new(Time::ZERO, FrameRate::from(10), size(), &cache);
     timeline
@@ -95,8 +98,13 @@ fn nested_push_and_embed_preserve_global_ticks_and_child_rate_without_retiming()
         .try_track(|track| track.try_gap(1.seconds())?.try_nest(child.clone()))?
         .build()?;
     let cache = SceneCache::new(0);
-    let context =
-        SceneContext::new(9.seconds(), FrameRate::NTSC, parent.size(), &cache).shifted(7.seconds());
+    let context = SceneContext::new(
+        9.seconds().after_origin(),
+        FrameRate::NTSC,
+        parent.size(),
+        &cache,
+    )
+    .shifted(7.seconds());
     let start = parent.tracks()[0].clips()[0].start();
     let pushed = parent.render(&context).compile(
         parent.size(),
@@ -112,8 +120,8 @@ fn nested_push_and_embed_preserve_global_ticks_and_child_rate_without_retiming()
     assert_eq!(
         observed.lock().unwrap().as_slice(),
         &[(
-            2.seconds() - start,
-            9.seconds(),
+            (2.seconds() - start.since_origin()).after_origin(),
+            9.seconds().after_origin(),
             FrameRate::from(24),
             child.size(),
             Some(2.seconds())
@@ -148,7 +156,7 @@ fn timeline_rejects_overlap_missing_duration_and_collapsed_intervals() -> crate:
         .try_track(|track| {
             track
                 .try_push(scene(1.seconds()))?
-                .try_place(500.milliseconds(), scene(1.seconds()))
+                .try_place(500.milliseconds().after_origin(), scene(1.seconds()))
         })
         .unwrap_err();
     assert_eq!(error.kind(), crate::ErrorKind::Timeline);
@@ -173,17 +181,19 @@ fn timeline_rejects_overlap_missing_duration_and_collapsed_intervals() -> crate:
 #[test]
 fn timeline_snaps_independent_boundaries_and_retains_warnings() -> crate::Result {
     let timeline = Timeline::try_new(size(), 10)?
-        .try_track(|track| track.try_place(50.milliseconds(), scene(100.milliseconds())))?
+        .try_track(|track| {
+            track.try_place(50.milliseconds().after_origin(), scene(100.milliseconds()))
+        })?
         .build()?;
     let clip = &timeline.tracks()[0].clips()[0];
-    assert_eq!(clip.start(), 100.milliseconds());
-    assert_eq!(clip.end(), 200.milliseconds());
+    assert_eq!(clip.start(), 100.milliseconds().after_origin());
+    assert_eq!(clip.end(), 200.milliseconds().after_origin());
     assert!(
         timeline
             .diagnostics()
             .boundary_adjustments()
             .any(|adjustment| adjustment.edge == BoundaryEdge::Start
-                && adjustment.requested == 50.milliseconds())
+                && adjustment.requested == 50.milliseconds().after_origin())
     );
     assert_eq!(timeline.frame_count(), 2);
     Ok(())
@@ -218,7 +228,7 @@ fn alignment_uses_tick_distances_ntsc_and_raw_cursors_without_drift() -> crate::
             for _ in 0..1000 {
                 track = track.try_push(scene(167.milliseconds()))?;
             }
-            assert_eq!(track.cursor(), 167.seconds());
+            assert_eq!(track.cursor(), 167.seconds().after_origin());
             Ok(track)
         })?
         .build()?;
@@ -230,7 +240,7 @@ fn alignment_uses_tick_distances_ntsc_and_raw_cursors_without_drift() -> crate::
         .try_track(|track| track.try_push(scene(1.seconds())))?;
     assert_eq!(
         ntsc.clone().build()?.duration(),
-        Time::from_frame(30, FrameRate::NTSC)
+        Duration::from_frame(30, FrameRate::NTSC)
     );
     let adjusted = ntsc.try_duration(1500.milliseconds())?;
     assert_eq!(adjusted.clone().build()?.frame_count(), 45);
@@ -256,14 +266,18 @@ fn construction_errors_limits_and_cow_snapshots_are_bounded() -> crate::Result {
         );
         assert!(
             Timeline::try_new(size(), 30)?
-                .try_track(|track| track.try_gap(bad))
+                .try_track(|track| track.try_gap(bad.since_origin()))
                 .is_err()
         );
-        assert!(Timeline::try_new(size(), 30)?.try_duration(bad).is_err());
+        assert!(
+            Timeline::try_new(size(), 30)?
+                .try_duration(bad.since_origin())
+                .is_err()
+        );
     }
     assert!(
         Timeline::try_new(size(), 30)?
-            .try_track(|track| track.try_push(scene(Time::ZERO)))
+            .try_track(|track| track.try_push(scene(Duration::ZERO)))
             .is_err()
     );
     assert!(
@@ -274,7 +288,7 @@ fn construction_errors_limits_and_cow_snapshots_are_bounded() -> crate::Result {
     assert!(
         Timeline::try_new(size(), 30)?
             .try_track(|track| track
-                .try_gap(Time::from_ticks(i64::MAX))?
+                .try_gap(Duration::from_ticks(i64::MAX))?
                 .try_gap(1.seconds()))
             .is_err()
     );
@@ -349,7 +363,7 @@ fn explicit_duration_shorter_than_content_warns_and_audio_extends_inferred_lengt
         .track(|track| track.push(scene(1.seconds())))
         .audio(
             crate::AudioClip::file("a.wav")
-                .start(500.milliseconds())
+                .start(500.milliseconds().after_origin())
                 .duration(1.seconds()),
         )
         .build()?;
@@ -375,16 +389,19 @@ fn clips_take_their_duration_at_placement_and_can_start_inside_the_scene() -> cr
         .build()?;
     assert_eq!(timeline.duration(), 2.seconds());
     let clips = timeline.tracks()[0].clips();
-    assert_eq!(clips[0].offset(), Time::ZERO);
+    assert_eq!(clips[0].offset(), Duration::ZERO);
     assert_eq!(clips[1].offset(), 500.milliseconds());
     let cache = SceneCache::new(0);
     for time in [200.milliseconds(), 1200.milliseconds()] {
-        let context = SceneContext::new(time, FrameRate::from(10), size(), &cache);
+        let context = SceneContext::new(time.after_origin(), FrameRate::from(10), size(), &cache);
         timeline.render(&context);
     }
     assert_eq!(
         observed.lock().unwrap().as_slice(),
-        [200.milliseconds(), 700.milliseconds()]
+        [
+            200.milliseconds().after_origin(),
+            700.milliseconds().after_origin()
+        ]
     );
     assert!(
         Timeline::try_new(size(), 10)?

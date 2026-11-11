@@ -1,7 +1,7 @@
 //! Random-access synthesis and seeded sound effects, without binary assets.
 
 use super::{effects::amplitude, pcm::invalid};
-use motion_core::{Animation, AudioSource, Duration, Time};
+use motion_core::{Animation, AudioSource, Duration};
 
 /// Segments in the oscillator sine table. Linear interpolation keeps the error below `3e-7`
 /// (about -130 dB), under 24-bit quantization.
@@ -45,10 +45,10 @@ impl Adsr {
         release: Duration,
         duration: Duration,
     ) -> motion_core::Result<Self> {
-        if attack < Time::ZERO
-            || decay < Time::ZERO
-            || release < Time::ZERO
-            || duration <= Time::ZERO
+        if attack < Duration::ZERO
+            || decay < Duration::ZERO
+            || release < Duration::ZERO
+            || duration <= Duration::ZERO
             || duration.as_seconds() > 86400.0
             || attack.as_seconds() + decay.as_seconds() + release.as_seconds()
                 > duration.as_seconds()
@@ -68,8 +68,8 @@ impl Adsr {
 }
 
 impl Animation<f64> for Adsr {
-    fn sample(&self, time: Time) -> f64 {
-        if time < Time::ZERO || time >= self.duration {
+    fn sample(&self, time: Duration) -> f64 {
+        if time < Duration::ZERO || time >= self.duration {
             return 0.0;
         }
         let seconds = time.as_seconds();
@@ -81,7 +81,7 @@ impl Animation<f64> for Adsr {
                 + (self.sustain - 1.0) * (seconds - self.attack.as_seconds())
                     / self.decay.as_seconds();
         }
-        if time >= self.duration - self.release && self.release > Time::ZERO {
+        if time >= self.duration - self.release && self.release > Duration::ZERO {
             return self.sustain * (self.duration - time).as_seconds() / self.release.as_seconds();
         }
         self.sustain
@@ -165,7 +165,7 @@ impl Synth {
         if !end_frequency.is_finite()
             || end_frequency <= 0.0
             || end_frequency >= f64::from(self.rate) * 0.5
-            || duration <= Time::ZERO
+            || duration <= Duration::ZERO
             || duration.as_seconds() > 86400.0
         {
             return Err(invalid("chirp", "Invalid chirp frequency or duration").into());
@@ -483,7 +483,7 @@ mod tests {
             20.milliseconds(),
             100.milliseconds(),
         )?;
-        assert_eq!(envelope.sample(Time::ZERO), 0.0);
+        assert_eq!(envelope.sample(Duration::ZERO), 0.0);
         assert_eq!(envelope.sample(10.milliseconds()), 1.0);
         assert_eq!(envelope.sample(100.milliseconds()), 0.0);
         Ok(())

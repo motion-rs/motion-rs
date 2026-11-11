@@ -12,7 +12,7 @@ pub struct Clip {
     pub(super) id: usize,
     pub(super) start: Time,
     pub(super) duration: Duration,
-    pub(super) offset: Time,
+    pub(super) offset: Duration,
     pub(super) scene: Arc<dyn Scene>,
     pub(super) transition_in: Option<TransitionIn>,
 }
@@ -51,7 +51,7 @@ impl Clip {
     }
 
     /// Scene-local time at the clip's first frame; zero unless the clip was placed trimmed.
-    pub fn offset(&self) -> Time {
+    pub fn offset(&self) -> Duration {
         self.offset
     }
 
@@ -114,11 +114,10 @@ impl Track {
         }
         let render = |clip: &Clip| {
             context.during(clip.start, clip.duration, |local| {
-                if clip.offset == Time::ZERO {
+                if clip.offset == Duration::ZERO {
                     clip.scene.render(local)
                 } else {
-                    clip.scene
-                        .render(&local.shifted(Time::from_ticks(-clip.offset.ticks())))
+                    clip.scene.render(&local.shifted(-clip.offset))
                 }
             })
         };
@@ -134,7 +133,7 @@ impl Track {
             let progress = crate::Animation::sample(&animation, context.time() - clip.start);
             if progress.is_finite() {
                 let local = context
-                    .shifted(clip.start)
+                    .shifted(clip.start.since_origin())
                     .with_clip_duration(transition.duration);
                 transition
                     .effect
@@ -176,7 +175,7 @@ impl TrackBuilder {
     /// Appends a finite scene, retaining invalid input for validate().
     pub fn push(self, scene: impl Scene + 'static) -> Self {
         let cursor = self.cursor;
-        self.defer(|builder| builder.place_checked(cursor, None, Time::ZERO, scene))
+        self.defer(|builder| builder.place_checked(cursor, None, Duration::ZERO, scene))
     }
 
     /// Appends a finite authoring callback accepting drawables or Result outputs.
@@ -191,18 +190,18 @@ impl TrackBuilder {
     /// Appends a scene at the cursor for `duration`, whatever its natural duration.
     pub fn push_for(self, duration: Duration, scene: impl Scene + 'static) -> Self {
         let cursor = self.cursor;
-        self.defer(|builder| builder.place_checked(cursor, Some(duration), Time::ZERO, scene))
+        self.defer(|builder| builder.place_checked(cursor, Some(duration), Duration::ZERO, scene))
     }
 
     /// Places a scene at absolute ticks for `duration`, whatever its natural duration.
     pub fn place_for(self, start: Time, duration: Duration, scene: impl Scene + 'static) -> Self {
-        self.defer(|builder| builder.place_checked(start, Some(duration), Time::ZERO, scene))
+        self.defer(|builder| builder.place_checked(start, Some(duration), Duration::ZERO, scene))
     }
 
     /// Appends a scene at the cursor that starts `offset` into its own timeline.
     pub fn push_trimmed(
         self,
-        offset: Time,
+        offset: Duration,
         duration: Duration,
         scene: impl Scene + 'static,
     ) -> Self {
@@ -217,7 +216,7 @@ impl TrackBuilder {
         scene: impl Scene + 'static,
     ) -> crate::Result<Self> {
         let cursor = self.cursor;
-        self.place_checked(cursor, Some(duration), Time::ZERO, scene)?;
+        self.place_checked(cursor, Some(duration), Duration::ZERO, scene)?;
         Ok(self)
     }
 
@@ -228,14 +227,14 @@ impl TrackBuilder {
         duration: Duration,
         scene: impl Scene + 'static,
     ) -> crate::Result<Self> {
-        self.place_checked(start, Some(duration), Time::ZERO, scene)?;
+        self.place_checked(start, Some(duration), Duration::ZERO, scene)?;
         Ok(self)
     }
 
     /// Immediately checks and appends a scene that starts `offset` into its own timeline.
     pub fn try_push_trimmed(
         mut self,
-        offset: Time,
+        offset: Duration,
         duration: Duration,
         scene: impl Scene + 'static,
     ) -> crate::Result<Self> {
@@ -293,9 +292,9 @@ impl TrackBuilder {
         let id = self.clips.len();
         match duration {
             Some(duration) => {
-                self.place_checked(start, Some(duration), Time::ZERO, child.visual())?
+                self.place_checked(start, Some(duration), Duration::ZERO, child.visual())?
             }
-            None => self.place_checked(start, None, Time::ZERO, child.visual())?,
+            None => self.place_checked(start, None, Duration::ZERO, child.visual())?,
         }
         let clip = self
             .clips
@@ -311,7 +310,7 @@ impl TrackBuilder {
                 soundtrack.clips().to_vec()
             };
         for source in sources {
-            if let Some(source) = source.relocated(start, duration)? {
+            if let Some(source) = source.relocated(start.since_origin(), duration)? {
                 self.audio.push(source);
             }
         }
@@ -329,7 +328,7 @@ impl TrackBuilder {
 
     /// Places a scene at absolute ticks, retaining invalid input for validate().
     pub fn place(self, start: Time, scene: impl Scene + 'static) -> Self {
-        self.defer(|builder| builder.place_checked(start, None, Time::ZERO, scene))
+        self.defer(|builder| builder.place_checked(start, None, Duration::ZERO, scene))
     }
 
     /// Advances the cursor, retaining invalid input for validate().
@@ -349,7 +348,7 @@ impl TrackBuilder {
 
     /// Immediately checks and places one scene.
     pub fn try_place(mut self, start: Time, scene: impl Scene + 'static) -> crate::Result<Self> {
-        self.place_checked(start, None, Time::ZERO, scene)?;
+        self.place_checked(start, None, Duration::ZERO, scene)?;
         Ok(self)
     }
 
@@ -372,7 +371,7 @@ impl TrackBuilder {
         effect: impl transition::Transition + 'static,
         duration: Duration,
     ) -> crate::Result<()> {
-        if self.pending.is_some() || duration <= Time::ZERO {
+        if self.pending.is_some() || duration <= Duration::ZERO {
             return Err(on_track(
                 self.index,
                 "Transition needs positive duration and no pending transition",
@@ -417,7 +416,7 @@ impl TrackBuilder {
         &mut self,
         start: Time,
         duration: Option<Duration>,
-        offset: Time,
+        offset: Duration,
         scene: impl Scene + 'static,
     ) -> crate::Result<()> {
         if self.clips.len() >= MAX_CLIPS {
@@ -426,7 +425,7 @@ impl TrackBuilder {
         if start < Time::ZERO {
             return Err(on_track(self.index, "Clip start must be nonnegative"));
         }
-        if offset < Time::ZERO {
+        if offset < Duration::ZERO {
             return Err(on_track(self.index, "Clip offset must be nonnegative"));
         }
         let duration = duration.or_else(|| scene.duration()).ok_or_else(|| {
@@ -435,7 +434,7 @@ impl TrackBuilder {
                 "Scene has no finite duration; use push_for or with_duration",
             )
         })?;
-        if duration <= Time::ZERO {
+        if duration <= Duration::ZERO {
             return Err(on_track(self.index, "Clip duration must be positive"));
         }
         let requested_end =
@@ -542,7 +541,7 @@ impl TrackBuilder {
                 "A pending transition must be followed by a clip, not a gap",
             ));
         }
-        if duration < Time::ZERO {
+        if duration < Duration::ZERO {
             return Err(on_track(self.index, "Gap must be nonnegative"));
         }
         self.cursor =
@@ -567,22 +566,22 @@ impl TrackBuilder {
                 "Pending transition has no incoming clip",
             ));
         }
-        let (duration, frame) =
+        let (end, frame) =
             align(self.cursor, self.rate).map_err(|error| on_track(self.index, error))?;
-        if duration != self.cursor {
+        if end != self.cursor {
             self.adjustments.push(BoundaryAdjustment {
                 track: Some(self.index),
                 clip: None,
                 edge: BoundaryEdge::Cursor,
                 requested: self.cursor,
-                aligned: duration,
+                aligned: end,
                 frame,
             });
         }
         Ok((
             Track {
                 clips: self.clips.into(),
-                duration,
+                duration: end.since_origin(),
             },
             self.adjustments,
             self.audio,

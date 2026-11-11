@@ -1,10 +1,10 @@
 //! Immutable source-time transforms and clip convenience operations.
 
 use super::pcm::{MAX_SAMPLES, PcmBuffer, invalid};
-use motion_core::{AudioClip, AudioSource, Duration, Time};
+use motion_core::{AudioClip, AudioSource, Duration};
 
 fn duration(frames: u64, rate: u32) -> Duration {
-    Time::from_ticks(
+    Duration::from_ticks(
         (u128::from(frames) * motion_core::TICKS_PER_SECOND as u128).div_ceil(u128::from(rate))
             as i64,
     )
@@ -12,7 +12,7 @@ fn duration(frames: u64, rate: u32) -> Duration {
 
 fn freeze(
     source: &dyn AudioSource,
-    offset: Time,
+    offset: Duration,
     length: Duration,
 ) -> motion_core::Result<PcmBuffer> {
     let channels = usize::from(source.channels());
@@ -57,7 +57,7 @@ impl ReverseSource {
         let length = source
             .duration()
             .ok_or_else(|| invalid("reverse", "Reverse requires a finite source"))?;
-        let pcm = freeze(source, Time::ZERO, length)?;
+        let pcm = freeze(source, Duration::ZERO, length)?;
         let channels = usize::from(pcm.channels());
         let values = pcm
             .samples()
@@ -85,7 +85,7 @@ impl SpeedSource {
         }
         let pcm = freeze(
             source,
-            Time::ZERO,
+            Duration::ZERO,
             source
                 .duration()
                 .ok_or_else(|| invalid("speed", "Require finite source"))?,
@@ -147,15 +147,15 @@ impl LoopSource {
     /// Freezes a source interval; seam length must be less than half the interval.
     pub fn new(
         source: &dyn AudioSource,
-        region: std::ops::Range<Time>,
+        region: std::ops::Range<Duration>,
         crossfade: Duration,
         length: Duration,
     ) -> motion_core::Result<Self> {
-        if region.start < Time::ZERO
+        if region.start < Duration::ZERO
             || region.end <= region.start
-            || crossfade < Time::ZERO
+            || crossfade < Duration::ZERO
             || crossfade.as_seconds() * 2.0 >= (region.end - region.start).as_seconds()
-            || length <= Time::ZERO
+            || length <= Duration::ZERO
             || length.as_seconds() > 86400.0
         {
             return Err(invalid("loop", "Invalid source region, seam or output length").into());
@@ -272,7 +272,7 @@ fn clip_pcm(clip: &AudioClip) -> motion_core::Result<PcmBuffer> {
     let tail = parameters
         .effects
         .iter()
-        .fold(Time::ZERO, |sum, effect| sum + effect.tail());
+        .fold(Duration::ZERO, |sum, effect| sum + effect.tail());
     freeze(
         parameters.source,
         parameters.offset,
@@ -283,14 +283,15 @@ fn clip_pcm(clip: &AudioClip) -> motion_core::Result<PcmBuffer> {
 impl AudioClipExt for AudioClip {
     fn speed(self, factor: f64) -> motion_core::Result<Self> {
         let source = SpeedSource::new(&clip_pcm(&self)?, factor)?;
-        let length = source.duration().unwrap_or(Time::ZERO);
+        let length = source.duration().unwrap_or(Duration::ZERO);
         let parameters = self.parameters();
-        let fade_in = Time::from_ticks((parameters.fade_in.ticks() as f64 / factor).round() as i64);
+        let fade_in =
+            Duration::from_ticks((parameters.fade_in.ticks() as f64 / factor).round() as i64);
         let fade_out =
-            Time::from_ticks((parameters.fade_out.ticks() as f64 / factor).round() as i64);
+            Duration::from_ticks((parameters.fade_out.ticks() as f64 / factor).round() as i64);
         Ok(self
             .with_resolved_source(std::sync::Arc::new(source))
-            .offset(Time::ZERO)
+            .offset(Duration::ZERO)
             .duration(length)
             .fade_in(fade_in)
             .fade_out(fade_out))
@@ -298,20 +299,20 @@ impl AudioClipExt for AudioClip {
 
     fn reverse(self) -> motion_core::Result<Self> {
         let source = ReverseSource::new(&clip_pcm(&self)?)?;
-        let length = source.duration().unwrap_or(Time::ZERO);
+        let length = source.duration().unwrap_or(Duration::ZERO);
         Ok(self
             .with_resolved_source(std::sync::Arc::new(source))
-            .offset(Time::ZERO)
+            .offset(Duration::ZERO)
             .duration(length))
     }
 
     fn pitch_shift(self, semitones: f64) -> motion_core::Result<Self> {
         let pcm = clip_pcm(&self)?;
         let shifted = pcm.pitch_shift(semitones)?;
-        let length = shifted.duration().unwrap_or(Time::ZERO);
+        let length = shifted.duration().unwrap_or(Duration::ZERO);
         Ok(self
             .with_resolved_source(std::sync::Arc::new(shifted))
-            .offset(Time::ZERO)
+            .offset(Duration::ZERO)
             .duration(length))
     }
 
@@ -319,18 +320,18 @@ impl AudioClipExt for AudioClip {
         let pcm = clip_pcm(&self)?;
         let source = LoopSource::new(
             &pcm,
-            Time::ZERO..pcm.duration().unwrap_or(Time::ZERO),
+            Duration::ZERO..pcm.duration().unwrap_or(Duration::ZERO),
             crossfade,
             length,
         )?;
         Ok(self
             .with_resolved_source(std::sync::Arc::new(source))
-            .offset(Time::ZERO)
+            .offset(Duration::ZERO)
             .duration(length))
     }
 
     fn crossfade(self, next: AudioClip, length: Duration) -> motion_core::Result<[AudioClip; 2]> {
-        if length <= Time::ZERO
+        if length <= Duration::ZERO
             || length > self.resolved_duration()?
             || length > next.resolved_duration()?
         {
@@ -371,7 +372,7 @@ impl PcmBuffer {
 fn stretch(pcm: &PcmBuffer, count: usize) -> motion_core::Result<PcmBuffer> {
     let channels = usize::from(pcm.channels());
     if count.saturating_mul(channels) > MAX_SAMPLES {
-        return Err(invalid("stretch_bytes", "Time stretch exceeds 128 MiB").into());
+        return Err(invalid("stretch_bytes", "Duration stretch exceeds 128 MiB").into());
     }
     let window = ((pcm.sample_rate() / 50) as usize)
         .next_power_of_two()
@@ -468,8 +469,8 @@ mod tests {
         assert_eq!(reversed, [0.7, 0.8, 0.5, 0.6, 0.3, 0.4, 0.1, 0.2]);
         let looped = LoopSource::new(
             &pcm,
-            Time::ZERO..4.milliseconds(),
-            Time::ZERO,
+            Duration::ZERO..4.milliseconds(),
+            Duration::ZERO,
             20.milliseconds(),
         )?;
         let mut whole = [0.0; 40];
@@ -482,7 +483,7 @@ mod tests {
         assert!(SpeedSource::new(&pcm, f64::NAN).is_err());
         let clips =
             AudioClip::source(pcm.clone()).crossfade(AudioClip::source(pcm), 1.milliseconds())?;
-        assert_eq!(clips[1].parameters().start, 3.milliseconds());
+        assert_eq!(clips[1].parameters().start, 3.milliseconds().after_origin());
         Ok(())
     }
 

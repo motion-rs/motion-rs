@@ -130,7 +130,7 @@ fn frame(context: &SceneContext<'_>, studies: &[Study]) -> motion::Result<Node> 
     let (page, local) = page_at(context.progress());
     let description = &PAGES[page];
     let sampled = context
-        .try_shifted(context.time() - (0.25 + local * 3.4).seconds())?
+        .try_shifted((context.time() - (0.25 + local * 3.4).seconds()).since_origin())?
         .with_clip_duration(SOURCE_SECONDS.seconds());
     let study = &studies[page];
     let particles = study.render(&sampled)?;
@@ -293,12 +293,12 @@ mod tests {
             .build()?;
         for (page, description) in PAGES.iter().enumerate() {
             let moment = |local: f64| ((page as f64 + local) * 60.0 / PAGES.len() as f64).seconds();
-            let early = render_still(&timeline, moment(0.25), &options)?;
-            let late = render_still(&timeline, moment(0.75), &options)?;
+            let early = render_still(&timeline, moment(0.25).after_origin(), &options)?;
+            let late = render_still(&timeline, moment(0.75).after_origin(), &options)?;
             for local in [0.05, 0.5, 0.95] {
-                render_still(&timeline, moment(local), &options)?;
+                render_still(&timeline, moment(local).after_origin(), &options)?;
             }
-            let replay = render_still(&timeline, moment(0.25), &options)?;
+            let replay = render_still(&timeline, moment(0.25).after_origin(), &options)?;
             assert_eq!(
                 early.bytes(),
                 replay.bytes(),
@@ -312,7 +312,7 @@ mod tests {
                 })
                 .count();
             assert!(changed > 8, "{} did not animate", description.title);
-            let empty = render_still(&background, moment(0.25), &options)?;
+            let empty = render_still(&background, moment(0.25).after_origin(), &options)?;
             let painted = (46..136)
                 .flat_map(|row| (117..269).map(move |column| (row * 288 + column) * 4))
                 .filter(|offset| {

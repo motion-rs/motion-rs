@@ -158,7 +158,7 @@ impl FrameRenderer {
             FrameRequest {
                 time,
                 frame_rate: rate,
-                duration: self.duration,
+                duration: self.duration.since_origin(),
                 background,
                 target: crate::RenderTarget::Memory(&mut output),
                 format,
@@ -186,7 +186,7 @@ impl FrameRenderer {
             FrameRequest {
                 time: Time::from_frame(i64::from(index), rate),
                 frame_rate: rate,
-                duration: self.duration,
+                duration: self.duration.since_origin(),
                 background,
                 target: crate::RenderTarget::Texture(texture),
                 format,

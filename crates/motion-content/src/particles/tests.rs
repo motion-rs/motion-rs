@@ -17,7 +17,7 @@ fn shared_curl_flow_and_smoke_are_seeded_and_bounded() -> motion_core::Result {
     curl.apply(
         &mut particle,
         0.125,
-        1.seconds(),
+        1.seconds().after_origin(),
         &mut Random::from_key(1_u64),
     )?;
     let expected = motion_core::noise::curl2(
@@ -31,7 +31,7 @@ fn shared_curl_flow_and_smoke_are_seeded_and_bounded() -> motion_core::Result {
     curl.apply(
         &mut replay,
         0.125,
-        1.seconds(),
+        1.seconds().after_origin(),
         &mut Random::from_key(9_u64),
     )?;
     assert_eq!(particle, replay);
@@ -39,7 +39,7 @@ fn shared_curl_flow_and_smoke_are_seeded_and_bounded() -> motion_core::Result {
     FlowField::curl(42, 0.5, 2.0).apply(
         &mut flow_particle,
         0.125,
-        1.seconds(),
+        1.seconds().after_origin(),
         &mut Random::from_key(1_u64),
     )?;
     for axis in 0..2 {
@@ -61,18 +61,38 @@ fn shared_curl_flow_and_smoke_are_seeded_and_bounded() -> motion_core::Result {
         evolution: 0.5,
         fractal: motion_core::noise::Fractal::default(),
     };
-    let asset = smoke.generate_at(32, 42, 1.seconds(), motion_core::RasterLimits::default())?;
+    let asset = smoke.generate_at(
+        32,
+        42,
+        1.seconds().after_origin(),
+        motion_core::RasterLimits::default(),
+    )?;
     assert_eq!(
         asset,
-        smoke.generate_at(32, 42, 1.seconds(), motion_core::RasterLimits::default())?
+        smoke.generate_at(
+            32,
+            42,
+            1.seconds().after_origin(),
+            motion_core::RasterLimits::default()
+        )?
     );
     assert_ne!(
         asset,
-        smoke.generate_at(32, 43, 1.seconds(), motion_core::RasterLimits::default())?
+        smoke.generate_at(
+            32,
+            43,
+            1.seconds().after_origin(),
+            motion_core::RasterLimits::default()
+        )?
     );
     assert_ne!(
         asset,
-        smoke.generate_at(32, 42, 2.seconds(), motion_core::RasterLimits::default())?
+        smoke.generate_at(
+            32,
+            42,
+            2.seconds().after_origin(),
+            motion_core::RasterLimits::default()
+        )?
     );
     assert_eq!(asset.levels()[0].pixel(0, 0), Some([0.0; 4]));
     assert!(asset.levels()[0].pixel(16, 16).unwrap()[3] > 0.3);
@@ -93,7 +113,7 @@ fn shared_curl_flow_and_smoke_are_seeded_and_bounded() -> motion_core::Result {
         ProceduralSprite::Ring.generate_at(
             32,
             42,
-            7.seconds(),
+            7.seconds().after_origin(),
             motion_core::RasterLimits::default()
         )?
     );
@@ -120,8 +140,14 @@ fn shared_noise_simulation_budget_parallel_seek_and_smoke_pixels() -> motion_cor
         100.milliseconds(),
         150.milliseconds(),
     ] {
-        assert_eq!(system.sample(time)?, parallel.sample(time)?);
-        assert_eq!(system.sample(time)?, system.sample(time)?);
+        assert_eq!(
+            system.sample(time.after_origin())?,
+            parallel.sample(time.after_origin())?
+        );
+        assert_eq!(
+            system.sample(time.after_origin())?,
+            system.sample(time.after_origin())?
+        );
     }
     assert!(
         system
@@ -131,7 +157,7 @@ fn shared_noise_simulation_budget_parallel_seek_and_smoke_pixels() -> motion_cor
                 ..Default::default()
             })
             .build()?
-            .sample(100.milliseconds())
+            .sample(100.milliseconds().after_origin())
             .is_err()
     );
     let size = 8;
@@ -227,7 +253,12 @@ fn image_density_color_and_animated_path_are_deterministic() -> motion_core::Res
         )?
         .speed(0.0);
         let mut output = Vec::new();
-        emitter.emit(240, 1.seconds(), &mut Random::from_key(3_u64), &mut output)?;
+        emitter.emit(
+            240,
+            1.seconds().after_origin(),
+            &mut Random::from_key(3_u64),
+            &mut output,
+        )?;
         for particle in output {
             assert!(particle.position[0] >= 1.0);
             assert_eq!(particle.color, [0.0, 0.25, 0.5, 0.5]);
@@ -277,7 +308,7 @@ fn counter_workers_and_seek_replay_match_exactly() -> motion_core::Result {
         100.milliseconds(),
         200.milliseconds(),
     ] {
-        let expected = original.sample(time)?;
+        let expected = original.sample(time.after_origin())?;
         for workers in [2, 4] {
             assert_eq!(
                 &*expected,
@@ -286,7 +317,7 @@ fn counter_workers_and_seek_replay_match_exactly() -> motion_core::Result {
                     .to_builder()
                     .workers(workers)
                     .build()?
-                    .sample(time)?
+                    .sample(time.after_origin())?
             );
         }
     }
@@ -312,7 +343,7 @@ fn events_are_sorted_and_birth_depth_count_limits_fail_explicitly() -> motion_co
             probability: 1.0,
         })
         .build()?;
-    let events = system.events(50.milliseconds())?;
+    let events = system.events(50.milliseconds().after_origin())?;
     assert_eq!(
         events
             .iter()
@@ -320,7 +351,7 @@ fn events_are_sorted_and_birth_depth_count_limits_fail_explicitly() -> motion_co
             .collect::<Vec<_>>(),
         vec![0, 1, 2, 3, 4, 5]
     );
-    assert_eq!(system.sample(50.milliseconds())?.len(), 3);
+    assert_eq!(system.sample(50.milliseconds().after_origin())?.len(), 3);
     assert!(
         system
             .clone()
@@ -388,8 +419,8 @@ fn prewarm_loop_and_explicit_reverse_are_random_access() -> motion_core::Result 
         .loop_period(500.milliseconds())
         .build()?;
     assert_eq!(
-        &*looping.sample(100.milliseconds())?,
-        &*looping.sample(600.milliseconds())?
+        &*looping.sample(100.milliseconds().after_origin())?,
+        &*looping.sample(600.milliseconds().after_origin())?
     );
     assert!(
         base.clone()
@@ -405,12 +436,12 @@ fn prewarm_loop_and_explicit_reverse_are_random_access() -> motion_core::Result 
         .time_remap(-1.0, 900.milliseconds(), true)
         .build()?;
     assert_eq!(
-        &*reverse.sample(100.milliseconds())?,
-        &*base.sample(800.milliseconds())?
+        &*reverse.sample(100.milliseconds().after_origin())?,
+        &*base.sample(800.milliseconds().after_origin())?
     );
     assert_eq!(
-        &*reverse.sample(600.milliseconds())?,
-        &*base.sample(300.milliseconds())?
+        &*reverse.sample(600.milliseconds().after_origin())?,
+        &*base.sample(300.milliseconds().after_origin())?
     );
     Ok(())
 }
@@ -453,11 +484,11 @@ fn curves_temperature_hdr_and_field_have_bounded_absolute_values() -> motion_cor
         .modifier(IntensityOverLifetime::new(ParticleCurve::linear(4.0, 4.0)))
         .build()?;
     assert_eq!(
-        system.sample(100.milliseconds())?[0].color,
+        system.sample(100.milliseconds().after_origin())?[0].color,
         [4.0, 4.0, 4.0, 1.0]
     );
     assert_eq!(
-        system.sample(200.milliseconds())?[0].color,
+        system.sample(200.milliseconds().after_origin())?[0].color,
         [4.0, 4.0, 4.0, 1.0]
     );
     Ok(())
@@ -688,8 +719,18 @@ fn flow_radial_forces_and_age_events_follow_authored_controls() -> motion_core::
         ..Default::default()
     };
     let mut replay = first;
-    flow.apply(&mut first, 0.25, 1.seconds(), &mut Random::from_key(1_u64))?;
-    flow.apply(&mut replay, 0.25, 1.seconds(), &mut Random::from_key(2_u64))?;
+    flow.apply(
+        &mut first,
+        0.25,
+        1.seconds().after_origin(),
+        &mut Random::from_key(1_u64),
+    )?;
+    flow.apply(
+        &mut replay,
+        0.25,
+        1.seconds().after_origin(),
+        &mut Random::from_key(2_u64),
+    )?;
     assert_eq!(first, replay);
     assert_ne!(first.velocity, [0.0; 2]);
 
@@ -725,18 +766,22 @@ fn flow_radial_forces_and_age_events_follow_authored_controls() -> motion_core::
             probability: 1.0,
         })
         .build()?;
-    let events = system.events(600.milliseconds())?;
+    let events = system.events(600.milliseconds().after_origin())?;
     let mut age_events = 0;
     for boundary in 118..=123 {
-        let events = system.events(((f64::from(boundary) + 0.1) / 240.0).seconds())?;
+        let events = system.events(
+            ((f64::from(boundary) + 0.1) / 240.0)
+                .seconds()
+                .after_origin(),
+        )?;
         age_events += events
             .iter()
             .filter(|event| event.kind == ParticleEventKind::AgeReached(0.5))
             .count();
     }
     assert_eq!(age_events, 1);
-    assert_eq!(system.sample(600.milliseconds())?.len(), 2);
-    assert_eq!(events, system.events(600.milliseconds())?);
+    assert_eq!(system.sample(600.milliseconds().after_origin())?.len(), 2);
+    assert_eq!(events, system.events(600.milliseconds().after_origin())?);
     Ok(())
 }
 
@@ -786,9 +831,13 @@ fn population_forces_contacts_and_recipe_catalog_are_bounded_and_seekable() -> m
         options.density = 0.1;
         options.logo = Some(colored_tree()?);
         let system = preset.simulation(options)?.build()?;
-        let first = system.sample(500.milliseconds())?;
-        let _later = system.sample(1500.milliseconds())?;
-        assert_eq!(&*first, &*system.sample(500.milliseconds())?, "{preset:?}");
+        let first = system.sample(500.milliseconds().after_origin())?;
+        let _later = system.sample(1500.milliseconds().after_origin())?;
+        assert_eq!(
+            &*first,
+            &*system.sample(500.milliseconds().after_origin())?,
+            "{preset:?}"
+        );
         assert!(!first.is_empty(), "{preset:?}");
     }
     Ok(())
@@ -821,7 +870,7 @@ fn mixed_size_atlas_pads_cells_and_builds_a_sheet_style() -> motion_core::Result
         .build()?;
     let cache = motion_core::SceneCache::default();
     let context = motion_core::SceneContext::new(
-        100.milliseconds(),
+        100.milliseconds().after_origin(),
         motion_core::FrameRate::from(30),
         motion_core::Size::new(32.0, 32.0),
         &cache,
@@ -845,13 +894,13 @@ fn emitter_paint_colors_births_without_changing_positions() -> motion_core::Resu
     let mut second = Vec::new();
     plain.emit(
         1,
-        10.milliseconds(),
+        10.milliseconds().after_origin(),
         &mut Random::from_key(3_u64),
         &mut first,
     )?;
     painted.emit(
         1,
-        10.milliseconds(),
+        10.milliseconds().after_origin(),
         &mut Random::from_key(3_u64),
         &mut second,
     )?;
@@ -930,7 +979,7 @@ fn group_modifiers_are_identical_for_any_worker_count() -> motion_core::Result {
             ..Boids::default()
         })
         .build()?;
-    let expected = system.sample(250.milliseconds())?;
+    let expected = system.sample(250.milliseconds().after_origin())?;
     assert!(expected.len() >= 128);
     for workers in [2, 3, 8] {
         assert_eq!(
@@ -940,7 +989,7 @@ fn group_modifiers_are_identical_for_any_worker_count() -> motion_core::Result {
                 .to_builder()
                 .workers(workers)
                 .build()?
-                .sample(250.milliseconds())?,
+                .sample(250.milliseconds().after_origin())?,
             "{workers} workers"
         );
     }
@@ -972,7 +1021,7 @@ fn ribbon_trails_subdivide_bends_more_finely_than_round_trails() -> motion_core:
             .build()?;
         let cache = motion_core::SceneCache::default();
         let context = motion_core::SceneContext::new(
-            600.milliseconds(),
+            600.milliseconds().after_origin(),
             motion_core::FrameRate::from(30),
             motion_core::Size::new(64.0, 64.0),
             &cache,

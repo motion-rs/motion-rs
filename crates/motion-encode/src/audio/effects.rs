@@ -1,7 +1,7 @@
 //! Bounded offline DSP, evaluated once before clip gain and panning.
 
 use super::pcm::invalid;
-use motion_core::{AudioEffect, Duration, Time, ValidationError};
+use motion_core::{AudioEffect, Duration, ValidationError};
 
 /// RBJ equalizer response.
 #[derive(Clone, Copy, Debug)]
@@ -133,7 +133,7 @@ impl AnimatedEq {
     }
 
     fn at(&self, frame: usize, rate: u32) -> Result<[f64; 5], ValidationError> {
-        let time = Time::from_ticks(
+        let time = Duration::from_ticks(
             (frame as u128 * motion_core::TICKS_PER_SECOND as u128 / u128::from(rate)) as i64,
         );
         let frequency = self.frequency.sample(time);
@@ -276,7 +276,7 @@ pub(crate) fn coefficients(kind: EqKind, frequency: f64, q: f64, gain: f64, rate
 }
 
 fn valid_time(time: Duration) -> bool {
-    time > Time::ZERO && time.as_seconds() <= 2.0
+    time > Duration::ZERO && time.as_seconds() <= 2.0
 }
 
 fn threshold(value: f64) -> bool {
@@ -338,12 +338,12 @@ impl AudioEffect for Effect {
                 wet,
                 tail,
             } => {
-                delay > Time::ZERO
+                delay > Duration::ZERO
                     && delay.as_seconds() <= 5.0
                     && feedback.is_finite()
                     && feedback.abs() < 0.99
                     && unit(wet)
-                    && tail >= Time::ZERO
+                    && tail >= Duration::ZERO
                     && tail.as_seconds() <= 30.0
             }
             Self::Reverb {
@@ -355,7 +355,7 @@ impl AudioEffect for Effect {
                 unit(room)
                     && unit(damping)
                     && unit(wet)
-                    && tail >= Time::ZERO
+                    && tail >= Duration::ZERO
                     && tail.as_seconds() <= 30.0
             }
         };
@@ -371,7 +371,7 @@ impl AudioEffect for Effect {
     fn tail(&self) -> Duration {
         match *self {
             Self::Delay { tail, .. } | Self::Reverb { tail, .. } => tail,
-            _ => Time::ZERO,
+            _ => Duration::ZERO,
         }
     }
 

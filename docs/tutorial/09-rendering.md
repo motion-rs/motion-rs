@@ -20,7 +20,7 @@ fn main() -> motion::Result {
     let mut output = FrameBuffer::new(size, RasterLimits::default())?;
     session.render(
         FrameRequest {
-            time: 250.milliseconds(),
+            time: 250.milliseconds().after_origin(),
             frame_rate: FrameRate::NTSC,
             duration: 2.seconds(),
             background: None,

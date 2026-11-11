@@ -32,10 +32,10 @@ pub(super) struct ReplayCursor {
 }
 
 pub(super) fn enabled(config: &Config) -> bool {
-    config.prewarm != Time::ZERO
+    config.prewarm != Duration::ZERO
         || config.loop_period.is_some()
         || config.time_scale != 1.0
-        || config.time_offset != Time::ZERO
+        || config.time_offset != Duration::ZERO
         || config.allow_reverse
         || config.workers != 1
         || !config.groups.is_empty()
@@ -454,11 +454,11 @@ pub(super) fn prepare(
     duration: Duration,
 ) -> Result<PreparedReplay, ValidationError> {
     let limits = config.limits;
-    if duration <= Time::ZERO
+    if duration <= Duration::ZERO
         || duration.as_seconds() > 3600.0
-        || config.prewarm < Time::ZERO
+        || config.prewarm < Duration::ZERO
         || config.prewarm.as_seconds() > 3600.0
-        || config.step <= Time::ZERO
+        || config.step <= Duration::ZERO
         || config.step > duration
         || config.interval == 0
         || limits.max_particles == 0
@@ -572,7 +572,7 @@ impl PreparedReplay {
             return Ok(None);
         }
         source += config.prewarm;
-        if source >= self.horizon {
+        if source >= self.horizon.after_origin() {
             return Ok(None);
         }
         Ok(Some(source))

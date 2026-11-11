@@ -72,7 +72,7 @@ pub fn comparison_frames(directory: &std::path::Path, options: &RenderOptions) -
                     .build()?;
                 let frame = render_still(
                     &timeline,
-                    time,
+                    time.after_origin(),
                     &options
                         .clone()
                         .size(PixelSize::new(320, 180))

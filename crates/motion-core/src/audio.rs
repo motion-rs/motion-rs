@@ -1,5 +1,5 @@
 //! Stateless audio sources and immutable timeline occurrence metadata.
-use crate::{Duration, Time, ValidationError};
+use crate::{Duration, ValidationError};
 use std::sync::Arc;
 
 mod clip;
@@ -20,7 +20,7 @@ pub trait AudioEffect: Send + Sync + std::fmt::Debug {
 
     /// Extra silent input needed to render a bounded decay tail.
     fn tail(&self) -> Duration {
-        Time::ZERO
+        Duration::ZERO
     }
 
     /// Processes complete interleaved frames from a zero initial state.
@@ -76,8 +76,8 @@ impl Master {
         Self {
             limiter: Some(Limiter {
                 ceiling_db: -1.0,
-                lookahead: Time::from_ticks(crate::TICKS_PER_SECOND / 200),
-                release: Time::from_ticks(crate::TICKS_PER_SECOND / 10),
+                lookahead: Duration::from_ticks(crate::TICKS_PER_SECOND / 200),
+                release: Duration::from_ticks(crate::TICKS_PER_SECOND / 10),
             }),
             ..Self::default()
         }
@@ -91,9 +91,9 @@ impl Master {
         if self.limiter.is_some_and(|limit| {
             !limit.ceiling_db.is_finite()
                 || !(-24.0..=0.0).contains(&limit.ceiling_db)
-                || limit.lookahead < Time::ZERO
+                || limit.lookahead < Duration::ZERO
                 || limit.lookahead.as_seconds() > 0.02
-                || limit.release <= Time::ZERO
+                || limit.release <= Duration::ZERO
                 || limit.release.as_seconds() > 2.0
         }) {
             return Err(invalid("limiter", "Invalid ceiling, lookahead or release"));
@@ -123,9 +123,9 @@ pub struct Duck {
     pub depth_db: f64,
     /// Compression ratio above the threshold, in 1..=100; reduction is capped by `depth_db`.
     pub ratio: f64,
-    /// Time to reach a deeper reduction, in 0..=5 seconds.
+    /// Duration to reach a deeper reduction, in 0..=5 seconds.
     pub attack: Duration,
-    /// Time to recover after the trigger falls, in 0..=10 seconds.
+    /// Duration to recover after the trigger falls, in 0..=10 seconds.
     pub release: Duration,
     /// Interval by which ducking anticipates the trigger, in 0..=500 milliseconds.
     pub lookahead: Duration,
@@ -137,9 +137,9 @@ impl Default for Duck {
             threshold_db: -45.0,
             depth_db: 12.0,
             ratio: 100.0,
-            attack: Time::from_ticks(crate::TICKS_PER_SECOND / 1000 * 80),
-            release: Time::from_ticks(crate::TICKS_PER_SECOND / 1000 * 400),
-            lookahead: Time::from_ticks(crate::TICKS_PER_SECOND / 100),
+            attack: Duration::from_ticks(crate::TICKS_PER_SECOND / 1000 * 80),
+            release: Duration::from_ticks(crate::TICKS_PER_SECOND / 1000 * 400),
+            lookahead: Duration::from_ticks(crate::TICKS_PER_SECOND / 100),
         }
     }
 }
@@ -176,7 +176,7 @@ impl Duck {
     /// Checks finite bounded parameters.
     pub fn validate(self) -> Result<(), ValidationError> {
         let seconds = |time: Duration, max: f64| {
-            time >= Time::ZERO && time.as_seconds().is_finite() && time.as_seconds() <= max
+            time >= Duration::ZERO && time.as_seconds().is_finite() && time.as_seconds() <= max
         };
         if !self.threshold_db.is_finite()
             || !(-96.0..=0.0).contains(&self.threshold_db)
@@ -311,8 +311,8 @@ impl<Source: AudioSource + ?Sized> AudioSource for Arc<Source> {
 
 /// Converts nonnegative ticks to the nearest audio frame, with half ties upward.
 /// Negative times fail; a zero sampling rate produces zero frames.
-pub fn frames(time: Time, rate: u32) -> Result<u64, ValidationError> {
-    if time < Time::ZERO {
+pub fn frames(time: Duration, rate: u32) -> Result<u64, ValidationError> {
+    if time < Duration::ZERO {
         return Err(invalid("time", "Audio time must be nonnegative"));
     }
     Ok(
@@ -323,8 +323,8 @@ pub fn frames(time: Time, rate: u32) -> Result<u64, ValidationError> {
 
 /// Converts a nonnegative duration to the smallest covering number of audio frames.
 /// Negative durations fail; integer arithmetic avoids floating-point endpoint drift.
-pub fn ceil_frames(time: Time, rate: u32) -> Result<u64, ValidationError> {
-    if time < Time::ZERO {
+pub fn ceil_frames(time: Duration, rate: u32) -> Result<u64, ValidationError> {
+    if time < Duration::ZERO {
         return Err(invalid("duration", "Audio duration must be nonnegative"));
     }
     Ok((u128::from(time.ticks() as u64) * u128::from(rate))

@@ -4,7 +4,7 @@
 //! use motion_content::particles::presets::{Preset, PresetOptions};
 //! use motion_core::{Rect, TimeLiteral};
 //! let sparks = Preset::Sparks.simulation(PresetOptions::new(7, 2.seconds(), Rect::new(0.0, 0.0, 320.0, 180.0)))?.build()?;
-//! assert!(!sparks.sample(100.milliseconds())?.is_empty());
+//! assert!(!sparks.sample(100.milliseconds().after_origin())?.is_empty());
 //! # Ok::<(), motion_core::Error>(())
 //! ```
 
@@ -119,7 +119,7 @@ impl Preset {
         options: PresetOptions,
     ) -> Result<ParticleSimulationBuilder, ValidationError> {
         motion_core::drawing::validate_rect(options.bounds, "particles.preset", "bounds")?;
-        if options.duration <= Time::ZERO
+        if options.duration <= Duration::ZERO
             || options.duration.as_seconds() > 3600.0
             || options.bounds.width() <= 0.0
             || options.bounds.height() <= 0.0
@@ -152,7 +152,7 @@ impl Preset {
         let speed = options.speed;
         let count = |amount: f64| (amount * options.density).ceil() as usize;
         let trail = ParticleStyle::Trails {
-            length: Time::from_seconds(0.12),
+            length: Duration::from_seconds(0.12),
             width: 2.0,
         }
         .trails(TrailOptions {
@@ -169,7 +169,7 @@ impl Preset {
             Self::Sparks => simulation
                 .emitter(
                     BurstEmitter::new(Time::ZERO, count(140.0), center)
-                        .lifetime(Time::from_seconds(1.8))
+                        .lifetime(Duration::from_seconds(1.8))
                         .speed(100.0 * speed),
                 )
                 .modifier(Gravity::new(Vector2::new(0.0, 95.0 * speed)))
@@ -182,7 +182,7 @@ impl Preset {
                         .rate(90.0 * options.density)
                         .speed(12.0)
                         .velocity(Vector2::new(0.0, -24.0 * speed))
-                        .lifetime(Time::from_seconds(3.0)),
+                        .lifetime(Duration::from_seconds(3.0)),
                 )
                 .modifier(CurlNoise {
                     frequency: 0.03,
@@ -191,14 +191,14 @@ impl Preset {
                     phase_speed: 1.0,
                 })
                 .modifier(Temperature::new(ParticleCurve::linear(4200.0, 1100.0)))
-                .prewarm(Time::from_seconds(1.0))
+                .prewarm(Duration::from_seconds(1.0))
                 .style(ParticleStyle::GlowDots { radius: 1.8 }),
             Self::Dust | Self::Motes => simulation
                 .emitter(
                     RectEmitter::new(bounds)
                         .rate(35.0 * options.density)
                         .speed(3.0 * speed)
-                        .lifetime(Time::from_seconds(5.0))
+                        .lifetime(Duration::from_seconds(5.0))
                         .depth_range(-2.0, 2.0)
                         .color([0.45, 0.65, 0.75, 0.75]),
                 )
@@ -206,7 +206,7 @@ impl Preset {
                     seed: options.seed,
                     strength: 3.0 * speed,
                 })
-                .prewarm(Time::from_seconds(1.5))
+                .prewarm(Duration::from_seconds(1.5))
                 .style(
                     ParticleStyle::Bokeh {
                         radius: if self == Self::Dust { 1.0 } else { 2.0 },
@@ -234,7 +234,7 @@ impl Preset {
                                     160.0 * speed
                                 },
                             ))
-                            .lifetime(Time::from_seconds(4.0))
+                            .lifetime(Duration::from_seconds(4.0))
                             .depth_range(depth, depth)
                             .color([0.65, 0.85, 1.0, 0.8]),
                     );
@@ -257,7 +257,7 @@ impl Preset {
                                 parent: 0.0,
                                 stage: 1.0,
                                 burst: BurstEmitter::new(Time::ZERO, 4, Point::ORIGIN)
-                                    .lifetime(Time::from_seconds(0.2))
+                                    .lifetime(Duration::from_seconds(0.2))
                                     .speed(20.0),
                             }),
                             inherit: Inherit::Color,
@@ -273,7 +273,7 @@ impl Preset {
                     )
                 } else {
                     simulation
-                        .prewarm(Time::from_seconds(1.0))
+                        .prewarm(Duration::from_seconds(1.0))
                         .style(ParticleStyle::Dots { radius: 1.8 }.parallax([8.0, 0.0]))
                 }
             }
@@ -295,7 +295,7 @@ impl Preset {
                             .rate(if smoke { 24.0 } else { 70.0 } * options.density)
                             .speed(8.0)
                             .velocity(Vector2::new(0.0, -20.0 * speed))
-                            .lifetime(Time::from_seconds(if smoke { 3.0 } else { 1.0 })),
+                            .lifetime(Duration::from_seconds(if smoke { 3.0 } else { 1.0 })),
                     )
                     .modifier(CurlNoise {
                         frequency: 0.025,
@@ -348,7 +348,7 @@ impl Preset {
                     RectEmitter::new(top)
                         .rate(60.0 * options.density)
                         .speed(25.0 * speed)
-                        .lifetime(Time::from_seconds(4.0))
+                        .lifetime(Duration::from_seconds(4.0))
                         .palette(Arc::from([
                             [0.8, 0.1, 0.2, 1.0],
                             [0.05, 0.7, 0.3, 1.0],
@@ -369,7 +369,7 @@ impl Preset {
             Self::Fireworks => simulation
                 .emitter(
                     BurstEmitter::new(Time::ZERO, 1, Point::new(center.x, bounds.bottom - 5.0))
-                        .lifetime(Time::from_seconds(0.8))
+                        .lifetime(Duration::from_seconds(0.8))
                         .speed(0.0)
                         .velocity(Vector2::new(0.0, -160.0 * speed)),
                 )
@@ -380,7 +380,7 @@ impl Preset {
                         parent: 0.0,
                         stage: 1.0,
                         burst: BurstEmitter::new(Time::ZERO, count(70.0), Point::ORIGIN)
-                            .lifetime(Time::from_seconds(0.7))
+                            .lifetime(Duration::from_seconds(0.7))
                             .speed(80.0 * speed),
                     }),
                     inherit: Inherit::Position,
@@ -392,7 +392,7 @@ impl Preset {
                         parent: 1.0,
                         stage: 2.0,
                         burst: BurstEmitter::new(Time::ZERO, 2, Point::ORIGIN)
-                            .lifetime(Time::from_seconds(0.25))
+                            .lifetime(Duration::from_seconds(0.25))
                             .speed(22.0),
                     }),
                     inherit: Inherit::Position,
@@ -405,7 +405,7 @@ impl Preset {
                     RectEmitter::new(bounds)
                         .rate(10.0 * options.density)
                         .speed(2.0 * speed)
-                        .lifetime(Time::from_seconds(5.0))
+                        .lifetime(Duration::from_seconds(5.0))
                         .color([1.0, 1.0, 0.1, 1.0]),
                 )
                 .modifier(Drift {

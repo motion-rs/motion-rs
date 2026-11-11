@@ -29,7 +29,7 @@ fn main() -> motion::Result {
             .push(first.with_duration(2.seconds()))
             .push(second.with_duration(1.seconds()))
     }).build()?;
-    render_still(&timeline, 2500.milliseconds(), &RenderOptions::default())?
+    render_still(&timeline, 2500.milliseconds().after_origin(), &RenderOptions::default())?
         .save_png("tutorial-timeline.png")
 }
 ```

@@ -2,7 +2,7 @@
 //! scene preflight of the first, middle and last frames.
 
 use super::{Project, invalid};
-use crate::{FrameRate, Result, Size, Time};
+use crate::{FrameRate, Result, Size};
 use serde_json::Value;
 use std::path::PathBuf;
 
@@ -18,7 +18,7 @@ pub struct ValidationReport {
     /// Number of output frames.
     pub frames: u64,
     /// Film duration.
-    pub duration: Time,
+    pub duration: motion_core::Duration,
     /// Frame indices whose scenes were built and preflighted.
     pub checked_frames: Vec<u32>,
     /// Files the film refers to, all present; empty for code timelines.

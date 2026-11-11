@@ -91,10 +91,18 @@ impl Rig {
 pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
     let duration = i64::from(parameters.seconds).seconds();
     let seed = parameters.seed as u32;
-    let output = audio_timeline(&soundtrack(duration, true, seed)?, duration).build()?;
+    let output = audio_timeline(
+        &soundtrack(duration.after_origin().since_origin(), true, seed)?,
+        duration.after_origin().since_origin(),
+    )
+    .build()?;
     let mix = MixedAudio::from_timeline(&output, RATE)?;
     let dry = MixedAudio::from_timeline(
-        &audio_timeline(&soundtrack(duration, false, seed)?, duration).build()?,
+        &audio_timeline(
+            &soundtrack(duration.after_origin().since_origin(), false, seed)?,
+            duration.after_origin().since_origin(),
+        )
+        .build()?,
         RATE,
     )?;
     let analysis = AudioAnalysis::from_source(&mix, duration)?;
@@ -560,14 +568,14 @@ mod tests {
         for size in [PixelSize::new(960, 540), PixelSize::new(1920, 1080)] {
             let options = options.clone().size(size);
             for seconds in [0.0, 1.375, 3.0, 7.8] {
-                let first = render_still(&film, seconds.seconds(), &options)?;
+                let first = render_still(&film, seconds.seconds().after_origin(), &options)?;
                 render_still(&film, Time::ZERO, &options)?;
-                let replay = render_still(&film, seconds.seconds(), &options)?;
+                let replay = render_still(&film, seconds.seconds().after_origin(), &options)?;
                 assert_eq!(first.bytes(), replay.bytes());
                 #[cfg(feature = "gpu")]
                 {
                     let gpu_options = options.clone().backend(BackendPreference::gpu());
-                    let gpu = render_still(&film, seconds.seconds(), &gpu_options)?;
+                    let gpu = render_still(&film, seconds.seconds().after_origin(), &gpu_options)?;
                     let difference = first
                         .bytes()
                         .iter()
@@ -577,7 +585,8 @@ mod tests {
                         .unwrap_or(0);
                     assert!(difference <= 2, "CPU/GPU difference: {difference}");
                     render_still(&film, Time::ZERO, &gpu_options)?;
-                    let replay = render_still(&film, seconds.seconds(), &gpu_options)?;
+                    let replay =
+                        render_still(&film, seconds.seconds().after_origin(), &gpu_options)?;
                     assert_eq!(gpu.bytes(), replay.bytes());
                 }
             }

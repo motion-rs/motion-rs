@@ -30,7 +30,7 @@ pub(super) fn video_benchmark(
                         Color::BLACK,
                     )
                 })
-                .with_duration(Time::from_frame(i64::from(frames), FrameRate::from(30))),
+                .with_duration(Duration::from_frame(i64::from(frames), FrameRate::from(30))),
             )
         })?
         .build()?;

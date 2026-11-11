@@ -53,7 +53,7 @@ pub const FORMULA_BACKEND_VERSION: &str = "typst-0.15.1/motion-v1";
 
 #[cfg(test)]
 fn failure(message: impl Into<String>) -> motion_core::Error {
-    motion_core::Error::Formula(message.into())
+    motion_core::Error::formula(message)
 }
 
 pub(super) struct Input {

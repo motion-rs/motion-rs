@@ -24,9 +24,12 @@ fn frame(
 fn fractional_frame_rate_validation_preserves_audio_duration() -> Result {
     let duration = motion_core::Time::from_seconds(1.0);
     let clip = motion_core::AudioClip::source(crate::PcmBuffer::new(48_000, 1, vec![0.0])?)
-        .duration(duration);
-    let options =
-        NativeOptions::default().audio_mix(crate::MixedAudio::new(&[clip], 48_000, duration)?)?;
+        .duration(duration.since_origin());
+    let options = NativeOptions::default().audio_mix(crate::MixedAudio::new(
+        &[clip],
+        48_000,
+        duration.since_origin(),
+    )?)?;
     let rate = motion_core::FrameRate::NTSC;
     let frames =
         (u64::from(rate.numerator()) * audio::MAX_SECONDS / u64::from(rate.denominator())) as u32;
@@ -304,16 +307,16 @@ fn audio_encoder_preserves_frame_count_and_encodes_delayed_padded_stereo_aac() -
     let source = audio_fixture(directory.path())?;
     let clip = crate::audio::resolve_clip(
         &motion_core::AudioClip::file(source)
-            .duration(motion_core::Time::from_seconds(0.5))
+            .duration(motion_core::Duration::from_seconds(0.5))
             .start(motion_core::Time::from_seconds(0.25))
             .volume(0.5)
-            .fade_in(motion_core::Time::from_seconds(0.05))
-            .fade_out(motion_core::Time::from_seconds(0.1)),
+            .fade_in(motion_core::Duration::from_seconds(0.05))
+            .fade_out(motion_core::Duration::from_seconds(0.1)),
     )?;
     let options = NativeOptions::default().audio_mix(crate::MixedAudio::new(
         &[clip],
         48_000,
-        motion_core::Time::from_seconds(1.0),
+        motion_core::Duration::from_seconds(1.0),
     )?)?;
     let destination = directory.path().join("output.mp4");
     let mut encoder = Encoder::new(&destination, (64, 64), 24, 24, &options)?;
@@ -381,7 +384,7 @@ fn pcm_delivery_rates_and_container_metadata_round_trip() -> Result {
             .chapters
             .push(motion_core::audio::AudioChapter {
                 start: motion_core::Time::ZERO,
-                end: 1.seconds(),
+                end: 1.seconds().after_origin(),
                 title: "Opening".into(),
             });
         let destination = directory.path().join(format!("pcm-{rate}.mp4"));
@@ -428,14 +431,14 @@ fn audio_cancellation_preserves_existing_destination() -> Result {
     std::fs::write(&destination, b"existing")?;
     let clip = crate::audio::resolve_clip(
         &motion_core::AudioClip::file(audio_fixture(directory.path())?)
-            .duration(motion_core::Time::from_seconds(1.0)),
+            .duration(motion_core::Duration::from_seconds(1.0)),
     )?;
     let options = NativeOptions::default()
         .overwrite(true)
         .audio_mix(crate::MixedAudio::new(
             &[clip],
             48_000,
-            motion_core::Time::from_seconds(1.0),
+            motion_core::Duration::from_seconds(1.0),
         )?)?;
     let mut encoder = Encoder::new(&destination, (64, 64), 24, 24, &options)?;
     for _ in 0..24 {

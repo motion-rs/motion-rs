@@ -38,7 +38,7 @@ impl TimelineBuilder {
             rate,
             background: None,
             tracks: Arc::new(Vec::new()),
-            track_end: Time::ZERO,
+            track_end: Duration::ZERO,
             adjustments: Arc::new(Vec::new()),
             soundtrack: Soundtrack::default(),
             nested_audio: Arc::default(),
@@ -59,7 +59,7 @@ impl TimelineBuilder {
                 .iter()
                 .map(|track| track.duration)
                 .max()
-                .unwrap_or(Time::ZERO),
+                .unwrap_or(Duration::ZERO),
             adjustments: Arc::new(
                 timeline
                     .diagnostics
@@ -198,18 +198,18 @@ impl TimelineBuilder {
 
     /// Overrides total duration on the nearest frame grid; zero is intentionally empty.
     pub fn try_duration(mut self, duration: Duration) -> crate::Result<Self> {
-        if duration < Time::ZERO {
+        if duration < Duration::ZERO {
             return Err(invalid("Timeline duration must be nonnegative"));
         }
-        let (aligned, frame) = align(duration, self.rate)?;
-        if duration > Time::ZERO && aligned == Time::ZERO {
+        let (aligned, frame) = align(duration.after_origin(), self.rate)?;
+        if duration > Duration::ZERO && aligned == Time::ZERO {
             return Err(invalid(
                 "Timeline duration becomes empty after frame alignment",
             ));
         }
         let adjustments = Arc::make_mut(&mut self.adjustments);
         adjustments.retain(|adjustment| adjustment.edge != BoundaryEdge::Duration);
-        if duration != aligned {
+        if duration != aligned.since_origin() {
             if adjustments.len() >= MAX_ADJUSTMENTS {
                 return Err(invalid("Timeline exceeds adjustment allowance"));
             }
@@ -217,12 +217,12 @@ impl TimelineBuilder {
                 track: None,
                 clip: None,
                 edge: BoundaryEdge::Duration,
-                requested: duration,
+                requested: duration.after_origin(),
                 aligned,
                 frame,
             });
         }
-        self.duration = Some(aligned);
+        self.duration = Some(aligned.since_origin());
         Ok(self)
     }
 
@@ -245,7 +245,7 @@ impl TimelineBuilder {
             Ok(end) => end,
             Err(error) => {
                 errors.record(error);
-                Time::ZERO
+                Duration::ZERO
             }
         };
         if !errors.is_empty() {

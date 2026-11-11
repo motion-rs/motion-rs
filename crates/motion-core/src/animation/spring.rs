@@ -1,7 +1,7 @@
 //! Closed-form damped spring response and conservative tick-based settling time.
 
 use super::Animation;
-use crate::{Duration, Interpolate, TICKS_PER_SECOND, Time};
+use crate::{Duration, Interpolate, TICKS_PER_SECOND};
 
 /// A finite physical spring between arbitrary interpolatable values.
 ///
@@ -93,8 +93,8 @@ impl Default for Spring<f64> {
 }
 
 impl<Value: Interpolate + Send + Sync> Animation<Value> for Spring<Value> {
-    fn sample(&self, time: Time) -> Value {
-        if time <= Time::ZERO {
+    fn sample(&self, time: Duration) -> Value {
+        if time <= Duration::ZERO {
             return self.from.clone();
         }
         if time >= self.response.duration {
@@ -327,7 +327,7 @@ fn settling_duration(rate: f64, slope: f64, threshold: f64) -> Duration {
         ticks.is_finite() && ticks < -(i64::MIN as f64),
         "spring settling duration exceeds the signed tick range"
     );
-    Time::from_ticks(ticks as i64)
+    Duration::from_ticks(ticks as i64)
 }
 
 #[cfg(test)]
@@ -382,7 +382,7 @@ mod tests {
                     ..Parameters::default()
                 };
                 let response = Response::new(parameters);
-                assert!(response.duration > Time::ZERO);
+                assert!(response.duration > Duration::ZERO);
                 for factor in [1.0, 1.1, 2.0, 10.0] {
                     let seconds = response.duration.as_seconds() * factor;
                     let error = (1.0 - response.progress(seconds)).abs();
@@ -401,7 +401,7 @@ mod tests {
 
     #[test]
     fn initial_velocity_and_mass_scaling_have_physical_units() {
-        let tick = Time::from_ticks(1);
+        let tick = Duration::from_ticks(1);
         for velocity in [-3.0, 4.0] {
             let spring = Spring::new(0.0_f64, 1.0).initial_velocity(velocity);
             assert!((spring.sample(tick) / tick.as_seconds() - velocity).abs() < 1e-6);
@@ -439,16 +439,16 @@ mod tests {
     fn default_threshold_and_random_order_sampling_pin_exact_endpoints() {
         let spring = Spring::default();
         let end = spring.duration().unwrap();
-        assert!(end > Time::ZERO);
-        assert_eq!(spring.sample(Time::from_ticks(i64::MIN)), 0.0);
-        assert_eq!(spring.sample(Time::ZERO), 0.0);
+        assert!(end > Duration::ZERO);
+        assert_eq!(spring.sample(Duration::from_ticks(i64::MIN)), 0.0);
+        assert_eq!(spring.sample(Duration::ZERO), 0.0);
         assert_eq!(spring.sample(end), 1.0);
-        assert_eq!(spring.sample(Time::from_ticks(i64::MAX)), 1.0);
+        assert_eq!(spring.sample(Duration::from_ticks(i64::MAX)), 1.0);
         let expected = spring.sample(300.milliseconds());
         assert!(spring.sample(500.milliseconds()) > 1.0);
         for time in [
             end,
-            Time::ZERO,
+            Duration::ZERO,
             300.milliseconds(),
             100.milliseconds(),
             300.milliseconds(),

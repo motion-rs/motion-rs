@@ -9,7 +9,7 @@ use std::sync::Arc;
 pub struct AudioClip {
     source: Arc<dyn AudioSource>,
     start: Time,
-    offset: Time,
+    offset: Duration,
     duration: Option<Duration>,
     volume: f64,
     fade_in: Duration,
@@ -38,7 +38,7 @@ pub struct AudioClipParameters<'a> {
     /// Destination start on the local timeline.
     pub start: Time,
     /// First source sample time.
-    pub offset: Time,
+    pub offset: Duration,
     /// Authored duration override, absent when natural file duration is unresolved.
     pub duration: Option<Duration>,
     /// Optional containing-scene crop.
@@ -130,11 +130,11 @@ impl AudioClip {
         Self {
             source: Arc::new(source),
             start: Time::ZERO,
-            offset: Time::ZERO,
+            offset: Duration::ZERO,
             duration: None,
             volume: 1.0,
-            fade_in: Time::ZERO,
-            fade_out: Time::ZERO,
+            fade_in: Duration::ZERO,
+            fade_out: Duration::ZERO,
             pan: 0.0,
             envelope: None,
             limit: None,
@@ -154,7 +154,7 @@ impl AudioClip {
     }
 
     /// Sets source offset, rounded once to the nearest source-rate frame.
-    pub fn offset(mut self, offset: Time) -> Self {
+    pub fn offset(mut self, offset: Duration) -> Self {
         self.offset = offset;
         self
     }
@@ -276,7 +276,7 @@ impl AudioClip {
     }
 
     /// Selects a positive source-time interval; natural duration is not required.
-    pub fn trim(self, start: Time, end: Time) -> Self {
+    pub fn trim(self, start: Duration, end: Duration) -> Self {
         self.offset(start).duration(end - start)
     }
 
@@ -289,11 +289,11 @@ impl AudioClip {
                     duration
                         .ticks()
                         .checked_sub(self.offset.ticks())
-                        .map(Time::from_ticks)
+                        .map(Duration::from_ticks)
                 })
             })
             .ok_or_else(|| invalid("duration", "Unbounded audio requires an explicit duration"))?;
-        if duration <= Time::ZERO {
+        if duration <= Duration::ZERO {
             return Err(invalid(
                 "duration",
                 "Clip source duration must be positive before effect tails",
@@ -320,10 +320,10 @@ impl AudioClip {
         for effect in self.effects.iter() {
             effect.validate(self.source.sample_rate())?;
             let tail = effect.tail();
-            if tail < Time::ZERO || tail.as_seconds() > 30.0 {
+            if tail < Duration::ZERO || tail.as_seconds() > 30.0 {
                 return Err(invalid("tail", "Effect tail must be in 0..=30 seconds"));
             }
-            duration = Time::from_ticks(
+            duration = Duration::from_ticks(
                 duration
                     .ticks()
                     .checked_add(tail.ticks())
@@ -331,8 +331,8 @@ impl AudioClip {
             );
         }
         if self.start < Time::ZERO
-            || self.offset < Time::ZERO
-            || duration <= Time::ZERO
+            || self.offset < Duration::ZERO
+            || duration <= Duration::ZERO
             || duration.as_seconds() > 86400.0
             || self
                 .start
@@ -349,8 +349,8 @@ impl AudioClip {
                 .bus
                 .as_ref()
                 .is_some_and(|name| name.is_empty() || name.len() > 128)
-            || self.fade_in < Time::ZERO
-            || self.fade_out < Time::ZERO
+            || self.fade_in < Duration::ZERO
+            || self.fade_out < Duration::ZERO
             || self.fade_in > duration
             || self.fade_out > duration
             || !(1..=192_000).contains(&self.source.sample_rate())
@@ -374,13 +374,13 @@ impl AudioClip {
     /// Source offsets and fade positions remain anchored to the original clip.
     pub fn relocated(
         &self,
-        offset: Time,
+        offset: Duration,
         window: Duration,
     ) -> Result<Option<Self>, ValidationError> {
         if !self.unresolved_file() {
             self.resolved_duration()?;
         }
-        if self.start >= window {
+        if self.start.since_origin() >= window {
             return Ok(None);
         }
         let mut clip = self.clone();
@@ -396,7 +396,7 @@ impl AudioClip {
             }
         }
         clip.ducking = Arc::new(ducking);
-        let remaining = window - clip.start;
+        let remaining = window - clip.start.since_origin();
         clip.limit = Some(clip.limit.map_or(remaining, |limit| limit.min(remaining)));
         clip.start = Time::from_ticks(
             offset
@@ -420,7 +420,7 @@ struct SpatialPan {
 }
 
 impl crate::Animation<f64> for SpatialPan {
-    fn sample(&self, time: Time) -> f64 {
+    fn sample(&self, time: Duration) -> f64 {
         let point = self.position.sample(time);
         if !point.x.is_finite() || !point.y.is_finite() {
             return f64::NAN;
@@ -442,7 +442,7 @@ struct SpatialGain {
 }
 
 impl crate::Animation<f64> for SpatialGain {
-    fn sample(&self, time: Time) -> f64 {
+    fn sample(&self, time: Duration) -> f64 {
         let point = self.position.sample(time);
         if !point.x.is_finite() || !point.y.is_finite() {
             return f64::NAN;

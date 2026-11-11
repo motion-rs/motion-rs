@@ -339,9 +339,9 @@ mod tests {
         })?;
         for page in 0..PAGE_COUNT {
             let moment = |local: f64| ((page as f64 + local) * 20.0 / PAGE_COUNT as f64).seconds();
-            let early = render_still(&timeline, moment(0.15), &options)?;
-            let later = render_still(&timeline, moment(0.8), &options)?;
-            let replay = render_still(&timeline, moment(0.15), &options)?;
+            let early = render_still(&timeline, moment(0.15).after_origin(), &options)?;
+            let later = render_still(&timeline, moment(0.8).after_origin(), &options)?;
+            let replay = render_still(&timeline, moment(0.15).after_origin(), &options)?;
             assert_eq!(early.bytes(), replay.bytes(), "page {page} replay");
             let changed = (46..136)
                 .flat_map(|vertical| {
@@ -380,7 +380,7 @@ mod tests {
                     .background(Color::from_hex(background))
                     .track(|track| track.scene(1.seconds(), move |_| node.clone()))
                     .build()?;
-                render_still(&timeline, 0.5.seconds(), &options)
+                render_still(&timeline, 0.5.seconds().after_origin(), &options)
             };
             let expected = render(preset.node(path.clone(), NIB_WIDTH, preset_color(preset))?)?;
             let actual = render(preset_node(

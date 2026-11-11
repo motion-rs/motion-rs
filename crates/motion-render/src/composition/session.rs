@@ -46,7 +46,7 @@ pub struct FrameRequest<'a> {
     /// Positive exclusive timeline end, including shutter boundary handling.
     /// Frames must fit the session's u32 addressing; no frame-index quantization
     /// is applied to the supplied time itself.
-    pub duration: Time,
+    pub duration: motion_core::Duration,
     /// Per-request background, overriding the session options' background choice.
     /// None preserves transparency; opaque output formats may reject it.
     pub background: Option<Color>,
@@ -116,8 +116,8 @@ impl RenderSession {
         self.asset_diagnostics.clear();
         self.diagnostics = motion_core::RequestDiagnostics::default();
         if request.time < Time::ZERO
-            || request.time >= request.duration
-            || request.duration <= Time::ZERO
+            || request.time >= request.duration.after_origin()
+            || request.duration <= motion_core::Duration::ZERO
         {
             return Err(ValidationError::invalid(
                 "_frame",
@@ -126,7 +126,7 @@ impl RenderSession {
             )
             .into());
         }
-        let count = (request.duration - Time::from_ticks(1))
+        let count = (request.duration - motion_core::Duration::from_ticks(1))
             .checked_to_frame(request.frame_rate)
             .ok_or_else(|| {
                 ValidationError::invalid(
@@ -171,7 +171,7 @@ impl RenderSession {
             })?;
         let mut execution = FrameExecution {
             composition,
-            duration: request.duration,
+            duration: request.duration.after_origin(),
             time: Some(request.time),
             limits,
             session: self,

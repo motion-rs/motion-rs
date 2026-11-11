@@ -42,10 +42,7 @@ impl ExportJob {
             draft,
             audio,
             context,
-            motion_encode::Codec::H264 {
-                quality: draft.quality,
-                preset: motion_encode::EncoderPreset::Medium,
-            },
+            motion_encode::Codec::h264(draft.quality),
         )
     }
 
@@ -100,7 +97,7 @@ impl ExportJob {
                         let build = scene.definition.build_scene;
                         let source = motion_core::authoring::Scene::with_duration(
                             move |context: &motion_core::SceneContext<'_>| build(context),
-                            duration,
+                            duration.since_origin(),
                         );
                         Arc::new(
                             motion_core::Timeline::try_new(scene.definition.design_size, rate)?
@@ -137,7 +134,6 @@ impl ExportJob {
                         None
                     };
                     options.overwrite = draft.overwrite;
-                    options.codec = codec;
                     if matches!(
                         codec,
                         motion_encode::Codec::ProRes4444
@@ -147,6 +143,7 @@ impl ExportJob {
                     ) {
                         options.render.background = None;
                     }
+                    options.codec = codec;
                     if draft.range.0 < draft.range.1 {
                         options.range = Some(
                             motion_core::Time::from_frame(
@@ -297,11 +294,8 @@ impl ExportFormat {
 
     pub fn codec(self, quality: u8, rate: motion_core::FrameRate) -> motion_encode::Codec {
         match self {
-            Self::H264 => motion_encode::Codec::H264 {
-                quality,
-                preset: motion_encode::EncoderPreset::Medium,
-            },
-            Self::H265 => motion_encode::Codec::H265 { quality },
+            Self::H264 => motion_encode::Codec::h264(quality),
+            Self::H265 => motion_encode::Codec::h265(quality),
             Self::Vp9 => motion_encode::Codec::Vp9 {
                 quality,
                 alpha: true,

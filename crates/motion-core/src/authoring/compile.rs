@@ -492,7 +492,7 @@ mod deferred_content_tests {
     fn deferred_content_preserves_outer_placement_and_inherited_local_time() {
         let node = Node::deferred(Deferred)
             .translate(10.0, 0.0)
-            .with_scene_time(1.seconds());
+            .with_scene_time(1.seconds().after_origin());
         assert_eq!(
             node.measure(ValidationLimits::default()).unwrap(),
             Rect::new(10.0, 0.0, 13.0, 1.0)

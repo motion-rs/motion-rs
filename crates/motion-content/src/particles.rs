@@ -11,7 +11,7 @@
 //! use motion_content::particles::*;
 //! let cache = SceneCache::new(16);
 //! let context = SceneContext::new(
-//!     50.milliseconds(),
+//!     50.milliseconds().after_origin(),
 //!     FrameRate::from(30),
 //!     Size::new(16.0, 16.0),
 //!     &cache,
@@ -25,7 +25,7 @@
 //!         .style(ParticleStyle::Dots { radius: 2.0 })
 //!         .build()
 //! })?;
-//! assert_eq!(simulation.sample(50.milliseconds())?.len(), 4);
+//! assert_eq!(simulation.sample(50.milliseconds().after_origin())?.len(), 4);
 //! let frame = simulation
 //!     .try_render(&context)?
 //!     .compile(

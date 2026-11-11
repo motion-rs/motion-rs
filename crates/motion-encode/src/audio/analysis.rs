@@ -18,7 +18,7 @@
 
 use super::pcm::{MAX_SAMPLES, ceil_frames, invalid};
 use crate::PcmBuffer;
-use motion_core::{Animation, AudioSource, Duration, Time};
+use motion_core::{Animation, AudioSource, Duration};
 use rustfft::{FftPlanner, num_complex::Complex};
 use std::{
     collections::BTreeMap,
@@ -54,8 +54,8 @@ pub(crate) struct AnalysisTrace {
 pub struct AudioSignal(Arc<AnalysisTrace>);
 
 impl Animation<f64> for AudioSignal {
-    fn sample(&self, time: Time) -> f64 {
-        if time < Time::ZERO || time >= self.0.duration {
+    fn sample(&self, time: Duration) -> f64 {
+        if time < Duration::ZERO || time >= self.0.duration {
             return 0.0;
         }
         let frame = (time.ticks() as u128 * u128::from(self.0.sample_rate)

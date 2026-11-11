@@ -41,9 +41,9 @@ pub use partition::{CacheLimits, CachePartition, RenderCache};
 ///     assert_eq!(local.global_time(), time);
 ///     (local.sample(&tween), positions)
 /// };
-/// let (late, first) = evaluate(1500.milliseconds());
-/// let (early, second) = evaluate(500.milliseconds());
-/// let (again, third) = evaluate(1500.milliseconds());
+/// let (late, first) = evaluate(1500.milliseconds().after_origin());
+/// let (early, second) = evaluate(500.milliseconds().after_origin());
+/// let (again, third) = evaluate(1500.milliseconds().after_origin());
 /// assert_eq!((late, early, again), (100.0, 0.0, 100.0));
 /// assert!(Arc::ptr_eq(&first, &second) && Arc::ptr_eq(&first, &third));
 /// ```
@@ -142,7 +142,10 @@ impl<'a> SceneContext<'a> {
     ///
     /// Panics for negative duration. Sampling time is not clamped to the clip.
     pub fn with_clip_duration(mut self, duration: Duration) -> Self {
-        assert!(duration >= Time::ZERO, "clip duration must be nonnegative");
+        assert!(
+            duration >= Duration::ZERO,
+            "clip duration must be nonnegative"
+        );
         self.clip_duration = Some(duration);
         self
     }
@@ -152,7 +155,7 @@ impl<'a> SceneContext<'a> {
         mut self,
         duration: Duration,
     ) -> Result<Self, crate::ValidationError> {
-        if duration < Time::ZERO {
+        if duration < Duration::ZERO {
             return Err(crate::ValidationError::invalid(
                 "scene_context",
                 "clip_duration",
@@ -183,6 +186,11 @@ impl<'a> SceneContext<'a> {
         self.clip_duration
     }
 
+    /// Clip-local time as a duration since the clip start.
+    pub fn elapsed(&self) -> Duration {
+        self.time.since_origin()
+    }
+
     /// Clamped local progress; unconstrained scenes return zero.
     ///
     /// A zero-duration clip jumps from zero to one at local time zero.
@@ -197,7 +205,7 @@ impl<'a> SceneContext<'a> {
     /// differences allow queries across opposite signed tick extremes.
     pub fn progress_in(&self, start: Time, duration: Duration) -> f64 {
         assert!(
-            duration >= Time::ZERO,
+            duration >= Duration::ZERO,
             "interval duration must be nonnegative"
         );
         let elapsed = i128::from(self.time.ticks()) - i128::from(start.ticks());
@@ -211,7 +219,7 @@ impl<'a> SceneContext<'a> {
     }
 
     /// Eased local interval progress, with the same clamping as progress_in.
-    pub fn ease_in(&self, start: Duration, duration: Duration, easing: crate::Easing) -> f64 {
+    pub fn ease_in(&self, start: Time, duration: Duration, easing: crate::Easing) -> f64 {
         easing.apply(self.progress_in(start, duration))
     }
 
@@ -235,12 +243,12 @@ impl<'a> SceneContext<'a> {
 
     /// Converts a signed frame count directly to ticks without cumulative rounding.
     pub fn frames(&self, count: i64) -> Duration {
-        Time::from_frame(count, self.frame_rate)
+        Duration::from_frame(count, self.frame_rate)
     }
 
     /// Samples an animation using local, not global, time.
     pub fn sample<Value>(&self, animation: &(impl Animation<Value> + ?Sized)) -> Value {
-        animation.sample(self.time)
+        animation.sample(self.time.since_origin())
     }
 
     /// Subtracts an offset from local time, preserving global time and clip metadata.
@@ -327,7 +335,7 @@ impl<'a> SceneContext<'a> {
         build: impl FnOnce(&SceneContext<'a>) -> Node,
     ) -> Node {
         assert!(
-            duration >= Time::ZERO,
+            duration >= Duration::ZERO,
             "interval duration must be nonnegative"
         );
         let elapsed = i128::from(self.time.ticks()) - i128::from(start.ticks());
@@ -336,7 +344,9 @@ impl<'a> SceneContext<'a> {
         } else {
             build(&Self {
                 nested_scene: true,
-                ..self.shifted(start).with_clip_duration(duration)
+                ..self
+                    .shifted(start.since_origin())
+                    .with_clip_duration(duration)
             })
             .with_scene_time(Time::from_ticks(elapsed as i64))
         }
@@ -350,14 +360,14 @@ impl<'a> SceneContext<'a> {
     /// Panics for invalid child duration or unrepresentable shifted local ticks.
     /// Timeline children clip and contain their own design viewport;
     /// changing the child frame grid never quantizes the elapsed parent ticks.
-    pub fn embed(&self, scene: &dyn crate::authoring::Scene, offset: Duration) -> Node {
+    pub fn embed(&self, scene: &dyn crate::authoring::Scene, offset: Time) -> Node {
         match scene.duration() {
             Some(duration) => self.during(offset, duration, |context| scene.render(context)),
             None if self.time < offset => Node::empty(),
             None => scene.render(&Self {
                 clip_duration: None,
                 nested_scene: true,
-                ..self.shifted(offset)
+                ..self.shifted(offset.since_origin())
             }),
         }
     }

@@ -2,7 +2,7 @@
 
 use super::invalid;
 use crate::audio::{AudioBus, Master};
-use crate::{AudioClip, FrameRate, Time};
+use crate::{AudioClip, Duration, FrameRate};
 use std::sync::Arc;
 
 const MAX_BUSES: usize = 16;
@@ -61,8 +61,8 @@ impl Soundtrack {
 
     /// Frame-aligned end of `clip` including bus effect tails. Add-time checks
     /// and the final duration share this one definition.
-    pub(super) fn clip_end(&self, clip: &AudioClip, rate: FrameRate) -> crate::Result<Time> {
-        let mut end = clip.end()?;
+    pub(super) fn clip_end(&self, clip: &AudioClip, rate: FrameRate) -> crate::Result<Duration> {
+        let mut end = clip.end()?.since_origin();
         if let Some(bus) = self
             .buses
             .iter()
@@ -70,10 +70,10 @@ impl Soundtrack {
         {
             for effect in &bus.effects {
                 let tail = effect.tail();
-                if tail < Time::ZERO || tail.as_seconds() > 30.0 {
+                if tail < Duration::ZERO || tail.as_seconds() > 30.0 {
                     return Err(invalid("Bus effect tail requires 0..=30 seconds"));
                 }
-                end = Time::from_ticks(
+                end = Duration::from_ticks(
                     end.ticks()
                         .checked_add(tail.ticks())
                         .ok_or_else(|| invalid("Bus tail exceeds frame clock"))?,
@@ -88,8 +88,8 @@ impl Soundtrack {
 
     /// Latest frame-aligned end over clips whose length is known; unresolved
     /// files without a duration contribute nothing until they are resolved.
-    pub(super) fn end(&self, rate: FrameRate) -> crate::Result<Time> {
-        let mut end = Time::ZERO;
+    pub(super) fn end(&self, rate: FrameRate) -> crate::Result<Duration> {
+        let mut end = Duration::ZERO;
         for clip in self.clips.iter() {
             if clip.unresolved_file() && clip.parameters().duration.is_none() {
                 continue;
@@ -101,12 +101,12 @@ impl Soundtrack {
 }
 
 /// Smallest frame boundary at or after `end`.
-pub(super) fn ceil_to_frame(end: Time, rate: FrameRate) -> crate::Result<Time> {
+pub(super) fn ceil_to_frame(end: Duration, rate: FrameRate) -> crate::Result<Duration> {
     let frame = end.to_frame(rate);
-    let boundary = Time::checked_from_frame(frame, rate)
+    let boundary = Duration::checked_from_frame(frame, rate)
         .ok_or_else(|| invalid("Audio end exceeds frame clock"))?;
     if boundary < end {
-        Time::checked_from_frame(frame + 1, rate)
+        Duration::checked_from_frame(frame + 1, rate)
             .ok_or_else(|| invalid("Audio end exceeds frame clock"))
     } else {
         Ok(boundary)

@@ -6,7 +6,7 @@ use super::resample::resample;
 use super::{AudioClip, AudioSource, MAX_SAMPLES, ResampleQuality, ceil_frames, frames, invalid};
 #[cfg(not(feature = "audio"))]
 use crate::audio::resample_disabled::resample;
-use motion_core::{Duration, Time};
+use motion_core::Duration;
 use std::sync::Arc;
 
 #[derive(Clone, Debug)]
@@ -57,7 +57,7 @@ impl MixedAudio {
     /// Mixes only a selected timeline interval while preserving original fade/envelope clocks.
     pub fn from_window(
         timeline: &motion_core::Timeline,
-        range: std::ops::Range<Time>,
+        range: std::ops::Range<Duration>,
         rate: u32,
     ) -> motion_core::Result<Self> {
         Self::from_window_with(timeline, range, rate, ResampleQuality::default())
@@ -66,7 +66,7 @@ impl MixedAudio {
     /// Like [`Self::from_window`] with an explicit resampler.
     pub fn from_window_with(
         timeline: &motion_core::Timeline,
-        range: std::ops::Range<Time>,
+        range: std::ops::Range<Duration>,
         rate: u32,
         quality: ResampleQuality,
     ) -> motion_core::Result<Self> {
@@ -77,11 +77,11 @@ impl MixedAudio {
     pub(crate) fn from_resolved_window(
         timeline: &motion_core::Timeline,
         resolved: &motion_core::ResolvedAudio,
-        range: std::ops::Range<Time>,
+        range: std::ops::Range<Duration>,
         rate: u32,
         quality: ResampleQuality,
     ) -> motion_core::Result<Self> {
-        if range.start < Time::ZERO || range.end < range.start {
+        if range.start < Duration::ZERO || range.end < range.start {
             return Err(invalid("range", "Invalid audio window").into());
         }
         let clips = resolved.clips();
@@ -109,14 +109,14 @@ impl MixedAudio {
         duration: Duration,
         quality: ResampleQuality,
     ) -> motion_core::Result<Self> {
-        Self::new_window(clips, rate, duration, Time::ZERO, quality)
+        Self::new_window(clips, rate, duration, Duration::ZERO, quality)
     }
 
     pub(super) fn new_window(
         clips: &[AudioClip],
         rate: u32,
         duration: Duration,
-        window: Time,
+        window: Duration,
         quality: ResampleQuality,
     ) -> motion_core::Result<Self> {
         let (window_time, mix_duration) = (window, duration);
@@ -127,7 +127,7 @@ impl MixedAudio {
         let clips = resolved.as_slice();
         if clips.len() > crate::audio::MAX_CLIPS
             || !(1..=192_000).contains(&rate)
-            || duration < Time::ZERO
+            || duration < Duration::ZERO
             || duration.as_seconds() > 86400.0
         {
             return Err(invalid(
@@ -146,7 +146,7 @@ impl MixedAudio {
                 error
             })?;
             let clip = clip.parameters();
-            let origin = frames(clip.start, rate)?;
+            let origin = frames(clip.start.since_origin(), rate)?;
             let window = frames(window, rate)?;
             let skipped = window.saturating_sub(origin);
             let start = origin.saturating_sub(window);
@@ -176,7 +176,7 @@ impl MixedAudio {
             let tail = clip
                 .effects
                 .iter()
-                .fold(Time::ZERO, |sum, effect| sum + effect.tail());
+                .fold(Duration::ZERO, |sum, effect| sum + effect.tail());
             let dry_frames = ceil_frames(duration - tail, source_rate)?;
             let offset = frames(clip.offset, source_rate)?
                 .checked_add(
@@ -231,7 +231,7 @@ impl MixedAudio {
             let mut data = Vec::with_capacity(count as usize * 2);
             for frame in 0..count as usize {
                 let local_frame = skipped + frame as u64;
-                let local = Time::from_ticks(
+                let local = Duration::from_ticks(
                     (u128::from(local_frame) * motion_core::TICKS_PER_SECOND as u128)
                         .div_ceil(u128::from(rate)) as i64,
                 );
@@ -351,7 +351,7 @@ impl MixedAudio {
     }
 
     pub(super) fn duration_time(&self) -> Duration {
-        Time::from_ticks(
+        Duration::from_ticks(
             (u128::from(self.frames) * motion_core::TICKS_PER_SECOND as u128)
                 .div_ceil(u128::from(self.rate)) as i64,
         )
@@ -403,8 +403,8 @@ impl MixedAudio {
     }
 
     /// Crops a prepared output without restarting effects or normalization clocks.
-    pub fn crop(mut self, range: std::ops::Range<Time>) -> motion_core::Result<Self> {
-        if range.start < Time::ZERO || range.end < range.start {
+    pub fn crop(mut self, range: std::ops::Range<Duration>) -> motion_core::Result<Self> {
+        if range.start < Duration::ZERO || range.end < range.start {
             return Err(invalid("range", "Invalid audio window").into());
         }
         let start = frames(range.start, self.rate)?;
@@ -484,7 +484,7 @@ impl AudioSource for MixedAudio {
     }
 
     fn duration(&self) -> Option<Duration> {
-        Some(Time::from_ticks(
+        Some(Duration::from_ticks(
             (u128::from(self.frames) * motion_core::TICKS_PER_SECOND as u128)
                 .div_ceil(u128::from(self.rate)) as i64,
         ))

@@ -308,7 +308,7 @@ let size = PixelSize::new(320, 180);
 let mut session = RenderSession::new(Size::new(320.0, 180.0), RenderOptions::default().size(size))?;
 let mut output = FrameBuffer::new(size, RasterLimits::default())?;
 session.render(FrameRequest {
-    time: 250.milliseconds(),
+    time: 250.milliseconds().after_origin(),
     frame_rate: FrameRate::NTSC,
     duration: 2.seconds(),
     background: None,

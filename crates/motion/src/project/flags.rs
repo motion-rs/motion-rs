@@ -37,11 +37,8 @@ pub(super) fn parse_codec(
     }
     let quality = quality.unwrap_or(18);
     let codec = match name {
-        "h264" if !alpha => crate::Codec::H264 {
-            quality,
-            preset: crate::EncoderPreset::Medium,
-        },
-        "h265" | "hevc" if !alpha => crate::Codec::H265 { quality },
+        "h264" if !alpha => crate::Codec::h264(quality),
+        "h265" | "hevc" if !alpha => crate::Codec::h265(quality),
         "vp9" => crate::Codec::Vp9 { quality, alpha },
         "prores" | "prores4444" => crate::Codec::ProRes4444,
         "png" | "png-sequence" => crate::Codec::PngSequence,

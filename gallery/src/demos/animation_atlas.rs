@@ -534,13 +534,13 @@ mod tests {
         assert_eq!(compositions.len(), 9);
         for study in signals.iter().chain(&compositions) {
             let expected = study.sample(0.6.seconds());
-            for time in [3.seconds(), (-1).seconds(), 0.6.seconds(), Time::ZERO] {
+            for time in [3.seconds(), (-1).seconds(), 0.6.seconds(), Duration::ZERO] {
                 assert!(study.sample(time).is_finite());
             }
             assert_eq!(study.sample(0.6.seconds()), expected);
         }
         assert_eq!(compositions[0].sample(0.3.seconds()), 0.0);
-        assert_eq!(compositions[1].sample(Time::ZERO), 1.0);
+        assert_eq!(compositions[1].sample(Duration::ZERO), 1.0);
         assert_eq!(compositions[3].sample(2.4.seconds()), 0.0);
         assert_eq!(compositions[8].sample(0.5.seconds()), 0.75);
         assert_eq!(compositions[8].sample(0.8.seconds()), 0.75);
@@ -554,7 +554,10 @@ mod tests {
     #[test]
     fn flight_uses_the_authored_path_endpoints() {
         let flight = FollowPath::new(flight_path().unwrap(), 2.5.seconds());
-        assert_eq!(flight.sample(Time::ZERO).position, Point::new(70.0, 285.0));
+        assert_eq!(
+            flight.sample(Duration::ZERO).position,
+            Point::new(70.0, 285.0)
+        );
         let endpoint = flight.sample(3.seconds()).position;
         assert!((endpoint.x - 425.0).abs() <= 1e-9);
         assert!((endpoint.y - 210.0).abs() <= 1e-9);
@@ -577,9 +580,9 @@ mod tests {
                 let seconds = DemoParameters::default().seconds as f64;
                 let start = (page as f64 + 0.18) / PAGE_COUNT as f64 * seconds;
                 let end = (page as f64 + 0.62) / PAGE_COUNT as f64 * seconds;
-                let first = render_still(&timeline, start.seconds(), &options)?;
-                let later = render_still(&timeline, end.seconds(), &options)?;
-                let replay = render_still(&timeline, start.seconds(), &options)?;
+                let first = render_still(&timeline, start.seconds().after_origin(), &options)?;
+                let later = render_still(&timeline, end.seconds().after_origin(), &options)?;
+                let replay = render_still(&timeline, start.seconds().after_origin(), &options)?;
                 assert_eq!(first.bytes().len(), width * height * 4);
                 assert_eq!(first.bytes(), replay.bytes());
                 let changed = (height * 152 / 540..height * 456 / 540)

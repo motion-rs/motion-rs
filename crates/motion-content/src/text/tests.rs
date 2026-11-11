@@ -157,7 +157,7 @@ fn lazy_parts_use_nested_scene_time_and_replay_without_explicit_context() -> mot
         .build()?;
     let first = motion_render::render_still(
         &parent,
-        1250.milliseconds(),
+        1250.milliseconds().after_origin(),
         &motion_render::RenderOptions::default(),
     )?;
     assert!(
@@ -171,7 +171,11 @@ fn lazy_parts_use_nested_scene_time_and_replay_without_explicit_context() -> mot
     for (index, time) in samples.lock().unwrap().iter() {
         assert_eq!(
             *time,
-            250.milliseconds() - Time::from_ticks(100.milliseconds().ticks() * *index as i64)
+            motion_core::Time::ZERO
+                + (250.milliseconds()
+                    - motion_core::Duration::from_ticks(
+                        100.milliseconds().ticks() * *index as i64
+                    ))
         );
     }
     assert!(!samples.lock().unwrap().is_empty());
@@ -179,7 +183,7 @@ fn lazy_parts_use_nested_scene_time_and_replay_without_explicit_context() -> mot
         first.bytes(),
         motion_render::render_still(
             &parent,
-            1250.milliseconds(),
+            1250.milliseconds().after_origin(),
             &motion_render::RenderOptions::default()
         )?
         .bytes()
@@ -388,7 +392,8 @@ fn explicit_paragraph_rows_parts_and_relative_layout_use_actual_baselines() -> m
     .with_assets(&resources);
     let large = Text::new("A").size(24.0).fonts(&fonts);
     let small = Text::new("A").size(12.0).fonts(&fonts);
-    let animated = large.try_animate_parts_at(&context, Time::ZERO, |_| PartStyle::new())?;
+    let animated =
+        large.try_animate_parts_at(&context, motion_core::Duration::ZERO, |_| PartStyle::new())?;
     let row = motion_core::Row::new()
         .alignment(motion_core::Alignment::Baseline)
         .gap(4.0)
@@ -424,11 +429,11 @@ fn explicit_paragraph_rows_parts_and_relative_layout_use_actual_baselines() -> m
         .collect::<Vec<_>>();
     assert_eq!(baselines.len(), 2);
     assert_eq!(baselines[0], baselines[1]);
-    let hidden =
-        large
-            .clone()
-            .visible_parts(0)
-            .try_animate_parts_at(&context, Time::ZERO, |_| PartStyle::new())?;
+    let hidden = large.clone().visible_parts(0).try_animate_parts_at(
+        &context,
+        motion_core::Duration::ZERO,
+        |_| PartStyle::new(),
+    )?;
     let hidden_row = motion_core::Row::new()
         .alignment(motion_core::Alignment::Baseline)
         .children([hidden, Node::from(small.clone())]);
@@ -560,7 +565,7 @@ fn explicit_paragraph_fonts_shaping_fallback_metrics_parts_and_replay() {
         .with_fonts(fonts.clone());
     let cache = motion_core::SceneCache::new(0);
     let context = motion_core::SceneContext::new(
-        250.milliseconds(),
+        250.milliseconds().after_origin(),
         motion_core::FrameRate::from(30),
         motion_core::Size::new(128.0, 112.0),
         &cache,
@@ -576,8 +581,8 @@ fn explicit_paragraph_fonts_shaping_fallback_metrics_parts_and_replay() {
         PartStyle::new()
     })
     .unwrap();
-    assert_eq!(probe.borrow()[0], 250.milliseconds());
-    assert_eq!(probe.borrow()[3], -50.milliseconds());
+    assert_eq!(probe.borrow()[0], 250.milliseconds().after_origin());
+    assert_eq!(probe.borrow()[3], (-50.milliseconds()).after_origin());
     let composition =
         motion_render::Composition::new(128, 112, motion_render::FrameClock::new(30, 12))
             .with_options(
@@ -941,13 +946,17 @@ fn explicit_gpu_paragraphs_and_parts_match_cpu_and_replay() {
     let mut cases = 0;
     for time in [
         500.milliseconds(),
-        Time::ZERO,
+        motion_core::Duration::ZERO,
         150.milliseconds(),
         500.milliseconds(),
     ] {
-        let context =
-            motion_core::SceneContext::new(time, motion_core::FrameRate::from(30), design, &cache)
-                .with_assets(&resources);
+        let context = motion_core::SceneContext::new(
+            time.after_origin(),
+            motion_core::FrameRate::from(30),
+            design,
+            &cache,
+        )
+        .with_assets(&resources);
         let nodes = [
             Node::from(text.clone()),
             Node::from(text.clone().stroke(0.4, Color::BLACK))

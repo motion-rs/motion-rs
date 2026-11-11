@@ -51,7 +51,7 @@ fn studio_all_codecs_export_and_retain_transactions() -> motion_core::Result<()>
             draft,
             AudioOptions::default(),
             context.clone(),
-            codec,
+            codec.clone(),
         )?;
         match wait_for_export(&job, &updates) {
             JobState::Finished(Ok(())) => {}
@@ -211,7 +211,7 @@ fn shared_texture_preview_and_automatic_export_loss_preserve_transactions()
                 }
                 motion_core::Node::from(sample.bounds().fill(motion_core::Color::WHITE))
             },
-            motion_core::Time::from_frame(3, motion_core::FrameRate::new(30, 1)),
+            motion_core::Duration::from_frame(3, motion_core::FrameRate::new(30, 1)),
         ))
     })?
     .build()?;
@@ -1335,7 +1335,7 @@ fn worker_export_acceptance(renderer: Renderer) -> motion_core::Result {
         composition.clone(),
         Size::new(96.0, 48.0),
         move |context| {
-            if context.time() == context.frames(1) {
+            if context.time() == context.frames(1).after_origin() {
                 let _result = reached.send(());
                 let (released, timeout) = worker_gate
                     .1
@@ -1379,7 +1379,7 @@ fn worker_export_acceptance(renderer: Renderer) -> motion_core::Result {
             composition.clone(),
             Size::new(96.0, 48.0),
             move |context| {
-                if context.time() == context.frames(1) {
+                if context.time() == context.frames(1).after_origin() {
                     assert!(!panic, "Expected export panic");
                     return Node::empty().opacity(f64::NAN);
                 }

@@ -64,7 +64,7 @@ fn bus_tails_meter_windows_and_spatial_controls_are_preserved() -> motion_core::
     assert!(tail[0] > 0.0);
     let expected = mixed.bus_meters()[0].level(625.milliseconds());
     let cropped = mixed.crop(625.milliseconds()..1125.milliseconds())?;
-    assert_eq!(cropped.bus_meters()[0].level(Time::ZERO), expected);
+    assert_eq!(cropped.bus_meters()[0].level(Duration::ZERO), expected);
     assert_eq!(
         cropped.bus_meters()[0].level(500.milliseconds()),
         [-96.0; 2]
@@ -171,7 +171,7 @@ fn buses_nested_master_and_local_sound_declarations_are_preserved() -> motion_co
     assert_eq!(samples, seek);
     let child = Timeline::new(Size::new(8.0, 8.0), 30)
         .track(|track| track.scene(1.seconds(), |_| Node::empty()))
-        .audio(AudioClip::source(pcm.clone()).start(100.milliseconds()))
+        .audio(AudioClip::source(pcm.clone()).start(100.milliseconds().after_origin()))
         .build()?;
     assert_eq!(child.soundtrack().clips().len(), 1);
     let timeline = Timeline::new(Size::new(8.0, 8.0), 30)
@@ -191,7 +191,7 @@ fn buses_nested_master_and_local_sound_declarations_are_preserved() -> motion_co
 #[test]
 fn envelope_ticks_round_trip_at_fractional_sample_boundaries_and_hard_pan_is_exact()
 -> motion_core::Result {
-    let boundary = Time::from_frame(1, motion_core::FrameRate::from(8192));
+    let boundary = Duration::from_frame(1, motion_core::FrameRate::from(8192));
     let envelope = motion_core::Tween::new(0.0, 1.0, boundary);
     let clip = AudioClip::source(PcmBuffer::new(8192, 1, vec![1.0; 8])?)
         .pan(1.0)
@@ -219,7 +219,7 @@ fn overlapping_clips_add_without_normalization_and_faulty_sources_fail() -> moti
         &[
             AudioClip::source(source.clone()),
             AudioClip::source(source)
-                .start(500.milliseconds())
+                .start(500.milliseconds().after_origin())
                 .duration(500.milliseconds())
                 .volume(0.5),
         ],
@@ -260,7 +260,7 @@ fn overlapping_clips_add_without_normalization_and_faulty_sources_fail() -> moti
 fn mix_positions_offsets_fades_envelopes_pan_eof_and_replay_are_exact() -> motion_core::Result {
     let source = PcmBuffer::new(4, 2, vec![1.0, 0.5, 0.8, 0.4, 0.6, 0.3, 0.4, 0.2])?;
     let clip = AudioClip::source(source)
-        .start(500.milliseconds())
+        .start(500.milliseconds().after_origin())
         .offset(250.milliseconds())
         .duration(1.seconds())
         .volume(0.5)
@@ -474,7 +474,7 @@ fn timeline_audio_exports_decodes_aac_and_protects_existing_output() -> motion_c
         })
         .collect();
     let clip = AudioClip::source(PcmBuffer::new(44_100, 1, input)?)
-        .start(25.milliseconds())
+        .start(25.milliseconds().after_origin())
         .pan(-1.0)
         .fade_in(5.milliseconds())
         .fade_out(5.milliseconds());
@@ -483,7 +483,7 @@ fn timeline_audio_exports_decodes_aac_and_protects_existing_output() -> motion_c
         motion_core::FrameRate::NTSC,
     )?
     .try_audio(clip)?
-    .try_duration(Time::from_frame(7, motion_core::FrameRate::NTSC))?
+    .try_duration(Duration::from_frame(7, motion_core::FrameRate::NTSC))?
     .build()?;
     let directory = tempfile::tempdir()?;
     let path = directory.path().join("native-audio.mp4");
@@ -565,7 +565,8 @@ fn ducking_fixture() -> motion_core::Result<(AudioClip, AudioClip)> {
         })
         .collect();
     let music = PcmBuffer::new(rate, 2, vec![0.4; rate as usize * 8])?;
-    let voice = AudioClip::source(PcmBuffer::new(rate, 2, voice)?).start(1.seconds());
+    let voice =
+        AudioClip::source(PcmBuffer::new(rate, 2, voice)?).start(1.seconds().after_origin());
     Ok((voice, AudioClip::source(music)))
 }
 
@@ -653,7 +654,7 @@ fn ducking_triggers_follow_relocation_and_sinc_mixing_is_selectable() -> motion_
     let DuckTrigger::Clip(trigger) = &moved.parameters().ducking[0].trigger else {
         panic!("clip trigger");
     };
-    assert_eq!(trigger.parameters().start, 3.seconds());
+    assert_eq!(trigger.parameters().start, 3.seconds().after_origin());
     let cropped = ducked
         .relocated(0.seconds(), 500.milliseconds())?
         .expect("placed");

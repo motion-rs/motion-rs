@@ -110,10 +110,12 @@ fn page_at(progress: f64) -> (usize, f64) {
 
 fn sample_time(preset: Preset, local: f64) -> Time {
     match preset {
-        Preset::Sparks => (0.12 + local * 1.35).seconds(),
-        Preset::Fireworks => (0.1 + local * 1.6).seconds(),
-        Preset::LogoDissolve | Preset::LogoAssemble => (0.04 + local * 3.9).seconds(),
-        _ => (0.2 + local * 3.5).seconds(),
+        Preset::Sparks => (0.12 + local * 1.35).seconds().after_origin(),
+        Preset::Fireworks => (0.1 + local * 1.6).seconds().after_origin(),
+        Preset::LogoDissolve | Preset::LogoAssemble => {
+            (0.04 + local * 3.9).seconds().after_origin()
+        }
+        _ => (0.2 + local * 3.5).seconds().after_origin(),
     }
 }
 
@@ -268,11 +270,11 @@ mod tests {
             assert!(!category.is_empty());
             assert!(lines.iter().all(|line| !line.is_empty()));
             assert!(sample_time(preset, 0.0) > Time::ZERO);
-            assert!(sample_time(preset, 1.0) < SIMULATION_SECONDS.seconds());
+            assert!(sample_time(preset, 1.0) < SIMULATION_SECONDS.seconds().after_origin());
         }
         assert_eq!(page_at(1.0), (Preset::ALL.len() - 1, 1.0));
-        assert!(sample_time(Preset::Fireworks, 0.0) < 0.8.seconds());
-        assert!(sample_time(Preset::Fireworks, 1.0) > 0.8.seconds());
+        assert!(sample_time(Preset::Fireworks, 0.0) < 0.8.seconds().after_origin());
+        assert!(sample_time(Preset::Fireworks, 1.0) > 0.8.seconds().after_origin());
     }
 
     #[test]
@@ -331,9 +333,9 @@ mod tests {
             .build()?;
         for (page, preset) in Preset::ALL.into_iter().enumerate() {
             let time = (page as f64 * 4.0 + 1.0).seconds();
-            let early = render_still(&timeline, time, &options)?;
-            let later = render_still(&timeline, time + 2.seconds(), &options)?;
-            let replay = render_still(&timeline, time, &options)?;
+            let early = render_still(&timeline, time.after_origin(), &options)?;
+            let later = render_still(&timeline, (time + 2.seconds()).after_origin(), &options)?;
+            let replay = render_still(&timeline, time.after_origin(), &options)?;
             assert_eq!(early.bytes(), replay.bytes(), "{preset:?} replay");
             let offsets =
                 || (46..136).flat_map(|row| (117..269).map(move |column| (row * 288 + column) * 4));
@@ -343,7 +345,7 @@ mod tests {
                 })
                 .count();
             assert!(changed > 8, "{preset:?} did not animate");
-            let empty = render_still(&background, time, &options)?;
+            let empty = render_still(&background, time.after_origin(), &options)?;
             let leaked = (0..162)
                 .flat_map(|row| (0..288).map(move |column| (row, column)))
                 .filter(|(row, column)| !(36..141).contains(row) || !(102..276).contains(column))

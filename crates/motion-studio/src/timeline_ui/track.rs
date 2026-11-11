@@ -106,7 +106,7 @@ impl StudioApp {
                         .round()
                         .max(0.0);
                     let snapped =
-                        grid.offset + motion_core::Time::from_seconds(index * 60.0 / grid.bpm);
+                        grid.offset + motion_core::Duration::from_seconds(index * 60.0 / grid.bpm);
                     frame = (snapped.to_frame(self.clock.rate).max(0) as u32).min(total - 1);
                 }
             }

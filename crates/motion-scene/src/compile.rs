@@ -4,8 +4,8 @@ use crate::document::{Document, LookSpec, SceneSpec, TrackItem, TransitionEffect
 use crate::element::Element;
 use element::Built;
 use motion_core::{
-    Animation, CrossFade, Iris, Node, NodeModifiers, PixelSize, Push, Scene, SceneContext, Size,
-    Slide, Time, Timeline, TrackBuilder, ValidationError, Wipe, ZoomBlur,
+    Animation, CrossFade, Duration, Iris, Node, NodeModifiers, PixelSize, Push, Scene,
+    SceneContext, Size, Slide, Timeline, TrackBuilder, ValidationError, Wipe, ZoomBlur,
 };
 use motion_render::{Look, RenderOptions};
 use serde_json::Value;
@@ -188,7 +188,7 @@ impl Document {
                 .map_err(|error| located(Some(format!("audio[{index}]")), error))?;
         }
         if let Some(duration) = self.duration {
-            let duration = Time::from_seconds(duration);
+            let duration = Duration::from_seconds(duration);
             timeline = timeline
                 .try_duration(duration)
                 .map_err(|error| located(Some("duration".into()), error))?;
@@ -303,9 +303,9 @@ impl<'a> Compiler<'a> {
     }
 
     /// Converts nonnegative seconds within [`MAX_SECONDS`] to ticks.
-    pub(crate) fn seconds(&mut self, value: f64, path: &str, field: &str) -> Option<Time> {
+    pub(crate) fn seconds(&mut self, value: f64, path: &str, field: &str) -> Option<Duration> {
         self.bounded(value, 0.0, MAX_SECONDS, path, field)
-            .map(Time::from_seconds)
+            .map(Duration::from_seconds)
     }
 
     /// Resolves a resource path, rejecting empty paths and parent traversal.
@@ -488,14 +488,14 @@ fn add_item(
                 Some(look) => look.scene(context, output, |context| content.at(context)),
                 None => Ok(content.at(context)),
             })
-            .with_duration(Time::from_seconds(spec.duration));
+            .with_duration(Duration::from_seconds(spec.duration));
             match spec.start {
-                Some(start) => builder.try_place(Time::from_seconds(start), render),
+                Some(start) => builder.try_place(motion_core::Time::from_seconds(start), render),
                 None => builder.try_push(render),
             }
         }
         TrackItem::Transition(transition) => {
-            let duration = Time::from_seconds(transition.duration);
+            let duration = Duration::from_seconds(transition.duration);
             match transition.effect {
                 TransitionEffect::CrossFade => builder.try_transition(CrossFade, duration),
                 TransitionEffect::Slide { direction } => builder.try_transition(
@@ -526,7 +526,7 @@ fn add_item(
                 TransitionEffect::ZoomBlur => builder.try_transition(ZoomBlur, duration),
             }
         }
-        TrackItem::Gap(seconds) => builder.try_gap(Time::from_seconds(*seconds)),
+        TrackItem::Gap(seconds) => builder.try_gap(Duration::from_seconds(*seconds)),
     }
 }
 

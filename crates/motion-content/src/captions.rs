@@ -170,7 +170,7 @@ impl CueSheet {
             / 1_000_000_000;
         Ok(motion_core::AudioClip::source(audio)
             .start(motion_core::Time::from_ticks(start as i64))
-            .offset(source.0)
+            .offset(source.0.since_origin())
             .duration(duration))
     }
 }
@@ -231,10 +231,14 @@ mod tests {
             std::sync::Arc::new(motion_encode::PcmBuffer::new(48_000, 1, vec![0.1; 96_000])?);
         assert!(
             short
-                .audio_clip(0, audio.clone(), (Time::ZERO, 1001.milliseconds()))
+                .audio_clip(
+                    0,
+                    audio.clone(),
+                    (Time::ZERO, 1001.milliseconds().after_origin())
+                )
                 .is_err()
         );
-        let clip = short.audio_clip(0, audio.clone(), (Time::ZERO, 1.seconds()))?;
+        let clip = short.audio_clip(0, audio.clone(), (Time::ZERO, 1.seconds().after_origin()))?;
         let mixed = motion_encode::MixedAudio::new(&[clip], 48_000, 2.seconds())?;
         let mut sample = [0.0; 2];
         assert_eq!(mixed.read(0, &mut sample), 1);
@@ -243,7 +247,7 @@ mod tests {
         assert!(sample.iter().all(|value| *value > 0.0));
         assert!(
             short
-                .audio_clip(2, audio, (Time::ZERO, 1.seconds()))
+                .audio_clip(2, audio, (Time::ZERO, 1.seconds().after_origin()))
                 .is_err()
         );
         Ok(())

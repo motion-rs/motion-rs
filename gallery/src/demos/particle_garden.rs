@@ -73,7 +73,7 @@ fn color(hex: u32) -> Color {
 }
 
 fn seconds(value: f64) -> Duration {
-    Time::from_seconds(value)
+    Duration::from_seconds(value)
 }
 
 struct Rig {
@@ -150,7 +150,7 @@ fn compose(
         let weight = opacity(now, (start, end), index == 3);
         context
             .during(
-                seconds(start * rig.scale),
+                seconds(start * rig.scale).after_origin(),
                 seconds((end - start) * rig.scale),
                 |inner| simulation.render(inner),
             )

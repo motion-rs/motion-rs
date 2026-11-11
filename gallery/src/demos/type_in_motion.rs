@@ -51,23 +51,23 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
     Timeline::new(Size::new(960.0, 540.0), 30)
         .track(|track| {
             track
-                .scene(shot, cover)
+                .scene(shot.since_origin(), cover)
                 .transition(
                     Wipe {
                         angle: 0.0,
                         feather: 36.0,
                     },
-                    turn,
+                    turn.since_origin(),
                 )
-                .scene(shot, spread)
+                .scene(shot.since_origin(), spread)
                 .transition(
                     Wipe {
                         angle: FRAC_PI_2,
                         feather: 0.0,
                     },
-                    turn,
+                    turn.since_origin(),
                 )
-                .scene(shot, closing)
+                .scene(shot.since_origin(), closing)
         })
         .duration(duration)
         .build()
@@ -103,7 +103,7 @@ fn rising(text: Text, spring: &std::sync::Arc<Spring<f64>>, delay: Duration, lif
     text.split(TextSplit::Characters)
         .animate_parts(65.milliseconds(), move |part| {
             let local = part.time() - delay;
-            let amount = spring.sample(local);
+            let amount = spring.sample(local.since_origin());
             PartStyle::new()
                 .offset(0.0, (1.0 - amount) * lift)
                 .rotate((1.0 - amount) * -0.1)
@@ -338,14 +338,14 @@ mod tests {
         for size in [PixelSize::new(960, 540), PixelSize::new(1920, 1080)] {
             let options = options.clone().size(size);
             for seconds in [2.0, 2.8, 4.5, 5.2, 7.8] {
-                let first = render_still(&film, seconds.seconds(), &options)?;
+                let first = render_still(&film, seconds.seconds().after_origin(), &options)?;
                 render_still(&film, Time::ZERO, &options)?;
-                let replay = render_still(&film, seconds.seconds(), &options)?;
+                let replay = render_still(&film, seconds.seconds().after_origin(), &options)?;
                 assert_eq!(first.bytes(), replay.bytes());
                 #[cfg(feature = "gpu")]
                 {
                     let gpu_options = options.clone().backend(BackendPreference::gpu());
-                    let gpu = render_still(&film, seconds.seconds(), &gpu_options)?;
+                    let gpu = render_still(&film, seconds.seconds().after_origin(), &gpu_options)?;
                     let difference = first
                         .bytes()
                         .iter()
@@ -354,7 +354,8 @@ mod tests {
                         .max()
                         .unwrap_or(0);
                     assert!(difference <= 2, "CPU/GPU difference: {difference}");
-                    let replay = render_still(&film, seconds.seconds(), &gpu_options)?;
+                    let replay =
+                        render_still(&film, seconds.seconds().after_origin(), &gpu_options)?;
                     assert_eq!(gpu.bytes(), replay.bytes());
                 }
             }

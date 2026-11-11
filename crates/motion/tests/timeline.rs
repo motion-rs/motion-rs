@@ -279,16 +279,20 @@ mod scenes {
         fn temporal_midpoints_advance_both_clocks_and_average_premultiplied_samples()
         -> motion::Result {
             assert_eq!(
-                sample_offsets(Time::from_ticks(8), 4)?,
-                [-3, -1, 1, 3].map(Time::from_ticks)
+                sample_offsets(Duration::from_ticks(8), 4)?,
+                [-3, -1, 1, 3].map(Duration::from_ticks)
             );
             let cache = SceneCache::new(0);
-            let context =
-                SceneContext::new(5.seconds(), FrameRate::NTSC, Size::new(2.0, 1.0), &cache)
-                    .shifted(5.seconds())
-                    .with_clip_duration(1.seconds());
+            let context = SceneContext::new(
+                5.seconds().after_origin(),
+                FrameRate::NTSC,
+                Size::new(2.0, 1.0),
+                &cache,
+            )
+            .shifted(5.seconds())
+            .with_clip_duration(1.seconds());
             let mut observed = Vec::new();
-            let node = context.try_motion_blur(Time::from_ticks(8), 4, |sample| {
+            let node = context.try_motion_blur(Duration::from_ticks(8), 4, |sample| {
                 observed.push((sample.time(), sample.global_time(), sample.clip_duration()));
                 Node::from(
                     Rect::new(0.0, 0.0, 2.0, 1.0).fill(if sample.time() < Time::ZERO {
@@ -303,7 +307,7 @@ mod scenes {
                     observed[index],
                     (
                         Time::from_ticks(offset),
-                        5.seconds() + Time::from_ticks(offset),
+                        (5.seconds() + Duration::from_ticks(offset)).after_origin(),
                         Some(1.seconds())
                     )
                 );
@@ -323,7 +327,7 @@ mod scenes {
                     samples: 4
                 }
                 .shutter(FrameRate::NTSC)?,
-                Time::from_frame(1, FrameRate::NTSC) / 2.0
+                Duration::from_frame(1, FrameRate::NTSC) / 2.0
             );
             assert!(
                 MotionBlur {
@@ -343,17 +347,17 @@ mod scenes {
             let mut calls = 0;
             assert!(
                 invalid_context
-                    .try_motion_blur(Time::from_ticks(8), 4, |_| {
+                    .try_motion_blur(Duration::from_ticks(8), 4, |_| {
                         calls += 1;
                         Node::empty()
                     })
                     .is_err()
             );
             assert_eq!(calls, 0);
-            assert!(sample_offsets(Time::from_ticks(-1), 4).is_err());
-            assert!(sample_offsets(Time::ZERO, 65).is_err());
+            assert!(sample_offsets(Duration::from_ticks(-1), 4).is_err());
+            assert!(sample_offsets(Duration::ZERO, 65).is_err());
             let moving = context
-                .try_motion_blur(Time::from_ticks(8), 4, |sample| {
+                .try_motion_blur(Duration::from_ticks(8), 4, |sample| {
                     let column = ((sample.time().ticks() + 3) / 2) as f64;
                     Node::from(
                         Rect::new(column, 0.0, column + 1.0, 1.0)
@@ -398,7 +402,7 @@ mod scenes {
             }
         }
 
-        fn artwork(index: usize, time: Time, duration: Duration, remap: bool) -> Node {
+        fn artwork(index: usize, time: Duration, duration: Duration, remap: bool) -> Node {
             let progress = (time / duration).clamp(0.0, 1.0);
             let progress = if remap {
                 match index {
@@ -429,8 +433,8 @@ mod scenes {
 
         fn compare(renderer: Renderer) -> motion::Result {
             let rate = FrameRate::from(30);
-            let duration = Time::from_frame(8, rate);
-            let overlap = Time::from_frame(4, rate);
+            let duration = Duration::from_frame(8, rate);
+            let overlap = Duration::from_frame(4, rate);
             let size = Size::new(64.0, 48.0);
             for (curve, remap) in [
                 (Easing::Linear, false),
@@ -454,7 +458,7 @@ mod scenes {
                             }
                             track = track.try_push(
                                 (move |context: &SceneContext<'_>| {
-                                    artwork(index, context.time(), duration, remap)
+                                    artwork(index, context.elapsed(), duration, remap)
                                 })
                                 .with_duration(duration),
                             )?;
@@ -625,8 +629,12 @@ mod scenes {
                 .build()?;
             assert_eq!(timeline.frame_count(), 30);
             let cache = SceneCache::new(0);
-            let context =
-                SceneContext::new(1500.milliseconds(), FrameRate::from(10), size(), &cache);
+            let context = SceneContext::new(
+                1500.milliseconds().after_origin(),
+                FrameRate::from(10),
+                size(),
+                &cache,
+            );
             let frame = timeline
                 .render(&context)
                 .compile(size(), PixelSize::new(8, 4), ValidationLimits::default())?
@@ -638,14 +646,14 @@ mod scenes {
                 &[
                     (
                         0,
-                        1500.milliseconds(),
-                        1500.milliseconds(),
+                        1500.milliseconds().after_origin(),
+                        1500.milliseconds().after_origin(),
                         Some(2.seconds())
                     ),
                     (
                         1,
-                        500.milliseconds(),
-                        1500.milliseconds(),
+                        500.milliseconds().after_origin(),
+                        1500.milliseconds().after_origin(),
                         Some(2.seconds())
                     )
                 ]
@@ -703,8 +711,8 @@ mod scenes {
                     context: &SceneContext<'_>,
                 ) -> Node {
                     assert_eq!(progress, 0.25);
-                    assert_eq!(context.time(), 500.milliseconds());
-                    assert_eq!(context.global_time(), 1500.milliseconds());
+                    assert_eq!(context.time(), 500.milliseconds().after_origin());
+                    assert_eq!(context.global_time(), 1500.milliseconds().after_origin());
                     assert_eq!(context.clip_duration(), Some(1.seconds()));
                     motion::authoring::transition::Transition::compose(
                         &motion::authoring::transition::CrossFade,
@@ -734,8 +742,12 @@ mod scenes {
                 })?
                 .build()?;
             let cache = SceneCache::new(0);
-            let context =
-                SceneContext::new(1500.milliseconds(), FrameRate::from(10), size(), &cache);
+            let context = SceneContext::new(
+                1500.milliseconds().after_origin(),
+                FrameRate::from(10),
+                size(),
+                &cache,
+            );
             let frame = timeline
                 .render(&context)
                 .compile(size(), PixelSize::new(8, 4), ValidationLimits::default())?
@@ -907,7 +919,7 @@ mod scenes {
                 })?
                 .try_track(|track| {
                     track.try_place(
-                        500.milliseconds(),
+                        500.milliseconds().after_origin(),
                         make(2, Color::rgb(0, 0, 255).with_alpha(0.5), i32::MIN),
                     )
                 })?
@@ -917,11 +929,19 @@ mod scenes {
             for (time, color, ids) in [
                 (Time::from_ticks(-1), [0.0; 4], vec![]),
                 (Time::ZERO, [1.0, 0.0, 0.0, 1.0], vec![0]),
-                (500.milliseconds(), [0.5, 0.0, 0.5, 1.0], vec![0, 2]),
-                (1.seconds(), [0.0, 0.5, 0.5, 1.0], vec![1, 2]),
-                (1500.milliseconds(), [0.0, 1.0, 0.0, 1.0], vec![1]),
-                (2.seconds(), [0.0, 0.0, 0.0, 1.0], vec![]),
-                (2500.milliseconds(), [0.0; 4], vec![]),
+                (
+                    500.milliseconds().after_origin(),
+                    [0.5, 0.0, 0.5, 1.0],
+                    vec![0, 2],
+                ),
+                (1.seconds().after_origin(), [0.0, 0.5, 0.5, 1.0], vec![1, 2]),
+                (
+                    1500.milliseconds().after_origin(),
+                    [0.0, 1.0, 0.0, 1.0],
+                    vec![1],
+                ),
+                (2.seconds().after_origin(), [0.0, 0.0, 0.0, 1.0], vec![]),
+                (2500.milliseconds().after_origin(), [0.0; 4], vec![]),
             ] {
                 calls.lock().unwrap().clear();
                 let context = SceneContext::new(
@@ -942,8 +962,12 @@ mod scenes {
                 let recorded = calls.lock().unwrap();
                 assert_eq!(recorded.iter().map(|call| call.0).collect::<Vec<_>>(), ids);
                 for (id, local, global, duration) in recorded.iter() {
-                    let start = [Time::ZERO, 1.seconds(), 500.milliseconds()][*id];
-                    assert_eq!(*local, time - start);
+                    let start = [
+                        Time::ZERO,
+                        1.seconds().after_origin(),
+                        500.milliseconds().after_origin(),
+                    ][*id];
+                    assert_eq!(*local, (time - start).after_origin());
                     assert_eq!(*global, time + 5.seconds());
                     assert_eq!(*duration, Some(1.seconds()));
                 }
@@ -964,7 +988,10 @@ mod scenes {
                     .frame_count(),
                 30
             );
-            let empty = timeline.to_builder().try_duration(Time::ZERO)?.build()?;
+            let empty = timeline
+                .to_builder()
+                .try_duration(Duration::ZERO)?
+                .build()?;
             let context = SceneContext::new(Time::ZERO, FrameRate::from(10), size(), &cache);
             assert!(
                 empty
@@ -1017,7 +1044,12 @@ mod scenes {
                 }
             });
             let cache = SceneCache::new(0);
-            let at_end = SceneContext::new(500.milliseconds(), FrameRate::from(30), size(), &cache);
+            let at_end = SceneContext::new(
+                500.milliseconds().after_origin(),
+                FrameRate::from(30),
+                size(),
+                &cache,
+            );
             assert!(
                 timeline
                     .render(&at_end)
@@ -1073,7 +1105,7 @@ mod scenes {
                     })?
                     .try_track(|track| {
                         track.try_place(
-                            500.milliseconds(),
+                            500.milliseconds().after_origin(),
                             (|context: &SceneContext<'_>| {
                                 Node::from(
                                     motion::Rect::new(8.5, 2.25, 29.5, 15.0)
@@ -1172,7 +1204,7 @@ mod scenes {
                             let animated = motion::Text::new("A")
                                 .size(18.0)
                                 .fonts(&scene_fonts)
-                                .try_animate_parts_at(context, Time::ZERO, |part| {
+                                .try_animate_parts_at(context, Duration::ZERO, |part| {
                                     let amount = part.sample(&motion::Tween::new(
                                         0.0,
                                         1.0,
@@ -1364,13 +1396,15 @@ mod scenes {
                         ));
                     }
                 }
-                nodes.push(context.try_motion_blur(Time::from_ticks(8), 4, |sample| {
-                    let column = ((sample.time().ticks() + 3) / 2) as f64;
-                    Node::from(
-                        Rect::new(column, 0.0, column + 1.0, 1.0)
-                            .fill(Color::rgb(255, 0, 0).with_alpha(0.5)),
-                    )
-                })?);
+                nodes.push(
+                    context.try_motion_blur(Duration::from_ticks(8), 4, |sample| {
+                        let column = ((sample.time().ticks() + 3) / 2) as f64;
+                        Node::from(
+                            Rect::new(column, 0.0, column + 1.0, 1.0)
+                                .fill(Color::rgb(255, 0, 0).with_alpha(0.5)),
+                        )
+                    })?,
+                );
                 for (index, node) in nodes.into_iter().enumerate() {
                     let frame = node
                         .compile(context.size(), PixelSize::new(8, 6), validation)?

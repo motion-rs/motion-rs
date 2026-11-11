@@ -271,7 +271,10 @@ fn transitions_gaps_and_placement_build_the_timeline() {
             .scene(SceneSpec::new(0.5, solid(Color::WHITE)).start(3.0)),
     );
     let compiled = document.compile(&CompileOptions::default()).unwrap();
-    assert_eq!(compiled.timeline().duration(), Time::from_seconds(3.5));
+    assert_eq!(
+        compiled.timeline().duration(),
+        motion_core::Duration::from_seconds(3.5)
+    );
     assert_eq!(pixel(&document, 0.25, 1, 1), [255, 0, 0, 255]);
     assert_eq!(pixel(&document, 1.25, 1, 1), [0, 0, 255, 255]);
     assert_eq!(pixel(&document, 2.75, 1, 1), [0, 0, 0, 255]);

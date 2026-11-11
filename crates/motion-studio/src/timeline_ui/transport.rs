@@ -184,7 +184,7 @@ impl StudioApp {
                         self.clock.rate,
                     );
                     for meter in &overview.meters {
-                        let [rms, peak] = meter.level(time);
+                        let [rms, peak] = meter.level(time.since_origin());
                         ui.label(format!("{}: {rms:.1} / {peak:.1} dBFS", meter.name));
                         ui.add(
                             egui::ProgressBar::new(((rms + 96.0) / 96.0).clamp(0.0, 1.0) as f32)

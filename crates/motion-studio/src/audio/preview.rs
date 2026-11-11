@@ -458,7 +458,7 @@ impl PreviewMix {
                     self.native = Some(
                         motion_encode::MixedAudio::from_window(
                             timeline,
-                            time(position)..time(self.window_end),
+                            time(position).since_origin()..time(self.window_end).since_origin(),
                             audio::SAMPLE_RATE as u32,
                         )
                         .map_err(io::Error::other)?,

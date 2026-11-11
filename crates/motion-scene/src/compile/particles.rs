@@ -27,7 +27,7 @@ use motion_content::particles::{
     SizeOverLifetime, Vortex, Wind,
 };
 #[cfg(feature = "particles")]
-use motion_core::{Duration, Rect, Time, Vector2};
+use motion_core::{Duration, Rect, Vector2};
 
 /// Most simultaneously living particles a document may request.
 #[cfg(feature = "particles")]
@@ -234,7 +234,7 @@ impl Compiler<'_> {
     #[cfg(feature = "particles")]
     fn positive(&mut self, seconds: f64, path: &str, field: &str) -> Option<Duration> {
         let time = self.seconds(seconds, path, field)?;
-        if time > Time::ZERO {
+        if time > Duration::ZERO {
             Some(time)
         } else {
             self.error(path, field, "Duration must be positive");
@@ -282,7 +282,8 @@ impl Compiler<'_> {
                 }
                 let time = self.seconds(*time, &format!("{path}.burst"), "time");
                 let count = self.particle_count(*count, &format!("{path}.burst"));
-                let mut emitter = BurstEmitter::new(time?, count? as usize, point(*position));
+                let mut emitter =
+                    BurstEmitter::new((time?).after_origin(), count? as usize, point(*position));
                 if let Some(lifetime) = birth.lifetime {
                     emitter = emitter.lifetime(lifetime);
                 }

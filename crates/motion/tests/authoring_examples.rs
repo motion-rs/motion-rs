@@ -247,20 +247,20 @@ fn authoring_example_9() -> Result<(), Box<dyn std::error::Error>> {
     use motion::render::*;
 
     let child = (|context: &SceneContext<'_>| {
-        assert_eq!(context.time(), 1.seconds());
-        assert_eq!(context.global_time(), 2.seconds());
+        assert_eq!(context.time(), 1.seconds().after_origin());
+        assert_eq!(context.global_time(), 2.seconds().after_origin());
         Node::from(Rect::new(0.0, 0.0, 32.0, 24.0).fill(Color::rgb(20, 150, 125)))
     })
     .with_duration(2.seconds());
     let cache = SceneCache::new(0);
     let context = SceneContext::new(
-        2.seconds(),
+        2.seconds().after_origin(),
         FrameRate::from(30),
         Size::new(640.0, 360.0),
         &cache,
     );
     let node = context.during(Time::ZERO, 4.seconds(), |local| {
-        local.embed(&child, 1.seconds())
+        local.embed(&child, 1.seconds().after_origin())
     });
     let frame = node
         .compile(

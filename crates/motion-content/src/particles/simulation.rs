@@ -84,16 +84,16 @@ impl ParticleSimulationBuilder {
             config: Config {
                 seed,
                 duration: None,
-                step: Time::from_ticks(motion_core::TICKS_PER_SECOND / 240),
+                step: Duration::from_ticks(motion_core::TICKS_PER_SECOND / 240),
                 interval: 60,
                 emitters: Vec::new(),
                 modifiers: Vec::new(),
                 groups: Vec::new(),
                 sub_emitters: Vec::new(),
-                prewarm: Time::ZERO,
+                prewarm: Duration::ZERO,
                 loop_period: None,
                 time_scale: 1.0,
-                time_offset: Time::ZERO,
+                time_offset: Duration::ZERO,
                 allow_reverse: false,
                 workers: 1,
                 limits: SimulationLimits::default(),
@@ -177,8 +177,8 @@ impl ParticleSimulationBuilder {
         let config = &self.config;
         if config
             .duration
-            .is_some_and(|duration| duration <= Time::ZERO)
-            || config.step <= Time::ZERO
+            .is_some_and(|duration| duration <= Duration::ZERO)
+            || config.step <= Duration::ZERO
             || config.interval == 0
             || config.limits.max_particles == 0
             || config.limits.max_work == 0
@@ -253,7 +253,7 @@ impl ParticleSimulation {
         clip_duration: Option<Duration>,
     ) -> Result<Arc<[Particle]>, ValidationError> {
         let prepared = self.prepared(clip_duration)?;
-        if time < Time::ZERO || time >= prepared.duration {
+        if time < Time::ZERO || time >= prepared.duration.after_origin() {
             return Ok(Arc::from([]));
         }
         if let Some(replay) = &prepared.replay {
@@ -297,7 +297,7 @@ impl ParticleSimulation {
     /// Returns events at the containing fixed boundary, sorted by stable ID and trigger kind.
     pub fn events(&self, time: Time) -> Result<Vec<ParticleEvent>, ValidationError> {
         let prepared = self.prepared(None)?;
-        if time < Time::ZERO || time >= prepared.duration {
+        if time < Time::ZERO || time >= prepared.duration.after_origin() {
             return Ok(Vec::new());
         }
         if let Some(replay) = &prepared.replay {
@@ -465,9 +465,9 @@ fn prepare(config: &Config, duration: Duration) -> Result<Prepared, ValidationEr
         });
     }
     let limits = config.limits;
-    if duration <= Time::ZERO
+    if duration <= Duration::ZERO
         || duration.as_seconds() > 3600.0
-        || config.step <= Time::ZERO
+        || config.step <= Duration::ZERO
         || config.step > duration
         || config.interval == 0
         || limits.max_particles == 0
@@ -591,7 +591,9 @@ mod tests {
             for _ in 0..4 {
                 let simulation = &simulation;
                 scope.spawn(move || {
-                    let point = simulation.sample(500.milliseconds()).unwrap()[0];
+                    let point = simulation
+                        .sample(500.milliseconds().after_origin())
+                        .unwrap()[0];
                     assert!((point.position[0] - 0.5).abs() < 1e-6);
                     assert!((point.position[1] - 0.255).abs() < 1e-6);
                 });
@@ -602,11 +604,11 @@ mod tests {
         assert!(stats.interval > 1 && stats.admitted_bytes <= 2048);
         for time in [990, 0, 500, 40, 500] {
             assert_eq!(
-                simulation.sample(time.milliseconds())?,
-                simulation.sample(time.milliseconds())?
+                simulation.sample(time.milliseconds().after_origin())?,
+                simulation.sample(time.milliseconds().after_origin())?
             );
         }
-        assert!(simulation.sample(1.seconds())?.is_empty());
+        assert!(simulation.sample(1.seconds().after_origin())?.is_empty());
         assert!(
             simulation
                 .clone()

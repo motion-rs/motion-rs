@@ -151,7 +151,7 @@ fn timeline_boundary_warnings_are_visible_without_rendering_or_devices() -> moti
     let creation = eframe::CreationContext::_new_kittest(context);
     let timeline = motion_core::Timeline::new(Size::new(16.0, 8.0), 30)
         .track(|track| {
-            track.scene(motion_core::Time::from_seconds(0.05), |_| {
+            track.scene(motion_core::Duration::from_seconds(0.05), |_| {
                 Node::from(
                     motion_core::Rect::new(0.0, 0.0, 8.0, 8.0).fill(motion_core::Color::WHITE),
                 )

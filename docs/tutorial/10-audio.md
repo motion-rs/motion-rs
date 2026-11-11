@@ -35,7 +35,7 @@ fn main() -> motion::Result {
                 Ok(Circle::new(context.center(), radius)?.fill(Color::rgb(20, 150, 125)))
             })
         }).build()?;
-    render_still(&timeline, 500.milliseconds(), &RenderOptions::default())?
+    render_still(&timeline, 500.milliseconds().after_origin(), &RenderOptions::default())?
         .save_png("tutorial-audio-reactive.png")
 }
 ```
@@ -89,7 +89,7 @@ use motion::encode::MixedAudio;
 
 fn main() -> motion::Result {
     let narration = AudioClip::file("voice.wav")
-        .start(1.seconds())
+        .start(1.seconds().after_origin())
         .duration(4.seconds())
         .fade_in(100.milliseconds());
     let music = AudioClip::file("music.mp3")

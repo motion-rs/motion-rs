@@ -210,7 +210,7 @@ impl BrushStrokeBuilder {
         radius: f32,
         drying: Duration,
     ) -> Result<Self, ValidationError> {
-        if age < Time::ZERO || drying <= Time::ZERO || !radius.is_finite() || radius < 0.0 {
+        if age < Duration::ZERO || drying <= Duration::ZERO || !radius.is_finite() || radius < 0.0 {
             return Err(invalid(
                 "wetness",
                 "Invalid age, wash radius or drying duration",

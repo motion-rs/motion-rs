@@ -16,7 +16,7 @@ use std::sync::Arc;
 
 fn trail(length: f64, width: f64, segments: u8) -> ParticleStyle {
     ParticleStyle::Trails {
-        length: Time::from_seconds(length),
+        length: Duration::from_seconds(length),
         width,
     }
     .trails(TrailOptions {

@@ -36,7 +36,7 @@ fn main() -> motion::Result {
                 .translate(32.0, 100.0)
         })
     }).build()?;
-    render_still(&timeline, 1.seconds(), &options)?
+    render_still(&timeline, 1.seconds().after_origin(), &options)?
         .save_png("tutorial-content.png")
 }
 ```

@@ -3,7 +3,7 @@
 use crate::{Image, ImageAsset};
 
 use image::{AnimationDecoder, ImageDecoder};
-use motion_core::{Duration, FrameRate, Time, ValidationError};
+use motion_core::{Duration, FrameRate, ValidationError};
 use std::{
     io::{Cursor, Read},
     sync::Arc,
@@ -36,7 +36,7 @@ pub enum ImageLoopMode {
 #[derive(Clone, Debug)]
 pub struct AnimatedImageAsset {
     frames: Arc<[Arc<ImageAsset>]>,
-    ends: Arc<[Time]>,
+    ends: Arc<[Duration]>,
     plays: Option<u32>,
     bytes: usize,
 }
@@ -50,13 +50,13 @@ impl AnimatedImageAsset {
         }
         let size = (frames[0].0.width(), frames[0].0.height());
         let mut total = 0i64;
-        let mut bytes =
-            frames.len() * (std::mem::size_of::<Arc<ImageAsset>>() + std::mem::size_of::<Time>());
+        let mut bytes = frames.len()
+            * (std::mem::size_of::<Arc<ImageAsset>>() + std::mem::size_of::<Duration>());
         let mut seen = std::collections::BTreeSet::new();
         let mut ends = Vec::with_capacity(frames.len());
         let mut images = Vec::with_capacity(frames.len());
         for (frame, duration) in frames {
-            if (frame.width(), frame.height()) != size || duration < Time::ZERO {
+            if (frame.width(), frame.height()) != size || duration < Duration::ZERO {
                 return Err(invalid(
                     "frames",
                     "Animation dimensions must match and durations must be nonnegative",
@@ -76,7 +76,7 @@ impl AnimatedImageAsset {
             if bytes > MAX_BYTES {
                 return Err(invalid("bytes", "Animation mip data exceeds 256 MiB"));
             }
-            ends.push(Time::from_ticks(total));
+            ends.push(Duration::from_ticks(total));
             images.push(frame);
         }
         if total == 0 {
@@ -108,9 +108,9 @@ impl AnimatedImageAsset {
             .into_iter()
             .enumerate()
             .map(|(index, frame)| {
-                let start = Time::checked_from_frame(index as i64, rate)
+                let start = Duration::checked_from_frame(index as i64, rate)
                     .ok_or_else(|| invalid("duration", "Sequence time overflow"))?;
-                let end = Time::checked_from_frame(index as i64 + 1, rate)
+                let end = Duration::checked_from_frame(index as i64 + 1, rate)
                     .ok_or_else(|| invalid("duration", "Sequence time overflow"))?;
                 Ok((frame, end - start))
             })
@@ -198,7 +198,7 @@ impl AnimatedImageAsset {
             let ticks = (u128::from(numerator) * motion_core::TICKS_PER_SECOND as u128
                 + divisor / 2)
                 / divisor;
-            let duration = Time::from_ticks(
+            let duration = Duration::from_ticks(
                 i64::try_from(ticks)
                     .map_err(|error| motion_core::Error::Parameters(Box::new(error)))?,
             );
@@ -262,13 +262,13 @@ impl AnimatedImageAsset {
             *end - index
                 .checked_sub(1)
                 .map(|previous| self.ends[previous])
-                .unwrap_or(Time::ZERO)
+                .unwrap_or(Duration::ZERO)
         })
     }
 
     /// Negative time is absent; finite play holds the last frame afterwards.
-    pub fn frame_index_at(&self, time: Time, mode: ImageLoopMode) -> Option<usize> {
-        if time < Time::ZERO {
+    pub fn frame_index_at(&self, time: Duration, mode: ImageLoopMode) -> Option<usize> {
+        if time < Duration::ZERO {
             return None;
         }
         let total = self.duration().ticks();
@@ -310,7 +310,7 @@ impl AnimatedImageAsset {
     }
 
     /// Samples without I/O, allocation, decoding or state mutation.
-    pub fn frame_at(&self, time: Time, mode: ImageLoopMode) -> Option<&Arc<ImageAsset>> {
+    pub fn frame_at(&self, time: Duration, mode: ImageLoopMode) -> Option<&Arc<ImageAsset>> {
         self.frame_index_at(time, mode)
             .map(|index| &self.frames[index])
     }
@@ -345,7 +345,7 @@ enum Input {
 #[derive(Clone, Debug)]
 pub struct AnimatedImage {
     input: Input,
-    time: Time,
+    time: Duration,
     mode: ImageLoopMode,
     size: Option<motion_core::Size>,
     fit: crate::Fit,
@@ -367,7 +367,7 @@ impl AnimatedImage {
     fn with_input(input: Input) -> Self {
         Self {
             input,
-            time: Time::ZERO,
+            time: Duration::ZERO,
             mode: ImageLoopMode::File,
             size: None,
             fit: crate::Fit::Contain,
@@ -377,7 +377,7 @@ impl AnimatedImage {
     }
 
     /// Sets source query time independently of output frame rate.
-    pub fn animation_time(mut self, time: Time) -> Self {
+    pub fn animation_time(mut self, time: Duration) -> Self {
         self.time = time;
         self
     }
@@ -538,8 +538,11 @@ mod tests {
             .unwrap();
         }
         let sequence = AnimatedImageAsset::from_sequence(asset.frames.to_vec(), FrameRate::NTSC)?;
-        assert_eq!(sequence.duration(), Time::from_frame(3, FrameRate::NTSC));
-        assert!(AnimatedImageAsset::from_frames(vec![(image([0; 4]), Time::ZERO)]).is_err());
+        assert_eq!(
+            sequence.duration(),
+            Duration::from_frame(3, FrameRate::NTSC)
+        );
+        assert!(AnimatedImageAsset::from_frames(vec![(image([0; 4]), Duration::ZERO)]).is_err());
         Ok(())
     }
 
@@ -679,7 +682,7 @@ mod tests {
                     let build = |context: &motion_core::SceneContext<'_>| {
                         motion_core::Node::from(
                             AnimatedImage::from_asset(asset.clone())
-                                .animation_time(context.time())
+                                .animation_time(context.elapsed())
                                 .loop_mode(mode)
                                 .size(10.0, 6.0)
                                 .fit(crate::Fit::Fill)
@@ -695,13 +698,13 @@ mod tests {
                         None
                     };
                     let expected = cpu.render_output_at(
-                        milliseconds.milliseconds(),
+                        milliseconds.milliseconds().after_origin(),
                         background,
                         format,
                         build,
                     )?;
                     let actual = gpu.render_output_at(
-                        milliseconds.milliseconds(),
+                        milliseconds.milliseconds().after_origin(),
                         background,
                         format,
                         build,
@@ -751,7 +754,7 @@ mod tests {
                     assert_eq!(
                         actual,
                         gpu.render_output_at(
-                            milliseconds.milliseconds(),
+                            milliseconds.milliseconds().after_origin(),
                             background,
                             format,
                             build

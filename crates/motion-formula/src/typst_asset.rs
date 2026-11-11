@@ -119,7 +119,7 @@ impl TypstCompiler {
         }
         let compiled = self.layout(Source::detached(source));
         let document = compiled.output.map_err(|diagnostics| {
-            motion_core::Error::Formula(format!(
+            motion_core::Error::formula(format!(
                 "Typst compilation failed: {}",
                 diagnostics
                     .iter()

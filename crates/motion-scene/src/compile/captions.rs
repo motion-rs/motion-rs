@@ -59,7 +59,9 @@ impl Compiler<'_> {
             .map_err(|error| self.error(path, "captions", error.to_string()))
             .ok()?;
         let layout = Arc::new(layout);
-        Some(Built::new(true, move |time| layout.node(time)))
+        Some(Built::new(true, move |time| {
+            layout.node(time.after_origin())
+        }))
     }
 
     #[cfg(feature = "captions")]

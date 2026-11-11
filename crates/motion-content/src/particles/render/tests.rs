@@ -47,7 +47,7 @@ fn original_coverage(batch: &ParticleBatch, point: Point, antialias: f64) -> f32
 fn bokeh_focus_and_history_capacity_are_explicit() -> motion_core::Result {
     let cache = motion_core::SceneCache::new(0);
     let context = SceneContext::new(
-        250.milliseconds(),
+        250.milliseconds().after_origin(),
         motion_core::FrameRate::from(30),
         Size::new(32.0, 24.0),
         &cache,
@@ -139,7 +139,7 @@ fn bokeh_focus_and_history_capacity_are_explicit() -> motion_core::Result {
 fn configured_eight_segment_trails_match_plain_trail_upload_bytes() -> motion_core::Result {
     let cache = motion_core::SceneCache::new(0);
     let context = SceneContext::new(
-        500.milliseconds(),
+        500.milliseconds().after_origin(),
         motion_core::FrameRate::from(30),
         Size::new(32.0, 24.0),
         &cache,
@@ -562,7 +562,7 @@ fn instance_styles_are_not_paths_and_respect_budget_and_custom_callbacks() -> mo
 {
     let cache = motion_core::SceneCache::new(0);
     let context = SceneContext::new(
-        500.milliseconds(),
+        500.milliseconds().after_origin(),
         motion_core::FrameRate::from(30),
         Size::new(32.0, 24.0),
         &cache,
@@ -694,7 +694,7 @@ mod gpu {
         let limits = RasterLimits::default();
         let mut gpu = motion_render::gpu::Gpu::new()?;
         let context = SceneContext::new(
-            250.milliseconds(),
+            250.milliseconds().after_origin(),
             motion_core::FrameRate::from(30),
             Size::new(32.0, 24.0),
             &cache,
@@ -965,7 +965,7 @@ mod gpu {
         let design = Size::new(1920.0, 1080.0);
         let cache = motion_core::SceneCache::new(0);
         let context = SceneContext::new(
-            500.milliseconds(),
+            500.milliseconds().after_origin(),
             motion_core::FrameRate::from(30),
             design,
             &cache,
@@ -1188,7 +1188,7 @@ mod gpu {
                 }
                 for milliseconds in [250, 0, 500, 250] {
                     let context = SceneContext::new(
-                        milliseconds.milliseconds(),
+                        milliseconds.milliseconds().after_origin(),
                         motion_core::FrameRate::from(30),
                         Size::new(32.0, 24.0),
                         &cache,
@@ -1249,7 +1249,7 @@ mod gpu {
                 motion_core::BlendSpace::Srgb,
             ] {
                 let context = SceneContext::new(
-                    500.milliseconds(),
+                    500.milliseconds().after_origin(),
                     motion_core::FrameRate::from(30),
                     Size::new(32.0, 24.0),
                     &cache,

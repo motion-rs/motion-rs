@@ -25,7 +25,7 @@ fn main() -> motion::Result {
                 .opacity(context.sample(&opacity)))
         })
     }).build()?;
-    render_still(&timeline, 1.seconds(), &RenderOptions::default())?
+    render_still(&timeline, 1.seconds().after_origin(), &RenderOptions::default())?
         .save_png("tutorial-animation.png")
 }
 ```

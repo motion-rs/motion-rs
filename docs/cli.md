@@ -118,7 +118,7 @@ quality setting.
 | Name | Codec | Default extension | Quality | Alpha |
 | --- | --- | --- | --- | --- |
 | `h264` | `Codec::H264` (Medium preset) | `.mp4` | yes | rejected |
-| `h265`, `hevc` | `Codec::H265` | `.mp4` | yes | rejected |
+| `h265`, `hevc` | `Codec::H265` (Medium preset, 8-bit) | `.mp4` | yes | rejected |
 | `vp9` | `Codec::Vp9` | `.webm` | yes | `--alpha` |
 | `prores`, `prores4444` | `Codec::ProRes4444` | `.mov` | rejected | no flag needed |
 | `png`, `png-sequence` | `Codec::PngSequence` | `.frames` (a directory) | rejected | no flag needed |
@@ -230,7 +230,7 @@ The [`motion-video` skill](../.github/skills/motion-video/SKILL.md) drives
 `still` and `export` of a film binary with `--size`, `--time`, `--range`,
 `--output` and `--overwrite`, and relies on exit code `0`. `SceneDescriptor` and
 `VisualCheckPolicy` in [`catalog.rs`](../crates/motion/src/catalog.rs) are
-Studio/test registration metadata and are not read by `Project`.
+Studio/test registration metadata, are exported from the crate root but not the prelude, and are not read by `Project`.
 
 ## Related
 

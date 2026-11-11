@@ -54,14 +54,15 @@ Verified in [`options.rs`](../../crates/motion-encode/src/export/options.rs),
 | `Codec` | Container / library | Input format | Alpha | Notes |
 | --- | --- | --- | --- | --- |
 | `H264 { quality, preset }` | MP4 / `libx264` | `Yuv420` 8-bit | no | CRF `0..=51` |
-| `H265 { quality }` | MP4 / `libx265` | `Yuv420` 8 or 10-bit | no | `BitDepth::Ten` selects Main10 (`yuv420p10le`); optional `x265_params` (at most 4096 bytes, no NUL) |
+| `H265 { quality, preset, bit_depth, params }` | MP4 / `libx265` | `Yuv420` 8 or 10-bit | no | `BitDepth::Ten` selects Main10 (`yuv420p10le`); optional `params` x265 string (at most 4096 bytes, no NUL) |
 | `Vp9 { quality, alpha }` | WebM / `libvpx-vp9` | `Yuv420` or straight `SrgbRgba8` when `alpha` | optional | quality `0..=63`; timeline audio is rejected |
 | `ProRes4444` | MOV / `prores_ks` | straight `SrgbRgba8` (`yuva444p10le`) | yes | fixed quality, no tuning |
 | `PngSequence` | directory of PNG frames | encoder-defined | straight | no audio, no container metadata |
 | `Gif { frame_rate, colors }` | GIF | encoder-defined | transparent entry | `2..=256` colors; delays must fit `1..=65535` centiseconds |
 
-Further constraints: ten-bit requires H.265 (`validate_encoding`); the `preset`
-applies to libx264/libx265 and is `medium`, `slow` or `slower`; the native encoder
+Further constraints: encoder-specific settings live only on the codec variants that
+use them (`preset` for H.264/H.265, `bit_depth` and `params` for H.265), so
+`ExportOptions` carries none; `preset` is `medium`, `slow` or `slower`; the native encoder
 requires even dimensions, at most 16,384 per side (`EncoderCapabilities`), at least
 one and at most `u32::MAX` frames, and at most 86,400 seconds. Audio is AAC at
 44,100, 48,000 (default) or 96,000 Hz. Selecting an alpha-capable codec, PNG or GIF

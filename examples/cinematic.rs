@@ -61,15 +61,19 @@ fn main() -> motion::Result {
         std::fs::create_dir_all("docs/assets")?;
         let frame = render_still(
             &timeline,
-            1.seconds(),
+            1.seconds().after_origin(),
             &look.render_options(RenderOptions::default()),
         )?;
         frame.save_png(format!("docs/assets/cinematic-{mode}.png"))?;
         return Ok(());
     }
     let options = ExportOptions::new(format!("cinematic-{mode}.mp4"))
-        .codec(Codec::H265 { quality: 18 })
-        .bit_depth(BitDepth::Ten)
+        .codec(Codec::H265 {
+            quality: 18,
+            preset: EncoderPreset::Medium,
+            bit_depth: BitDepth::Ten,
+            params: None,
+        })
         .render(|options| look.render_options(options));
     export(&timeline, &options, &motion::NoProgress)?;
     Ok(())

@@ -421,7 +421,7 @@ fn scene_closures_duration_wrappers_and_dynamic_sharing_use_explicit_context() {
     let shared: Arc<dyn Scene> = Arc::new(scene);
     let cache = SceneCache::new(0);
     let context = SceneContext::new(
-        1.seconds(),
+        1.seconds().after_origin(),
         FrameRate::from(30),
         Size::new(16.0, 16.0),
         &cache,
@@ -444,10 +444,10 @@ fn scene_closures_duration_wrappers_and_dynamic_sharing_use_explicit_context() {
         );
     });
     assert_eq!(
-        shared.clone().with_duration(Time::ZERO).duration(),
-        Some(Time::ZERO)
+        shared.clone().with_duration(Duration::ZERO).duration(),
+        Some(Duration::ZERO)
     );
-    assert!(std::panic::catch_unwind(|| callback.with_duration(Time::from_ticks(-1))).is_err());
+    assert!(std::panic::catch_unwind(|| callback.with_duration(Duration::from_ticks(-1))).is_err());
 }
 
 #[test]

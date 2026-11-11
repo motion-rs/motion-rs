@@ -6,7 +6,7 @@
 //! ```
 //! use motion_core::{FrameRate, Time, TimeLiteral};
 //! let boundary = Time::from_frame(30_000, FrameRate::NTSC);
-//! assert_eq!(boundary, 1001.seconds());
+//! assert_eq!(boundary, 1001.seconds().after_origin());
 //! assert_eq!(boundary.to_frame(FrameRate::NTSC), 30_000);
 //! ```
 

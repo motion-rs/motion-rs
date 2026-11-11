@@ -232,8 +232,14 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
                     .try_wetness((progress * 4.0).seconds(), 10.0, 1.4.seconds())?
                     .build()?,
             ),
-            16 => Node::from(recorded.clone().write_with((progress * 4.0).seconds())?),
-            17 => Node::from(stroke.write_timed((progress * 3.45).seconds(), &timing)?),
+            16 => Node::from(
+                recorded
+                    .clone()
+                    .write_with((progress * 4.0).seconds().after_origin())?,
+            ),
+            17 => {
+                Node::from(stroke.write_timed((progress * 3.45).seconds().after_origin(), &timing)?)
+            }
             18 => stroke.write(reveal).erase(atlas::specimen(progress)?),
             19 => pigment(progress)?,
             20 => {
@@ -364,7 +370,7 @@ fn recording() -> motion::Result<BrushStroke> {
         position: Point::new(left, top),
         pressure,
         tilt: time * 0.5,
-        time: time.seconds(),
+        time: time.seconds().after_origin(),
     });
     Ok(
         BrushStrokeBuilder::from_samples(&samples, 26.0, Color::from_hex(0x3564c4))?

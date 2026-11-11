@@ -1,23 +1,29 @@
-//! Signed integer-tick time and rational frame rates, independent of rendering.
+//! Integer-tick time points, durations and rational frame rates, independent of rendering.
 
 use std::ops::{Add, AddAssign, Div, Mul, Neg, Sub, SubAssign};
 
 /// Flicks per second, exactly covering common video and audio sample rates.
 pub const TICKS_PER_SECOND: i64 = 705_600_000;
 
-/// A signed time point or duration, stored as integer flicks.
+/// A signed point on the timeline, stored as integer flicks since the origin.
 ///
 /// Comparisons and frame conversion use integers. Floating-point seconds are
 /// intended for animation mathematics, not interval membership checks.
-/// Arithmetic panics on overflow, independently of the build profile.
+/// Only meaningful operations exist: `Time - Time` is a [`Duration`] and
+/// `Time ± Duration` is a [`Time`]. Arithmetic panics on overflow,
+/// independently of the build profile.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Time(i64);
 
-/// A duration uses the same representation and arithmetic as a time point.
-pub type Duration = Time;
+/// A signed span of time, stored as integer flicks.
+///
+/// Durations add, subtract, negate and scale; they use the same tick unit and
+/// overflow behavior as [`Time`].
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Duration(i64);
 
 impl Time {
-    /// The time origin and an empty duration.
+    /// The time origin.
     pub const ZERO: Self = Self(0);
 
     /// Constructs time without losing integer tick precision.
@@ -30,7 +36,7 @@ impl Time {
     /// # Panics
     /// Panics for nonfinite input or a rounded result outside the signed range.
     pub fn from_seconds(seconds: f64) -> Self {
-        Self::rounded_ticks(seconds * TICKS_PER_SECOND as f64)
+        Self(rounded_ticks(seconds * TICKS_PER_SECOND as f64))
     }
 
     /// Returns the first tick at or after the exact rational frame boundary.
@@ -85,34 +91,37 @@ impl Time {
         self.0
     }
 
-    /// Multiplies ticks exactly, returning None on signed overflow.
-    pub fn checked_mul(self, factor: i64) -> Option<Self> {
-        self.0.checked_mul(factor).map(Self)
-    }
-
-    fn rounded_ticks(ticks: f64) -> Self {
-        let rounded = ticks.round();
-        assert!(
-            rounded.is_finite() && rounded >= i64::MIN as f64 && rounded < -(i64::MIN as f64),
-            "time must be finite and fit the signed tick range"
-        );
-        Self(rounded as i64)
+    /// Returns the span from the origin to this time point.
+    pub const fn since_origin(self) -> Duration {
+        Duration(self.0)
     }
 }
 
-impl Add for Time {
+impl Add<Duration> for Time {
     type Output = Self;
 
-    fn add(self, other: Self) -> Self {
-        Self(self.0.checked_add(other.0).expect("time addition overflow"))
+    fn add(self, span: Duration) -> Self {
+        Self(self.0.checked_add(span.0).expect("time addition overflow"))
+    }
+}
+
+impl Sub<Duration> for Time {
+    type Output = Self;
+
+    fn sub(self, span: Duration) -> Self {
+        Self(
+            self.0
+                .checked_sub(span.0)
+                .expect("time subtraction overflow"),
+        )
     }
 }
 
 impl Sub for Time {
-    type Output = Self;
+    type Output = Duration;
 
-    fn sub(self, other: Self) -> Self {
-        Self(
+    fn sub(self, other: Self) -> Duration {
+        Duration(
             self.0
                 .checked_sub(other.0)
                 .expect("time subtraction overflow"),
@@ -120,88 +129,189 @@ impl Sub for Time {
     }
 }
 
-impl AddAssign for Time {
+impl AddAssign<Duration> for Time {
+    fn add_assign(&mut self, span: Duration) {
+        *self = *self + span;
+    }
+}
+
+impl SubAssign<Duration> for Time {
+    fn sub_assign(&mut self, span: Duration) {
+        *self = *self - span;
+    }
+}
+
+impl Duration {
+    /// The empty duration.
+    pub const ZERO: Self = Self(0);
+
+    /// Constructs a duration without losing integer tick precision.
+    pub const fn from_ticks(ticks: i64) -> Self {
+        Self(ticks)
+    }
+
+    /// Rounds seconds to the nearest tick; halfway cases round away from zero.
+    ///
+    /// # Panics
+    /// Panics for nonfinite input or a rounded result outside the signed range.
+    pub fn from_seconds(seconds: f64) -> Self {
+        Self(rounded_ticks(seconds * TICKS_PER_SECOND as f64))
+    }
+
+    /// Returns the duration from the origin to a frame boundary, as
+    /// [`Time::from_frame`] does.
+    ///
+    /// # Panics
+    /// Panics if the boundary cannot be represented as signed ticks.
+    pub fn from_frame(frame: i64, rate: FrameRate) -> Self {
+        Time::from_frame(frame, rate).since_origin()
+    }
+
+    /// Converts a frame boundary like [`Self::from_frame`], returning None on overflow.
+    pub fn checked_from_frame(frame: i64, rate: FrameRate) -> Option<Self> {
+        Time::checked_from_frame(frame, rate).map(Time::since_origin)
+    }
+
+    /// Returns the frame containing this span's end, rounding toward negative infinity.
+    ///
+    /// # Panics
+    /// Panics if the frame index is outside the signed 64-bit range.
+    pub fn to_frame(self, rate: FrameRate) -> i64 {
+        Time(self.0).to_frame(rate)
+    }
+
+    /// Finds the frame count like [`Self::to_frame`], returning None on overflow.
+    pub fn checked_to_frame(self, rate: FrameRate) -> Option<i64> {
+        Time(self.0).checked_to_frame(rate)
+    }
+
+    /// Converts to floating-point seconds for animation mathematics.
+    pub fn as_seconds(self) -> f64 {
+        self.0 as f64 / TICKS_PER_SECOND as f64
+    }
+
+    /// Returns the exact signed tick count.
+    pub const fn ticks(self) -> i64 {
+        self.0
+    }
+
+    /// Returns the time point this far from the origin.
+    pub const fn after_origin(self) -> Time {
+        Time(self.0)
+    }
+
+    /// Multiplies ticks exactly, returning None on signed overflow.
+    pub fn checked_mul(self, factor: i64) -> Option<Self> {
+        self.0.checked_mul(factor).map(Self)
+    }
+}
+
+impl Add for Duration {
+    type Output = Self;
+
+    fn add(self, other: Self) -> Self {
+        Self(
+            self.0
+                .checked_add(other.0)
+                .expect("duration addition overflow"),
+        )
+    }
+}
+
+impl Sub for Duration {
+    type Output = Self;
+
+    fn sub(self, other: Self) -> Self {
+        Self(
+            self.0
+                .checked_sub(other.0)
+                .expect("duration subtraction overflow"),
+        )
+    }
+}
+
+impl AddAssign for Duration {
     fn add_assign(&mut self, other: Self) {
         *self = *self + other;
     }
 }
 
-impl SubAssign for Time {
+impl SubAssign for Duration {
     fn sub_assign(&mut self, other: Self) {
         *self = *self - other;
     }
 }
 
-impl Neg for Time {
+impl Neg for Duration {
     type Output = Self;
 
     fn neg(self) -> Self {
-        Self(self.0.checked_neg().expect("time negation overflow"))
+        Self(self.0.checked_neg().expect("duration negation overflow"))
     }
 }
 
-impl Mul<f64> for Time {
+impl Mul<f64> for Duration {
     type Output = Self;
 
-    /// Scales time and rounds to the nearest tick, away from zero at ties.
+    /// Scales the duration and rounds to the nearest tick, away from zero at ties.
     fn mul(self, factor: f64) -> Self {
         match factor {
             1.0 => self,
             -1.0 => -self,
-            _ => Self::rounded_ticks(self.0 as f64 * factor),
+            _ => Self(rounded_ticks(self.0 as f64 * factor)),
         }
     }
 }
 
-macro_rules! integer_time_mul {
+macro_rules! integer_duration_mul {
     ($($integer:ty),+ $(,)?) => {$ (
-        impl Mul<$integer> for Time {
-            type Output = Time;
-            fn mul(self, factor: $integer) -> Time {
-                Time(i64::try_from(i128::from(self.0) * factor as i128).expect("time multiplication overflow"))
+        impl Mul<$integer> for Duration {
+            type Output = Duration;
+            fn mul(self, factor: $integer) -> Duration {
+                Duration(i64::try_from(i128::from(self.0) * factor as i128).expect("duration multiplication overflow"))
             }
         }
-        impl Mul<Time> for $integer {
-            type Output = Time;
-            fn mul(self, time: Time) -> Time { time * self }
+        impl Mul<Duration> for $integer {
+            type Output = Duration;
+            fn mul(self, span: Duration) -> Duration { span * self }
         }
     )+};
 }
 
-integer_time_mul!(i32, i64, u32, u64, usize);
+integer_duration_mul!(i32, i64, u32, u64, usize);
 
-impl Mul<Time> for f64 {
-    type Output = Time;
+impl Mul<Duration> for f64 {
+    type Output = Duration;
 
-    fn mul(self, time: Time) -> Time {
-        time * self
+    fn mul(self, span: Duration) -> Duration {
+        span * self
     }
 }
 
-impl Div<f64> for Time {
+impl Div<f64> for Duration {
     type Output = Self;
 
-    /// Divides time; a nonfinite or zero divisor is rejected.
+    /// Divides the duration; a nonfinite or zero divisor is rejected.
     fn div(self, divisor: f64) -> Self {
         assert!(
             divisor.is_finite() && divisor != 0.0,
-            "time divisor must be finite and nonzero"
+            "duration divisor must be finite and nonzero"
         );
         match divisor {
             1.0 => self,
             -1.0 => -self,
-            _ => Self::rounded_ticks(self.0 as f64 / divisor),
+            _ => Self(rounded_ticks(self.0 as f64 / divisor)),
         }
     }
 }
 
-impl Div for Time {
+impl Div for Duration {
     type Output = f64;
 
-    /// Returns a dimensionless ratio; a zero duration is rejected.
-    fn div(self, duration: Self) -> f64 {
-        assert!(duration.0 != 0, "time ratio requires a nonzero duration");
-        self.0 as f64 / duration.0 as f64
+    /// Returns a dimensionless ratio; a zero divisor is rejected.
+    fn div(self, divisor: Self) -> f64 {
+        assert!(divisor.0 != 0, "duration ratio requires a nonzero divisor");
+        self.0 as f64 / divisor.0 as f64
     }
 }
 
@@ -255,7 +365,7 @@ impl FrameRate {
     /// Returns the first frame's duration, rounded up if not tick-exact.
     /// Use [`Time::from_frame`] for later boundaries to avoid accumulated rounding.
     pub fn frame_duration(self) -> Duration {
-        Time::from_frame(1, self)
+        Duration::from_frame(1, self)
     }
 }
 
@@ -271,23 +381,23 @@ impl From<u32> for FrameRate {
 /// Nonfinite or out-of-range values panic. Integer literals use exact arithmetic
 /// and panic on overflow, independently of the build profile.
 pub trait TimeLiteral {
-    /// Converts seconds to signed tick time.
-    fn seconds(self) -> Time;
+    /// Converts seconds to signed tick duration.
+    fn seconds(self) -> Duration;
 
-    /// Converts milliseconds to signed tick time.
-    fn milliseconds(self) -> Time;
+    /// Converts milliseconds to signed tick duration.
+    fn milliseconds(self) -> Duration;
 }
 
 impl TimeLiteral for i64 {
-    fn seconds(self) -> Time {
-        Time(
+    fn seconds(self) -> Duration {
+        Duration(
             self.checked_mul(TICKS_PER_SECOND)
                 .expect("seconds overflow"),
         )
     }
 
-    fn milliseconds(self) -> Time {
-        Time(
+    fn milliseconds(self) -> Duration {
+        Duration(
             self.checked_mul(TICKS_PER_SECOND / 1_000)
                 .expect("milliseconds overflow"),
         )
@@ -295,11 +405,11 @@ impl TimeLiteral for i64 {
 }
 
 impl TimeLiteral for i32 {
-    fn seconds(self) -> Time {
+    fn seconds(self) -> Duration {
         i64::from(self).seconds()
     }
 
-    fn milliseconds(self) -> Time {
+    fn milliseconds(self) -> Duration {
         i64::from(self).milliseconds()
     }
 }
@@ -307,8 +417,8 @@ impl TimeLiteral for i32 {
 macro_rules! unsigned_time_literal {
     ($($integer:ty),+ $(,)?) => {$ (
         impl TimeLiteral for $integer {
-            fn seconds(self) -> Time { i64::try_from(self).expect("seconds overflow").seconds() }
-            fn milliseconds(self) -> Time { i64::try_from(self).expect("milliseconds overflow").milliseconds() }
+            fn seconds(self) -> Duration { i64::try_from(self).expect("seconds overflow").seconds() }
+            fn milliseconds(self) -> Duration { i64::try_from(self).expect("milliseconds overflow").milliseconds() }
         }
     )+};
 }
@@ -316,13 +426,22 @@ macro_rules! unsigned_time_literal {
 unsigned_time_literal!(u32, u64, usize);
 
 impl TimeLiteral for f64 {
-    fn seconds(self) -> Time {
-        Time::from_seconds(self)
+    fn seconds(self) -> Duration {
+        Duration::from_seconds(self)
     }
 
-    fn milliseconds(self) -> Time {
-        Time::rounded_ticks(self * (TICKS_PER_SECOND / 1_000) as f64)
+    fn milliseconds(self) -> Duration {
+        Duration(rounded_ticks(self * (TICKS_PER_SECOND / 1_000) as f64))
     }
+}
+
+fn rounded_ticks(ticks: f64) -> i64 {
+    let rounded = ticks.round();
+    assert!(
+        rounded.is_finite() && rounded >= i64::MIN as f64 && rounded < -(i64::MIN as f64),
+        "time must be finite and fit the signed tick range"
+    );
+    rounded as i64
 }
 
 #[cfg(test)]
@@ -334,12 +453,12 @@ mod tests {
         assert_eq!(2_u32.seconds(), 2_i64.seconds());
         assert_eq!(3_usize.milliseconds(), 3_i64.milliseconds());
         assert_eq!(4_u64.seconds(), 4_i64.seconds());
-        let large = Time::from_ticks((1_i64 << 53) + 1);
+        let large = Duration::from_ticks((1_i64 << 53) + 1);
         assert_eq!((large * 3_i64).ticks(), ((1_i64 << 53) + 1) * 3);
         assert_eq!((3_u32 * large).ticks(), (large * 3_i64).ticks());
-        assert_eq!((Time::from_ticks(-2) * 4_u64).ticks(), -8);
-        assert_eq!(Time::from_ticks(i64::MAX).checked_mul(2), None);
-        assert!(std::panic::catch_unwind(|| Time::from_ticks(i64::MAX) * 2_u32).is_err());
+        assert_eq!((Duration::from_ticks(-2) * 4_u64).ticks(), -8);
+        assert_eq!(Duration::from_ticks(i64::MAX).checked_mul(2), None);
+        assert!(std::panic::catch_unwind(|| Duration::from_ticks(i64::MAX) * 2_u32).is_err());
         assert!(std::panic::catch_unwind(|| u64::MAX.seconds()).is_err());
     }
 
@@ -382,11 +501,11 @@ mod tests {
             for frame in [-1_000_000, -101, -1, 0, 1, 101, 1_000_000] {
                 let time = Time::from_frame(frame, rate);
                 assert_eq!(time.to_frame(rate), frame);
-                assert_eq!((time - Time::from_ticks(1)).to_frame(rate), frame - 1);
+                assert_eq!((time - Duration::from_ticks(1)).to_frame(rate), frame - 1);
             }
         }
         let rate = FrameRate::from(11);
-        assert_eq!(Time::from_frame(11, rate), 1.seconds());
+        assert_eq!(Time::from_frame(11, rate), Time::ZERO + 1.seconds());
         assert_ne!(rate.frame_duration() * 11.0, 1.seconds());
         assert_eq!(Time::from_ticks(-1).to_frame(FrameRate::from(30)), -1);
         let tiny_time = Time::from_frame(i64::MAX, FrameRate::new(u32::MAX, 1));
@@ -427,8 +546,8 @@ mod tests {
         let duration: Duration = 1.5.seconds();
         assert_eq!(duration, 1.seconds() + 500.milliseconds());
         assert_eq!((-250).milliseconds(), -250.milliseconds());
-        assert_eq!(Time::from_seconds(1.0 / 1024.0).ticks(), 689_063);
-        assert_eq!(Time::from_seconds(-1.0 / 1024.0).ticks(), -689_063);
+        assert_eq!(Duration::from_seconds(1.0 / 1024.0).ticks(), 689_063);
+        assert_eq!(Duration::from_seconds(-1.0 / 1024.0).ticks(), -689_063);
         assert_eq!((1.0 / 128.0).milliseconds().ticks(), 5_513);
         assert_eq!(2.0 * duration, 3.seconds());
         assert_eq!(duration / 2.0, 750.milliseconds());
@@ -437,32 +556,47 @@ mod tests {
         let mut time = Time::ZERO;
         time += duration;
         time -= 2.seconds();
-        assert_eq!(time, -500.milliseconds());
+        assert_eq!(time, Time::ZERO - 500.milliseconds());
+        assert_eq!(time - Time::ZERO, -500.milliseconds());
+        assert_eq!(time.since_origin().after_origin(), time);
         for ticks in [i64::MIN, i64::MAX] {
-            assert_eq!(Time::from_ticks(ticks) * 1.0, Time::from_ticks(ticks));
-            assert_eq!(Time::from_ticks(ticks) / 1.0, Time::from_ticks(ticks));
+            assert_eq!(
+                Duration::from_ticks(ticks) * 1.0,
+                Duration::from_ticks(ticks)
+            );
+            assert_eq!(
+                Duration::from_ticks(ticks) / 1.0,
+                Duration::from_ticks(ticks)
+            );
         }
     }
 
     #[test]
     fn invalid_inputs_and_overflow_do_not_saturate_or_wrap() {
         for seconds in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY, f64::MAX] {
-            assert!(std::panic::catch_unwind(|| Time::from_seconds(seconds)).is_err());
+            assert!(std::panic::catch_unwind(|| Duration::from_seconds(seconds)).is_err());
         }
         for components in [(0, 1), (1, 0), (0, 0)] {
             assert!(
                 std::panic::catch_unwind(|| FrameRate::new(components.0, components.1)).is_err()
             );
         }
-        let maximum = Time::from_ticks(i64::MAX);
-        let minimum = Time::from_ticks(i64::MIN);
-        assert!(std::panic::catch_unwind(|| maximum + Time::from_ticks(1)).is_err());
-        assert!(std::panic::catch_unwind(|| minimum - Time::from_ticks(1)).is_err());
+        let maximum = Duration::from_ticks(i64::MAX);
+        let minimum = Duration::from_ticks(i64::MIN);
+        assert!(std::panic::catch_unwind(|| maximum + Duration::from_ticks(1)).is_err());
+        assert!(std::panic::catch_unwind(|| minimum - Duration::from_ticks(1)).is_err());
+        assert!(
+            std::panic::catch_unwind(|| Time::from_ticks(i64::MAX) + Duration::from_ticks(1))
+                .is_err()
+        );
+        assert!(
+            std::panic::catch_unwind(|| Time::from_ticks(i64::MIN) - Time::from_ticks(1)).is_err()
+        );
         assert!(std::panic::catch_unwind(|| -minimum).is_err());
         assert!(std::panic::catch_unwind(|| maximum * 2.0).is_err());
         assert!(std::panic::catch_unwind(|| 1.seconds() * f64::NAN).is_err());
         assert!(std::panic::catch_unwind(|| 1.seconds() / 0.0).is_err());
-        assert!(std::panic::catch_unwind(|| Time::ZERO / Time::ZERO).is_err());
+        assert!(std::panic::catch_unwind(|| Duration::ZERO / Duration::ZERO).is_err());
         assert!(std::panic::catch_unwind(|| i64::MAX.seconds()).is_err());
         assert!(std::panic::catch_unwind(|| i64::MAX.milliseconds()).is_err());
         assert!(

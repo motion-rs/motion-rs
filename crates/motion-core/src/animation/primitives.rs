@@ -1,7 +1,7 @@
 //! Clock-free analytic oscillators, seeded noise, path motion and mappings.
 
 use super::{Animation, Easing, Interpolate};
-use crate::{Duration, Path2D, Point, Time, Vector2};
+use crate::{Duration, Path2D, Point, Vector2};
 use std::sync::Arc;
 
 /// Periodic waveform evaluated in turns.
@@ -67,7 +67,7 @@ impl Oscillator {
 }
 
 impl Animation<f64> for Oscillator {
-    fn sample(&self, time: Time) -> f64 {
+    fn sample(&self, time: Duration) -> f64 {
         let cycles = time.as_seconds() * self.frequency + self.phase;
         assert!(cycles.is_finite(), "Oscillator phase overflow");
         let turns = cycles - libm::floor(cycles);
@@ -157,7 +157,7 @@ impl Noise {
 }
 
 impl Animation<f64> for Noise {
-    fn sample(&self, time: Time) -> f64 {
+    fn sample(&self, time: Duration) -> f64 {
         let mut position = time.as_seconds() * self.frequency;
         let mut amplitude = 1.0;
         let mut value = 0.0;
@@ -196,7 +196,7 @@ pub struct FollowPath {
 impl FollowPath {
     /// Creates path motion with a nonnegative duration; zero jumps to the end.
     pub fn new(path: impl Into<Arc<Path2D>>, duration: Duration) -> Self {
-        assert!(duration >= Time::ZERO);
+        assert!(duration >= Duration::ZERO);
         Self {
             path: path.into(),
             duration,
@@ -213,9 +213,9 @@ impl FollowPath {
 }
 
 impl Animation<PathSample> for FollowPath {
-    fn sample(&self, time: Time) -> PathSample {
-        let progress = if self.duration == Time::ZERO {
-            if time < Time::ZERO { 0.0 } else { 1.0 }
+    fn sample(&self, time: Duration) -> PathSample {
+        let progress = if self.duration == Duration::ZERO {
+            if time < Duration::ZERO { 0.0 } else { 1.0 }
         } else {
             (time / self.duration).clamp(0.0, 1.0)
         };

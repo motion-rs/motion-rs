@@ -1,6 +1,6 @@
 //! Windowed, checked file decoding without whole-file PCM retention.
 
-use motion_core::{AudioClip, AudioSource, Duration, Time};
+use motion_core::{AudioClip, AudioSource, Duration};
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
@@ -106,7 +106,7 @@ impl AudioSource for FileSource {
                 )
                 .ok()
             })
-            .map(Time::from_ticks)
+            .map(Duration::from_ticks)
     }
 
     fn read(&self, start: u64, output: &mut [f32]) -> usize {
@@ -246,7 +246,7 @@ mod tests {
         let resolved = super::super::prepare_timeline(&timeline)?;
         assert_eq!(
             resolved.duration(),
-            motion_core::Time::from_frame(30, motion_core::FrameRate::from(30))
+            motion_core::Duration::from_frame(30, motion_core::FrameRate::from(30))
         );
         let original = std::fs::read(&path)?;
         let mut options = crate::ExportOptions::new(&path).overwrite(true);

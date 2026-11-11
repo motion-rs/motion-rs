@@ -273,7 +273,7 @@ fn draw(
             .into(),
         safe.stroke(1.0, Color::from_hex(0x648377)).into(),
         atlas::text(&format!("{seconds:.2} s"), 13.0, 0xb9cec5, 415.0, 12.0),
-        layout.node(time),
+        layout.node(time.after_origin()),
     ];
     let duration = study.sheet.duration().as_secs_f64();
     for (index, cue) in study.sheet.captions().cues().iter().enumerate() {
@@ -292,7 +292,7 @@ fn draw(
             .into(),
     );
     if page == 10 {
-        let amount = study.sheet.progress(time, "in", "out")?;
+        let amount = study.sheet.progress(time.after_origin(), "in", "out")?;
         nodes.push(
             Circle::new(Point::new(50.0 + amount * 412.0, 118.0), 8.0)?
                 .fill(Color::from_hex(atlas::MINT))
@@ -313,7 +313,7 @@ fn draw(
             .as_ref()
             .as_ref()
             .map_err(|message| std::io::Error::other(message.clone()))?;
-        nodes.push(original_layout.node(time));
+        nodes.push(original_layout.node(time.after_origin()));
         nodes.push(atlas::text("Original / 4 s", 13.0, 0xb9cec5, 28.0, 78.0));
         nodes.push(atlas::text("Retimed / 6 s", 13.0, 0xb9cec5, 28.0, 180.0));
     }
@@ -330,24 +330,24 @@ mod tests {
         let track = boundary.sheet.captions();
         assert_eq!(
             track
-                .active_at_time(1999.milliseconds())
+                .active_at_time(1999.milliseconds().after_origin())
                 .next()
                 .map(CaptionCue::text),
             Some("第一句 / First cue")
         );
         assert_eq!(
             track
-                .active_at_time(2.seconds())
+                .active_at_time(2.seconds().after_origin())
                 .next()
                 .map(CaptionCue::text),
             Some("第二句 / Second cue")
         );
-        assert_eq!(track.active_at_time(4.seconds()).count(), 0);
+        assert_eq!(track.active_at_time(4.seconds().after_origin()).count(), 0);
         assert_eq!(
             study(7)?
                 .sheet
                 .captions()
-                .active_at_time(1500.milliseconds())
+                .active_at_time(1500.milliseconds().after_origin())
                 .count(),
             2
         );
@@ -363,7 +363,12 @@ mod tests {
             retimed.sheet.captions().cues()[1].start(),
             Duration::from_secs(3)
         );
-        assert_eq!(study(10)?.sheet.progress(2.seconds(), "in", "out")?, 0.5);
+        assert_eq!(
+            study(10)?
+                .sheet
+                .progress(2.seconds().after_origin(), "in", "out")?,
+            0.5
+        );
         Ok(())
     }
 }

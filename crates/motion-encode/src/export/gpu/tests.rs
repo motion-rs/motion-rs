@@ -18,7 +18,7 @@ fn bounded_planning_retains_full_submission_limits_without_a_device() -> Result<
                         .fill(Color::rgb(190, 40, 125))
                         .opacity(0.5)
                 })
-                .with_duration(Time::from_frame(4, rate)),
+                .with_duration(motion_core::Duration::from_frame(4, rate)),
             )
         })
         .build()?;
@@ -133,7 +133,7 @@ fn ten_bit_gpu_export_matches_cpu_export_within_one_code_value() -> Result<()> {
                     )
                     .opacity(0.5)
                 })
-                .with_duration(Time::from_frame(6, rate)),
+                .with_duration(motion_core::Duration::from_frame(6, rate)),
             )
         })
         .build()?;
@@ -255,7 +255,7 @@ fn automatic_backend_selecting_the_gpu_uses_the_pipeline() -> Result<()> {
                             .fill(Color::rgb(190, 40, 125)),
                     )
                 })
-                .with_duration(Time::from_frame(12, rate)),
+                .with_duration(motion_core::Duration::from_frame(12, rate)),
             )
         })
         .build()?;
@@ -286,7 +286,7 @@ fn gpu_export_pipeline_matches_linear_reference_and_cancels_transactionally() ->
                     )
                     .opacity(0.5)
                 })
-                .with_duration(Time::from_frame(12, rate)),
+                .with_duration(motion_core::Duration::from_frame(12, rate)),
             )
         })
         .build()?;
@@ -385,7 +385,7 @@ fn gpu_export_pipeline_matches_linear_reference_and_cancels_transactionally() ->
                             .filter(motion_core::Filter::Blur { sigma: 9.0 })
                     }
                 })
-                .with_duration(Time::from_frame(12, rate)),
+                .with_duration(motion_core::Duration::from_frame(12, rate)),
             )
         })
         .build()?;
@@ -486,7 +486,7 @@ fn gpu_export_pipeline_matches_linear_reference_and_cancels_transactionally() ->
                     );
                     Node::empty()
                 })
-                .with_duration(Time::from_frame(12, rate)),
+                .with_duration(motion_core::Duration::from_frame(12, rate)),
             )
         })
         .build()?;

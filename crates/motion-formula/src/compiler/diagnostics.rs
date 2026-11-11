@@ -57,7 +57,7 @@ impl std::error::Error for FormulaCompileError {}
 
 impl From<FormulaCompileError> for motion_core::Error {
     fn from(error: FormulaCompileError) -> Self {
-        Self::FormulaDiagnostics(Box::new(error))
+        Self::formula_with_source(error.to_string(), error)
     }
 }
 

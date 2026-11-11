@@ -159,7 +159,7 @@ mod tests {
         for index in [3, 0, 2, 1, 19, 3] {
             let selected = sequence
                 .frame_at(
-                    motion_core::Time::from_frame(index, rate),
+                    motion_core::Duration::from_frame(index, rate),
                     ImageLoopMode::Once,
                 )
                 .unwrap();
@@ -170,7 +170,7 @@ mod tests {
         for (index, expected) in [(0, 3), (1, 3), (2, 2), (4, 1), (19, 1), (0, 3)] {
             let selected = reversed
                 .frame_at(
-                    motion_core::Time::from_frame(index, rate) / 2.0,
+                    motion_core::Duration::from_frame(index, rate) / 2.0,
                     ImageLoopMode::Once,
                 )
                 .unwrap();
@@ -179,7 +179,10 @@ mod tests {
         let freeze = AnimatedImageAsset::from_sequence(vec![images[2].clone()], rate)?;
         assert!(Arc::ptr_eq(
             freeze
-                .frame_at(motion_core::Time::from_frame(19, rate), ImageLoopMode::Loop)
+                .frame_at(
+                    motion_core::Duration::from_frame(19, rate),
+                    ImageLoopMode::Loop
+                )
                 .unwrap(),
             &images[2]
         ));
@@ -255,7 +258,10 @@ mod tests {
             for index in [6, 0, 5, 1, 4, 2, 3, 0] {
                 assert!(Arc::ptr_eq(
                     asset
-                        .frame_at(Time::from_frame(index, rate) * speed, ImageLoopMode::Once)
+                        .frame_at(
+                            motion_core::Duration::from_frame(index, rate) * speed,
+                            ImageLoopMode::Once
+                        )
                         .unwrap(),
                     &images[expected[index as usize]]
                 ));
@@ -315,7 +321,7 @@ mod tests {
             for index in [8, 0, 7, 1, 6, 2, 5, 3, 4, 0] {
                 assert!(Arc::ptr_eq(
                     asset
-                        .frame_at(Time::from_frame(index, rate) * speed, mode)
+                        .frame_at(motion_core::Duration::from_frame(index, rate) * speed, mode)
                         .unwrap(),
                     &images[expected[index as usize]]
                 ));
@@ -329,12 +335,12 @@ mod tests {
             Size::new(123.0, 456.0),
             &cache,
         )
-        .with_clip_duration(Time::from_frame(120, rate));
+        .with_clip_duration(motion_core::Duration::from_frame(120, rate));
         assert_eq!(source.sample(&track), 24.0);
         assert_eq!(source.time().as_seconds(), 1.0);
         assert_eq!(
             source
-                .shifted(Time::from_frame(20, rate))
+                .shifted(motion_core::Duration::from_frame(20, rate))
                 .time()
                 .to_frame(rate),
             4
@@ -342,7 +348,7 @@ mod tests {
         assert_eq!(source.size(), Size::new(123.0, 456.0));
         assert_eq!(source.frame_rate(), rate);
         assert_eq!(source.clip_duration(), Some(5.seconds()));
-        assert_eq!(track.sample(source.time()), 24.0);
+        assert_eq!(track.sample(source.time().since_origin()), 24.0);
         Ok(())
     }
 
@@ -357,7 +363,7 @@ mod tests {
         assert!(AnimatedImageAsset::from_sequence(vec![small.clone(); 4096], rate).is_ok());
         assert!(AnimatedImageAsset::from_sequence(vec![small.clone(); 4097], rate).is_err());
         assert!(
-            AnimatedImageAsset::from_frames(vec![(small, motion_core::Time::from_ticks(-1))])
+            AnimatedImageAsset::from_frames(vec![(small, motion_core::Duration::from_ticks(-1))])
                 .is_err()
         );
         Ok(())
@@ -394,7 +400,7 @@ mod tests {
                     let sampled = actual.render_frame(index, |context| {
                         Node::from(
                             AnimatedImage::from_asset(sequence.clone())
-                                .animation_time(context.time() / 2.0)
+                                .animation_time(context.elapsed() / 2.0)
                                 .loop_mode(mode)
                                 .size(4.0, 4.0),
                         )

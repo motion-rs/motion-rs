@@ -2,7 +2,7 @@
 
 use super::mix::{MixedAudio, PreparedClip};
 use super::{MAX_SAMPLES, invalid};
-use motion_core::Time;
+use motion_core::Duration;
 use std::sync::Arc;
 
 /// Immutable prepared stereo mix. Reads perform fixed-order f64 summation and are
@@ -20,8 +20,8 @@ pub struct BusMeter {
 
 impl BusMeter {
     /// Offline 50 ms RMS and sample-peak levels in dBFS; silence/EOF return -96 dBFS.
-    pub fn level(&self, time: Time) -> [f64; 2] {
-        if time < Time::ZERO {
+    pub fn level(&self, time: Duration) -> [f64; 2] {
+        if time < Duration::ZERO {
             return [-96.0; 2];
         }
         let frame = (time.as_seconds() * f64::from(self.rate)).floor() as u64;
@@ -120,7 +120,7 @@ impl MixedAudio {
                             std::slice::from_ref(trigger.as_ref()),
                             self.rate,
                             self.duration_time(),
-                            Time::ZERO,
+                            Duration::ZERO,
                             self.quality,
                         )?
                         .snapshot()?;

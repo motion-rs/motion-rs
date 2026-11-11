@@ -74,10 +74,13 @@ pub enum Error {
     },
     /// SVG parser failure.
     Svg(BoxedError),
-    /// Formula compiler diagnostics.
-    Formula(String),
-    /// Structured formula diagnostics retaining original source ranges.
-    FormulaDiagnostics(BoxedError),
+    /// Formula compilation failure, optionally retaining structured diagnostics.
+    Formula {
+        /// User-facing explanation.
+        message: String,
+        /// Original structured diagnostics with source ranges, when available.
+        source: Option<BoxedError>,
+    },
     /// Invalid serialized project parameters.
     Parameters(BoxedError),
     /// Timeline construction failure.
@@ -140,6 +143,25 @@ impl Error {
         }
     }
 
+    /// Formula failure without structured diagnostics.
+    pub fn formula(message: impl Into<String>) -> Self {
+        Self::Formula {
+            message: message.into(),
+            source: None,
+        }
+    }
+
+    /// Formula failure retaining its structured diagnostics as the source.
+    pub fn formula_with_source(
+        message: impl Into<String>,
+        source: impl StdError + Send + Sync + 'static,
+    ) -> Self {
+        Self::Formula {
+            message: message.into(),
+            source: Some(Box::new(source)),
+        }
+    }
+
     /// Classifies an error independently of any frame annotation.
     pub fn kind(&self) -> ErrorKind {
         match self {
@@ -150,7 +172,7 @@ impl Error {
             Self::Io(_) => ErrorKind::Io,
             Self::Asset { .. } => ErrorKind::Asset,
             Self::Svg(_) => ErrorKind::Svg,
-            Self::Formula(_) | Self::FormulaDiagnostics(_) => ErrorKind::Formula,
+            Self::Formula { .. } => ErrorKind::Formula,
             Self::Parameters(_) => ErrorKind::Parameters,
             Self::Timeline { .. } => ErrorKind::Timeline,
             Self::GpuUnavailable(_) => ErrorKind::GpuUnavailable,
@@ -248,8 +270,7 @@ impl fmt::Display for Error {
                 "{kind} asset `{source_name}` failed to load: {cause}"
             ),
             Self::Svg(cause) => write!(formatter, "SVG parse error: {cause}"),
-            Self::Formula(message) => write!(formatter, "formula compile error: {message}"),
-            Self::FormulaDiagnostics(cause) => write!(formatter, "formula compile error: {cause}"),
+            Self::Formula { message, .. } => write!(formatter, "formula compile error: {message}"),
             Self::Parameters(cause) => write!(formatter, "invalid parameters: {cause}"),
             Self::Timeline { timeline, message } => {
                 write!(formatter, "timeline `{timeline}`: {message}")
@@ -280,13 +301,15 @@ impl StdError for Error {
             Self::Io(error) => Some(error),
             Self::Asset { cause, .. }
             | Self::Svg(cause)
-            | Self::FormulaDiagnostics(cause)
             | Self::Parameters(cause)
             | Self::GpuUnavailable(cause)
             | Self::Gpu(cause)
             | Self::DeviceLost(cause)
             | Self::Encoder(cause)
             | Self::Other(cause) => Some(cause.as_ref()),
+            Self::Formula { source, .. } => source
+                .as_deref()
+                .map(|cause| cause as &(dyn StdError + 'static)),
             Self::AtFrame { cause, .. } => Some(cause.as_ref()),
             _ => None,
         }
@@ -296,7 +319,10 @@ impl StdError for Error {
 impl From<ValidationError> for Error {
     fn from(error: ValidationError) -> Self {
         if error.field == "formula" {
-            Self::FormulaDiagnostics(Box::new(error))
+            Self::Formula {
+                message: error.to_string(),
+                source: Some(Box::new(error)),
+            }
         } else {
             Self::Validation(error)
         }

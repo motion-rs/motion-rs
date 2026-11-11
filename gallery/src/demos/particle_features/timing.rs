@@ -29,7 +29,7 @@ pub(super) fn looped(parameters: DemoParameters) -> motion::Result<Study> {
 pub(super) fn slow(parameters: DemoParameters) -> motion::Result<Study> {
     Ok(Study::new(stream(parameters).time_remap(
         0.35,
-        Time::ZERO,
+        Duration::ZERO,
         false,
     )))
 }
@@ -84,8 +84,16 @@ mod tests {
         };
         for moment in [2.8, 0.25, 1.1, 2.8] {
             assert_eq!(
-                layers[0].0.as_ref().unwrap().sample(moment.seconds())?,
-                layers[1].0.as_ref().unwrap().sample(moment.seconds())?
+                layers[0]
+                    .0
+                    .as_ref()
+                    .unwrap()
+                    .sample(moment.seconds().after_origin())?,
+                layers[1]
+                    .0
+                    .as_ref()
+                    .unwrap()
+                    .sample(moment.seconds().after_origin())?
             );
         }
         Ok(())
@@ -100,16 +108,19 @@ mod tests {
             .clone()
             .time_remap(-0.75, 3.seconds(), true)
             .build()?;
-        let slowed = source.clone().time_remap(0.35, Time::ZERO, false).build()?;
+        let slowed = source
+            .clone()
+            .time_remap(0.35, Duration::ZERO, false)
+            .build()?;
         let source = source.build()?;
-        let reversed_state = reversed.sample(1.seconds())?;
-        let forward_state = source.sample(2.25.seconds())?;
+        let reversed_state = reversed.sample(1.seconds().after_origin())?;
+        let forward_state = source.sample(2.25.seconds().after_origin())?;
         assert!(
             reversed_state == forward_state,
             "reverse mapping changed the fixed-boundary state"
         );
         let source_time = Time::from_ticks((2.seconds().ticks() as f64 * 0.35) as i64);
-        let slowed_state = slowed.sample(2.seconds())?;
+        let slowed_state = slowed.sample(2.seconds().after_origin())?;
         let forward_state = source.sample(source_time)?;
         assert!(
             slowed_state == forward_state,

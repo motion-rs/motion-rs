@@ -381,7 +381,8 @@ mod tests {
         let rate = motion_core::FrameRate::from(3);
         for frame in [
             motion_core::Time::from_frame(1, rate),
-            motion_core::Time::from_frame(4, rate) - motion_core::Time::from_frame(3, rate),
+            (motion_core::Time::from_frame(4, rate) - motion_core::Time::from_frame(3, rate))
+                .after_origin(),
             motion_core::Time::from_frame(1, rate),
         ] {
             assert_eq!(
