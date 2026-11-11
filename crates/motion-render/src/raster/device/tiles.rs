@@ -2,11 +2,23 @@
 
 use super::super::polygon::Edge;
 use crate::prepared::PixelRect;
+use kurbo::ParamCurve;
 use motion_core::ValidationError;
 use motion_core::budget::Budget;
 
 /// Width and height of a coverage tile in pixels.
 pub(crate) const COVERAGE_TILE_SIZE: u32 = 16;
+
+/// Full-row area followed by eight subrow winding carries; mirrored in coverage.wgsl.
+#[cfg(feature = "gpu")]
+pub(crate) const COVERAGE_CARRY_STRIDE: u64 = 9;
+
+/// Winding samples (8 x 8) one refined pixel evaluates against every edge of its tile.
+const COVERAGE_REFINEMENT_SAMPLES: u64 = 64;
+
+/// Pixels one edge reference can force into refinement inside a tile: the pixels it crosses
+/// plus the pixels to its right in rows where it ends.
+const REFINED_PIXELS_PER_EDGE: u64 = 2 * COVERAGE_TILE_SIZE as u64;
 
 /// Bytes in the host/WGSL coverage fill descriptor.
 #[cfg(feature = "gpu")]
@@ -27,6 +39,12 @@ pub(crate) const COVERAGE_PARAMS_BYTES: u64 = 16;
 /// Maximum conservatively admitted edge references in one tile.
 const MAX_TILE_EDGES: u32 = 4096;
 
+/// Maximum control hulls used to admit one curve, without generating its line segments.
+const CURVE_ADMISSION_HULLS: u32 = 8;
+
+/// Conservative scalar work for one cubic subsegment's control polygon.
+const CURVE_HULL_WORK: u64 = 128;
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct TileLayout {
     pub(crate) columns: u32,
@@ -36,6 +54,17 @@ pub(crate) struct TileLayout {
 }
 
 impl TileLayout {
+    /// Work units for binning, row carries, area integration and refinement.
+    ///
+    /// Area integration and row carries visit each edge reference at most `256 + 16` times,
+    /// plus the count/scatter and prefix passes. Refinement evaluates every reference against
+    /// each pixel it forces into the 8 x 8 winding test.
+    fn work_for(indices: u64, tile_count: u64, bounds: PixelRect) -> u64 {
+        let area = u64::from(COVERAGE_TILE_SIZE).pow(2) + 18;
+        let refinement = REFINED_PIXELS_PER_EDGE * COVERAGE_REFINEMENT_SAMPLES;
+        indices * (area + refinement) + tile_count * 32 + bounds.pixels()
+    }
+
     pub(super) fn admit_curves(
         curves: &[super::DeviceCurve],
         bounds: PixelRect,
@@ -55,47 +84,62 @@ impl TileLayout {
         let mut indices = 0_u64;
         let mut crowded = false;
         for curve in curves {
-            // The f32 de Casteljau hull stays inside this hull plus one seam tile.
-            let axis = |x: bool, minimum: bool| {
-                curve
-                    .points
-                    .iter()
-                    .map(|point| {
-                        let value = if x {
-                            point.x - f64::from(bounds.left)
-                        } else {
-                            point.y - f64::from(bounds.top)
-                        };
-                        f64::from(value as f32)
-                    })
-                    .fold(
-                        if minimum {
-                            f64::INFINITY
-                        } else {
-                            f64::NEG_INFINITY
-                        },
-                        |a, b| if minimum { a.min(b) } else { a.max(b) },
-                    )
-            };
-            let tile = |value: f64, maximum: u32| {
-                (value / f64::from(COVERAGE_TILE_SIZE))
-                    .floor()
-                    .clamp(0.0, f64::from(maximum - 1)) as u32
-            };
-            let left = tile(axis(true, true), columns).saturating_sub(1);
-            let right = (tile(axis(true, false), columns) + 1).min(columns - 1);
-            let top = tile(axis(false, true), rows).saturating_sub(1);
-            let bottom = (tile(axis(false, false), rows) + 1).min(rows - 1);
-            budget.work(
-                u64::from(right - left + 1) * u64::from(bottom - top + 1),
-                path,
-            )?;
-            for row in top..=bottom {
-                for column in left..=right {
-                    let count = &mut counts[(row * columns + column) as usize];
-                    *count = count.saturating_add(curve.segments);
-                    crowded |= *count > MAX_TILE_EDGES;
-                    indices += u64::from(curve.segments);
+            let parts = curve.segments.min(CURVE_ADMISSION_HULLS);
+            budget.work(u64::from(parts) * CURVE_HULL_WORK, path)?;
+            let points = curve
+                .points
+                .map(|point| kurbo::Point::new(point.x, point.y));
+            let cubic = kurbo::CubicBez::new(points[0], points[1], points[2], points[3]);
+            for part in 0..parts {
+                let first = u64::from(part) * u64::from(curve.segments) / u64::from(parts);
+                let last = u64::from(part + 1) * u64::from(curve.segments) / u64::from(parts);
+                let hull = cubic.subsegment(
+                    first as f64 / f64::from(curve.segments)
+                        ..last as f64 / f64::from(curve.segments),
+                );
+                let points = [hull.p0, hull.p1, hull.p2, hull.p3];
+                // Split on the GPU's segment boundaries. Each generated chord is in its
+                // subcurve hull; the seam tile also covers f32 evaluation/parameter error.
+                let axis = |x: bool, minimum: bool| {
+                    points
+                        .iter()
+                        .map(|point| {
+                            let value = if x {
+                                point.x - f64::from(bounds.left)
+                            } else {
+                                point.y - f64::from(bounds.top)
+                            };
+                            f64::from(value as f32)
+                        })
+                        .fold(
+                            if minimum {
+                                f64::INFINITY
+                            } else {
+                                f64::NEG_INFINITY
+                            },
+                            |a, b| if minimum { a.min(b) } else { a.max(b) },
+                        )
+                };
+                let tile = |value: f64, maximum: u32| {
+                    (value / f64::from(COVERAGE_TILE_SIZE))
+                        .floor()
+                        .clamp(0.0, f64::from(maximum - 1)) as u32
+                };
+                let left = tile(axis(true, true), columns).saturating_sub(1);
+                let right = (tile(axis(true, false), columns) + 1).min(columns - 1);
+                let top = tile(axis(false, true), rows).saturating_sub(1);
+                let bottom = (tile(axis(false, false), rows) + 1).min(rows - 1);
+                budget.work(
+                    u64::from(right - left + 1) * u64::from(bottom - top + 1),
+                    path,
+                )?;
+                for row in top..=bottom {
+                    for column in left..=right {
+                        let count = &mut counts[(row * columns + column) as usize];
+                        *count = count.saturating_add((last - first) as u32);
+                        crowded |= *count > MAX_TILE_EDGES;
+                        indices += last - first;
+                    }
                 }
             }
         }
@@ -107,9 +151,7 @@ impl TileLayout {
             columns,
             rows,
             indices: indices as u32,
-            work: indices * (u64::from(COVERAGE_TILE_SIZE).pow(2) + 18)
-                + tile_count * 32
-                + bounds.pixels(),
+            work: Self::work_for(indices, tile_count, bounds),
         }))
     }
 
@@ -180,11 +222,7 @@ impl TileLayout {
             columns,
             rows,
             indices: indices as u32,
-            // Raster area plus row carries visit each reference at most 256 + 16 times;
-            // count/scatter and prefix passes are charged as well.
-            work: indices * (u64::from(COVERAGE_TILE_SIZE).pow(2) + 18)
-                + tile_count * 32
-                + bounds.pixels(),
+            work: Self::work_for(indices, tile_count, bounds),
         }))
     }
 

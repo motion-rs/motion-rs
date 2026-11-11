@@ -22,8 +22,8 @@ pub(crate) use curves::DeviceCurve;
 pub(crate) use tiles::TileLayout;
 #[cfg(feature = "gpu")]
 pub(crate) use tiles::{
-    COVERAGE_CURVE_BYTES, COVERAGE_EDGE_BYTES, COVERAGE_FILL_BYTES, COVERAGE_PARAMS_BYTES,
-    COVERAGE_TILE_SIZE,
+    COVERAGE_CARRY_STRIDE, COVERAGE_CURVE_BYTES, COVERAGE_EDGE_BYTES, COVERAGE_FILL_BYTES,
+    COVERAGE_PARAMS_BYTES, COVERAGE_TILE_SIZE,
 };
 
 /// Conservative device work units for de Casteljau evaluation and one generated edge write.

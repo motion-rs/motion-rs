@@ -46,8 +46,10 @@ A GPU pass expands those descriptors into the edge records consumed by coverage;
 the host does not flatten or upload those curve edges. Line-only uploads remain
 compatible. The GPU computes f32 coverage before composition, without an
 intermediate u8 quantization. All other coverage is still generated on the CPU and uploaded.
-Where contours cross inside a pixel the GPU sums signed areas rather than reproducing
-the exact CPU sweep, allowing localized antialiasing differences. CPU rendering
+Simple boundaries retain analytic signed areas. Overlapping winding is refined on
+an eight-by-eight midpoint grid before applying the fill rule, rather than folding
+an integrated winding and leaving false coverage along duplicate even-odd contours.
+This is not the exact CPU sweep and permits localized antialiasing differences. CPU rendering
 prepares its own coverage with unchanged reference arithmetic. An Automatic startup
 rejection prepares CPU coverage independently from the validated source before
 rendering; both preparation attempts count toward the request's work allowance.
@@ -73,7 +75,9 @@ fill origin; area evaluation subtracts the tile origin for local arithmetic.
 
 Before selecting GPU coverage, host preparation admits conservative tile counts,
 index capacity and work from line endpoints or curve control-point hulls and
-Wang segment upper bounds. One extra tile on each
+Wang segment upper bounds. Curves use up to eight subcurve hulls split at the
+device's uniform segment boundaries; this tightens capacity without generating
+host line segments. One extra tile on each
 horizontal side covers interpolation rounding at seams. Each tile admits at most
 4096 edge references. A fill admits at most 2^26 tile work units and the frame at
 most 2^28, 2^24 bounding-box pixels and 32768 fills. Coordinates outside the local
@@ -82,11 +86,17 @@ choose CPU coverage for that path before submission. Exhausting the caller's
 byte/work allowance remains a validation error, not an uncharged retry.
 
 Planning reserves host/upload/device descriptors, tile counters and offsets,
-the full conservative index capacity and 16 row carries per tile. The count,
+the full conservative index capacity and nine values per row: integrated signed
+height and eight midpoint winding carries. Refinement work is admitted separately
+from the base tile-work ceilings, conservatively charging up to 64 winding samples
+per edge visit plus the original coverage work. The count,
 prefix and scatter passes never request growth or a readback. Device buffer and
 two-dimensional dispatch limits are checked before encoding. Per-fill/frame work
 ceilings bound each coverage dispatch. Pooled counters are explicitly cleared
 before every count pass; each row carry and output sample has one writer.
+Packed plans validate their actual packed output buffer against device limits,
+not an unused full-raster float buffer. Linear readback plans retain the float
+buffer check, including filter padding.
 
 `PreparedGpuFrame::gpu_stats` exposes `GpuPreparationStats`: logical preparation
 totals, retained GPU segments, admitted tiles/index capacity, geometry-upload

@@ -463,12 +463,7 @@ fn packed_resources(
             "Output size/format requires linear fallback",
         ));
     }
-    let count = u64::from(size.width) * u64::from(size.height);
-    let packed_bytes = match format {
-        crate::PixelFormat::Yuv420 { bit_depth: 8 } => (count * 3 / 2).next_multiple_of(4),
-        crate::PixelFormat::Yuv420 { bit_depth: 10 } => count * 3,
-        _ => count * 4,
-    };
+    let packed_bytes = packed_buffer_bytes(size, format);
     Ok(WorkStats {
         peak_bytes: packed_bytes * PACKED_PAYLOAD_COPIES
             + (size_of::<PendingOutputFrame>()
@@ -477,6 +472,15 @@ fn packed_resources(
                 + 32) as u64,
         work: crate::FrameBuffer::conversion_work(size, format),
     })
+}
+
+pub(super) fn packed_buffer_bytes(size: PixelSize, format: crate::PixelFormat) -> u64 {
+    let count = u64::from(size.width) * u64::from(size.height);
+    match format {
+        crate::PixelFormat::Yuv420 { bit_depth: 8 } => (count * 3 / 2).next_multiple_of(4),
+        crate::PixelFormat::Yuv420 { bit_depth: 10 } => count * 3,
+        _ => count * 4,
+    }
 }
 
 #[cfg(test)]

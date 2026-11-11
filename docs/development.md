@@ -104,6 +104,35 @@ video fixtures decode frame counts and metadata. No test should invoke ffmpeg/ff
 executables. Native-window interaction, real output devices and other platforms need
 separate validation. Current gaps and acceptance criteria are in [the plan](plan.md).
 
+### Independent backend acceptance
+
+The v3 fixtures share their complex scenes with the breadth benchmark. They cover
+1,872 text characters, 128 SVG paths with gradients/holes/clipping/filtering,
+192 crossing paths under twelve alternating geometric/coverage clips, and 4,096
+analytic particles with blur, a mesh paint and seeded procedural atmosphere.
+The native matrix renders frames 0, 45 and 89 at 640x360, 1920x1080 and 3840x2160.
+Every visible 32x32 region checks alpha and each appearance channel on black and
+white independently, with RMS at most 0.035; transparent padding cannot dilute
+errors. An unrelated seek precedes each replay. Both backends receive identical
+inputs, and geometry cases must report independent GPU coverage.
+
+```sh
+cargo test --locked --offline --release -p motion-bench --features gpu --test breadth_cases v3_large_scene_visual_alpha_and_seek_acceptance -- --ignored --nocapture --test-threads=1
+cargo test --locked --offline -p motion-render --all-features --lib gpu:: -- --include-ignored --test-threads=1
+```
+
+The renderer suite includes 24 fixed random seeds under both winding rules,
+local-region comparisons, exact duplicate even-odd cancellation, tile seams,
+large coordinates, guard-band filters, procedural paints, analytic trajectories,
+residency and exact byte/work/device-limit admission. Existing CPU reference
+tests and goldens remain unchanged.
+
+Visual acceptance explicitly allows 2 GiB logical bytes and the authoring default
+work allowance. This is not benchmark-budget acceptance: breadth retains its
+unchanged 1 GiB/20-billion-work policy and records rejected cases instead of
+increasing limits. Both allowances describe logical payloads, not process RSS or
+physical device memory. GPU fixtures certify only the adapter actually used.
+
 ## Frame timing diagnostics
 
 The breadth benchmark accepts `MOTION_BENCH_TIMINGS=1` to collect per-frame host

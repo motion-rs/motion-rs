@@ -46,7 +46,7 @@ fn tile_descriptors_admit_scratch_and_report_geometry_uploads() -> motion_core::
     assert_eq!(u64::from(plan.device.indices), stats.tile_index_capacity);
     assert_eq!(
         plan.device.buffer_sizes()[2..5].iter().sum::<u64>(),
-        stats.tile_count * (16 + 16 * 4) + stats.tile_index_capacity.max(1) * 4
+        stats.tile_count * (16 + 16 * 9 * 4) + stats.tile_index_capacity.max(1) * 4
     );
     assert_eq!(plan.device.fills[0].columns, 12);
     assert_eq!(plan.device.fills[0].tile_rows, 6);

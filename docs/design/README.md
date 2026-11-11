@@ -75,7 +75,7 @@ perspective-mapped.
 3. Traits serve open extension points such as Scene, Drawable, DeferredContent, Asset, AudioSource
    and Encoder. Closed command/backend protocols use exhaustive enums.
 4. Backend-neutral frame facts precede backend-aware preparation. Eligible GPU
-   fills use CPU-flattened edges and GPU-generated coverage; other coverage stays
+   fills use device-flattened curves or line uploads and GPU-generated coverage; other coverage stays
    on the CPU. Independent GPU work does not imply automatic speedup.
 5. SVG, text and formulas share vector machinery, effects and coverage rather than
    separate rendering engines.

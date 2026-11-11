@@ -5,6 +5,7 @@ mod analytic_tests;
 mod curve_flatten_tests;
 mod device_coverage_tests;
 mod noise_tests;
+mod randomized_coverage_tests;
 mod tile_coverage_tests;
 
 fn assert_packed_output_matches(actual: &crate::FrameBuffer, expected: &crate::FrameBuffer) {

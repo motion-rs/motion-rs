@@ -2,7 +2,9 @@
 
 use super::*;
 use crate::gpu::abi::{CoverageCurve, CoverageEdge, CoverageFill, CoverageParams, CoverageTile};
-use crate::raster::device::{COVERAGE_TILE_SIZE, CURVE_FLATTEN_WORK_PER_SEGMENT};
+use crate::raster::device::{
+    COVERAGE_CARRY_STRIDE, COVERAGE_TILE_SIZE, CURVE_FLATTEN_WORK_PER_SEGMENT,
+};
 use motion_core::{FillRule, ValidationError};
 
 /// GPU-owned counts, offsets, indices and row carries have no CPU-generated edge lists.
@@ -25,7 +27,7 @@ impl DeviceCoverage {
             u64::from(self.edge_count).max(1) * size_of::<CoverageEdge>() as u64,
             u64::from(self.tiles) * size_of::<CoverageTile>() as u64,
             u64::from(self.indices).max(1) * 4,
-            u64::from(self.tiles) * u64::from(COVERAGE_TILE_SIZE) * 4,
+            u64::from(self.tiles) * u64::from(COVERAGE_TILE_SIZE) * COVERAGE_CARRY_STRIDE * 4,
             (self.curves.len() as u64).max(1) * size_of::<CoverageCurve>() as u64,
         ]
     }

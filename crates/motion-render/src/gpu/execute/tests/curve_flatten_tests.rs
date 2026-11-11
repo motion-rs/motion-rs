@@ -105,6 +105,41 @@ fn gpu_curve_flattening_has_no_host_edges_and_exact_admission() -> motion_core::
 }
 
 #[test]
+fn packed_output_validates_its_own_buffer_instead_of_unused_linear_storage() -> motion_core::Result
+{
+    let validation = ValidationLimits::default();
+    let limits = RasterLimits::default();
+    let frame = Node::from(Rect::new(0.0, 0.0, 64.0, 64.0).fill(Color::WHITE))
+        .compile(Size::new(64.0, 64.0), PixelSize::new(64, 64), validation)?
+        .prepare(validation, limits)?;
+    let format = crate::PixelFormat::SrgbRgba8 {
+        premultiplied: false,
+    };
+    let linear = Plan::new(&frame, limits)?;
+    let packed = Plan::new_packed(&frame, limits, format)?;
+    let device = wgpu::Limits {
+        max_storage_buffer_binding_size: 32 * 1024,
+        ..Default::default()
+    };
+    assert_eq!(
+        linear.validate_device(&device).unwrap_err().field,
+        "buffer_size"
+    );
+    packed.validate_device(&device)?;
+    assert_eq!(
+        packed
+            .validate_device(&wgpu::Limits {
+                max_storage_buffer_binding_size: 64 * 64 * 4 - 1,
+                ..device
+            })
+            .unwrap_err()
+            .field,
+        "buffer_size"
+    );
+    Ok(())
+}
+
+#[test]
 #[ignore = "requires native GPU; GPU quadratic/cubic flattening with clip/filter and replay"]
 fn gpu_curve_flattening_cpu_gpu_equivalence_and_replay() -> motion_core::Result {
     let limits = RasterLimits::default();

@@ -51,13 +51,16 @@ impl Plan {
                 "Shared coverage exceeds device buffer limits",
             ));
         }
-        let raster_bytes = u64::from(self.size.width) * u64::from(self.size.height) * 16;
-        if raster_bytes > limits.max_storage_buffer_binding_size
-            || raster_bytes > limits.max_buffer_size
+        let output_bytes = self.packed_output.map_or_else(
+            || u64::from(self.size.width) * u64::from(self.size.height) * 16,
+            |(size, format)| super::plan::packed_buffer_bytes(size, format),
+        );
+        if output_bytes > limits.max_storage_buffer_binding_size
+            || output_bytes > limits.max_buffer_size
         {
             return Err(device_error(
                 "buffer_size",
-                "Native GPU raster exceeds the selected device buffer limits",
+                "Native GPU output exceeds the selected device buffer limits",
             ));
         }
         if self.size.width.div_ceil(8) > limits.max_compute_workgroups_per_dimension
