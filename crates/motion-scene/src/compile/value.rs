@@ -349,7 +349,7 @@ impl Compiler<'_> {
         let amplitude = self.signal(oscillate.amplitude.unwrap_or(1.0), path, "amplitude");
         let phase = self.signal(oscillate.phase.unwrap_or(0.0), path, "phase");
         let offset = self.signal(oscillate.offset.unwrap_or(0.0), path, "offset");
-        let oscillator = Oscillator::new(oscillate.waveform.into(), frequency?)
+        let oscillator = Oscillator::new(oscillate.waveform, frequency?)
             .amplitude(amplitude?)
             .phase(phase?)
             .offset(offset?);

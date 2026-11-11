@@ -23,7 +23,7 @@ formula = ["text", "dep:motion-formula", "motion-formula/formula"]
 audio = ["dep:motion-encode", "motion-encode/audio"]
 
 [dependencies]
-motion-core = { version = "0.1.0", path = "../motion-core" }
+motion-core = { version = "0.1.0", path = "../motion-core", features = ["schema"] }
 motion-render = { version = "0.1.0", path = "../motion-render", default-features = false }
 motion-content = { version = "0.1.0", path = "../motion-content", default-features = false, optional = true }
 motion-formula = { version = "0.1.0", path = "../motion-formula", default-features = false, optional = true }

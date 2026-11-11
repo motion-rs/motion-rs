@@ -1,6 +1,8 @@
 //! Round-trip, schema, diagnostics and rendering tests for declarative documents.
 
-use motion_core::{Color, ErrorKind, Time, ValidationError};
+use motion_core::{
+    BlendMode, ClipMode, Color, ErrorKind, FillRule, LineCap, MaskMode, Time, ValidationError,
+};
 use motion_render::{RenderOptions, render_still};
 use motion_scene::*;
 
@@ -43,7 +45,7 @@ fn showcase() -> Document {
     ))
     .stroke(
         StrokeSpec::new(1.5, Color::WHITE)
-            .cap(LineCapSpec::Round)
+            .cap(LineCap::Round)
             .dash(vec![2.0, 1.0], 0.5),
     )
     .trim(TrimSpec::new(0.0, Animated::tween(0.0, 1.0, 1.0)))
@@ -51,8 +53,7 @@ fn showcase() -> Document {
         OscillateSpec::new(2.0).amplitude(0.5).offset(1.0),
     ))
     .clip(
-        ClipSpec::new(ClipShapeSpec::Rect([0.0, 0.0, 80.0, 40.0].into()))
-            .mode(ClipModeSpec::Geometric),
+        ClipSpec::new(ClipShapeSpec::Rect([0.0, 0.0, 80.0, 40.0].into())).mode(ClipMode::Geometric),
     );
     let group = Element::group([
         Element::rect([0.0, 0.0, 80.0, 40.0]).fill(PaintSpec::Gradient(GradientSpec::Linear(
@@ -63,16 +64,16 @@ fn showcase() -> Document {
         orbit,
         Element::path("M0 0 L10 0 L10 10 Z")
             .fill(Color::WHITE)
-            .fill_rule(FillRuleSpec::EvenOdd)
+            .fill_rule(FillRule::EvenOdd)
             .rotate(TweenSpec::new(0.0, 90.0, 1.0).repeat(2).ping_pong())
             .pivot(PivotSpec::Relative([0.5, 0.5]))
             .z_index(-1),
     ])
     .opacity(0.9)
-    .blend(BlendModeSpec::Screen)
+    .blend(BlendMode::Screen)
     .mask(
         Element::rect([0.0, 0.0, 40.0, 40.0]).fill(Color::WHITE),
-        MaskModeSpec::Alpha,
+        MaskMode::Alpha,
     );
     let rate = FrameRateSpec {
         numerator: 30_000,

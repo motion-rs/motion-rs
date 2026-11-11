@@ -303,7 +303,13 @@ impl Transition for Wipe {
 }
 
 /// Built-in iris reveal geometry centered in the design viewport.
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(rename_all = "snake_case")
+)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub enum IrisShape {
     /// Circle reaches every viewport corner at progress one.
     #[default]
@@ -392,6 +398,12 @@ impl Transition for ZoomBlur {
 
 /// A movement vector in layer-local coordinates, not the edge of entry.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(rename_all = "snake_case")
+)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub enum Direction {
     /// Move/reveal toward decreasing X; incoming push content enters from the right.
     Left,

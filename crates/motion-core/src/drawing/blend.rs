@@ -8,6 +8,12 @@
 /// endpoints and saturation; other modes extend their piecewise formulas without
 /// input clipping. Nonseparable modes use hue/saturation/luminosity replacement.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(rename_all = "snake_case")
+)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub enum BlendMode {
     /// Premultiplied source-over; the default.
     #[default]
@@ -98,6 +104,12 @@ pub enum BlendSpace {
 /// # Ok::<(), motion_core::ValidationError>(())
 /// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(rename_all = "snake_case")
+)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub enum FillRule {
     /// Nonzero signed winding count; the default.
     #[default]
@@ -113,6 +125,12 @@ pub enum FillRule {
 /// Alpha-zero pixels have zero ordinary coverage, even with hidden extended
 /// RGB; inverted modes therefore retain source content at those pixels.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(rename_all = "snake_case")
+)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub enum MaskMode {
     /// Use only the completed mask's alpha.
     #[default]

@@ -2,8 +2,8 @@
 
 use crate::content::CircleSpec;
 use crate::element::Element;
-use crate::options::{ClipModeSpec, MaskModeSpec};
 use crate::value::{Animated, ColorValue};
+use motion_core::{ClipMode, MaskMode};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -129,7 +129,7 @@ pub struct ClipSpec {
     pub shape: ClipShapeSpec,
     /// Coverage multiplication by default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub mode: Option<ClipModeSpec>,
+    pub mode: Option<ClipMode>,
 }
 
 impl ClipSpec {
@@ -139,7 +139,7 @@ impl ClipSpec {
     }
 
     /// Selects coverage or geometric clipping.
-    pub fn mode(mut self, mode: ClipModeSpec) -> Self {
+    pub fn mode(mut self, mode: ClipMode) -> Self {
         self.mode = Some(mode);
         self
     }
@@ -165,5 +165,5 @@ pub struct MaskSpec {
     pub element: Element,
     /// Alpha by default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub mode: Option<MaskModeSpec>,
+    pub mode: Option<MaskMode>,
 }

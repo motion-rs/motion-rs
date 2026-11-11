@@ -2,9 +2,9 @@
 
 use crate::audio::{AudioSpec, BusSpec, MasterSpec};
 use crate::element::Element;
-use crate::options::{DirectionSpec, IrisShapeSpec};
 use crate::value::ColorValue;
 use crate::{FORMAT_VERSION, MAX_DOCUMENT_BYTES, diagnostics, params};
+use motion_core::{Direction, IrisShape};
 use motion_core::{FrameRate, ValidationError};
 use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use serde::de::Error as _;
@@ -433,12 +433,12 @@ pub enum TransitionEffect {
     /// Incoming view slides over the outgoing view.
     Slide {
         /// Travel direction.
-        direction: DirectionSpec,
+        direction: Direction,
     },
     /// Both views move together.
     Push {
         /// Travel direction.
-        direction: DirectionSpec,
+        direction: Direction,
     },
     /// Advancing projected edge.
     Wipe {
@@ -453,7 +453,7 @@ pub enum TransitionEffect {
     Iris {
         /// Reveal geometry.
         #[serde(default)]
-        shape: IrisShapeSpec,
+        shape: IrisShape,
     },
     /// Radial zoom blur dissolve.
     ZoomBlur,

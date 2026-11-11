@@ -8,10 +8,11 @@ use crate::content::{
 use crate::diagram::{CalloutSpec, LineChartSpec, RulerSpec};
 use crate::effects::{ClipSpec, FilterSpec, MaskSpec};
 use crate::formula::{FormulaSpec, MorphSpec, SvgMorphSpec};
-use crate::options::{BlendModeSpec, FillRuleSpec, MaskModeSpec, PivotSpec};
+use crate::options::PivotSpec;
 use crate::paint::{PaintSpec, StrokeSpec, TrimSpec};
 use crate::particles::{ParticlesSpec, TrajectorySpec};
 use crate::value::{Animated, is_false};
+use motion_core::{BlendMode, FillRule, MaskMode};
 use schemars::{JsonSchema, Schema, SchemaGenerator};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
@@ -48,7 +49,7 @@ pub struct Element {
     /// Stroke for geometry and text.
     pub stroke: Option<StrokeSpec>,
     /// Geometry fill rule.
-    pub fill_rule: Option<FillRuleSpec>,
+    pub fill_rule: Option<FillRule>,
     /// Drawn arc-length range of geometry.
     pub trim: Option<TrimSpec>,
     /// Parent-space point receiving the pivot, `[x, y]`.
@@ -66,7 +67,7 @@ pub struct Element {
     /// Subtree opacity in `0..=1`.
     pub opacity: Option<Animated<f64>>,
     /// Subtree blend mode.
-    pub blend: Option<BlendModeSpec>,
+    pub blend: Option<BlendMode>,
     /// Sibling drawing order; ties keep insertion order.
     pub z_index: Option<i32>,
     /// Removes the element entirely when set.
@@ -160,7 +161,7 @@ impl Element {
     }
 
     /// Sets the geometry fill rule.
-    pub fn fill_rule(mut self, rule: FillRuleSpec) -> Self {
+    pub fn fill_rule(mut self, rule: FillRule) -> Self {
         self.fill_rule = Some(rule);
         self
     }
@@ -214,7 +215,7 @@ impl Element {
     }
 
     /// Sets the subtree blend mode.
-    pub fn blend(mut self, mode: BlendModeSpec) -> Self {
+    pub fn blend(mut self, mode: BlendMode) -> Self {
         self.blend = Some(mode);
         self
     }
@@ -244,7 +245,7 @@ impl Element {
     }
 
     /// Masks the subtree with another element.
-    pub fn mask(mut self, element: Element, mode: MaskModeSpec) -> Self {
+    pub fn mask(mut self, element: Element, mode: MaskMode) -> Self {
         self.mask = Some(Box::new(MaskSpec {
             element,
             mode: Some(mode),
@@ -402,7 +403,7 @@ struct RawElement {
     stroke: Option<StrokeSpec>,
     /// Geometry fill rule.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    fill_rule: Option<FillRuleSpec>,
+    fill_rule: Option<FillRule>,
     /// Drawn arc-length range of geometry.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     trim: Option<TrimSpec>,
@@ -429,7 +430,7 @@ struct RawElement {
     opacity: Option<Animated<f64>>,
     /// Subtree blend mode.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    blend: Option<BlendModeSpec>,
+    blend: Option<BlendMode>,
     /// Sibling drawing order.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     z_index: Option<i32>,

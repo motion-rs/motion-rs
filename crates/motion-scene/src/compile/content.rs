@@ -216,7 +216,7 @@ impl Compiler<'_> {
                     .as_ref()
                     .map(|size| self.animated(size, &format!("{path}.head_size")));
                 let (from, to, width, size) = (from?, to?, width.lift()?, size.lift()?);
-                let head = spec.head.map(motion_core::ArrowHead::from);
+                let head = spec.head;
                 let varying = from.varying()
                     || to.varying()
                     || width.as_ref().is_some_and(|width| width.varying())
@@ -326,7 +326,7 @@ impl Compiler<'_> {
             image = image.corner_radius(radius);
         }
         if let Some(sampling) = spec.sampling {
-            image = image.sampling(sampling.into());
+            image = image.sampling(sampling);
         }
         Some(Built::Fixed(Node::from(image)))
     }

@@ -2950,6 +2950,8 @@ dependencies = [
  "kurbo",
  "libm",
  "proptest",
+ "schemars",
+ "serde",
  "svgtypes",
  "tempfile",
 ]

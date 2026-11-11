@@ -498,18 +498,12 @@ fn add_item(
             let duration = Duration::from_seconds(transition.duration);
             match transition.effect {
                 TransitionEffect::CrossFade => builder.try_transition(CrossFade, duration),
-                TransitionEffect::Slide { direction } => builder.try_transition(
-                    Slide {
-                        direction: direction.into(),
-                    },
-                    duration,
-                ),
-                TransitionEffect::Push { direction } => builder.try_transition(
-                    Push {
-                        direction: direction.into(),
-                    },
-                    duration,
-                ),
+                TransitionEffect::Slide { direction } => {
+                    builder.try_transition(Slide { direction }, duration)
+                }
+                TransitionEffect::Push { direction } => {
+                    builder.try_transition(Push { direction }, duration)
+                }
                 TransitionEffect::Wipe { angle, feather } => builder.try_transition(
                     Wipe {
                         angle: angle.to_radians(),
@@ -517,12 +511,9 @@ fn add_item(
                     },
                     duration,
                 ),
-                TransitionEffect::Iris { shape } => builder.try_transition(
-                    Iris {
-                        shape: shape.into(),
-                    },
-                    duration,
-                ),
+                TransitionEffect::Iris { shape } => {
+                    builder.try_transition(Iris { shape }, duration)
+                }
                 TransitionEffect::ZoomBlur => builder.try_transition(ZoomBlur, duration),
             }
         }

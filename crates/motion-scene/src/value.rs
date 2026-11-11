@@ -1,6 +1,6 @@
 //! Animated property values, motion sources, easing curves and serialized colors.
 
-use crate::options::WaveformSpec;
+use motion_core::Waveform;
 use motion_core::{Color, Easing};
 use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use serde::de::{DeserializeOwned, Error as _};
@@ -326,6 +326,11 @@ impl<T> KeyframeSpec<T> {
     }
 }
 
+/// Reports the default sine wave, which documents omit.
+fn is_sine(waveform: &Waveform) -> bool {
+    matches!(waveform, Waveform::Sine)
+}
+
 /// A periodic waveform: `offset + amplitude * wave(frequency * t + phase)`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -333,8 +338,8 @@ pub struct OscillateSpec {
     /// Finite, nonnegative frequency in hertz.
     pub frequency: f64,
     /// Wave shape; sine by default.
-    #[serde(default, skip_serializing_if = "WaveformSpec::is_sine")]
-    pub waveform: WaveformSpec,
+    #[serde(default, skip_serializing_if = "is_sine")]
+    pub waveform: Waveform,
     /// Peak deviation; one by default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub amplitude: Option<f64>,
@@ -351,7 +356,7 @@ impl OscillateSpec {
     pub fn new(frequency: f64) -> Self {
         Self {
             frequency,
-            waveform: WaveformSpec::Sine,
+            waveform: Waveform::Sine,
             amplitude: None,
             phase: None,
             offset: None,
@@ -359,7 +364,7 @@ impl OscillateSpec {
     }
 
     /// Selects the wave shape.
-    pub fn waveform(mut self, waveform: WaveformSpec) -> Self {
+    pub fn waveform(mut self, waveform: Waveform) -> Self {
         self.waveform = waveform;
         self
     }

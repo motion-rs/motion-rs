@@ -130,7 +130,7 @@ its targets, fixtures and provenance build script, not a facade build script.
 
 | Package | Responsibility | Engine dependencies |
 | --- | --- | --- |
-| motion-core | Time, geometry, animation, scene/layout/timeline, commands, resources, audio occurrences | None |
+| motion-core | Time, geometry, animation, scene/layout/timeline, commands, resources, audio occurrences; optional `serde`/`schema` for plain value enums | None |
 | motion-render | Coverage, CPU/GPU composition, filters, sessions, output buffers, film looks | core |
 | motion-content | Images, text, SVG, vectors, particles, optional ink/diagram/captions | core |
 | motion-formula | Typst document/math compilation and formula operations | core, content |
@@ -165,6 +165,7 @@ Gallery disables facade defaults and forwards its own selected capabilities.
 | typst / formula | Optional compiler / additional math authoring and morphing |
 | audio / ffmpeg | Headless audio / native codecs and audio preparation |
 | studio | Desktop workbench; enables FFmpeg, not automatic scene GPU selection |
+| serde / schema | Core: serde and JSON Schema derives on plain value enums, enabled by motion-scene |
 | declarative | JSON documents; text, image and SVG elements follow the matching content features |
 
 The facade's authoring, extension, rendering and eager namespaces have different

@@ -22,7 +22,7 @@ fn typed_parameters_preserve_layout_and_reject_oversized_values() {
     expected[16..48].fill(1.0_f32.to_bits());
     assert_eq!(
         bytemuck::bytes_of(&parameters),
-        bytemuck::cast_slice(&expected)
+        bytemuck::cast_slice::<_, u8>(&expected)
     );
     let shader = shader_constants()
         + include_str!("shaders/noise.wgsl")

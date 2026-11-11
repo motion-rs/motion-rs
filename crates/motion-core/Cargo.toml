@@ -13,10 +13,17 @@ categories.workspace = true
 [lib]
 name = "motion_core"
 
+[features]
+default = []
+serde = ["dep:serde"]
+schema = ["serde", "dep:schemars"]
+
 [dependencies]
 libm = "0.2"
 svgtypes = "0.16"
 kurbo = "0.13"
+serde = { version = "1", features = ["derive"], optional = true }
+schemars = { version = "1", optional = true }
 
 [dev-dependencies]
 proptest = { version = "1", default-features = false, features = ["std"] }

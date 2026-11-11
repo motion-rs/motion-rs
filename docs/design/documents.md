@@ -8,6 +8,15 @@ JSON Schema and compilation to a `Timeline`; the facade re-exports it as
 line entry points ([command line](../cli.md#declarative-documents)). Authoring
 guidance is in the [tutorial](../tutorial/16-declarative.md); Rustdoc lists the types.
 
+The document model reuses core value types where their serialized form is exactly the
+document form. Plain enumerations (`BlendMode`, `FillRule`, `MaskMode`, `ClipMode`,
+`LineCap`, `GradientSpace`, `GradientUnits`, `GradientExtend`, `Waveform`, `ArrowHead`,
+`Sampling`, `Direction`, `IrisShape`) derive snake_case serde and schema behind
+`motion-core`'s `serde` and `schema` features, so the spec layer has no mirror enums
+for them. Types that carry references, parameters, array shorthands, defaults or
+different shapes (`Pivot`, `LineJoin`, colors, paints, points, rectangles) keep
+spec types that the compiler translates.
+
 ## Data Model
 
 - Documents are plain data. Parsing and serialization never read resources, discover

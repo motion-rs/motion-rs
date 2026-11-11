@@ -1,10 +1,8 @@
 //! Fill/stroke paint, gradients, stroke geometry and trim ranges.
 
-use crate::options::{
-    GradientExtendSpec, GradientSpaceSpec, GradientUnitsSpec, LineCapSpec, LineJoinSpec,
-};
+use crate::options::LineJoinSpec;
 use crate::value::{Animated, ColorValue};
-use motion_core::Color;
+use motion_core::{Color, GradientExtend, GradientSpace, GradientUnits, LineCap};
 use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use serde::de::Error as _;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -235,13 +233,13 @@ pub struct GradientStop {
 pub struct GradientOptions {
     /// Interpolation color space.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub space: Option<GradientSpaceSpec>,
+    pub space: Option<GradientSpace>,
     /// Coordinate system of the gradient geometry.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub units: Option<GradientUnitsSpec>,
+    pub units: Option<GradientUnits>,
     /// Behavior outside the stop range.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub extend: Option<GradientExtendSpec>,
+    pub extend: Option<GradientExtend>,
 }
 
 impl GradientOptions {
@@ -261,7 +259,7 @@ pub struct StrokeSpec {
     pub paint: PaintSpec,
     /// End cap; butt by default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cap: Option<LineCapSpec>,
+    pub cap: Option<LineCap>,
     /// Corner join; miter by default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub join: Option<LineJoinSpec>,
@@ -291,7 +289,7 @@ impl StrokeSpec {
     }
 
     /// Selects the end cap.
-    pub fn cap(mut self, cap: LineCapSpec) -> Self {
+    pub fn cap(mut self, cap: LineCap) -> Self {
         self.cap = Some(cap);
         self
     }

@@ -4,6 +4,12 @@ use super::*;
 
 /// How a subtree clip combines with its geometric ancestors.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(rename_all = "snake_case")
+)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub enum ClipMode {
     /// Multiply separately rasterized clip coverage, preserving mask semantics.
     #[default]

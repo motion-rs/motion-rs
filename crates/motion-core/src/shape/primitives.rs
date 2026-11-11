@@ -385,7 +385,13 @@ fn append(path: &mut Path2D, verb: crate::PathVerb) -> Result<(), ValidationErro
 }
 
 /// arrow-head geometry; Vee is an open strokable head.
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(rename_all = "snake_case")
+)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub enum ArrowHead {
     /// Filled triangular head integrated with the shaft.
     #[default]

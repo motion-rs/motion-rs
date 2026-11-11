@@ -99,7 +99,7 @@ impl Compiler<'_> {
             .collect::<Vec<_>>();
         let clip = element.clip.as_ref().map(|clip| {
             let shape = self.clip_shape(&clip.shape, &format!("{path}.clip.shape"))?;
-            Some((shape, ClipMode::from(clip.mode.unwrap_or_default())))
+            Some((shape, clip.mode.unwrap_or_default()))
         });
         let mask = element
             .mask
@@ -114,7 +114,7 @@ impl Compiler<'_> {
             scale_xy: scale_xy?,
             pivot: element.pivot.map(Pivot::from),
             opacity: opacity?,
-            blend: element.blend.map(BlendMode::from),
+            blend: element.blend,
             z_index: element.z_index,
             filters: filters.into_iter().collect::<Option<_>>()?,
             clip: clip.lift()?,
@@ -124,7 +124,7 @@ impl Compiler<'_> {
 
     fn mask(&mut self, mask: &MaskSpec, path: &str, depth: usize) -> Option<(Built, MaskMode)> {
         let built = self.element(&mask.element, &format!("{path}.element"), depth + 1)?;
-        Some((built, mask.mode.unwrap_or_default().into()))
+        Some((built, mask.mode.unwrap_or_default()))
     }
 
     fn clip_shape(&mut self, shape: &ClipShapeSpec, path: &str) -> Option<ClipProp> {

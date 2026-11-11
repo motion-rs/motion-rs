@@ -13,7 +13,7 @@ use crate::diagram::{OrientationSpec, ScaleKind, ScaleSpec};
 #[cfg(feature = "diagram")]
 use motion_content::diagram::{Callout, LineChart, Ruler, Scale};
 #[cfg(feature = "diagram")]
-use motion_core::{LineJoin, Node, Rect, Size, StrokeStyle};
+use motion_core::{LineCap, LineJoin, Node, Rect, Size, StrokeStyle};
 
 /// Most series a chart may hold, matching the engine limit.
 #[cfg(feature = "diagram")]
@@ -110,10 +110,7 @@ impl Compiler<'_> {
             let here = format!("{path}.series[{index}]");
             let stroke = StrokeStyle {
                 width: series.width.unwrap_or(2.0),
-                cap: series
-                    .cap
-                    .unwrap_or(crate::options::LineCapSpec::Round)
-                    .into(),
+                cap: series.cap.unwrap_or(LineCap::Round),
                 join: match series.join.unwrap_or(crate::options::LineJoinSpec::Round) {
                     crate::options::LineJoinSpec::Miter => LineJoin::Miter { limit: 4.0 },
                     crate::options::LineJoinSpec::Round => LineJoin::Round,

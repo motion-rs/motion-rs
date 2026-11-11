@@ -147,6 +147,12 @@ impl From<ImagePattern> for super::Paint {
 
 /// Color interpolation space for gradients.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(rename_all = "snake_case")
+)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub enum GradientSpace {
     /// Perceptual Oklab, matching Color interpolation.
     #[default]
@@ -159,6 +165,12 @@ pub enum GradientSpace {
 
 /// Coordinates used by gradient geometry.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(rename_all = "snake_case")
+)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub enum GradientUnits {
     /// Coordinates are fractions of the original shape's local bounds.
     #[default]
@@ -169,6 +181,12 @@ pub enum GradientUnits {
 
 /// Behavior outside a gradient's normalized interval.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(rename_all = "snake_case")
+)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub enum GradientExtend {
     /// Hold endpoint colors.
     #[default]

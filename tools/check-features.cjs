@@ -102,15 +102,15 @@ function check(combination, offline) {
       Ok(pool.retained_bytes() == 8)
     }
 
-    pub fn author_scene() -> Timeline {
+    pub fn author_scene() -> motion::Result<Timeline> {
       Timeline::new(Size::new(8.0, 4.0), 30).track(|track| {
         track.scene(1_u32.seconds(), |context| -> motion::Result<_> {
-          let path = Path2D::polyline([Point::ORIGIN, Point::new(2.0, 0.0), Point::new(2.0, 2.0)]).closed();
+          let path = Path2D::parse_svg("M0 0L2 0L2 2z")?;
           let cached = context.memo(key::F64(2.0), || path.fill(Color::WHITE));
           let progress = context.ease_in(Time::ZERO, 1_usize.seconds(), Easing::Linear);
-          Ok((cached, Circle::new(context.center(), math::smoothstep(0.0, 1.0, progress)).fill(Color::BLACK)))
+          Ok((cached, Circle::new(context.center(), math::smoothstep(0.0, 1.0, progress))?.fill(Color::BLACK)))
         })
-      })
+      }).build()
     }
     `,
     );

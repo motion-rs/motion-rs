@@ -6,6 +6,12 @@ use std::sync::Arc;
 
 /// Periodic waveform evaluated in turns.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(rename_all = "snake_case")
+)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub enum Waveform {
     /// Smooth sine starting at zero.
     #[default]

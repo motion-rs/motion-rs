@@ -195,7 +195,7 @@ impl Compiler<'_> {
         Some(Arc::new(Style {
             fill: fill.lift()?,
             stroke: stroke.lift()?,
-            rule: element.fill_rule.map(Into::into),
+            rule: element.fill_rule,
             trim: trim.lift()?,
         }))
     }
@@ -238,7 +238,7 @@ impl Compiler<'_> {
         Some(StrokeProp {
             width: width?,
             paint: paint?,
-            cap: stroke.cap.unwrap_or_default().into(),
+            cap: stroke.cap.unwrap_or_default(),
             join,
             dash: dash?,
         })

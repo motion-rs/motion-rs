@@ -4,9 +4,10 @@ use crate::captions::CaptionsSpec;
 use crate::diagram::{CalloutSpec, LineChartSpec, RulerSpec};
 use crate::element::Element;
 use crate::formula::{FormulaSpec, MorphSpec, SvgMorphSpec};
-use crate::options::{ArrowHeadSpec, FitSpec, SamplingSpec, TextAlignmentSpec};
+use crate::options::{FitSpec, TextAlignmentSpec};
 use crate::particles::{ParticlesSpec, TrajectorySpec};
 use crate::value::{Animated, ColorValue};
+use motion_core::{ArrowHead, Sampling};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -234,7 +235,7 @@ pub struct ArrowSpec {
     pub width: Option<Animated<f64>>,
     /// Head geometry; a filled triangle by default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub head: Option<ArrowHeadSpec>,
+    pub head: Option<ArrowHead>,
     /// Head length and width.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub head_size: Option<Animated<f64>>,
@@ -516,7 +517,7 @@ pub struct ImageSpec {
     pub corner_radius: Option<f64>,
     /// Reconstruction filter.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub sampling: Option<SamplingSpec>,
+    pub sampling: Option<Sampling>,
 }
 
 /// A static SVG file.

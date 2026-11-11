@@ -96,11 +96,7 @@ pub use effects::{
 };
 pub use element::Element;
 pub use formula::{FormulaSpec, MorphSpec, SvgMorphSpec};
-pub use options::{
-    ArrowHeadSpec, BlendModeSpec, ClipModeSpec, DirectionSpec, FillRuleSpec, FitSpec,
-    GradientExtendSpec, GradientSpaceSpec, GradientUnitsSpec, IrisShapeSpec, LineCapSpec,
-    LineJoinSpec, MaskModeSpec, PivotSpec, SamplingSpec, TextAlignmentSpec, WaveformSpec,
-};
+pub use options::{FitSpec, LineJoinSpec, PivotSpec, TextAlignmentSpec};
 pub use paint::{
     GradientOptions, GradientSpec, GradientStop, LinearGradientSpec, PaintSpec, RadialGradientSpec,
     StrokeSpec, SweepGradientSpec, TrimSpec,

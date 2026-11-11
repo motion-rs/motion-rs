@@ -1,7 +1,8 @@
 //! Rulers, callouts and line charts described as plain data.
 
-use crate::options::{LineCapSpec, LineJoinSpec};
+use crate::options::LineJoinSpec;
 use crate::value::ColorValue;
+use motion_core::LineCap;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -179,7 +180,7 @@ pub struct SeriesSpec {
     pub width: Option<f64>,
     /// End cap; round by default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cap: Option<LineCapSpec>,
+    pub cap: Option<LineCap>,
     /// Corner join; round by default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub join: Option<LineJoinSpec>,
