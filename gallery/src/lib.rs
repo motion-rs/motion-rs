@@ -80,7 +80,7 @@ pub fn project(options: RenderOptions) -> motion::Result<Project> {
             demos::timeline(demo, parameters)
         })?;
     }
-    project.build()
+    Ok(project.build()?)
 }
 
 /// Explicit startup preparation; metadata/listing never invokes it.

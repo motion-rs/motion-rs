@@ -60,11 +60,11 @@ fn scene_accepts_drawables_and_results_without_losing_original_errors() {
             .measure(ValidationLimits::default())
             .is_err()
     );
-    let errors = diagnostics.errors();
+    let errors = diagnostics.scene_errors();
     assert_eq!(errors.len(), 1);
-    assert_eq!(errors[0].kind(), crate::ErrorKind::Io);
+    assert_eq!(errors.errors()[0].kind(), crate::ErrorKind::Io);
     assert!(
-        errors[0].build_errors()[0]
+        errors.errors()[0]
             .downcast_ref::<std::io::Error>()
             .is_some()
     );

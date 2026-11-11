@@ -88,7 +88,7 @@ impl Rig {
     }
 }
 
-pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
+pub(super) fn timeline(parameters: DemoParameters) -> Result<Timeline, motion::ErrorReport> {
     let duration = i64::from(parameters.seconds).seconds();
     let seed = parameters.seed as u32;
     let output = audio_timeline(

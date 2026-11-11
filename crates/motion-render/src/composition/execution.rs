@@ -385,12 +385,7 @@ mod scene_output_tests {
                 .unwrap();
             assert_eq!(error.kind(), motion_core::ErrorKind::Io);
             assert_eq!(error.frame(), Some(u64::from(index)));
-            assert_eq!(error.build_errors().len(), 1);
-            assert!(
-                error.build_errors()[0]
-                    .downcast_ref::<std::io::Error>()
-                    .is_some()
-            );
+            assert!(error.downcast_ref::<std::io::Error>().is_some());
         }
         assert_eq!(builds.get(), 1);
     }
@@ -410,11 +405,7 @@ mod scene_output_tests {
             .unwrap();
         assert_eq!(error.kind(), motion_core::ErrorKind::Io);
         assert_eq!(error.frame(), Some(2));
-        assert!(
-            error.build_errors()[0]
-                .downcast_ref::<std::io::Error>()
-                .is_some()
-        );
+        assert!(error.downcast_ref::<std::io::Error>().is_some());
         assert!(renderer.last_stats().is_none());
         let success = motion_core::scene(|context| context.bounds().fill(Color::WHITE));
         renderer

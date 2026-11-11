@@ -186,7 +186,7 @@ report positions only for parse errors and compile errors have none.
 
 Parse failures are a `ValidationError` whose path follows the JSON structure, for
 example `tracks[0].items[1].scene.content`. Compilation reports a single
-`ValidationError`, or `Error::BuildErrors` holding one per invalid property, with paths
+`ValidationError`, or an `ErrorReport` holding one per invalid property, with paths
 such as `tracks[0].items[0].scene.content.children[2].circle.radius` and the failing
 field. Parameter and expression errors name the failing property. Timeline construction failures, such as an overlapping transition, are
 reported at their track item path. Text, image and SVG content parse without their

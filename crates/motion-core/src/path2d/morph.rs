@@ -19,7 +19,7 @@ const MAX_ALIGNMENT_WORK: usize = 16_777_216;
 /// ```
 /// use motion_core::prelude::*;
 /// use motion_core::{
-///     DisplayList, RasterLimits, ResourcePool, ValidatedDisplayList, MAX_PATH_VERBS,
+///     DisplayList, RasterLimits, ResourceStore, ValidatedDisplayList, MAX_PATH_VERBS,
 ///     MAX_STROKE_VERBS, MAX_SVG_PATH_BYTES, sample_offsets,
 /// };
 /// let (from, to) = MorphPath::pair(

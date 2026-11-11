@@ -109,10 +109,10 @@ mod resources {
             let fonts = motion::FontLibrary::new();
             let first = Assets::new(directory.path())?.with_fonts(fonts.clone());
             let same = Assets::new(directory.path())?
-                .with_pool(first.pool().clone())
+                .with_store(first.store().clone())
                 .with_fonts(fonts.clone());
             let different = Assets::new(directory.path())?
-                .with_pool(first.pool().clone())
+                .with_store(first.store().clone())
                 .with_fonts(fonts.default_family("explicit-other"));
             let source = Source::Bytes {
                 key: "same".into(),

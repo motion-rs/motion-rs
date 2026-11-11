@@ -63,7 +63,7 @@ impl RenderPrepare for DisplayList {
     /// use motion_render::prelude::*;
     /// use motion_core::prelude::*;
     /// use motion_core::{
-    ///     DisplayList, RasterLimits, ResourcePool, ValidatedDisplayList, MAX_PATH_VERBS,
+    ///     DisplayList, RasterLimits, ResourceStore, ValidatedDisplayList, MAX_PATH_VERBS,
     ///     MAX_STROKE_VERBS, MAX_SVG_PATH_BYTES, sample_offsets,
     /// };
     /// use motion_render::{Composition, RenderPrepare, RenderOptions, Renderer, render_still};
@@ -104,7 +104,7 @@ impl RenderPrepare for DisplayList {
     /// use motion_render::prelude::*;
     /// use motion_core::prelude::*;
     /// use motion_core::{
-    ///     DisplayList, RasterLimits, ResourcePool, ValidatedDisplayList, MAX_PATH_VERBS,
+    ///     DisplayList, RasterLimits, ResourceStore, ValidatedDisplayList, MAX_PATH_VERBS,
     ///     MAX_STROKE_VERBS, MAX_SVG_PATH_BYTES, sample_offsets,
     /// };
     /// use motion_render::{Composition, RenderPrepare, RenderOptions, Renderer, render_still};

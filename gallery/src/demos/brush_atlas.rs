@@ -124,7 +124,7 @@ pub(super) const PAGES: &[Page] = &[
     },
 ];
 
-pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
+pub(super) fn timeline(parameters: DemoParameters) -> Result<Timeline, motion::ErrorReport> {
     let path = comparison_path()?;
     atlas::timeline(
         parameters,

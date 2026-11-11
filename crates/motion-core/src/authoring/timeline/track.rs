@@ -1,9 +1,9 @@
 //! Timeline clips, tracks and the fluent track builder that schedules them.
 
 use super::{BoundaryAdjustment, BoundaryEdge, MAX_CLIPS, Scene, add_time, align, on_track};
+use crate::ErrorReport;
 use crate::authoring::{scene, transition};
-use crate::deferred::DeferredErrors;
-use crate::{AudioClip, Duration, Error, FrameRate, Node, SceneContext, Time, Timeline};
+use crate::{AudioClip, Duration, FrameRate, Node, SceneContext, Time, Timeline};
 use std::{fmt, sync::Arc};
 
 /// One immutable, positive-duration scene occurrence.
@@ -157,7 +157,7 @@ pub struct TrackBuilder {
     pub(super) cursor: Time,
     pub(super) adjustments: Vec<BoundaryAdjustment>,
     pub(super) pending: Option<Arc<dyn transition::Transition>>,
-    pub(super) errors: DeferredErrors,
+    pub(super) errors: ErrorReport,
     pub(super) audio: Vec<AudioClip>,
 }
 
@@ -556,15 +556,12 @@ impl TrackBuilder {
 
     pub(super) fn finish(
         mut self,
-    ) -> crate::Result<(Track, Vec<BoundaryAdjustment>, Vec<AudioClip>)> {
+    ) -> Result<(Track, Vec<BoundaryAdjustment>, Vec<AudioClip>), ErrorReport> {
         if !self.errors.is_empty() {
-            return Err(Error::BuildErrors(self.errors.into_vec()));
+            return Err(self.errors);
         }
         if self.pending.is_some() {
-            return Err(on_track(
-                self.index,
-                "Pending transition has no incoming clip",
-            ));
+            return Err(on_track(self.index, "Pending transition has no incoming clip").into());
         }
         let (end, frame) =
             align(self.cursor, self.rate).map_err(|error| on_track(self.index, error))?;

@@ -120,7 +120,7 @@ pub(super) const PAGES: &[Page] = &[
     },
 ];
 
-pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
+pub(super) fn timeline(parameters: DemoParameters) -> Result<Timeline, motion::ErrorReport> {
     let seed = parameters.seed as u32 ^ (parameters.seed >> 32) as u32;
     atlas::timeline(parameters, METADATA, PAGES, move |page, progress, _| {
         if page >= 10 {

@@ -49,11 +49,8 @@ fn messages(document: &Document) -> Vec<String> {
     let error = document
         .compile(&CompileOptions::default().base_dir(FONTS))
         .unwrap_err();
-    if error.build_errors().is_empty() {
-        return vec![error.to_string()];
-    }
     error
-        .build_errors()
+        .errors()
         .iter()
         .map(|error| {
             let error = error.downcast_ref::<ValidationError>().unwrap();

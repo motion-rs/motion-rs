@@ -82,7 +82,7 @@ fn label(text: impl Into<String>, size: f64, hex: u32) -> Text {
         .fill(color(hex))
 }
 
-pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
+pub(super) fn timeline(parameters: DemoParameters) -> Result<Timeline, motion::ErrorReport> {
     let seconds = parameters.seconds as f64;
     let at = move |fraction: f64| (seconds * fraction).seconds();
     let track = CaptionTrack::new(

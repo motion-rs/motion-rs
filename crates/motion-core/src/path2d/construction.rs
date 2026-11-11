@@ -43,7 +43,7 @@ impl Path2D {
     /// ```
     /// use motion_core::prelude::*;
     /// use motion_core::{
-    ///     DisplayList, RasterLimits, ResourcePool, ValidatedDisplayList, MAX_PATH_VERBS,
+    ///     DisplayList, RasterLimits, ResourceStore, ValidatedDisplayList, MAX_PATH_VERBS,
     ///     MAX_STROKE_VERBS, MAX_SVG_PATH_BYTES, sample_offsets,
     /// };
     /// let path = Path2D::parse_svg("M1 1h6v6H1z")?;

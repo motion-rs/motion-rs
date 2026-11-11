@@ -168,7 +168,7 @@ pub(super) const PAGES: &[Page] = &[
     },
 ];
 
-pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
+pub(super) fn timeline(parameters: DemoParameters) -> Result<Timeline, motion::ErrorReport> {
     atlas::timeline(parameters, METADATA, PAGES, |page, progress, context| {
         let fonts = context
             .assets()

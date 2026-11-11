@@ -22,7 +22,7 @@ All Rust examples use `rust,no_run`. Enable the features listed in each chapter 
 | [03 Animation](03-animation.md) | Tween, Keyframes, easing, Spring, animation primitives, Morph |
 | [04 Scenes and Timeline](04-scenes-and-timeline.md) | scene, Node, layout, Track, transitions, cameras, Project |
 | [05 Drawing](05-drawing.md) | Canvas, Paint, Stroke, Clip, Filter, validation, budgets |
-| [06 Content and Resources](06-content.md) | Images, SVG, text, Ink, Diagram, Captions, resource pools |
+| [06 Content and Resources](06-content.md) | Images, SVG, text, Ink, Diagram, Captions, resource stores |
 | [07 Particles](07-particles.md) | Trajectories, simulation, styles, instances, determinism |
 | [08 Typst and Formulas](08-formula-typst.md) | Compilation, selection, writing, morphing, trust model |
 | [09 Rendering](09-rendering.md) | CPU/GPU, prepared frames, sessions, caches, memory and texture output |

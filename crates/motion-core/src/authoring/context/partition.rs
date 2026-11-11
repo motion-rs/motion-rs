@@ -24,7 +24,8 @@ pub enum CachePartition {
     Scene,
 }
 
-/// Cloneable rendering cache shared by sessions and export workers.
+/// Cloneable rendering compute cache shared by sessions and export workers; unlike a
+/// [`crate::ResourceStore`], its entries are recomputable and may be evicted.
 /// Each partition has its own entry and logical-byte allowance; external Arc pins
 /// and allocator overhead are not included. Computation runs outside cache locks.
 #[derive(Clone, Debug)]
@@ -36,7 +37,7 @@ impl Default for RenderCache {
     fn default() -> Self {
         Self {
             partitions: std::array::from_fn(|index| {
-                let (entries, bytes) = match index {
+                let (max_entries, max_bytes) = match index {
                     0 => (2048, 16 * 1024 * 1024),
                     1 => (256, 8 * 1024 * 1024),
                     2 => (2048, 16 * 1024 * 1024),
@@ -45,19 +46,22 @@ impl Default for RenderCache {
                     6 => (256, 8 * 1024 * 1024),
                     _ => (32, 32 * 1024 * 1024),
                 };
-                Arc::new(SceneCache::with_limits(CacheLimits { entries, bytes }))
+                Arc::new(SceneCache::with_limits(CacheLimits {
+                    max_entries,
+                    max_bytes,
+                }))
             }),
         }
     }
 }
 
-/// Entry-count and payload-byte allowance shared by the cache constructors.
+/// Entry-count and payload-byte allowance of a compute cache; resource stores use [`crate::ResourceLimits`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CacheLimits {
     /// Maximum retained entries; zero disables caching where the cache allows it.
-    pub entries: usize,
+    pub max_entries: usize,
     /// Caller-declared retained payload bytes.
-    pub bytes: usize,
+    pub max_bytes: usize,
 }
 
 impl RenderCache {
@@ -78,8 +82,8 @@ impl RenderCache {
         let mut cache = self.clone();
         let source = self.partition(partition);
         cache.partitions[partition as usize] = Arc::new(SceneCache::with_limits(CacheLimits {
-            entries: source.capacity(),
-            bytes: source.max_bytes(),
+            max_entries: source.capacity(),
+            max_bytes: source.max_bytes(),
         }));
         cache
     }

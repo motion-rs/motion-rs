@@ -2,21 +2,72 @@
 
 use super::*;
 
-/// Observable shared lifecycle; loading starts only at the first get call.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum AssetStatus {
+/// Observable shared lifecycle with its sticky result; observing never starts loading.
+pub enum AssetState<A> {
     /// No read or decode has begun.
     Unloaded,
     /// One caller is reading/decoding; others join the same result.
     Loading,
     /// An immutable decoded resource is available.
-    Ready,
+    Ready(Arc<A>),
     /// A sticky diagnostic is available; failures are not retried implicitly.
-    Failed,
+    Failed(Arc<crate::Error>),
+}
+
+impl<A> Clone for AssetState<A> {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Unloaded => Self::Unloaded,
+            Self::Loading => Self::Loading,
+            Self::Ready(asset) => Self::Ready(asset.clone()),
+            Self::Failed(error) => Self::Failed(error.clone()),
+        }
+    }
+}
+
+impl<A> std::fmt::Debug for AssetState<A> {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Unloaded => formatter.write_str("Unloaded"),
+            Self::Loading => formatter.write_str("Loading"),
+            Self::Ready(_) => formatter.write_str("Ready"),
+            Self::Failed(error) => formatter.debug_tuple("Failed").field(error).finish(),
+        }
+    }
+}
+
+impl<A> AssetState<A> {
+    /// Whether no read or decode has begun.
+    pub fn is_unloaded(&self) -> bool {
+        matches!(self, Self::Unloaded)
+    }
+
+    /// Whether a decode is in progress.
+    pub fn is_loading(&self) -> bool {
+        matches!(self, Self::Loading)
+    }
+
+    /// Whether the decoded resource is available.
+    pub fn is_ready(&self) -> bool {
+        matches!(self, Self::Ready(_))
+    }
+
+    /// Whether loading failed.
+    pub fn is_failed(&self) -> bool {
+        matches!(self, Self::Failed(_))
+    }
+
+    /// Sticky original diagnostic of a failed load.
+    pub fn failure(&self) -> Option<&Arc<crate::Error>> {
+        match self {
+            Self::Failed(error) => Some(error),
+            _ => None,
+        }
+    }
 }
 
 pub(super) struct Entry<A: Asset> {
-    pub(super) pool: ResourcePool,
+    pub(super) store: ResourceStore,
     pub(super) source: Source,
     pub(super) context: LoadContext,
     pub(super) result: OnceLock<Result<Arc<A>, Arc<crate::Error>>>,
@@ -26,7 +77,7 @@ pub(super) struct Entry<A: Asset> {
 
 impl<A: Asset> Drop for Entry<A> {
     fn drop(&mut self) {
-        self.pool
+        self.store
             .0
             .bytes
             .fetch_sub(self.charged.load(Ordering::Relaxed), Ordering::Relaxed);
@@ -41,7 +92,7 @@ impl<A: Asset> Drop for Entry<A> {
             self.source.clone(),
         );
         let mut cache = self
-            .pool
+            .store
             .0
             .entries
             .lock()
@@ -76,7 +127,7 @@ impl<A: Asset> std::fmt::Debug for Handle<A> {
             .debug_struct("Handle")
             .field("kind", &A::KIND)
             .field("source", &self.entry.source)
-            .field("status", &self.status())
+            .field("state", &self.state())
             .finish()
     }
 }
@@ -85,22 +136,15 @@ impl<A: Asset> Handle<A> {
     /// Current state without triggering a file read or decode.
     ///
     /// This is a non-authoritative snapshot for polling and diagnostics: another thread may change
-    /// it immediately after the call. [`Handle::get`] is the only authoritative result.
-    pub fn status(&self) -> AssetStatus {
+    /// it immediately after the call. [`Handle::get`] is the only call that loads, and a `Ready`
+    /// or `Failed` state is sticky.
+    pub fn state(&self) -> AssetState<A> {
         match self.entry.result.get() {
-            Some(Ok(_)) => AssetStatus::Ready,
-            Some(Err(_)) => AssetStatus::Failed,
-            None if self.entry.loading.load(Ordering::Acquire) => AssetStatus::Loading,
-            None => AssetStatus::Unloaded,
+            Some(Ok(asset)) => AssetState::Ready(asset.clone()),
+            Some(Err(error)) => AssetState::Failed(error.clone()),
+            None if self.entry.loading.load(Ordering::Acquire) => AssetState::Loading,
+            None => AssetState::Unloaded,
         }
-    }
-
-    /// Sticky original diagnostic, without triggering loading.
-    pub fn error(&self) -> Option<Arc<crate::Error>> {
-        self.entry
-            .result
-            .get()
-            .and_then(|result| result.as_ref().err().cloned())
     }
 
     /// Resolves this handle synchronously, joining one concurrent decode.
@@ -196,13 +240,13 @@ impl<A: Asset> Handle<A> {
                         .max(bytes.len());
                     let additional = charge - self.entry.charged.load(Ordering::Acquire);
                     self.entry
-                        .pool
+                        .store
                         .0
                         .bytes
                         .try_update(Ordering::AcqRel, Ordering::Acquire, |current| {
                             current
                                 .checked_add(additional)
-                                .filter(|total| *total <= self.entry.pool.0.max_bytes)
+                                .filter(|total| *total <= self.entry.store.0.limits.max_bytes)
                         })
                         .map_err(|_| {
                             io::Error::new(

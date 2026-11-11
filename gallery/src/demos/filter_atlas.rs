@@ -151,7 +151,7 @@ pub(super) const PAGES: &[Page] = &[
     },
 ];
 
-pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
+pub(super) fn timeline(parameters: DemoParameters) -> Result<Timeline, motion::ErrorReport> {
     atlas::timeline(parameters, METADATA, PAGES, move |page, progress, _| {
         let source = atlas::specimen(progress)?;
         let amount = 0.25 + 0.75 * progress;

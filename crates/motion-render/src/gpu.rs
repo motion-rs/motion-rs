@@ -128,7 +128,7 @@ pub struct GpuContext {
     timestamp_marker: std::sync::Arc<std::sync::OnceLock<wgpu::ComputePipeline>>,
     alpha_thresholds: std::sync::Arc<std::sync::OnceLock<wgpu::Buffer>>,
 
-    working_pool: std::sync::Arc<std::sync::Mutex<WorkingResourcePool>>,
+    working_pool: std::sync::Arc<std::sync::Mutex<WorkingResourceStore>>,
 
     self_check_result: std::sync::Arc<std::sync::OnceLock<Result<(), String>>>,
 
@@ -235,7 +235,7 @@ pub(crate) struct PendingLinearFrame {
 }
 
 #[derive(Default)]
-struct WorkingResourcePool {
+struct WorkingResourceStore {
     buffers: Vec<wgpu::Buffer>,
     staging: Vec<StagingBuffer>,
     textures: Vec<wgpu::Texture>,
@@ -267,7 +267,7 @@ impl std::ops::DerefMut for WorkingLease {
     }
 }
 
-impl WorkingResourcePool {
+impl WorkingResourceStore {
     fn trim(&mut self, maximum: u64) {
         while self.bytes > maximum
             || self.buffers.len() + self.staging.len() > 512

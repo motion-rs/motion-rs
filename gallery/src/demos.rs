@@ -51,7 +51,7 @@ fn frame_seed(context: &SceneContext<'_>) -> u64 {
 
 struct Film {
     metadata: DemoMetadata,
-    build: fn(DemoParameters) -> motion::Result<Timeline>,
+    build: fn(DemoParameters) -> Result<Timeline, motion::ErrorReport>,
 }
 
 const PROGRAM: &[Film] = &[
@@ -145,5 +145,5 @@ pub(super) fn timeline(info: DemoMetadata, parameters: DemoParameters) -> motion
         .ok_or_else(|| {
             std::io::Error::new(std::io::ErrorKind::InvalidInput, "Unknown gallery film")
         })?;
-    (film.build)(parameters)
+    Ok((film.build)(parameters)?)
 }

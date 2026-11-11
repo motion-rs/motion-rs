@@ -18,7 +18,7 @@ pub(super) const METADATA: DemoMetadata = DemoMetadata::new(
     ],
 );
 
-pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
+pub(super) fn timeline(parameters: DemoParameters) -> Result<Timeline, motion::ErrorReport> {
     let compiler = FormulaCompiler::new();
     let options = FormulaOptions {
         size: 48.0,

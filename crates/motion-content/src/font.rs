@@ -43,8 +43,8 @@ impl FontLibrary {
             font_system: Arc::new(OnceLock::new()),
             glyph_cache: Arc::new(motion_core::SceneCache::with_limits(
                 motion_core::CacheLimits {
-                    entries: 2048,
-                    bytes: 16 * 1024 * 1024,
+                    max_entries: 2048,
+                    max_bytes: 16 * 1024 * 1024,
                 },
             )),
             layout_cache: Default::default(),
@@ -106,8 +106,8 @@ impl FontLibrary {
         self.font_system = Arc::new(OnceLock::new());
         self.glyph_cache = Arc::new(motion_core::SceneCache::with_limits(
             motion_core::CacheLimits {
-                entries: 2048,
-                bytes: 16 * 1024 * 1024,
+                max_entries: 2048,
+                max_bytes: 16 * 1024 * 1024,
             },
         ));
         self.layout_cache = Default::default();
@@ -206,8 +206,8 @@ impl FontLibrary {
         self.font_system = Arc::new(OnceLock::new());
         self.glyph_cache = Arc::new(motion_core::SceneCache::with_limits(
             motion_core::CacheLimits {
-                entries: 2048,
-                bytes: 16 * 1024 * 1024,
+                max_entries: 2048,
+                max_bytes: 16 * 1024 * 1024,
             },
         ));
         self.layout_cache = Default::default();

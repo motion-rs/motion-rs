@@ -46,7 +46,7 @@ clap parser (adding `--font` and the `--demo` alias of `--timeline`) and calls `
 - Names are 1..=128 bytes of ASCII letters, digits, `.`, `_` or `-`, unique, with
   at most 256 entries. The project name must be 1..=256 bytes.
 - Registration errors from the infallible builder methods are deferred and reported
-  together as `Error::BuildErrors` by the first `cli`/`build` call, before any
+  together as one `ErrorReport` by the first `cli`/`build` call, before any
   argument is parsed.
 - `Project::render_options` supplies the shared fonts/assets and defaults. The CLI
   always overrides the backend preference to `automatic` before applying `--backend`.

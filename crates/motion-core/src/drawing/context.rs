@@ -125,7 +125,7 @@ impl DrawContext {
     /// ```
     /// use motion_core::prelude::*;
     /// use motion_core::{
-    ///     DisplayList, RasterLimits, ResourcePool, ValidatedDisplayList, MAX_PATH_VERBS,
+    ///     DisplayList, RasterLimits, ResourceStore, ValidatedDisplayList, MAX_PATH_VERBS,
     ///     MAX_STROKE_VERBS, MAX_SVG_PATH_BYTES, sample_offsets,
     /// };
     /// let bounds = Rect::new(0.1, 0.2, 10.3, 20.4);
@@ -225,7 +225,7 @@ impl DrawContext {
 /// ```
 /// use motion_core::prelude::*;
 /// use motion_core::{
-///     DisplayList, RasterLimits, ResourcePool, ValidatedDisplayList, MAX_PATH_VERBS,
+///     DisplayList, RasterLimits, ResourceStore, ValidatedDisplayList, MAX_PATH_VERBS,
 ///     MAX_STROKE_VERBS, MAX_SVG_PATH_BYTES, sample_offsets,
 /// };
 /// let row = Row::new()

@@ -347,7 +347,7 @@ mod tests {
             })
             .build()
             .unwrap_err();
-        assert!(!error.build_errors().is_empty());
+        assert!(!error.errors().is_empty());
         assert!(!called.load(std::sync::atomic::Ordering::Relaxed));
     }
 

@@ -1,7 +1,7 @@
-//! Lazy typed assets with explicit bounded project pools and request diagnostics.
+//! Lazy typed assets with explicit bounded project resource stores and request diagnostics.
 //!
 //! ```
-//! use motion_core::{Asset, Assets, AssetStatus, LoadContext, Source};
+//! use motion_core::{Asset, Assets, LoadContext, Source};
 //! use std::sync::Arc;
 //! struct Label(String);
 //! impl Asset for Label {
@@ -18,7 +18,7 @@
 //!     key: "title".into(),
 //!     data: Arc::from(&b"Native resources"[..]),
 //! });
-//! assert_eq!(handle.status(), AssetStatus::Unloaded);
+//! assert!(handle.state().is_unloaded());
 //! assert_eq!(handle.get()?.0, "Native resources");
 //! # Ok::<(), motion_core::Error>(())
 //! ```
@@ -38,17 +38,17 @@ use handle::Entry;
 
 pub mod environment;
 mod handle;
-mod pool;
+mod store;
 #[cfg(test)]
 mod tests;
 
 pub use environment::{FontEnvironment, FontIdentity};
-pub use handle::{AssetStatus, Handle};
-pub use pool::ResourcePool;
+pub use handle::{AssetState, Handle};
+pub use store::{ResourceLimits, ResourceStore};
 
 const MAX_ENCODED: usize = 64 * 1024 * 1024;
 
-const MAX_CACHE_BYTES: usize = 256 * 1024 * 1024;
+const MAX_STORE_BYTES: usize = 256 * 1024 * 1024;
 
 const MAX_ENTRIES: usize = 4096;
 
@@ -58,27 +58,56 @@ thread_local! {
 
 /// Explicit request-owned diagnostic sink, safely shared with background tasks.
 /// Clones append to the same sink. Assets views and handles carry it explicitly.
+/// Resource load failures and scene-authoring failures are kept apart.
 #[derive(Clone, Default, Debug)]
-pub struct RequestDiagnostics(Arc<Mutex<Vec<Arc<crate::Error>>>>);
+pub struct RequestDiagnostics(Arc<Mutex<RequestFailures>>);
+
+#[derive(Default, Debug)]
+struct RequestFailures {
+    loads: Vec<Arc<crate::Error>>,
+    scene: crate::ErrorReport,
+}
 
 impl RequestDiagnostics {
-    /// Captures a failure once by Arc identity, not by its text or semantic equality.
-    pub fn record(&self, error: Arc<crate::Error>) {
-        let mut errors = self
-            .0
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        if !errors.iter().any(|existing| Arc::ptr_eq(existing, &error)) {
-            errors.push(error);
-        }
-    }
-
-    /// Snapshot of failures belonging to this request only.
-    pub fn errors(&self) -> Vec<Arc<crate::Error>> {
+    fn locked(&self) -> std::sync::MutexGuard<'_, RequestFailures> {
         self.0
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .clone()
+    }
+
+    /// Captures a resource failure once by Arc identity, not by its text or semantic equality.
+    pub fn record(&self, error: Arc<crate::Error>) {
+        let mut failures = self.locked();
+        if !failures
+            .loads
+            .iter()
+            .any(|existing| Arc::ptr_eq(existing, &error))
+        {
+            failures.loads.push(error);
+        }
+    }
+
+    /// Captures a scene-authoring failure once by Arc identity.
+    pub fn record_scene(&self, error: Arc<crate::Error>) {
+        let mut failures = self.locked();
+        if !failures
+            .scene
+            .errors()
+            .iter()
+            .any(|existing| Arc::ptr_eq(existing, &error))
+        {
+            failures.scene.record_shared(error);
+        }
+    }
+
+    /// Snapshot of resource failures belonging to this request only.
+    pub fn errors(&self) -> Vec<Arc<crate::Error>> {
+        self.locked().loads.clone()
+    }
+
+    /// Snapshot of scene-authoring failures belonging to this request only.
+    pub fn scene_errors(&self) -> crate::ErrorReport {
+        self.locked().scene.clone()
     }
 }
 
@@ -215,7 +244,7 @@ impl OwnedEntry {
 pub struct Assets {
     context: LoadContext,
     entries: Arc<Mutex<BTreeMap<CacheKey, Arc<OwnedEntry>>>>,
-    pool: ResourcePool,
+    store: ResourceStore,
     diagnostics: Option<RequestDiagnostics>,
 }
 
@@ -237,7 +266,7 @@ impl Default for Assets {
                 namespace: 0,
             },
             entries: Arc::new(Mutex::new(BTreeMap::new())),
-            pool: ResourcePool::new(),
+            store: ResourceStore::new(),
             diagnostics: None,
         }
     }
@@ -296,13 +325,13 @@ impl Assets {
                 })
                 .and_then(|charge| {
                     let additional = charge - handle.entry.charged.load(Ordering::Acquire);
-                    self.pool
+                    self.store
                         .0
                         .bytes
                         .try_update(Ordering::AcqRel, Ordering::Acquire, |current| {
                             current
                                 .checked_add(additional)
-                                .filter(|total| *total <= self.pool.0.max_bytes)
+                                .filter(|total| *total <= self.store.0.limits.max_bytes)
                         })
                         .map_err(|_| {
                             io::Error::new(
@@ -334,17 +363,17 @@ impl Assets {
         Ok(handle)
     }
 
-    /// Uses an explicit project pool and drops this value's retained entry table.
+    /// Uses an explicit project store and drops this value's retained entry table.
     /// Existing owner clones, handles and decoded values keep their original ownership.
-    pub fn with_pool(mut self, pool: ResourcePool) -> Self {
-        self.pool = pool;
+    pub fn with_store(mut self, store: ResourceStore) -> Self {
+        self.store = store;
         self.entries = Arc::new(Mutex::new(BTreeMap::new()));
         self
     }
 
     /// Project cache identity and accounting shared by this owner's clones.
-    pub fn pool(&self) -> &ResourcePool {
-        &self.pool
+    pub fn store(&self) -> &ResourceStore {
+        &self.store
     }
 
     /// Unregisters one typed source from this owner without invalidating handles.
@@ -375,7 +404,7 @@ impl Assets {
             return false;
         };
         let mut global = self
-            .pool
+            .store
             .0
             .entries
             .lock()
@@ -415,13 +444,13 @@ impl Assets {
                 namespace: 0,
             },
             entries: Arc::new(Mutex::new(BTreeMap::new())),
-            pool: ResourcePool::new(),
+            store: ResourceStore::new(),
             diagnostics: None,
         })
     }
 
     /// Requests a lazy typed handle. Matching type/root/font snapshot/source shares
-    /// one entry only among owners attached to the same ResourcePool. Creating a
+    /// one entry only among owners attached to the same ResourceStore. Creating a
     /// handle performs no file decode. Relative parent traversal is rejected.
     pub fn load<A: Asset>(&self, source: impl Into<Source>) -> Handle<A> {
         let mut source = source.into();
@@ -477,14 +506,14 @@ impl Assets {
             };
         }
         let mut global = self
-            .pool
+            .store
             .0
             .entries
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         global.retain(|_, entry| entry.strong_count() > 0);
         let failure = failure.or_else(|| {
-            (entries.len() >= self.pool.0.max_entries)
+            (entries.len() >= self.store.0.limits.max_entries)
                 .then_some("Resource cache exceeds its entry allowance")
         });
         if failure.is_none()
@@ -498,7 +527,7 @@ impl Assets {
             };
         }
         let mut failure = failure.or_else(|| {
-            (global.len() >= self.pool.0.max_entries)
+            (global.len() >= self.store.0.limits.max_entries)
                 .then_some("Resource cache exceeds its entry allowance")
         });
         let mut charged = 0;
@@ -506,13 +535,13 @@ impl Assets {
             && let Source::Bytes { data, .. } = &source
         {
             if self
-                .pool
+                .store
                 .0
                 .bytes
                 .try_update(Ordering::AcqRel, Ordering::Acquire, |current| {
                     current
                         .checked_add(data.len())
-                        .filter(|total| *total <= self.pool.0.max_bytes)
+                        .filter(|total| *total <= self.store.0.limits.max_bytes)
                 })
                 .is_ok()
             {
@@ -527,7 +556,7 @@ impl Assets {
             *data = Arc::from([]);
         }
         let entry = Arc::new(Entry {
-            pool: self.pool.clone(),
+            store: self.store.clone(),
             source,
             context: self.context.clone(),
             result: OnceLock::new(),

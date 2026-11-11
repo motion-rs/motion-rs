@@ -29,7 +29,7 @@ const SIMULATION_SECONDS: f64 = 4.0;
 /// Emission baseline in viewport design units for the magnified smoke and fire specimens.
 const SPECIMEN_FLOOR: f64 = 264.0;
 
-pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
+pub(super) fn timeline(parameters: DemoParameters) -> Result<Timeline, motion::ErrorReport> {
     let logo = super::particle_recipes::logo(VIEWPORT)?;
     let simulations = Preset::ALL
         .into_iter()

@@ -507,7 +507,7 @@ fn wav_decode_and_lazy_asset_handles_freeze_exact_pcm() -> motion_core::Result {
     };
     let first = assets.load::<PcmBuffer>(source.clone());
     let second = assets.load::<PcmBuffer>(source);
-    assert_eq!(first.status(), motion_core::AssetStatus::Unloaded);
+    assert!(first.state().is_unloaded());
     assert!(Arc::ptr_eq(&first.get().unwrap(), &second.get().unwrap()));
     assert!(PcmBuffer::from_bytes(b"not audio").is_err());
     Ok(())

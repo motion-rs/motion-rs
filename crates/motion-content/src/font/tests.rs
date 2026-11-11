@@ -4,7 +4,7 @@ use crate::asset::AssetsExt;
 #[cfg(feature = "gpu")]
 use motion_core::Rect;
 use motion_core::{
-    Assets, Color, Node, PixelSize, RasterLimits, ResourcePool, Size, ValidationLimits,
+    Assets, Color, Node, PixelSize, RasterLimits, ResourceStore, Size, ValidationLimits,
 };
 use motion_render::RenderPrepare;
 
@@ -32,10 +32,11 @@ fn explicit_fonts_use_paragraph_layout_and_keep_registry_snapshots() -> motion_c
     let bytes = std::fs::read(std::env::var("MOTION_TEST_FONT")?)?;
     let face = FontFace::from_bytes(bytes.clone(), 0)?;
     assert!(FontFace::from_bytes(bytes, u32::MAX).is_err());
-    let store = Assets::new(".")?.with_pool(ResourcePool::with_limits(motion_core::CacheLimits {
-        entries: 4096,
-        bytes: face.byte_len(),
-    })?);
+    let store =
+        Assets::new(".")?.with_store(ResourceStore::with_limits(motion_core::ResourceLimits {
+            max_entries: 4096,
+            max_bytes: face.byte_len(),
+        })?);
     store.preload("title", Arc::new(face.clone()))?;
     let registered = store.font("title").get()?;
     let text = Text::from_font("office AV", &registered, 24.0, Color::WHITE)?;

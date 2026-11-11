@@ -103,7 +103,7 @@ pub trait NodeModifiers: Into<Node> + Sized {
     /// ```
     /// use motion_core::prelude::*;
     /// use motion_core::{
-    ///     DisplayList, RasterLimits, ResourcePool, ValidatedDisplayList, MAX_PATH_VERBS,
+    ///     DisplayList, RasterLimits, ResourceStore, ValidatedDisplayList, MAX_PATH_VERBS,
     ///     MAX_STROKE_VERBS, MAX_SVG_PATH_BYTES, sample_offsets,
     /// };
     /// let tile = || Node::from(Rect::new(0.0, 0.0, 1.0, 1.0).fill(Color::WHITE)).opacity(0.5);
@@ -131,7 +131,7 @@ pub trait NodeModifiers: Into<Node> + Sized {
     /// ```
     /// use motion_core::prelude::*;
     /// use motion_core::{
-    ///     DisplayList, RasterLimits, ResourcePool, ValidatedDisplayList, MAX_PATH_VERBS,
+    ///     DisplayList, RasterLimits, ResourceStore, ValidatedDisplayList, MAX_PATH_VERBS,
     ///     MAX_STROKE_VERBS, MAX_SVG_PATH_BYTES, sample_offsets,
     /// };
     /// let node = Node::from(Rect::new(0.0, 0.0, 2.0, 2.0).fill(Color::WHITE))
@@ -158,7 +158,7 @@ pub trait NodeModifiers: Into<Node> + Sized {
     /// ```
     /// use motion_core::prelude::*;
     /// use motion_core::{
-    ///     DisplayList, RasterLimits, ResourcePool, ValidatedDisplayList, MAX_PATH_VERBS,
+    ///     DisplayList, RasterLimits, ResourceStore, ValidatedDisplayList, MAX_PATH_VERBS,
     ///     MAX_STROKE_VERBS, MAX_SVG_PATH_BYTES, sample_offsets,
     /// };
     /// let tile = || Node::from(Rect::new(0.0, 0.0, 2.0, 1.0).fill(Color::WHITE));
@@ -233,7 +233,7 @@ pub trait NodeModifiers: Into<Node> + Sized {
     /// ```
     /// use motion_core::prelude::*;
     /// use motion_core::{
-    ///     DisplayList, RasterLimits, ResourcePool, ValidatedDisplayList, MAX_PATH_VERBS,
+    ///     DisplayList, RasterLimits, ResourceStore, ValidatedDisplayList, MAX_PATH_VERBS,
     ///     MAX_STROKE_VERBS, MAX_SVG_PATH_BYTES, sample_offsets,
     /// };
     /// let rect = Rect::new(0.5, 0.0, 2.0, 1.0);
@@ -259,7 +259,7 @@ pub trait NodeModifiers: Into<Node> + Sized {
     /// ```
     /// use motion_core::prelude::*;
     /// use motion_core::{
-    ///     DisplayList, RasterLimits, ResourcePool, ValidatedDisplayList, MAX_PATH_VERBS,
+    ///     DisplayList, RasterLimits, ResourceStore, ValidatedDisplayList, MAX_PATH_VERBS,
     ///     MAX_STROKE_VERBS, MAX_SVG_PATH_BYTES, sample_offsets,
     /// };
     /// let triangle = Path2D::builder()
@@ -291,7 +291,7 @@ pub trait NodeModifiers: Into<Node> + Sized {
     /// ```
     /// use motion_core::prelude::*;
     /// use motion_core::{
-    ///     DisplayList, RasterLimits, ResourcePool, ValidatedDisplayList, MAX_PATH_VERBS,
+    ///     DisplayList, RasterLimits, ResourceStore, ValidatedDisplayList, MAX_PATH_VERBS,
     ///     MAX_STROKE_VERBS, MAX_SVG_PATH_BYTES, sample_offsets,
     /// };
     /// let tile = |color| Node::from(Rect::new(0.0, 0.0, 1.0, 1.0).fill(color));
@@ -310,7 +310,7 @@ pub trait NodeModifiers: Into<Node> + Sized {
     /// ```
     /// use motion_core::prelude::*;
     /// use motion_core::{
-    ///     DisplayList, RasterLimits, ResourcePool, ValidatedDisplayList, MAX_PATH_VERBS,
+    ///     DisplayList, RasterLimits, ResourceStore, ValidatedDisplayList, MAX_PATH_VERBS,
     ///     MAX_STROKE_VERBS, MAX_SVG_PATH_BYTES, sample_offsets,
     /// };
     /// let source = Node::from(Rect::new(1.0, 0.0, 3.0, 1.0).fill(Color::WHITE));

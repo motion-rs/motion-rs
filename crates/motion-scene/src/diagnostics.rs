@@ -88,32 +88,15 @@ fn shorten_expected(message: &str) -> Option<String> {
     (count > MAX_LISTED_NAMES).then(|| format!("{head}; {count} names are valid here."))
 }
 
-/// Maps every diagnostic inside `error` through [`annotate`].
-pub(crate) fn annotate_error(error: motion_core::Error, text: &str) -> motion_core::Error {
-    if let Some(diagnostic) = error.downcast_ref::<ValidationError>() {
-        return annotate(diagnostic.clone(), text).into();
-    }
-    if error.build_errors().is_empty() {
-        return error;
-    }
-    motion_core::Error::BuildErrors(
-        error
-            .build_errors()
-            .iter()
-            .map(|inner| std::sync::Arc::new(annotate_error_ref(inner, text)))
-            .collect(),
-    )
-}
-
-fn annotate_error_ref(error: &motion_core::Error, text: &str) -> motion_core::Error {
-    match error.downcast_ref::<ValidationError>() {
-        Some(diagnostic) => annotate(diagnostic.clone(), text).into(),
-        None => motion_core::Error::Validation(ValidationError::invalid(
-            "document",
-            "document",
-            error.to_string(),
-        )),
-    }
+/// Maps every diagnostic inside `report` through [`annotate`].
+pub(crate) fn annotate_report(
+    report: motion_core::ErrorReport,
+    text: &str,
+) -> motion_core::ErrorReport {
+    report.map(|error| match error.downcast_ref::<ValidationError>() {
+        Some(diagnostic) => std::sync::Arc::new(annotate(diagnostic.clone(), text).into()),
+        None => error,
+    })
 }
 
 /// Returns "Did you mean `x`?" for the closest candidate, if any is close enough.

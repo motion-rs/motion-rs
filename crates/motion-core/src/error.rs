@@ -2,7 +2,7 @@
 
 use std::{error::Error as StdError, fmt, io};
 
-use crate::ValidationError;
+use crate::{ErrorReport, ValidationError};
 
 /// Owned source error that can cross rendering-worker boundaries.
 pub type BoxedError = Box<dyn StdError + Send + Sync + 'static>;
@@ -57,8 +57,6 @@ pub enum ErrorKind {
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum Error {
-    /// Ordered diagnostics retained while authoring an invalid value.
-    BuildErrors(Vec<std::sync::Arc<Error>>),
     /// Detailed scene/property diagnostic.
     Validation(ValidationError),
     /// Original filesystem or operating-system error.
@@ -121,12 +119,12 @@ pub enum Error {
 }
 
 impl Error {
-    /// All deferred authoring diagnostics, preserving their original categories.
-    pub fn build_errors(&self) -> &[std::sync::Arc<Error>] {
+    /// The report of several failures carried by this single error, if any.
+    pub fn report(&self) -> Option<&ErrorReport> {
         match self {
-            Self::BuildErrors(errors) => errors,
-            Self::AtFrame { cause, .. } => cause.build_errors(),
-            _ => &[],
+            Self::Other(cause) => cause.downcast_ref::<ErrorReport>(),
+            Self::AtFrame { cause, .. } => cause.report(),
+            _ => None,
         }
     }
 
@@ -165,9 +163,6 @@ impl Error {
     /// Classifies an error independently of any frame annotation.
     pub fn kind(&self) -> ErrorKind {
         match self {
-            Self::BuildErrors(errors) => errors
-                .first()
-                .map_or(ErrorKind::Validation, |error| error.kind()),
             Self::Validation(_) => ErrorKind::Validation,
             Self::Io(_) => ErrorKind::Io,
             Self::Asset { .. } => ErrorKind::Asset,
@@ -182,7 +177,15 @@ impl Error {
             Self::Encoder(_) => ErrorKind::Encoder,
             Self::Cancelled => ErrorKind::Cancelled,
             Self::AtFrame { cause, .. } => cause.kind(),
-            Self::Other(_) => ErrorKind::Other,
+            Self::Other(cause) => {
+                cause
+                    .downcast_ref::<ErrorReport>()
+                    .map_or(ErrorKind::Other, |report| {
+                        report
+                            .first()
+                            .map_or(ErrorKind::Validation, |error| error.kind())
+                    })
+            }
         }
     }
 
@@ -252,13 +255,6 @@ impl Error {
 impl fmt::Display for Error {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::BuildErrors(errors) => {
-                write!(formatter, "{} authoring error(s)", errors.len())?;
-                for error in errors {
-                    write!(formatter, "\n  {error}")?;
-                }
-                Ok(())
-            }
             Self::Validation(error) => error.fmt(formatter),
             Self::Io(error) => error.fmt(formatter),
             Self::Asset {

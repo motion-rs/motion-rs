@@ -3,12 +3,9 @@
 use motion_scene::*;
 use serde_json::json;
 
-fn message(error: motion_core::Error) -> String {
-    if error.build_errors().is_empty() {
-        return error.to_string();
-    }
-    error
-        .build_errors()
+fn message(report: motion_core::ErrorReport) -> String {
+    report
+        .errors()
         .iter()
         .map(|error| error.to_string())
         .collect::<Vec<_>>()
@@ -26,7 +23,7 @@ fn unknown_keys_and_variants_suggest_the_closest_name() {
     let text = format!(
         "{HEAD}\n  {{\"scene\": {{\"duration\": 1, \"content\": {{\n    \"rect\": {{\"bounds\": [0, 0, 1, 1]}},\n    \"fil\": \"white\"\n  }}}}}}]}}]}}"
     );
-    let error = message(Document::from_json(&text).unwrap_err());
+    let error = message(Document::from_json(&text).unwrap_err().into());
     assert!(error.contains("unknown field `fil`"), "{error}");
     assert!(error.contains("(line 4, column 5)"), "{error}");
     assert!(error.ends_with("Did you mean `fill`?"), "{error}");
@@ -34,14 +31,18 @@ fn unknown_keys_and_variants_suggest_the_closest_name() {
     let text = scene(
         r#"{"circle": {"center": [1, 1], "radius": {"tween": {"from": 0, "to": 1, "duration": 1, "easing": "cubic_ot"}}}, "fill": "white"}"#,
     );
-    let error = message(Document::from_json(&text).unwrap_err());
+    let error = message(Document::from_json(&text).unwrap_err().into());
     assert!(error.contains("Did you mean `cubic_out`?"), "{error}");
     assert!(error.contains("line 1"), "{error}");
 }
 
 #[test]
 fn syntax_errors_keep_serde_positions() {
-    let error = message(Document::from_json("{\n  \"version\": 1,\n  oops\n}").unwrap_err());
+    let error = message(
+        Document::from_json("{\n  \"version\": 1,\n  oops\n}")
+            .unwrap_err()
+            .into(),
+    );
     assert!(error.contains("line 3"), "{error}");
 }
 
@@ -50,12 +51,13 @@ fn parameter_and_expression_typos_are_suggested() {
     let text = r#"{"version": 1, "size": [8, 8], "fps": 4, "params": {"radius": 3},
             "tracks": [{"items": [{"scene": {"duration": 1, "content": {
               "circle": {"center": [1, 1], "radius": {"$param": "radis"}}, "fill": "white"}}}]}]}"#;
-    let error = message(Document::from_json(text).unwrap_err());
+    let error = message(Document::from_json(text).unwrap_err().into());
     assert!(error.contains("Did you mean `radius`?"), "{error}");
 
     let error = message(
         Document::from_json_with(&text.replace("radis", "radius"), Some(&json!({"radis": 1})))
-            .unwrap_err(),
+            .unwrap_err()
+            .into(),
     );
     assert!(error.contains("Did you mean `radius`?"), "{error}");
 

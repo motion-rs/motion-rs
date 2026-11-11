@@ -287,7 +287,7 @@ let error = Document::from_json(
 )?
 .compile(&Default::default())
 .unwrap_err();
-let diagnostic = error.downcast_ref::<ValidationError>().unwrap();
+let diagnostic = error.errors()[0].downcast_ref::<ValidationError>().unwrap();
 assert_eq!(diagnostic.path, "tracks[0].items[0].scene.content");
 assert_eq!(diagnostic.field, "fill");
 # Ok::<(), motion::Error>(())

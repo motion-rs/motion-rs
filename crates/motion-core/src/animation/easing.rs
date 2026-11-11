@@ -14,7 +14,7 @@ mod tests;
 /// ```
 /// use motion_core::prelude::*;
 /// use motion_core::{
-///     DisplayList, RasterLimits, ResourcePool, ValidatedDisplayList, MAX_PATH_VERBS,
+///     DisplayList, RasterLimits, ResourceStore, ValidatedDisplayList, MAX_PATH_VERBS,
 ///     MAX_STROKE_VERBS, MAX_SVG_PATH_BYTES, sample_offsets,
 /// };
 /// let movement = Tween::new(0.0_f64, 100.0, 2.seconds()).easing(Easing::CubicOut);

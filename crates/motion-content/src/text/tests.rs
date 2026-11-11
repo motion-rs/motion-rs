@@ -13,8 +13,8 @@ fn session_layout_cache_reuses_fresh_texts_and_evicts_lru_without_clearing() -> 
         .join("../../tests/fixtures/fonts/NotoSans-Regular.ttf");
     fonts.load_file(&font)?;
     let render_cache = motion_core::RenderCache::with_limits(motion_core::CacheLimits {
-        entries: 2,
-        bytes: 1024 * 1024,
+        max_entries: 2,
+        max_bytes: 1024 * 1024,
     });
     let cache = render_cache
         .partition(motion_core::CachePartition::Paragraph)
@@ -57,8 +57,8 @@ fn session_layout_cache_converges_concurrent_misses_and_clear_releases_charges()
             .join("../../tests/fixtures/fonts/NotoSans-Regular.ttf"),
     )?;
     let render_cache = motion_core::RenderCache::with_limits(motion_core::CacheLimits {
-        entries: 8,
-        bytes: 1024 * 1024,
+        max_entries: 8,
+        max_bytes: 1024 * 1024,
     });
     let cache = render_cache
         .partition(motion_core::CachePartition::Paragraph)

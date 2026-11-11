@@ -90,7 +90,7 @@ pub fn camera(
 /// ```
 /// use motion_core::prelude::*;
 /// use motion_core::{
-///     DisplayList, RasterLimits, ResourcePool, ValidatedDisplayList, MAX_PATH_VERBS,
+///     DisplayList, RasterLimits, ResourceStore, ValidatedDisplayList, MAX_PATH_VERBS,
 ///     MAX_STROKE_VERBS, MAX_SVG_PATH_BYTES, sample_offsets,
 /// };
 /// let cache = SceneCache::new(0);

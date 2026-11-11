@@ -107,7 +107,7 @@ enum Specimen {
     Text(DemoParameters),
 }
 
-pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
+pub(super) fn timeline(parameters: DemoParameters) -> Result<Timeline, motion::ErrorReport> {
     let dense = DemoParameters {
         count: parameters.count * DENSITY,
         ..parameters

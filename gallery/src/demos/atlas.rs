@@ -92,7 +92,7 @@ pub(super) fn timeline(
     metadata: DemoMetadata,
     pages: &'static [Page],
     draw: impl Fn(usize, f64, &SceneContext<'_>) -> motion::Result<Node> + Send + Sync + 'static,
-) -> motion::Result<Timeline> {
+) -> Result<Timeline, motion::ErrorReport> {
     builder(parameters, metadata, pages, draw).build()
 }
 

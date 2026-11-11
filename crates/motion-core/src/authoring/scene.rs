@@ -27,18 +27,17 @@ impl<Output: Into<Node>, Failure: Into<crate::Error>> IntoSceneOutput
 
 struct SceneFailure {
     error: Arc<crate::Error>,
-    report: Arc<crate::Error>,
 }
 
 impl SceneFailure {
     fn new(error: crate::Error) -> Self {
-        let error = Arc::new(error);
-        let report = Arc::new(crate::Error::BuildErrors(vec![error.clone()]));
-        Self { error, report }
+        Self {
+            error: Arc::new(error),
+        }
     }
 
     fn diagnostic(&self, context: &DrawContext) -> ValidationError {
-        context.diagnostics().record(self.report.clone());
+        context.diagnostics().record_scene(self.error.clone());
         if let Some(error) = self.error.downcast_ref::<ValidationError>() {
             return error.clone();
         }
@@ -75,7 +74,7 @@ where
         Err(error) => {
             let failure = SceneFailure::new(error);
             if let Some(diagnostics) = context.diagnostics() {
-                diagnostics.record(failure.report.clone());
+                diagnostics.record_scene(failure.error.clone());
             }
             Node::from(failure)
         }
@@ -98,7 +97,7 @@ macro_rules! group {
 /// ```
 /// use motion_core::prelude::*;
 /// use motion_core::{
-///     DisplayList, RasterLimits, ResourcePool, ValidatedDisplayList, MAX_PATH_VERBS,
+///     DisplayList, RasterLimits, ResourceStore, ValidatedDisplayList, MAX_PATH_VERBS,
 ///     MAX_STROKE_VERBS, MAX_SVG_PATH_BYTES, sample_offsets,
 /// };
 ///

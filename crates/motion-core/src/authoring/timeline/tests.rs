@@ -26,7 +26,7 @@ fn fluent_builders_retain_all_errors_and_valid_chains_need_no_question_marks() -
         .duration((-1).seconds())
         .build()
         .unwrap_err();
-    assert_eq!(error.build_errors().len(), 3);
+    assert_eq!(error.errors().len(), 3);
     assert!(error.to_string().contains("track[0]"));
     let valid = Timeline::new(size(), 30)
         .track(|track| {

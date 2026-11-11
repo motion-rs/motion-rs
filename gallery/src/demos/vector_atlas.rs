@@ -131,7 +131,7 @@ pub(super) const PAGES: &[Page] = &[
     },
 ];
 
-pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
+pub(super) fn timeline(parameters: DemoParameters) -> Result<Timeline, motion::ErrorReport> {
     let source = SvgAsset::from_bytes(SOURCE)?.tree;
     let target = SvgAsset::from_bytes(TARGET)?.tree;
     let morph = Morph::new(&source, &target)?;

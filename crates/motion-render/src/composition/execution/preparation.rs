@@ -97,25 +97,17 @@ impl FrameExecution<'_> {
         if let Some(started) = started {
             self.timings.as_mut().expect("enabled timings").evaluation += started.elapsed();
         }
-        let scene_errors = diagnostics
-            .errors()
-            .into_iter()
-            .flat_map(|error| error.build_errors().to_vec())
-            .collect::<Vec<_>>();
+        let scene_errors = diagnostics.scene_errors();
         if !scene_errors.is_empty() {
-            return Err(motion_core::Error::BuildErrors(scene_errors).at_frame(u64::from(index)));
+            return Err(motion_core::Error::from(scene_errors).at_frame(u64::from(index)));
         }
         let result = self
             .prepare_node(node, background)
             .map_err(|error| error.at_frame(u64::from(index)));
         let failures = diagnostics.errors();
-        let scene_errors = failures
-            .iter()
-            .flat_map(|error| error.build_errors().to_vec())
-            .collect::<Vec<_>>();
+        let scene_errors = diagnostics.scene_errors();
         self.asset_diagnostics = failures
             .into_iter()
-            .filter(|error| error.build_errors().is_empty())
             .map(|error| {
                 std::sync::Arc::new(
                     motion_core::Error::asset("resource", "frame", error)
@@ -124,7 +116,7 @@ impl FrameExecution<'_> {
             })
             .collect();
         if !scene_errors.is_empty() {
-            return Err(motion_core::Error::BuildErrors(scene_errors).at_frame(u64::from(index)));
+            return Err(motion_core::Error::from(scene_errors).at_frame(u64::from(index)));
         }
         let result = result?;
         if !self.composition.options.allow_missing_assets

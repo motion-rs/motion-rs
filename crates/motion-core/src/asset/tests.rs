@@ -18,58 +18,58 @@ fn configurable_pool_limits_cover_encoded_decoded_and_preloaded_payloads() -> cr
         }
     }
     assert!(
-        ResourcePool::with_limits(crate::CacheLimits {
-            entries: 1,
-            bytes: 0
+        ResourceStore::with_limits(crate::ResourceLimits {
+            max_entries: 1,
+            max_bytes: 0
         })
         .is_err()
     );
     assert!(
-        ResourcePool::with_limits(crate::CacheLimits {
-            entries: 0,
-            bytes: 8
+        ResourceStore::with_limits(crate::ResourceLimits {
+            max_entries: 0,
+            max_bytes: 8
         })
         .is_err()
     );
     assert!(
-        ResourcePool::with_limits(crate::CacheLimits {
-            entries: 4097,
-            bytes: 8
+        ResourceStore::with_limits(crate::ResourceLimits {
+            max_entries: 4097,
+            max_bytes: 8
         })
         .is_err()
     );
-    let pool = ResourcePool::with_limits(crate::CacheLimits {
-        entries: 1,
-        bytes: 8,
+    let pool = ResourceStore::with_limits(crate::ResourceLimits {
+        max_entries: 1,
+        max_bytes: 8,
     })?;
     assert_eq!(pool.max_bytes(), 8);
     assert_eq!(pool.max_entries(), 1);
-    let assets = Assets::new(".")?.with_pool(pool.clone());
+    let assets = Assets::new(".")?.with_store(pool.clone());
     assets.preload("first", Arc::new(Value))?;
     assert!(assets.preload("second", Arc::new(Value)).is_err());
     assert_eq!(pool.retained_bytes(), 8);
-    let assets = Assets::new(".")?.with_pool(ResourcePool::with_limits(crate::CacheLimits {
-        entries: 2,
-        bytes: 7,
+    let assets = Assets::new(".")?.with_store(ResourceStore::with_limits(crate::ResourceLimits {
+        max_entries: 2,
+        max_bytes: 7,
     })?);
     assert!(assets.preload("first", Arc::new(Value)).is_err());
-    assert_eq!(assets.pool().retained_bytes(), 0);
-    let assets = Assets::default().with_pool(ResourcePool::with_limits(crate::CacheLimits {
-        entries: 2,
-        bytes: 8,
+    assert_eq!(assets.store().retained_bytes(), 0);
+    let assets = Assets::default().with_store(ResourceStore::with_limits(crate::ResourceLimits {
+        max_entries: 2,
+        max_bytes: 8,
     })?);
     let encoded = assets.load::<Value>(Source::Bytes {
         key: "encoded".into(),
         data: Arc::from(&b"123456789"[..]),
     });
-    assert_eq!(encoded.status(), AssetStatus::Failed);
-    assert_eq!(assets.pool().retained_bytes(), 0);
+    assert!(encoded.state().is_failed());
+    assert_eq!(assets.store().retained_bytes(), 0);
     let decoded = assets.load::<Value>(Source::Bytes {
         key: "decoded".into(),
         data: Arc::from(&b"1"[..]),
     });
     assert!(decoded.get().is_err());
-    assert_eq!(assets.pool().retained_bytes(), 1);
+    assert_eq!(assets.store().retained_bytes(), 1);
     Ok(())
 }
 
@@ -88,11 +88,11 @@ fn removal_preserves_snapshots_handles_and_replacement_accounting() -> crate::Re
             8
         }
     }
-    let pool = ResourcePool::with_limits(crate::CacheLimits {
-        entries: 2,
-        bytes: 16,
+    let pool = ResourceStore::with_limits(crate::ResourceLimits {
+        max_entries: 2,
+        max_bytes: 16,
     })?;
-    let assets = Assets::new(".")?.with_pool(pool.clone());
+    let assets = Assets::new(".")?.with_store(pool.clone());
     let old = assets.preload("value", Arc::new(Value(1)))?;
     let snapshot = assets.snapshot();
     assert!(!assets.remove::<Value>("unknown"));
@@ -126,10 +126,10 @@ fn preload_populates_existing_lazy_handle_without_decoding_or_replacing() -> cra
     }
     let assets = Assets::new(".")?;
     let before = assets.load::<Preloaded>("nonexistent.bin");
-    assert_eq!(before.status(), AssetStatus::Unloaded);
+    assert!(before.state().is_unloaded());
     let value = Arc::new(Preloaded(42));
     let registered = assets.preload("nonexistent.bin", value.clone())?;
-    assert_eq!(before.status(), AssetStatus::Ready);
+    assert!(before.state().is_ready());
     assert!(Arc::ptr_eq(&value, &before.get()?));
     assert!(Arc::ptr_eq(
         &registered.entry,
@@ -159,11 +159,8 @@ fn snapshot_preloading_does_not_resolve_an_old_unloaded_handle() -> crate::Resul
     let original = assets.load::<Value>("unread.bin");
     let snapshot = assets.snapshot();
     snapshot.preload("unread.bin", Arc::new(Value))?;
-    assert_eq!(
-        snapshot.load::<Value>("unread.bin").status(),
-        AssetStatus::Ready
-    );
-    assert_eq!(original.status(), AssetStatus::Unloaded);
+    assert!(snapshot.load::<Value>("unread.bin").state().is_ready());
+    assert!(original.state().is_unloaded());
     Ok(())
 }
 
@@ -183,12 +180,12 @@ fn preloads_keep_one_charge_after_owner_drop() -> crate::Result {
         }
     }
     let value = Arc::new(Value);
-    let pool = ResourcePool::new();
-    let assets = Assets::new(".")?.with_pool(pool.clone());
+    let pool = ResourceStore::new();
+    let assets = Assets::new(".")?.with_store(pool.clone());
     assets.preload("value", value.clone())?;
-    assert!(assets.pool().same_pool(&pool));
+    assert!(assets.store().same_store(&pool));
     let handle = assets.load::<Value>("value");
-    assert_eq!(handle.status(), AssetStatus::Ready);
+    assert!(handle.state().is_ready());
     assert!(Arc::ptr_eq(&value, &handle.get()?));
     assert_eq!(pool.retained_bytes(), 64);
     drop(assets);
@@ -292,15 +289,15 @@ fn loading_status_is_observable_and_never_resets_before_publication() -> crate::
         key: "blocking".into(),
         data: Arc::from(&b"payload"[..]),
     });
-    assert_eq!(handle.status(), AssetStatus::Unloaded);
+    assert!(handle.state().is_unloaded());
     std::thread::scope(|scope| {
         let task = scope.spawn(|| handle.get().unwrap());
         gates.0.wait();
-        assert_eq!(handle.status(), AssetStatus::Loading);
+        assert!(handle.state().is_loading());
         gates.1.wait();
         let _value = task.join().unwrap();
     });
-    assert_eq!(handle.status(), AssetStatus::Ready);
+    assert!(handle.state().is_ready());
     Ok(())
 }
 
@@ -344,10 +341,13 @@ fn decoder_panics_and_payload_budget_failures_are_sticky() -> crate::Result {
             .to_string()
             .contains("expected decoder panic")
     );
-    assert_eq!(handle.status(), AssetStatus::Failed);
-    let failure = handle.error().unwrap();
+    assert!(handle.state().is_failed());
+    let failure = handle.state().failure().unwrap().clone();
     assert!(handle.get().is_err());
-    assert!(Arc::ptr_eq(&failure, &handle.error().unwrap()));
+    assert!(Arc::ptr_eq(
+        &failure,
+        &handle.state().failure().unwrap().clone()
+    ));
     let oversized = assets.load::<Oversized>(source);
     assert_eq!(
         oversized
@@ -359,7 +359,7 @@ fn decoder_panics_and_payload_budget_failures_are_sticky() -> crate::Result {
             .kind(),
         io::ErrorKind::OutOfMemory
     );
-    assert_eq!(oversized.status(), AssetStatus::Failed);
+    assert!(oversized.state().is_failed());
     Ok(())
 }
 
@@ -398,13 +398,13 @@ fn lazy_handles_share_one_concurrent_decode_across_owners() -> crate::Result {
 
     let directory = tempfile::tempdir()?;
     let first = Assets::new(directory.path())?;
-    let second = Assets::new(directory.path())?.with_pool(first.pool().clone());
+    let second = Assets::new(directory.path())?.with_store(first.store().clone());
     let source = Source::Bytes {
         key: "same".into(),
         data: Arc::from(&b"shared"[..]),
     };
     let handle = first.load::<Counted>(source.clone());
-    assert_eq!(handle.status(), AssetStatus::Unloaded);
+    assert!(handle.state().is_unloaded());
     let previous = DECODE_COUNT.load(Ordering::SeqCst);
     std::thread::scope(|scope| {
         let tasks = (0..8)
@@ -417,7 +417,7 @@ fn lazy_handles_share_one_concurrent_decode_across_owners() -> crate::Result {
         assert!(values.iter().all(|value| Arc::ptr_eq(value, &values[0])));
     });
     assert_eq!(DECODE_COUNT.load(Ordering::SeqCst), previous + 1);
-    assert_eq!(handle.status(), AssetStatus::Ready);
+    assert!(handle.state().is_ready());
     assert_eq!(handle.get()?.0, b"shared");
     let changed = first.load::<Counted>(Source::Bytes {
         key: "same".into(),
@@ -432,14 +432,14 @@ fn project_pools_isolate_identity_budget_and_cross_thread_diagnostics() -> crate
     let directory = tempfile::tempdir()?;
     let first = Assets::new(directory.path())?;
     let second = Assets::new(directory.path())?;
-    assert!(!first.pool().same_pool(second.pool()));
+    assert!(!first.store().same_store(second.store()));
     let source = Source::Bytes {
         key: "isolated".into(),
         data: Arc::from(&b"bytes"[..]),
     };
     let first_handle = first.load::<Counted>(source.clone());
-    assert_eq!(first.pool().retained_bytes(), 5);
-    assert_eq!(second.pool().retained_bytes(), 0);
+    assert_eq!(first.store().retained_bytes(), 5);
+    assert_eq!(second.store().retained_bytes(), 0);
     let second_handle = second.load::<Counted>(source);
     assert!(!Arc::ptr_eq(&first_handle.get()?, &second_handle.get()?));
     let diagnostics = RequestDiagnostics::default();
@@ -465,20 +465,31 @@ fn file_failures_are_lazy_sticky_classified_and_keep_original_source() -> crate:
     let directory = tempfile::tempdir()?;
     let assets = Assets::new(directory.path())?;
     let handle = assets.load::<Counted>("missing.data");
-    assert_eq!(handle.status(), AssetStatus::Unloaded);
+    assert!(handle.state().is_unloaded());
     let error = handle.get().err().unwrap();
     assert_eq!(error.kind(), crate::ErrorKind::Asset);
     assert_eq!(
         error.downcast_ref::<io::Error>().unwrap().kind(),
         io::ErrorKind::NotFound
     );
-    let failure = handle.error().unwrap();
+    let failure = handle.state().failure().unwrap().clone();
     std::fs::write(directory.path().join("missing.data"), b"new")?;
     assert!(handle.get().is_err());
-    assert!(Arc::ptr_eq(&failure, &handle.error().unwrap()));
-    assert_eq!(handle.status(), AssetStatus::Failed);
+    assert!(Arc::ptr_eq(
+        &failure,
+        &handle.state().failure().unwrap().clone()
+    ));
+    assert!(handle.state().is_failed());
     let invalid = assets.load::<Counted>("../escape");
-    assert_eq!(invalid.status(), AssetStatus::Failed);
-    assert!(invalid.error().unwrap().to_string().contains("../escape"));
+    assert!(invalid.state().is_failed());
+    assert!(
+        invalid
+            .state()
+            .failure()
+            .unwrap()
+            .clone()
+            .to_string()
+            .contains("../escape")
+    );
     Ok(())
 }

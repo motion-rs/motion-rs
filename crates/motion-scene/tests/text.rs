@@ -111,7 +111,7 @@ fn text_documents_round_trip_and_report_errors() {
     );
     let error = broken.compile(&CompileOptions::default()).unwrap_err();
     let messages: Vec<String> = error
-        .build_errors()
+        .errors()
         .iter()
         .map(|error| {
             error

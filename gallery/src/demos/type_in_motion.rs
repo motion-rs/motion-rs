@@ -44,7 +44,7 @@ pub(super) const METADATA: DemoMetadata = DemoMetadata::new(
     ],
 );
 
-pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
+pub(super) fn timeline(parameters: DemoParameters) -> Result<Timeline, motion::ErrorReport> {
     let duration = parameters.seconds.seconds();
     let shot = Time::from_ticks(duration.ticks() * 2 / 5);
     let turn = Time::from_ticks(duration.ticks() / 10);

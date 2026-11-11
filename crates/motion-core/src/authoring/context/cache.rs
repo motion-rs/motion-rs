@@ -8,7 +8,10 @@ use std::sync::{Arc, Mutex};
 
 use super::CacheLimits;
 
-/// Shared LRU storage for pure authoring computations, with optional byte accounting.
+/// Shared LRU compute cache for pure authoring computations, with optional byte accounting.
+///
+/// Entries can be dropped and recomputed at any time; decoded resources that must keep their
+/// identity live in a [`crate::ResourceStore`] instead.
 ///
 /// Values must depend only on their keys and immutable resources. Resource
 /// revisions belong in the key. The default retains 256 entries without a byte cap.
@@ -65,8 +68,8 @@ impl SceneCache {
     /// Creates a cache with at most this many retained entries; zero disables it.
     pub fn new(capacity: usize) -> Self {
         Self::with_limits(CacheLimits {
-            entries: capacity,
-            bytes: usize::MAX,
+            max_entries: capacity,
+            max_bytes: usize::MAX,
         })
     }
 
@@ -75,8 +78,8 @@ impl SceneCache {
     /// Neither allocator overhead nor externally pinned Arc values are bounded.
     pub fn with_limits(limits: CacheLimits) -> Self {
         Self {
-            capacity: limits.entries,
-            max_bytes: limits.bytes,
+            capacity: limits.max_entries,
+            max_bytes: limits.max_bytes,
             entries: Mutex::new(VecDeque::new()),
             empty_assets: crate::Assets::default(),
         }

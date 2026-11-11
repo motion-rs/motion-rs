@@ -248,7 +248,7 @@ pub(super) const PAGES: &[Page] = &[
     },
 ];
 
-pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
+pub(super) fn timeline(parameters: DemoParameters) -> Result<Timeline, motion::ErrorReport> {
     atlas::timeline(parameters, METADATA, PAGES, |page, progress, _| {
         if page < MODES.len() {
             return layers(progress, MODES[page], 1.0);

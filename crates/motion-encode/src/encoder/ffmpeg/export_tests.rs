@@ -4,9 +4,7 @@ use crate::*;
 use motion_core::Result;
 use motion_core::Shape;
 #[cfg(feature = "ffmpeg")]
-use motion_core::{
-    AssetStatus, Assets, AudioClip, Color, MotionBlur, NodeModifiers, Rect, ValidationError,
-};
+use motion_core::{Assets, AudioClip, Color, MotionBlur, NodeModifiers, Rect, ValidationError};
 use motion_core::{
     ErrorKind, FrameRate, Node, Scene, SceneContext, Size, Time, Timeline, TimelineBuilder,
 };
@@ -168,7 +166,7 @@ fn explicit_font_video_commit_cancel_and_failure() -> Result {
     let rate = FrameRate::from(24);
     let painted = text.clone();
     let scene = timeline(Size::new(64.0, 32.0), rate, 3, move |context| {
-        assert_eq!(context.assets().font("title").status(), AssetStatus::Ready);
+        assert!(context.assets().font("title").state().is_ready());
         observed.lock().unwrap().push(context.time());
         Node::from(painted.clone()).translate(context.seconds() * 24.0, 4.0)
     });

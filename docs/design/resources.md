@@ -12,19 +12,19 @@ decoded on a device unless the author asked for it. The tutorial walkthrough is
 | Object | Owns | Lifetime |
 | --- | --- | --- |
 | `Assets` | Typed entry table, `LoadContext` (absolute root, optional `FontEnvironment`, namespace) | Clones share registrations; `snapshot()` freezes resolved entries and isolates later edits |
-| `ResourcePool` | Logical byte counter and weak entry index | Shared by clones; a new `Assets` owner starts with its own pool unless `with_pool` is used |
-| `Handle<A>` | One shared entry: source, sticky result, charged bytes | Until the last handle/owner drops; dropping releases the pool charge |
-| Decoded `Arc<A>` | Immutable decoded value | Can outlive every owner and handle; it is then no longer pool-accounted |
+| `ResourceStore` | Logical byte counter and weak entry index | Shared by clones; a new `Assets` owner starts with its own store unless `with_store` is used |
+| `Handle<A>` | One shared entry: source, sticky result, charged bytes | Until the last handle/owner drops; dropping releases the store charge |
+| Decoded `Arc<A>` | Immutable decoded value | Can outlive every owner and handle; it is then no longer store-accounted |
 | `FontLibrary` | Font database, shaping engine, glyph/layout caches, usage log | Cloned libraries share one frozen snapshot |
 | `RenderCache` | Compute cache: seven independently bounded partitions | Shared by clones, sessions and export workers until `clear` |
 | `SceneCache` | Compute cache (LRU) of pure author computations keyed by call site, type and key | Per cache; entries are LRU-evicted |
 
-`ResourcePool` keeps only `Weak` references: it does not keep decoded data alive.
+`ResourceStore` keeps only `Weak` references: it does not keep decoded data alive.
 `Assets::remove` unregisters a source without invalidating existing handles, and
 retained snapshots or handles keep their payload charged until dropped. Sources
 are [`asset.rs`](../../crates/motion-core/src/asset.rs),
 [`handle.rs`](../../crates/motion-core/src/asset/handle.rs) and
-[`pool.rs`](../../crates/motion-core/src/asset/pool.rs).
+[`store.rs`](../../crates/motion-core/src/asset/store.rs).
 
 ## Explicit-IO Policy
 
@@ -83,7 +83,7 @@ needs one or the other. See [`font.rs`](../../crates/motion-content/src/font.rs)
 Anything that changes decoding or layout must be in the key. Pure scene values
 should put resource revisions in the author key. `SceneCache` builders may run
 more than once (concurrent misses, eviction, `clear`, disabled cache), so they must
-be pure. Sharing a `ResourcePool` never lets owners with different roots, sources
+be pure. Sharing a `ResourceStore` never lets owners with different roots, sources
 or font snapshots reuse each other's entries.
 
 ## Limits and Accounting
@@ -94,7 +94,7 @@ overhead, parser scratch and external `Arc` pins are excluded.
 | Scope | Default | Notes |
 | --- | --- | --- |
 | Encoded asset input | 64 MiB | Checked on file metadata, bytes and after the read |
-| `ResourcePool` | 256 MiB, 4096 entries | `with_limits(CacheLimits)` requires positive bytes and 1..=4096 entries; at least the encoded length is charged |
+| `ResourceStore` | 256 MiB, 4096 entries | `with_limits(ResourceLimits { max_bytes, max_entries })` requires positive bytes and 1..=4096 entries; it is independent of the compute caches' `CacheLimits`; at least the encoded length is charged |
 | Image decode | 16384 px per side, 16,777,216 pixels | Static PNG/JPEG/WebP only; stored as linear-premultiplied RGBA16F with mips |
 | SVG source | 8 MiB, XML depth 64, 100,000 nodes | DTDs disallowed |
 | `RenderCache` partitions | Coverage 2048/16 MiB, Paragraph 256/8 MiB, Glyph 2048/16 MiB, Gradient 64/8 MiB, Formula 32/32 MiB, Ink 64/32 MiB, Scene 256/8 MiB | `RenderCache::with_limits` applies one limit to all; `fork_partition` isolates one |
@@ -116,7 +116,7 @@ bound preparation, not Rust callbacks or Typst evaluation time. See
 | `Formula::typst` | `Formula::compile`, `FormulaCompiler::compile` |
 | `Text` shaping at compilation | `Text::layout(&fonts)` for inspection |
 
-`Handle` status moves `Unloaded` → `Loading` → `Ready` or `Failed`. Failure is
+`Handle::state()` returns an `AssetState` without loading; it moves `Unloaded` → `Loading` → `Ready(Arc<A>)` or `Failed(Arc<Error>)`. Failure is
 sticky and never retried implicitly. Concurrent
 callers join one decode; a panicking decoder becomes a sticky asset error.
 Recursive resolution or nesting deeper than 64 fails. `Formula` without an
@@ -130,7 +130,7 @@ for custom math fonts.
 (or require it of their contents), so workers share them freely. Policy by
 object:
 
-- `Assets`, `ResourcePool`, `RequestDiagnostics`, `FontUsage` and the font usage
+- `Assets`, `ResourceStore`, `RequestDiagnostics`, `FontUsage` and the font usage
   log **recover** from a poisoned lock and continue.
 - `SceneCache` treats a poisoned lock as a bug and panics.
 - A poisoned font engine returns a `ValidationError` ("Font engine is poisoned");
@@ -171,7 +171,7 @@ fn main() -> motion::Result {
 }
 ```
 
-Compositions cloned from these options share the `Assets` owner (and its pool);
+Compositions cloned from these options share the `Assets` owner (and its resource store);
 sessions keep separate targets and caches.
 
 ## Related

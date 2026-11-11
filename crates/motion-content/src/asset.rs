@@ -80,7 +80,7 @@ mod tests {
                     .context(RenderContext::new().with_assets(assets.clone())),
             )?;
         let frame = composition.render_frame(0, Size::new(8.0, 4.0), |context| {
-            assert!(context.assets().pool().same_pool(assets.pool()));
+            assert!(context.assets().store().same_store(assets.store()));
             for node in [
                 Node::from(crate::Image::open("logo.png")),
                 Node::from(crate::Svg::open("diagram.svg")),
@@ -105,7 +105,7 @@ mod tests {
         let frame = composition
             .configure(|options| options.resources(override_assets.clone()))
             .render_frame(0, Size::new(8.0, 4.0), |context| {
-                assert!(context.assets().pool().same_pool(override_assets.pool()));
+                assert!(context.assets().store().same_store(override_assets.store()));
                 crate::Image::open("logo.png").into()
             })?;
         assert_eq!(frame.packed_rgb()[0], 0xff0000);
@@ -141,7 +141,7 @@ mod tests {
     fn invalid_font_does_not_change_resources() {
         let assets = Assets::default();
         assert!(crate::FontFace::from_bytes(Vec::new(), 0).is_err());
-        assert_eq!(assets.pool().retained_bytes(), 0);
+        assert_eq!(assets.store().retained_bytes(), 0);
     }
 
     #[test]
@@ -153,7 +153,7 @@ mod tests {
             assets.preload(format!("pixel-{index}"), pixel.clone())?;
         }
         assert!(assets.preload("overflow", pixel).is_err());
-        assert_eq!(assets.pool().retained_bytes(), 4096 * bytes);
+        assert_eq!(assets.store().retained_bytes(), 4096 * bytes);
         Ok(())
     }
 
@@ -161,11 +161,11 @@ mod tests {
     fn preloads_respect_allowance_and_snapshot_lifetimes() -> motion_core::Result {
         let image = Arc::new(ImageAsset::from_rgba8(2, 2, vec![255; 16])?);
         let bytes = image.retained_bytes();
-        let pool = motion_core::ResourcePool::with_limits(motion_core::CacheLimits {
-            entries: 4096,
-            bytes,
+        let pool = motion_core::ResourceStore::with_limits(motion_core::ResourceLimits {
+            max_entries: 4096,
+            max_bytes: bytes,
         })?;
-        let assets = Assets::new(".")?.with_pool(pool.clone());
+        let assets = Assets::new(".")?.with_store(pool.clone());
         assets.preload("sun", image.clone())?;
         assert_eq!(pool.retained_bytes(), bytes);
         assert!(assets.preload("sun", image.clone()).is_err());

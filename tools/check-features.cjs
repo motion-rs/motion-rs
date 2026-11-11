@@ -93,8 +93,8 @@ function check(combination, offline) {
         fn decode(_: &[u8], _: &motion::extend::LoadContext) -> motion::Result<Self> { Ok(Self) }
         fn retained_bytes(&self) -> usize { 8 }
       }
-      let pool = motion::render::ResourcePool::with_limits(motion::render::CacheLimits { entries: 8, bytes: 1 })?;
-      let assets = Assets::new(".")?.with_pool(pool.clone());
+      let pool = motion::render::ResourceStore::with_limits(motion::render::ResourceLimits { max_entries: 8, max_bytes: 1 })?;
+      let assets = Assets::new(".")?.with_store(pool.clone());
       let handle = assets.preload("payload", std::sync::Arc::new(Payload))?;
       let snapshot = assets.snapshot();
       assert!(assets.remove::<Payload>("payload"));
@@ -102,7 +102,7 @@ function check(combination, offline) {
       Ok(pool.retained_bytes() == 8)
     }
 
-    pub fn author_scene() -> motion::Result<Timeline> {
+    pub fn author_scene() -> Result<Timeline, motion::ErrorReport> {
       Timeline::new(Size::new(8.0, 4.0), 30).track(|track| {
         track.scene(1_u32.seconds(), |context| -> motion::Result<_> {
           let path = Path2D::parse_svg("M0 0L2 0L2 2z")?;

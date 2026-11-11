@@ -50,7 +50,7 @@ pub enum Layout {
 /// ```
 /// use motion_core::prelude::*;
 /// use motion_core::{
-///     DisplayList, RasterLimits, ResourcePool, ValidatedDisplayList, MAX_PATH_VERBS,
+///     DisplayList, RasterLimits, ResourceStore, ValidatedDisplayList, MAX_PATH_VERBS,
 ///     MAX_STROKE_VERBS, MAX_SVG_PATH_BYTES, sample_offsets,
 /// };
 /// let tile = || Node::from(Rect::new(0.0, 0.0, 10.0, 20.0).fill(Color::rgb(20, 150, 125)));

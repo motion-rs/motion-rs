@@ -87,7 +87,7 @@ struct Rig {
     look: Look,
 }
 
-pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
+pub(super) fn timeline(parameters: DemoParameters) -> Result<Timeline, motion::ErrorReport> {
     let scale = f64::from(parameters.seconds) / 8.0;
     let window = |index: usize| seconds((ACTS[index].1 - ACTS[index].0) * scale);
     let (dust, ember_sim) = embers(parameters.seed, window(3))?;

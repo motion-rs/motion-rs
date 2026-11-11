@@ -18,7 +18,6 @@ pub mod audio;
 pub mod authoring;
 pub mod budget;
 pub mod color;
-pub mod deferred;
 pub mod display_list;
 pub mod drawing;
 pub mod error;
@@ -33,6 +32,7 @@ pub mod optics;
 pub mod path2d;
 pub mod pixels;
 pub mod random;
+pub mod report;
 pub mod shape;
 pub mod time;
 pub mod validation;
@@ -48,7 +48,8 @@ pub use animation::{
 pub use asset::environment::FontEnvironment;
 pub use asset::environment::{FontIdentity, FontUsage};
 pub use asset::{
-    Asset, AssetStatus, Assets, Handle, LoadContext, RequestDiagnostics, ResourcePool, Source,
+    Asset, AssetState, Assets, Handle, LoadContext, RequestDiagnostics, ResourceLimits,
+    ResourceStore, Source,
 };
 pub use audio::{
     AudioBus, AudioChapter, AudioClip, AudioClipParameters, AudioEffect, AudioMetadata,
@@ -95,6 +96,7 @@ pub use optics::{ApertureShape, HeightFrom, Optics};
 pub use path2d::{MAX_PATH_VERBS, MAX_SVG_PATH_BYTES, MorphPath, Path2D, PathBuilder, PathVerb};
 pub use pixels::{ImagePixels, Sampling};
 pub use random::Random;
+pub use report::ErrorReport;
 pub use shape::{
     Arc as ArcShape, Arrow, ArrowHead, Circle, Ellipse, FunctionGraph, Line, Polygon, Polyline,
     RegularPolygon, Ring, RoundedRect, Spline, Star,
@@ -121,8 +123,8 @@ pub mod prelude {
         RegularPolygon, Ring, RoundedRect, Spline, Star,
     };
     pub use crate::{
-        Asset, AssetStatus, Assets, AudioClip, AudioSource, Handle, LoadContext,
-        RequestDiagnostics, Source,
+        Asset, AssetState, Assets, AudioClip, AudioSource, Handle, LoadContext, RequestDiagnostics,
+        Source,
     };
     pub use crate::{BlendMode, BlendSpace, Filter, FilterOperation, MaskMode, PixelSize};
     pub use crate::{
@@ -145,8 +147,8 @@ pub mod prelude {
     };
     pub use crate::{Duration, FrameRate, Random, TICKS_PER_SECOND, Time, TimeLiteral};
     pub use crate::{
-        Error, ErrorKind, SceneLimits, SceneStats, ValidationError, ValidationErrorKind,
-        ValidationLimits,
+        Error, ErrorKind, ErrorReport, SceneLimits, SceneStats, ValidationError,
+        ValidationErrorKind, ValidationLimits,
     };
     pub use crate::{
         Extrapolate, FollowPath, Noise, Oscillator, PathSample, Waveform, piecewise, remap,

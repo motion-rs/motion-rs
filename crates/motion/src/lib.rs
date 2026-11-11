@@ -115,7 +115,7 @@
 //! Errors are `Send + Sync`, so workers retain typed diagnostics until UI display.
 //!
 //! [`Assets`] owns both lazy typed sources and explicit preloads within an injected
-//! [`ResourcePool`]. [`RenderContext`] and scene compilation select the same owner;
+//! [`ResourceStore`]. [`RenderContext`] and scene compilation select the same owner;
 //! clones share resolved entries; mutable access isolates future registrations,
 //! including previously requested but unresolved handles. Relative file lookup
 //! requires an explicit project root. Separate projects need not share a pool.
@@ -176,7 +176,7 @@
 //! [`Composition::preflight`]: render::Composition::preflight
 //! [`Composition::preflight_frame`]: render::Composition::preflight_frame
 //! [`ValidationLimits`]: render::ValidationLimits
-//! [`ResourcePool`]: render::ResourcePool
+//! [`ResourceStore`]: render::ResourceStore
 //! [`RenderContext`]: render::RenderContext
 //! [`RequestDiagnostics`]: render::RequestDiagnostics
 //! [`RenderCapabilities`]: render::RenderCapabilities
@@ -214,10 +214,10 @@ pub use motion_core::{key, math};
 pub use motion_core::{
     Alignment, AngleLiteral, ArcShape, Arrow, ArrowHead, Assets, AudioClip, BlendMode, BlendSpace,
     Bone, BonePose, BoneTransform, Camera, Circle, Clip, Color, Column, Constant, CrossFade,
-    Direction, Duration, Easing, Ellipse, Error, ErrorKind, FillRule, Filter, FiniteAnimation,
-    FontEnvironment, FrameRate, FunctionGraph, GradientExtend, GradientSpace, GradientUnits,
-    ImagePattern, Interpolate, Interval, Iris, IrisShape, Keyframes, Layout, Line, LineCap,
-    LineJoin, LinearGradient, MaskMode, MotionBlur, Node, NodeModifiers, Paint, Path2D,
+    Direction, Duration, Easing, Ellipse, Error, ErrorKind, ErrorReport, FillRule, Filter,
+    FiniteAnimation, FontEnvironment, FrameRate, FunctionGraph, GradientExtend, GradientSpace,
+    GradientUnits, ImagePattern, Interpolate, Interval, Iris, IrisShape, Keyframes, Layout, Line,
+    LineCap, LineJoin, LinearGradient, MaskMode, MotionBlur, Node, NodeModifiers, Paint, Path2D,
     PathBuilder, Pivot, PixelSize, Point, Polygon, Polyline, Pose, Push, RadialGradient, Random,
     Rect, RegularPolygon, RenderQuality, Ring, RoundedRect, Row, Sampling, Scene, SceneContext,
     Shape, Side, Signal, Size, Skeleton, Slide, Soundtrack, Source, Spline, Spring, Star,
@@ -306,10 +306,10 @@ pub mod extend {
 /// Explicit rendering, compiled commands and backend-level contracts.
 pub mod render {
     pub use motion_core::{
-        AssetStatus, AudioClipParameters, BoundaryAdjustment, BoundaryEdge, BoxedError,
-        CacheLimits, DisplayList, DrawCommand, FilterOperation, FontIdentity, Handle,
-        IntoShapeClip, MAX_PATH_VERBS, MAX_STROKE_VERBS, MAX_SVG_PATH_BYTES, MorphPath, PathClip,
-        PathVerb, RasterLimits, RectClip, RequestDiagnostics, ResourcePool, SceneCache,
+        AssetState, AudioClipParameters, BoundaryAdjustment, BoundaryEdge, BoxedError, CacheLimits,
+        DisplayList, DrawCommand, FilterOperation, FontIdentity, Handle, IntoShapeClip,
+        MAX_PATH_VERBS, MAX_STROKE_VERBS, MAX_SVG_PATH_BYTES, MorphPath, PathClip, PathVerb,
+        RasterLimits, RectClip, RequestDiagnostics, ResourceLimits, ResourceStore, SceneCache,
         SceneLimits, SceneStats, ShapeClip, TICKS_PER_SECOND, ValidatedDisplayList,
         ValidationErrorKind, ValidationLimits,
     };
@@ -339,17 +339,18 @@ pub mod prelude {
         Alignment, AngleLiteral, ArcShape, Arrow, ArrowHead, Assets, AudioClip, BackendPreference,
         BlendMode, BlendSpace, Bone, BonePose, BoneTransform, Camera, Circle, Clip, ClipMode,
         Color, Column, Constant, CrossFade, Direction, Duration, Easing, Ellipse, Error, ErrorKind,
-        Extrapolate, FillRule, Filter, FiniteAnimation, FollowPath, FontEnvironment, FrameRate,
-        FunctionGraph, GradientExtend, GradientSpace, GradientUnits, ImagePattern, Interpolate,
-        Interval, Iris, IrisShape, Keyframes, Layout, Line, LineCap, LineJoin, LinearGradient,
-        MaskMode, MotionBlur, Node, NodeModifiers, Noise, Oscillator, Paint, Path2D, PathSample,
-        Pivot, PixelSize, Point, Polygon, Polyline, Pose, Project, ProjectBuilder, ProjectOutcome,
-        ProjectTimelineInfo, Push, RadialGradient, Random, Rect, RegularPolygon, RenderOptions,
-        RenderQuality, Ring, RoundedRect, Row, Sampling, Scene, SceneContext, Shape, Side, Signal,
-        Size, Skeleton, Slide, Source, Spline, Spring, Star, StrokeStyle, Styled, SweepGradient,
-        Time, TimeLiteral, Timeline, TimelineBuilder, TimelineWarning, Track, TrackBuilder,
-        Transform, TransformComponents, Tween, ValidationError, Vector2, Waveform, Wipe, ZoomBlur,
-        camera, export, group, key, math, piecewise, remap, render_still, scene,
+        ErrorReport, Extrapolate, FillRule, Filter, FiniteAnimation, FollowPath, FontEnvironment,
+        FrameRate, FunctionGraph, GradientExtend, GradientSpace, GradientUnits, ImagePattern,
+        Interpolate, Interval, Iris, IrisShape, Keyframes, Layout, Line, LineCap, LineJoin,
+        LinearGradient, MaskMode, MotionBlur, Node, NodeModifiers, Noise, Oscillator, Paint,
+        Path2D, PathSample, Pivot, PixelSize, Point, Polygon, Polyline, Pose, Project,
+        ProjectBuilder, ProjectOutcome, ProjectTimelineInfo, Push, RadialGradient, Random, Rect,
+        RegularPolygon, RenderOptions, RenderQuality, Ring, RoundedRect, Row, Sampling, Scene,
+        SceneContext, Shape, Side, Signal, Size, Skeleton, Slide, Source, Spline, Spring, Star,
+        StrokeStyle, Styled, SweepGradient, Time, TimeLiteral, Timeline, TimelineBuilder,
+        TimelineWarning, Track, TrackBuilder, Transform, TransformComponents, Tween,
+        ValidationError, Vector2, Waveform, Wipe, ZoomBlur, camera, export, group, key, math,
+        piecewise, remap, render_still, scene,
     };
     pub use crate::{
         ApertureShape, BitDepth, Cdl, ColorWheels, DepthOfField, DepthPlane, DisplayTransform,

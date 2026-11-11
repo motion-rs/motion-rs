@@ -7,7 +7,7 @@ set of public API signatures. Start with [content](../tutorial/06-content.md),
 
 ## Assets and Images
 
-Assets owns preloaded values and lazy typed handles in one explicit ResourcePool.
+Assets owns preloaded values and lazy typed handles in one explicit ResourceStore.
 Clones share registrations; snapshots isolate later edits. Handles retain shared
 loading/success/failure results and their logical charges. Removing a registration
 does not invalidate existing handles. Relative files require a configured root;
@@ -17,7 +17,7 @@ Image::open and Svg::open retain sources without decoding at authoring time.
 Compilation uses the session owner and font snapshot. Strict production output
 rejects missing resources; explicit placeholder policy retains typed diagnostics.
 Custom decoded data implements Asset, while pure non-resource computation belongs
-in the scene cache. Pools, caches and external Arc holders have distinct lifetimes.
+in the scene cache. Resource stores, compute caches and external Arc holders have distinct lifetimes.
 See [resource accounting](rendering.md#resources-and-content).
 
 ImageAsset retains immutable linear-premultiplied image data and bounded mipmaps.

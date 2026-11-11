@@ -214,7 +214,7 @@ pub struct ProjectBuilder {
     name: String,
     entries: Vec<Entry>,
     options: RenderOptions,
-    errors: motion_core::deferred::DeferredErrors,
+    errors: motion_core::ErrorReport,
 }
 
 impl Default for ProjectBuilder {
@@ -236,13 +236,13 @@ impl ProjectBuilder {
 
     /// Checks every registration made so far, reporting all deferred failures at once
     /// without invoking factories, and freezes the registry.
-    pub fn build(self) -> Result<Project> {
-        let mut errors = self.errors.as_slice().to_vec();
+    pub fn build(self) -> std::result::Result<Project, motion_core::ErrorReport> {
+        let mut errors = self.errors;
         if self.name.trim().is_empty() || self.name.len() > 256 {
-            errors.push(Arc::new(invalid("Project name requires 1..=256 bytes")));
+            errors.record(invalid("Project name requires 1..=256 bytes"));
         }
         if !errors.is_empty() {
-            return Err(crate::Error::BuildErrors(errors));
+            return Err(errors);
         }
         Ok(Project {
             name: self.name,
@@ -270,7 +270,7 @@ impl ProjectBuilder {
         name: impl Into<String>,
         build: impl Fn() -> TimelineBuilder + Send + Sync + 'static,
     ) -> Self {
-        self.defer(|project| project.try_timeline(name, move || build().build()))
+        self.defer(|project| project.try_timeline(name, move || Ok(build().build()?)))
     }
 
     /// Registers a factory borrowing bounded, deserialized typed parameters.
@@ -280,7 +280,7 @@ impl ProjectBuilder {
         build: impl Fn(&P) -> TimelineBuilder + Send + Sync + 'static,
     ) -> Self {
         self.defer(|project| {
-            project.try_timeline_with::<P>(name, move |parameters| build(&parameters).build())
+            project.try_timeline_with::<P>(name, move |parameters| Ok(build(&parameters).build()?))
         })
     }
 
@@ -544,7 +544,7 @@ mod tests {
             .build()
             .err()
             .unwrap();
-        assert_eq!(error.build_errors().len(), 2);
+        assert_eq!(error.len(), 2);
         let project = Project::new("valid")
             .timeline("main", || {
                 Timeline::new(Size::new(8.0, 4.0), 30).track(|track| {
@@ -591,6 +591,7 @@ mod tests {
                         )
                     })?
                     .build()
+                    .map_err(crate::Error::from)
             })?
             .build()?;
         assert_eq!(

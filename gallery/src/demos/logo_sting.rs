@@ -44,7 +44,7 @@ const PRIMITIVES: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="240"
     <path id="drive" d="M296 78 L344 164 L248 164 Z" fill="#d7ff3c"/>
 </svg>"##;
 
-pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
+pub(super) fn timeline(parameters: DemoParameters) -> Result<Timeline, motion::ErrorReport> {
     let seconds = parameters.seconds as f64;
     let k = seconds / DESIGN_SECONDS;
     let document = scaled_document(k)?;

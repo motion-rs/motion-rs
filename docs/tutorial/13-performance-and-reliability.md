@@ -37,7 +37,7 @@ This deliberately tiny work allowance demonstrates admission failure, not an opt
 | --- | --- |
 | `ValidationLimits` | Input complexity such as nodes, structure and commands |
 | `RasterLimits` | Pixels, active logical bytes, raster work allowance |
-| `ResourcePool` / `RenderCache` | Long-term logical retention and entry counts |
+| `ResourceStore` / `RenderCache` | Long-term logical retention and entry counts |
 | `ExportOptions.max_parallel_bytes` | Allowance for multiple active export-render slots |
 | Studio frame LRU | Final-preview-frame retention, not the renderer working set |
 

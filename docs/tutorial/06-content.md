@@ -124,9 +124,9 @@ tabs become four spaces. Input, cue, run, keyword and line budgets are bounded.
 Safe-area overflow or excessive simultaneous cue height is an error, not accepted
 clipped text. Inspect `cues` and `safe_area` to review measured preparation.
 
-## Resource Pools and Diagnostics
+## Resource Stores and Diagnostics
 
-Sharing `ResourcePool` is explicit. Separate Assets owners have isolated pools by default. Sharing a pool does not allow arbitrary reuse across different roots, sources or font snapshots.
+Sharing `ResourceStore` is explicit. Separate Assets owners have isolated stores by default. Sharing a store does not allow arbitrary reuse across different roots, sources or font snapshots.
 
 `Assets` cloning, snapshots, preloading and removal have distinct contracts. Removing a registration does not forcibly destroy data still held by handles or frames. Logical retained bytes are not RSS.
 

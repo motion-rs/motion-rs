@@ -233,7 +233,7 @@ struct Study {
     envelopes: [Vec<f32>; 3],
 }
 
-pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
+pub(super) fn timeline(parameters: DemoParameters) -> Result<Timeline, motion::ErrorReport> {
     let duration = parameters.seconds.seconds();
     let seed = parameters.seed as u32 ^ (parameters.seed >> 32) as u32;
     let mut studies = Vec::new();

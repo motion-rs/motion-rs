@@ -219,7 +219,7 @@ const fn page(title: &'static str, lines: [&'static str; 3]) -> Page {
     Page { title, lines }
 }
 
-pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
+pub(super) fn timeline(parameters: DemoParameters) -> Result<Timeline, motion::ErrorReport> {
     let curves = easing_curves();
     let signals = signal_studies(parameters.seed)?;
     let compositions = composition_studies();

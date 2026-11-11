@@ -8,8 +8,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 #[test]
 fn render_cache_shares_bounded_partitions_without_cross_domain_collisions() {
     let cache = RenderCache::with_limits(CacheLimits {
-        entries: 1,
-        bytes: 128,
+        max_entries: 1,
+        max_bytes: 128,
     });
     let shared = cache.clone();
     let get = |cache: &RenderCache, partition, key| {
@@ -54,8 +54,8 @@ impl std::hash::Hash for CollidingKey {
 fn scene_cache_distinguishes_unequal_keys_with_identical_hashes() {
     for accounted in [false, true] {
         let cache = SceneCache::with_limits(CacheLimits {
-            entries: 2,
-            bytes: 64,
+            max_entries: 2,
+            max_bytes: 64,
         });
         let context = context(&cache, Time::ZERO);
         let fetch = |key| {
@@ -101,8 +101,8 @@ fn cached_typed_key<Key: Eq + Hash + Send + Sync + 'static>(
 fn scene_cache_distinguishes_key_types_with_identical_hashes() {
     for accounted in [false, true] {
         let cache = SceneCache::with_limits(CacheLimits {
-            entries: 2,
-            bytes: 64,
+            max_entries: 2,
+            max_bytes: 64,
         });
         let context = context(&cache, Time::ZERO);
         let first = cached_typed_key(&context, CollidingKey(1), 11, accounted);
@@ -125,8 +125,8 @@ fn scene_cache_rechecks_full_keys_after_concurrent_misses() {
     for accounted in [false, true] {
         for same_key in [false, true] {
             let cache = SceneCache::with_limits(CacheLimits {
-                entries: 2,
-                bytes: 64,
+                max_entries: 2,
+                max_bytes: 64,
             });
             let context = context(&cache, Time::ZERO);
             let barrier = std::sync::Barrier::new(2);
@@ -164,8 +164,8 @@ fn scene_cache_rechecks_full_keys_after_concurrent_misses() {
 fn scene_cache_cost_includes_retained_key_inline_storage() {
     for limit in [32, 33] {
         let cache = SceneCache::with_limits(CacheLimits {
-            entries: 2,
-            bytes: limit,
+            max_entries: 2,
+            max_bytes: limit,
         });
         let context = context(&cache, Time::ZERO);
         let fetch = || context.cache_with_cost([0_u8; 32], || 7_u8, |_| 1);
@@ -182,8 +182,8 @@ fn scene_cache_cost_includes_retained_key_inline_storage() {
 fn ordinary_cache_is_entry_bounded_and_only_explicit_costs_charge_bytes() {
     use super::*;
     let cache = SceneCache::with_limits(CacheLimits {
-        entries: 2,
-        bytes: 1,
+        max_entries: 2,
+        max_bytes: 1,
     });
     let fetch = || cache.get("large", || vec![1_u8; 4096]);
     assert!(Arc::ptr_eq(&fetch(), &fetch()));
@@ -197,8 +197,8 @@ fn ordinary_cache_is_entry_bounded_and_only_explicit_costs_charge_bytes() {
 #[test]
 fn checked_context_inputs_and_declared_cache_bytes_preserve_ownership() {
     let cache = SceneCache::with_limits(CacheLimits {
-        entries: 8,
-        bytes: 96,
+        max_entries: 8,
+        max_bytes: 96,
     });
     assert!(
         SceneContext::try_new(Time::ZERO, FrameRate::from(30), Size::new(0.0, 1.0), &cache)

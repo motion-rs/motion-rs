@@ -20,11 +20,8 @@ fn pixel(document: &Document, seconds: f64, x: u32, y: u32) -> [u8; 4] {
 
 fn errors(document: &Document) -> Vec<ValidationError> {
     let error = document.compile(&CompileOptions::default()).err().unwrap();
-    if error.build_errors().is_empty() {
-        return vec![error.downcast_ref::<ValidationError>().unwrap().clone()];
-    }
     error
-        .build_errors()
+        .errors()
         .iter()
         .map(|error| error.downcast_ref::<ValidationError>().unwrap().clone())
         .collect()
@@ -291,7 +288,7 @@ fn transition_overlap_errors_are_located() {
             .scene(SceneSpec::new(1.0, Element::default())),
     );
     let error = document.compile(&CompileOptions::default()).unwrap_err();
-    let diagnostic = error.downcast_ref::<ValidationError>().unwrap();
+    let diagnostic = error.errors()[0].downcast_ref::<ValidationError>().unwrap();
     assert!(
         diagnostic.path.starts_with("tracks[0].items["),
         "{diagnostic:?}"

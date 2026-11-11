@@ -22,7 +22,7 @@ pub use partition::{CacheLimits, CachePartition, RenderCache};
 /// ```
 /// use motion_core::prelude::*;
 /// use motion_core::{
-///     DisplayList, RasterLimits, ResourcePool, ValidatedDisplayList, MAX_PATH_VERBS,
+///     DisplayList, RasterLimits, ResourceStore, ValidatedDisplayList, MAX_PATH_VERBS,
 ///     MAX_STROKE_VERBS, MAX_SVG_PATH_BYTES, sample_offsets,
 /// };
 /// use std::sync::Arc;
@@ -415,7 +415,7 @@ impl<'a> SceneContext<'a> {
     /// ```
     /// use motion_core::prelude::*;
     /// use motion_core::{
-    ///     DisplayList, RasterLimits, ResourcePool, ValidatedDisplayList, MAX_PATH_VERBS,
+    ///     DisplayList, RasterLimits, ResourceStore, ValidatedDisplayList, MAX_PATH_VERBS,
     ///     MAX_STROKE_VERBS, MAX_SVG_PATH_BYTES, sample_offsets,
     /// };
     /// let cache = SceneCache::new(0);

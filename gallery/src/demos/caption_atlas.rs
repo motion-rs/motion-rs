@@ -126,7 +126,7 @@ struct Study {
     original: Option<CueSheet>,
 }
 
-pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
+pub(super) fn timeline(parameters: DemoParameters) -> Result<Timeline, motion::ErrorReport> {
     let studies = (0..PAGES.len())
         .map(study)
         .collect::<motion::Result<Vec<_>>>()?;

@@ -4,8 +4,8 @@ use super::diagnostics::{BoundaryAdjustment, BoundaryEdge, Diagnostics, Timeline
 use super::{
     MAX_ADJUSTMENTS, MAX_CLIPS, MAX_TRACKS, Timeline, Track, TrackBuilder, align, invalid, on_track,
 };
+use crate::ErrorReport;
 use crate::authoring::timeline::soundtrack::Soundtrack;
-use crate::deferred::DeferredErrors;
 use crate::{Color, Duration, Error, FrameRate, Size, TICKS_PER_SECOND, Time};
 use std::sync::Arc;
 
@@ -28,7 +28,7 @@ pub struct TimelineBuilder {
     soundtrack: Soundtrack,
     nested_audio: Arc<Vec<crate::AudioClip>>,
     duration: Option<Duration>,
-    errors: Arc<DeferredErrors>,
+    errors: Arc<ErrorReport>,
 }
 
 impl TimelineBuilder {
@@ -135,7 +135,7 @@ impl TimelineBuilder {
             cursor: Time::ZERO,
             adjustments: Vec::new(),
             pending: None,
-            errors: DeferredErrors::default(),
+            errors: ErrorReport::default(),
             audio: Vec::new(),
         };
         let builder = build(builder)?;
@@ -228,8 +228,8 @@ impl TimelineBuilder {
 
     /// Validates everything retained so far and freezes the timeline. All
     /// deferred failures, invalid audio settings and invalid nested scenes are
-    /// reported together as [`Error::BuildErrors`].
-    pub fn build(self) -> crate::Result<Timeline> {
+    /// reported together as one [`ErrorReport`].
+    pub fn build(self) -> Result<Timeline, ErrorReport> {
         let mut errors = self.errors.as_ref().clone();
         if let Err(error) = self.soundtrack.validate() {
             errors.record(error);
@@ -249,14 +249,14 @@ impl TimelineBuilder {
             }
         };
         if !errors.is_empty() {
-            return Err(Error::BuildErrors(errors.into_vec()));
+            return Err(errors);
         }
         let mut soundtrack = self.soundtrack;
         if !self.nested_audio.is_empty() {
             let mut clips = soundtrack.clips.as_ref().clone();
             clips.extend(self.nested_audio.iter().cloned());
             if clips.len() > 256 {
-                return Err(invalid("Nested timeline exceeds 256 audio clips"));
+                return Err(invalid("Nested timeline exceeds 256 audio clips").into());
             }
             soundtrack.clips = Arc::new(clips);
         }

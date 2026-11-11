@@ -86,8 +86,8 @@ account for admitted logical work and live payloads, not allocator capacity,
 driver memory, arbitrary callbacks or process RSS. All retained caches need separate
 entry/byte bounds. Resource mutation creates a new snapshot identity.
 
-Assets owns both preloaded values and lazy handles within one ResourcePool.
-New pools isolate projects, while explicitly shared pools reuse matching sources and
+Assets owns both preloaded values and lazy handles within one ResourceStore.
+New resource stores isolate projects, while explicitly shared stores reuse matching sources and
 accounting. RenderOptions.cache is a cloneable RenderCache shared by sessions and
 export workers. Coverage, paragraph, glyph, gradient LUT, formula
 and explicit author computation partitions each

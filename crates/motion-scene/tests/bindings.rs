@@ -9,7 +9,10 @@ const WHITE: [u8; 4] = [255, 255, 255, 255];
 
 const BLACK: [u8; 4] = [0, 0, 0, 255];
 
-fn load(text: &str, overrides: Option<serde_json::Value>) -> motion_core::Result<CompiledDocument> {
+fn load(
+    text: &str,
+    overrides: Option<serde_json::Value>,
+) -> Result<CompiledDocument, motion_core::ErrorReport> {
     Document::from_json_with(text, overrides.as_ref())?.compile(&CompileOptions::default())
 }
 
@@ -24,12 +27,9 @@ fn pixel(film: &CompiledDocument, seconds: f64, x: u32, y: u32) -> [u8; 4] {
     bitmap.bytes()[offset..offset + 4].try_into().unwrap()
 }
 
-fn diagnostics(error: motion_core::Error) -> Vec<ValidationError> {
-    if error.build_errors().is_empty() {
-        return vec![error.downcast_ref::<ValidationError>().unwrap().clone()];
-    }
+fn diagnostics(error: motion_core::ErrorReport) -> Vec<ValidationError> {
     error
-        .build_errors()
+        .errors()
         .iter()
         .map(|error| error.downcast_ref::<ValidationError>().unwrap().clone())
         .collect()

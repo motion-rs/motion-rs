@@ -216,14 +216,8 @@ mod tests {
             Arc::new(motion_content::ImageAsset::from_rgba8(1, 1, vec![0; 4])?),
         )?;
         assert!(cloned.assets().image("pixel").get().is_ok());
-        assert_eq!(
-            cloned.assets().image("new").status(),
-            motion_core::AssetStatus::Unloaded
-        );
-        assert_eq!(
-            context.assets().image("new").status(),
-            motion_core::AssetStatus::Ready
-        );
+        assert!(cloned.assets().image("new").state().is_unloaded());
+        assert!(context.assets().image("new").state().is_ready());
         assert_eq!(context.preflight(&Node::empty())?.nodes, 1);
         assert!(context.capabilities().supports(Renderer::Cpu));
         assert!(

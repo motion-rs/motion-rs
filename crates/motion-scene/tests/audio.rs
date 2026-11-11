@@ -42,7 +42,7 @@ impl Files {
         Self(directory)
     }
 
-    fn compile(&self, document: &Document) -> motion_core::Result<CompiledDocument> {
+    fn compile(&self, document: &Document) -> Result<CompiledDocument, motion_core::ErrorReport> {
         document.compile(&CompileOptions::default().base_dir(self.0.path()))
     }
 }
@@ -255,9 +255,9 @@ fn audio_documents_round_trip_and_report_errors() {
             ..BusSpec::new("late")
         });
     let error = files.compile(&broken).err().unwrap();
-    assert_eq!(error.kind(), ErrorKind::Validation);
+    assert_eq!(error.errors()[0].kind(), ErrorKind::Validation);
     let found: Vec<String> = error
-        .build_errors()
+        .errors()
         .iter()
         .map(|error| {
             error

@@ -343,7 +343,7 @@ things. Sharing one owner does not merge these allowances or establish an RSS ca
 
 | Owner | Retained data | Sharing and accounting boundary |
 | --- | --- | --- |
-| Assets / ResourcePool | Decoded typed assets | Cloned Assets share registrations; with_pool shares the pool across independent owners. |
+| Assets / ResourceStore | Decoded typed assets | Cloned Assets share registrations; with_store shares the store across independent owners. |
 | SceneCache | Pure scene computations | Entry-bounded by default; byte accounting requires declared key/value costs. |
 | RenderCache | Coverage, paragraphs, glyphs, gradients, formulas | RenderOptions.cache can share partitions across sessions and export workers; hits still undergo raster admission. |
 | RenderSession pools | Idle CPU scratch and encoded plane storage | Active frames and captures remain live payload, not idle capacity; dropped output planes can return to their shared pool. |
@@ -356,8 +356,8 @@ policy, with typed diagnostics still retained.
 
 Assets::preload registers decoded objects in the same entries used by lazy handles.
 Each new Assets owner starts with its own
-256 MiB/4096-entry ResourcePool; clones share it and with_pool opts independent
-owners into shared accounting/cache identity. ResourcePool::with_limits configures a positive
+256 MiB/4096-entry ResourceStore; clones share it and with_store opts independent
+owners into shared accounting/cache identity. ResourceStore::with_limits configures a positive
 byte allowance and 1..=4096 entries. Assets clones share registrations; snapshot()
 isolates future edits. remove::<A>(source) unregisters without invalidating handles;
 retained snapshots and handles keep their payload charged. Direct decoded Arc pins may outlive

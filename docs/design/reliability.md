@@ -29,7 +29,7 @@ Resources are explicit immutable snapshots. Cache identity includes the environm
 that changes decoding/layout. Byte/entry limits describe logical retention, not hard
 process RSS. Font/device discovery is not performed implicitly during scene callbacks.
 
-Each new Assets owner has an isolated ResourcePool unless sharing is explicit.
+Each new Assets owner has an isolated ResourceStore unless sharing is explicit.
 RenderSession owns caches and installs a fresh RequestDiagnostics sink per request;
 Handle::get_with propagates resource failures to an explicit cross-thread sink.
 DrawContext passes the sink explicitly; FrameAssets and the frame thread-local bridge

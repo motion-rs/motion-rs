@@ -76,7 +76,7 @@ fn public_yuv10_output_uses_packing_and_preserves_unaligned_fallback() -> Result
 fn explicit_requests_preserve_exact_time_project_diagnostics_and_atomic_targets() -> Result {
     use motion_core::TimeLiteral;
     let assets = motion_core::Assets::new(".")?;
-    let pool = assets.pool().clone();
+    let pool = assets.store().clone();
 
     struct Missing;
 
@@ -117,7 +117,7 @@ fn explicit_requests_preserve_exact_time_project_diagnostics_and_atomic_targets(
         assert_eq!(context.time(), 1.milliseconds().after_origin());
         assert_eq!(context.clip_duration(), Some(1.seconds()));
         assert!(context.diagnostics().is_some());
-        assert!(context.assets().pool().same_pool(&pool));
+        assert!(context.assets().store().same_store(&pool));
         Node::from(context.bounds().fill(Color::WHITE))
     })?;
     let previous = target.clone();

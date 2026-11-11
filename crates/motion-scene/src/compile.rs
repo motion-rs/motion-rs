@@ -124,15 +124,18 @@ impl CompiledDocument {
 impl Document {
     /// Validates every property and builds the engine timeline.
     ///
-    /// Element diagnostics are collected together and returned as
-    /// [`motion_core::Error::BuildErrors`] of [`ValidationError`]s whose paths
+    /// Element diagnostics are collected together and returned as one
+    /// [`motion_core::ErrorReport`] of [`ValidationError`]s whose paths
     /// follow the JSON structure, such as `tracks[0].items[1].scene.content.circle.radius`.
-    pub fn compile(&self, options: &CompileOptions) -> motion_core::Result<CompiledDocument> {
+    pub fn compile(
+        &self,
+        options: &CompileOptions,
+    ) -> Result<CompiledDocument, motion_core::ErrorReport> {
         self.check_version()?;
         let mut compiler = Compiler::new(options.base_dir.as_deref(), &self.params);
         let prepared = compiler.document(self);
         if !compiler.errors.is_empty() {
-            return Err(compiler.into_error());
+            return Err(compiler.into_report());
         }
         let Some(Prepared {
             size,
@@ -141,7 +144,7 @@ impl Document {
             audio,
         }) = prepared
         else {
-            return Err(compiler.into_error());
+            return Err(compiler.into_report());
         };
         let look = self.look.as_ref().map(|look| match look {
             LookSpec::Clean => Look::clean(),
@@ -210,7 +213,7 @@ impl Document {
 }
 
 /// Reads, compiles and resolves paths relative to the document's directory.
-pub fn load(path: impl AsRef<Path>) -> motion_core::Result<CompiledDocument> {
+pub fn load(path: impl AsRef<Path>) -> Result<CompiledDocument, motion_core::ErrorReport> {
     load_with(path, None)
 }
 
@@ -218,7 +221,7 @@ pub fn load(path: impl AsRef<Path>) -> motion_core::Result<CompiledDocument> {
 pub fn load_with(
     path: impl AsRef<Path>,
     overrides: Option<&Value>,
-) -> motion_core::Result<CompiledDocument> {
+) -> Result<CompiledDocument, motion_core::ErrorReport> {
     let path = std::path::absolute(path.as_ref())?;
     let text = std::fs::read_to_string(&path)?;
     let document = Document::from_json_with(&text, overrides)?;
@@ -228,7 +231,7 @@ pub fn load_with(
     }
     let mut compiled = document
         .compile(&options)
-        .map_err(|error| crate::diagnostics::annotate_error(error, &text))?;
+        .map_err(|error| crate::diagnostics::annotate_report(error, &text))?;
     compiled.resources.insert(0, path);
     Ok(compiled)
 }
@@ -347,24 +350,17 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn into_error(self) -> motion_core::Error {
-        let mut errors = self.errors;
-        if errors.len() == 1 {
-            return errors.remove(0).into();
+    fn into_report(self) -> motion_core::ErrorReport {
+        let mut report = motion_core::ErrorReport::default();
+        if self.errors.is_empty() {
+            report.record(
+                ValidationError::invalid("document", "document", "Invalid document").into(),
+            );
         }
-        if errors.is_empty() {
-            errors.push(ValidationError::invalid(
-                "document",
-                "document",
-                "Invalid document",
-            ));
+        for error in self.errors {
+            report.record(error.into());
         }
-        motion_core::Error::BuildErrors(
-            errors
-                .into_iter()
-                .map(|error| std::sync::Arc::new(error.into()))
-                .collect(),
-        )
+        report
     }
 
     /// Validates document-level values and compiles every scene in track order.
