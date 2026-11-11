@@ -6,6 +6,7 @@ use motion_core::{PixelSize, ValidationError};
 mod coverage;
 mod device;
 mod items;
+mod particles;
 mod schedule;
 mod sparse;
 mod steps;

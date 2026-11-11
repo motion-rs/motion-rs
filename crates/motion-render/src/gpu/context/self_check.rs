@@ -1,85 +1,204 @@
-//! Shared once-only startup parity check.
+//! Startup visual fixtures that prepare CPU and GPU coverage independently.
 
-use super::*;
-use motion_core::Shape;
+use crate::gpu::{Gpu, GpuContext, Plan, visual};
+use crate::raster::gpu_prepare::GpuFrame;
+use crate::{RasterLimits, RenderPrepare};
+use motion_core::{
+    BlendMode, Circle, ClipMode, Color, FillRule, Filter, LinearGradient, Node, NodeModifiers,
+    Path2D, PixelSize, Point, Rect, Shape, Size, ValidationError, ValidationLimits,
+};
+
+/// RMS allowance for spatial paint and large-coordinate fixtures.
+const PAINT_VISUAL_RMS: f64 = 0.005;
+
+/// Small self-intersecting contours permit localized differences in antialiasing area.
+const GEOMETRY_VISUAL_RMS: f64 = 0.02;
+
+/// RMS allowance after filtering the clipped geometry fixture.
+const FILTER_VISUAL_RMS: f64 = 0.01;
 
 impl GpuContext {
-    /// Runs a shared once-only native/CPU parity scene, including alpha, geometry,
-    /// spatial paints and group blending. Failure is sticky for this context.
+    /// Checks independently prepared CPU/GPU geometry, alpha, paints, clipping and filters.
+    ///
+    /// Comparisons allow visual error rather than requiring identical bytes. The result is
+    /// shared and sticky for this context; device loss remains an error even after success.
     pub fn self_check(&self) -> motion_core::Result<()> {
         self.loss.check()?;
-        let result = self.self_check_result.get_or_init(|| {
-            use motion_core::NodeModifiers;
-            let limits = RasterLimits::default();
-            let node = motion_core::Node::group([
-                motion_core::Node::from(
-                    motion_core::Rect::new(0.25, 0.5, 12.75, 9.25).fill(
-                        motion_core::LinearGradient::new(
-                            motion_core::Point::ORIGIN,
-                            motion_core::Point::new(1.0, 1.0),
-                        )
-                        .stop(0.0, motion_core::Color::rgb(235, 30, 75))
-                        .stop(1.0, motion_core::Color::rgb(20, 190, 230)),
-                    ),
-                )
-                .opacity(0.7),
-                motion_core::Node::from(
-                    motion_core::Rect::new(4.5, 3.25, 15.0, 12.0).fill(motion_core::Color::WHITE),
-                )
-                .opacity(0.4)
-                .blend_mode(motion_core::BlendMode::Multiply),
-            ])
-            .opacity(0.8);
-            let frame = node
-                .compile(
-                    motion_core::Size::new(16.0, 12.0),
-                    PixelSize::new(16, 12),
-                    motion_core::ValidationLimits::default(),
-                )
-                .and_then(|list| list.prepare(motion_core::ValidationLimits::default(), limits))
-                .map_err(|error| error.to_string())?;
-            let expected = frame
-                .compose_linear(limits)
-                .and_then(|frame| crate::FrameBuffer::from_linear_rgba8(&frame, limits))
-                .map_err(|error| error.to_string())?;
-            let actual = Gpu::from_context(self.clone())
-                .render(
-                    &frame,
-                    Plan::new(&frame, limits).map_err(|error| error.to_string())?,
-                )
-                .and_then(|frame| {
-                    crate::FrameBuffer::from_linear_rgba8(&frame, limits).map_err(Into::into)
-                })
-                .map_err(|error| error.to_string())?;
-            let differences = expected
-                .bytes()
-                .as_chunks::<4>()
-                .0
-                .iter()
-                .zip(actual.bytes().as_chunks::<4>().0)
-                .map(|(expected, actual)| {
-                    expected
-                        .iter()
-                        .zip(actual)
-                        .map(|(a, b)| a.abs_diff(*b))
-                        .max()
-                        .unwrap_or(0)
-                })
-                .collect::<Vec<_>>();
-            if differences.iter().any(|difference| *difference > 2)
-                || differences
-                    .iter()
-                    .filter(|difference| **difference > 1)
-                    .count()
-                    * 1000
-                    >= differences.len()
-            {
-                return Err("Native GPU self-check exceeded CPU parity tolerance".into());
-            }
-            Ok(())
-        });
+        let result = self
+            .self_check_result
+            .get_or_init(|| run(self).map_err(|error| error.to_string()));
         result.clone().map_err(|message| {
             motion_core::Error::GpuUnavailable(Box::new(std::io::Error::other(message)))
         })
+    }
+}
+
+fn run(context: &GpuContext) -> motion_core::Result<()> {
+    let limits = RasterLimits::default();
+    let validation = ValidationLimits::default();
+    let mut gpu = Gpu::from_context(context.clone());
+    for (label, node, requires_device_coverage, tolerance) in fixtures()? {
+        let list = node.compile(Size::new(64.0, 64.0), PixelSize::new(64, 64), validation)?;
+        let reference = list.prepare(validation, limits)?;
+        let device = crate::prepared::prepare_validated_device(
+            &list,
+            validation,
+            limits,
+            1.0 / 256.0,
+            None,
+            true,
+        )?;
+        if requires_device_coverage && !device.has_device_coverage() {
+            return Err(ValidationError::invalid(
+                "gpu.self_check",
+                "coverage",
+                format!("{label} did not exercise GPU coverage"),
+            )
+            .into());
+        }
+        let expected =
+            crate::FrameBuffer::from_linear_rgba8(&reference.compose_linear(limits)?, limits)?;
+        let actual = render(&mut gpu, &device, limits)?;
+        visual::compare_rgba8(
+            actual.bytes().as_chunks::<4>().0,
+            expected.bytes().as_chunks::<4>().0,
+            tolerance,
+        )
+        .map_err(|error| ValidationError::invalid("gpu.self_check", label, error.to_string()))?;
+        let replay = render(&mut gpu, &device, limits)?;
+        visual::compare_rgba8(
+            replay.bytes().as_chunks::<4>().0,
+            actual.bytes().as_chunks::<4>().0,
+            tolerance,
+        )
+        .map_err(|error| ValidationError::invalid("gpu.self_check", label, error.to_string()))?;
+    }
+    Ok(())
+}
+
+fn render(
+    gpu: &mut Gpu,
+    frame: &GpuFrame,
+    limits: RasterLimits,
+) -> motion_core::Result<crate::FrameBuffer> {
+    Ok(crate::FrameBuffer::from_linear_rgba8(
+        &gpu.render(frame, Plan::new(frame, limits)?)?,
+        limits,
+    )?)
+}
+
+fn fixtures() -> Result<Vec<(&'static str, Node, bool, f64)>, ValidationError> {
+    let paints = Node::group([
+        Node::from(
+            Rect::new(0.25, 0.5, 12.75, 9.25).fill(
+                LinearGradient::new(Point::ORIGIN, Point::new(1.0, 1.0))
+                    .stop(0.0, Color::rgb(235, 30, 75))
+                    .stop(1.0, Color::rgb(20, 190, 230)),
+            ),
+        )
+        .opacity(0.7),
+        Node::from(Rect::new(4.5, 3.25, 15.0, 12.0).fill(Color::WHITE))
+            .opacity(0.4)
+            .blend_mode(BlendMode::Multiply),
+    ])
+    .opacity(0.8);
+    let curve = Path2D::builder()
+        .move_to(Point::new(4.1, 40.2))
+        .cubic_to(
+            Point::new(20.3, 10.1),
+            Point::new(50.7, 63.0),
+            Point::new(59.3, 30.4),
+        )
+        .line_to(Point::new(59.3, 30.8))
+        .cubic_to(
+            Point::new(50.7, 63.4),
+            Point::new(20.3, 10.5),
+            Point::new(4.1, 40.6),
+        )
+        .close()
+        .build()?;
+    let geometry = Node::group([
+        star(18.25, FillRule::NonZero)?,
+        star(45.75, FillRule::EvenOdd)?,
+        Node::from(curve.fill(Color::rgb(240, 180, 30))),
+        Node::from(Circle::new(Point::new(32.0, 48.5), 10.3)?.fill(Color::WHITE.with_alpha(0.4))),
+    ]);
+    let filtered = geometry
+        .clone()
+        .clip_with(Rect::new(8.25, 4.5, 56.75, 59.5), ClipMode::Geometric)
+        .clip_with(
+            Circle::new(Point::new(32.25, 32.5), 28.5)?,
+            ClipMode::Geometric,
+        )
+        .filter(Filter::Blur { sigma: 0.6 });
+    let large = Path2D::builder()
+        .move_to(Point::new(-20000.0, 5.25))
+        .line_to(Point::new(20000.0, 5.25))
+        .line_to(Point::new(20000.0, 25.75))
+        .line_to(Point::new(-20000.0, 25.75))
+        .close()
+        .build()?;
+    Ok(vec![
+        ("paints", paints, false, PAINT_VISUAL_RMS),
+        ("geometry", geometry, true, GEOMETRY_VISUAL_RMS),
+        ("filtered_clips", filtered, true, FILTER_VISUAL_RMS),
+        (
+            "large_coordinates",
+            Node::from(large.fill(Color::rgb(70, 180, 120))),
+            false,
+            PAINT_VISUAL_RMS,
+        ),
+    ])
+}
+
+fn star(center_x: f64, rule: FillRule) -> Result<Node, ValidationError> {
+    let mut path = Path2D::new();
+    for index in 0..5 {
+        let angle = f64::from(index) * 4.0 * std::f64::consts::PI / 5.0 - 1.5;
+        let point = Point::new(center_x + 14.0 * angle.cos(), 19.25 + 14.0 * angle.sin());
+        if index == 0 {
+            path.try_move_to(point)?;
+        } else {
+            path.try_line_to(point)?;
+        }
+    }
+    path.try_close()?;
+    Ok(Node::from(
+        path.fill(Color::rgb(210, 80, 150).with_alpha(0.7))
+            .fill_rule(rule),
+    ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn startup_fixtures_exercise_independent_coverage() -> motion_core::Result<()> {
+        let limits = RasterLimits::default();
+        let validation = ValidationLimits::default();
+        let mut device_cases = 0;
+        for (label, node, requires_device, _) in fixtures()? {
+            let list = node.compile(Size::new(64.0, 64.0), PixelSize::new(64, 64), validation)?;
+            let reference = list.prepare(validation, limits)?;
+            let device = crate::prepared::prepare_validated_device(
+                &list,
+                validation,
+                limits,
+                1.0 / 256.0,
+                None,
+                true,
+            )?;
+            assert!(!reference.has_device_coverage());
+            if requires_device {
+                assert!(device.has_device_coverage(), "{label}");
+                device_cases += 1;
+            }
+            if label == "large_coordinates" {
+                assert!(!device.has_device_coverage());
+            }
+        }
+        assert_eq!(device_cases, 2);
+        Ok(())
     }
 }

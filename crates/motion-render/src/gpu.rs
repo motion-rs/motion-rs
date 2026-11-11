@@ -17,15 +17,18 @@ mod output_plan;
 mod particle_tiles;
 mod plan;
 mod prepared;
+mod residency;
 #[cfg(test)]
 mod target_tests;
 #[cfg(test)]
 mod tests;
 mod timing;
+mod visual;
 
 pub use device::*;
 pub use output_plan::OutputPlan;
 pub use prepared::PreparedGpuFrame;
+pub use residency::GpuResidencyStats;
 pub use timing::{GpuTimingHandle, GpuTimings};
 
 pub(crate) use abi::output_shader;
@@ -48,7 +51,9 @@ struct Step {
     second: usize,
     parameters: GpuUniforms,
     data: Vec<f32>,
+    resource: Option<residency::ResidentResource>,
     quads: Vec<[f32; 4]>,
+    analytic: Option<motion_core::instances::AnalyticInstanceUpload>,
 }
 
 const SPARSE_COVERAGE: u32 = u32::MAX;
@@ -131,10 +136,12 @@ pub struct GpuContext {
     present_check: std::sync::Arc<std::sync::OnceLock<wgpu::ComputePipeline>>,
     packing: std::sync::Arc<std::sync::OnceLock<wgpu::ComputePipeline>>,
     device_coverage: std::sync::Arc<std::sync::OnceLock<CoveragePipelines>>,
+    analytic_particles: std::sync::Arc<std::sync::OnceLock<wgpu::ComputePipeline>>,
     timestamp_marker: std::sync::Arc<std::sync::OnceLock<wgpu::ComputePipeline>>,
     alpha_thresholds: std::sync::Arc<std::sync::OnceLock<wgpu::Buffer>>,
 
     working_pool: std::sync::Arc<std::sync::Mutex<WorkingResourceStore>>,
+    residency: std::sync::Arc<std::sync::Mutex<residency::ResidentStore>>,
 
     self_check_result: std::sync::Arc<std::sync::OnceLock<Result<(), String>>>,
 
@@ -192,7 +199,7 @@ type ScopedError = std::pin::Pin<Box<dyn std::future::Future<Output = Option<wgp
 
 struct CoveragePipelines {
     layout: wgpu::BindGroupLayout,
-    passes: [wgpu::ComputePipeline; 5],
+    passes: [wgpu::ComputePipeline; 6],
 }
 
 /// Submitted same-device texture rendering. Finish checks status and scoped errors
@@ -262,6 +269,7 @@ struct StagingBuffer {
 struct WorkingLease {
     buffers: Vec<wgpu::Buffer>,
     textures: Vec<wgpu::Texture>,
+    resident: Vec<wgpu::Buffer>,
 }
 
 impl std::ops::Deref for WorkingLease {

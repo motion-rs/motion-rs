@@ -3,7 +3,29 @@
 use super::*;
 use motion_core::{Rect, ValidationError};
 
+/// Device evaluation work units per analytic initial state.
+const ANALYTIC_WORK_PER_INSTANCE: u64 = 256;
+
+/// Simultaneous analytic staging and device payload copies; host facts remain in the admitted IR.
+const ANALYTIC_DEVICE_COPIES: u64 = 2;
+
 impl Planner<'_> {
+    pub(in crate::gpu) fn admit_analytic_program(
+        &mut self,
+        program: &motion_core::instances::AnalyticInstanceUpload,
+    ) -> Result<(), ValidationError> {
+        self.budget.bytes(
+            program.bytes() * ANALYTIC_DEVICE_COPIES
+                + size_of::<wgpu::Buffer>() as u64
+                + size_of::<wgpu::BindGroup>() as u64,
+            "gpu.particles.analytic",
+        )?;
+        self.budget.work(
+            program.len() as u64 * ANALYTIC_WORK_PER_INSTANCE + program.words().len() as u64,
+            "gpu.particles.analytic",
+        )
+    }
+
     pub(super) fn data(&mut self, count: usize, value: f32) -> Result<Vec<f32>, ValidationError> {
         self.budget.bytes(count as u64 * 4, "gpu.data")?;
         self.budget.work(count as u64, "gpu.data")?;
@@ -105,7 +127,9 @@ impl Planner<'_> {
                 second,
                 parameters,
                 data,
+                resource: None,
                 quads: Vec::new(),
+                analytic: None,
             },
             "gpu.steps",
         )?;

@@ -29,7 +29,8 @@ impl Plan {
             }
             let maximum_groups = u64::from(limits.max_compute_workgroups_per_dimension).pow(2);
             let groups = [
-                (self.device.edges.len() as u64).div_ceil(64),
+                u64::from(self.device.edge_count).div_ceil(64),
+                (self.device.curves.len() as u64).div_ceil(64),
                 (self.device.fills.len() as u64).div_ceil(64),
                 u64::from(self.device.rows).div_ceil(64),
                 u64::from(self.device.tiles),
@@ -70,6 +71,10 @@ impl Plan {
         if self.steps.iter().any(|step| {
             step.data.len() as u64 * 4 > limits.max_storage_buffer_binding_size
                 || step.data.len() as u64 * 4 > limits.max_buffer_size
+                || step.resource.as_ref().is_some_and(|resource| {
+                    resource.words.len() as u64 * 4 > limits.max_storage_buffer_binding_size
+                        || resource.words.len() as u64 * 4 > limits.max_buffer_size
+                })
         }) {
             return Err(device_error(
                 "buffer_size",
@@ -77,6 +82,17 @@ impl Plan {
             ));
         }
         for step in &self.steps {
+            if let Some(program) = &step.analytic
+                && (program.bytes() > limits.max_storage_buffer_binding_size
+                    || program.bytes() > limits.max_buffer_size
+                    || (program.len() as u64).div_ceil(64)
+                        > u64::from(limits.max_compute_workgroups_per_dimension).pow(2))
+            {
+                return Err(device_error(
+                    "analytic_particles",
+                    "Analytic upload or dispatch exceeds device limits",
+                ));
+            }
             if step.parameters.operation.code == GpuOp::Particles as u32 {
                 let tiles =
                     ParticleTiles::new(step.parameters.image_bounds(2), step.data[0] as u32)?;
@@ -85,6 +101,7 @@ impl Plan {
                         .max_storage_buffer_binding_size
                         .min(limits.max_buffer_size)
                     || tiles.tiles.div_ceil(64) > limits.max_compute_workgroups_per_dimension
+                    || tiles.count.div_ceil(64) > limits.max_compute_workgroups_per_dimension
                 {
                     return Err(device_error(
                         "particle_tiles",
@@ -367,9 +384,11 @@ impl GpuContext {
                 present_check: Default::default(),
                 packing: Default::default(),
                 device_coverage: Default::default(),
+                analytic_particles: Default::default(),
                 timestamp_marker: Default::default(),
                 alpha_thresholds: Default::default(),
                 working_pool: Default::default(),
+                residency: Default::default(),
                 present: std::sync::Arc::new(std::array::from_fn(|_| std::sync::OnceLock::new())),
                 info,
                 submissions: std::sync::Arc::new(std::sync::Mutex::new(())),
@@ -599,7 +618,7 @@ impl GpuContext {
                     label: Some("GPU fill coverage"),
                     source: wgpu::ShaderSource::Wgsl(include_str!("shaders/coverage.wgsl").into()),
                 });
-            let entries = (0..7)
+            let entries = (0..8)
                 .map(|binding| wgpu::BindGroupLayoutEntry {
                     binding,
                     visibility: wgpu::ShaderStages::COMPUTE,
@@ -608,7 +627,7 @@ impl GpuContext {
                             wgpu::BufferBindingType::Uniform
                         } else {
                             wgpu::BufferBindingType::Storage {
-                                read_only: binding <= 2,
+                                read_only: binding == 1 || binding == 7,
                             }
                         },
                         has_dynamic_offset: false,
@@ -631,6 +650,7 @@ impl GpuContext {
                         immediate_size: 0,
                     });
             let passes = [
+                "flatten_curves",
                 "count_tiles",
                 "prefix_tiles",
                 "fill_tiles",

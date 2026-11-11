@@ -74,6 +74,8 @@ pub struct ParticleBatch {
     pub(super) sprite: Option<Arc<crate::ImageAsset>>,
     pub(super) bounds: Rect,
     pub(super) index: Arc<[SpatialNode]>,
+    pub(super) analytic:
+        Option<Result<motion_core::instances::AnalyticInstanceUpload, ValidationError>>,
 }
 
 impl PartialEq for ParticleBatch {
@@ -85,6 +87,7 @@ impl PartialEq for ParticleBatch {
             && self.align == other.align
             && self.sprite.as_ref().map(Arc::as_ptr) == other.sprite.as_ref().map(Arc::as_ptr)
             && self.bounds == other.bounds
+            && self.analytic == other.analytic
     }
 }
 
@@ -106,6 +109,10 @@ impl ParticleBatch {
 
     pub(crate) fn bytes(&self) -> u64 {
         self.instances.len() as u64 * std::mem::size_of::<Instance>() as u64
+            + self.analytic.as_ref().map_or(0, |upload| match upload {
+                Ok(upload) => upload.bytes(),
+                Err(error) => (error.path.len() + error.field.len() + error.message.len()) as u64,
+            })
             + self.index.len() as u64 * std::mem::size_of::<SpatialNode>() as u64
             + std::mem::size_of::<Arc<[SpatialNode]>>() as u64
             + self.sprite.as_ref().map_or(0, |sprite| {
@@ -181,6 +188,14 @@ impl ParticleBatch {
     }
 
     pub(crate) fn validate(&self) -> Result<(), ValidationError> {
+        if self
+            .analytic
+            .as_ref()
+            .and_then(|program| program.as_ref().ok())
+            .is_some_and(|program| program.len() != self.len())
+        {
+            return Err(invalid("analytic", "Analytic initial-state count mismatch"));
+        }
         if self.instances.len() > MAX_INSTANCE_COUNT
             || !self.radius.is_finite()
             || self.radius < 0.0
@@ -447,6 +462,18 @@ impl ParticleBatch {
 }
 
 impl motion_core::instances::InstanceBatch for ParticleBatch {
+    fn analytic_upload(&self) -> Option<&motion_core::instances::AnalyticInstanceUpload> {
+        self.analytic
+            .as_ref()
+            .and_then(|program| program.as_ref().ok())
+    }
+
+    fn analytic_fallback(&self) -> Option<&ValidationError> {
+        self.analytic
+            .as_ref()
+            .and_then(|program| program.as_ref().err())
+    }
+
     fn blend(&self) -> motion_core::instances::InstanceBlend {
         ParticleBatch::blend(self)
     }

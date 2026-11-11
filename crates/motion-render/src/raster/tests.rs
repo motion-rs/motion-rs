@@ -315,7 +315,7 @@ fn linear_paints_keep_extended_channels_and_reject_working_overflow() {
 }
 
 #[test]
-fn mesh_paint_bakes_like_the_explicit_pattern_and_validates_resolution() {
+fn mesh_paint_evaluates_analytic_patches_and_validates_explicit_bake_resolution() {
     use motion_core::{MeshGradient, MeshPaint};
     let mesh = MeshGradient::grid(
         2,
@@ -345,14 +345,26 @@ fn mesh_paint_bakes_like_the_explicit_pattern_and_validates_resolution() {
         transform: Transform::IDENTITY,
         paint: Paint::Mesh(MeshPaint::new(mesh.clone(), size, 4)),
     }];
-    let baked = prepare(&source).unwrap();
+    let analytic = prepare(&source).unwrap();
+    let patch = mesh.patch(0, 0).unwrap();
+    let mut differs_from_bake = false;
     for point in [(3.0, 2.0), (8.5, 4.5), (13.5, 7.5)] {
         let point = motion_core::Point::new(point.0, point.1);
-        assert_eq!(
-            baked.paint_at(0, point).unwrap(),
-            explicit.paint_at(0, point).unwrap()
-        );
+        let expected = patch
+            .sample(motion_core::Point::new(
+                (point.x - bounds.left) / bounds.width(),
+                (point.y - bounds.top) / bounds.height(),
+            ))
+            .unwrap()
+            .unwrap();
+        assert_eq!(analytic.paint_at(0, point).unwrap(), expected);
+        differs_from_bake |=
+            analytic.paint_at(0, point).unwrap() != explicit.paint_at(0, point).unwrap();
     }
+    assert!(
+        differs_from_bake,
+        "Authored meshes must not sample a baked image"
+    );
     source.commands = vec![DrawCommand::FillRect {
         bounds,
         transform: Transform::IDENTITY,

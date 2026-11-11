@@ -5,6 +5,8 @@ use super::batch::SpatialNode;
 use super::*;
 use motion_core::{Node, Rect, SceneContext};
 
+#[cfg(all(test, feature = "gpu"))]
+mod analytic_tests;
 #[cfg(test)]
 mod instance_protocol_tests;
 
@@ -12,6 +14,7 @@ fn render(
     style: &ParticleStyle,
     context: &SceneContext<'_>,
     states: Arc<[Particle]>,
+    analytic: Option<Result<motion_core::instances::AnalyticInstanceUpload, ValidationError>>,
     mut sample: impl FnMut(Time) -> Result<Arc<[Particle]>, ValidationError>,
 ) -> Result<Node, ValidationError> {
     match style {
@@ -29,7 +32,7 @@ fn render(
                 && !options.trails.smooth
                 && !options.trails.ribbon
             {
-                return render(style, context, states, sample);
+                return render(style, context, states, None, sample);
             }
             return super::extended::render(style, options, context, states, sample);
         }
@@ -160,6 +163,7 @@ fn render(
         sprite,
         bounds,
         index: Arc::from([]),
+        analytic,
     };
     batch.validate()?;
     batch.index = batch.build_spatial_index();
@@ -182,7 +186,7 @@ impl ParticleSimulation {
         // instead of replaying from a retained snapshot for every historical sample.
         let mut cursor = super::simulation::SampleCursor::default();
         let states = self.sample_with(&mut cursor, context.time(), duration)?;
-        render(&self.style, context, states, |time| {
+        render(&self.style, context, states, None, |time| {
             self.sample_with(&mut cursor, time, duration)
         })
     }
@@ -195,11 +199,41 @@ impl ParticleTrajectory {
         self
     }
 
-    /// Evaluates trajectories in Rust before uploading renderable instance states.
+    /// Retains CPU reference states and attaches eligible seeded analytic GPU evaluation.
     pub fn try_render(&self, context: &SceneContext<'_>) -> Result<Node, ValidationError> {
-        render(&self.style, context, self.sample(context.time())?, |time| {
-            self.sample(time)
-        })
+        let primitive = match self.style.as_ref() {
+            ParticleStyle::Dots { .. } => Some((motion_core::instances::InstanceKind::Disc, false)),
+            ParticleStyle::GlowDots { .. } => {
+                Some((motion_core::instances::InstanceKind::Glow, false))
+            }
+            ParticleStyle::Sprites {
+                align_to_velocity, ..
+            } => Some((
+                motion_core::instances::InstanceKind::Sprite,
+                *align_to_velocity,
+            )),
+            _ => None,
+        };
+        let analytic = match primitive
+            .map(|(kind, align)| {
+                self.model
+                    .analytic_upload(context.time().as_seconds() as f32, kind, align)
+            })
+            .transpose()
+        {
+            Ok(upload) => upload.flatten().map(Ok),
+            Err(error) if error.kind == motion_core::ValidationErrorKind::Unsupported => {
+                Some(Err(error))
+            }
+            Err(error) => return Err(error),
+        };
+        render(
+            &self.style,
+            context,
+            self.sample(context.time())?,
+            analytic,
+            |time| self.sample(time),
+        )
     }
 }
 

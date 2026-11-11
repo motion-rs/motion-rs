@@ -78,6 +78,7 @@ fn bokeh_focus_and_history_capacity_are_explicit() -> motion_core::Result {
         },
         &context,
         states.clone(),
+        None,
         |_| Ok(states.clone()),
     )?;
     let list = node.compile(
@@ -124,6 +125,7 @@ fn bokeh_focus_and_history_capacity_are_explicit() -> motion_core::Result {
             }),
             &context,
             instances.clone(),
+            None,
             |_| {
                 samples.set(samples.get() + 1);
                 Ok(instances.clone())
@@ -231,6 +233,7 @@ fn support_checks_preserve_original_samples_and_compositor_errors() -> motion_co
                             sprite: None,
                             bounds: Rect::default(),
                             index: Arc::from([]),
+                            analytic: None,
                         };
                         for antialias in
                             [1e-10, 0.125, 1.0, 8.0, 0.0, -1.0, f64::INFINITY, f64::NAN]
@@ -344,6 +347,7 @@ fn zero_identity_sampling_preserves_order_errors_and_signed_zero_destination() -
             sprite: None,
             bounds: Rect::default(),
             index: Arc::from([]),
+            analytic: None,
         };
         for space in [
             motion_core::BlendSpace::LinearRgb,
@@ -466,6 +470,7 @@ fn spatial_index_preserves_order_and_charges_retained_storage() -> motion_core::
                 sprite: None,
                 bounds: Rect::default(),
                 index: Arc::from([]),
+                analytic: None,
             };
             let base_bytes = batch.bytes();
             batch.index = batch.build_spatial_index();
@@ -529,6 +534,7 @@ fn cached_line_support_is_charged_without_changing_device_layout() {
         sprite: None,
         bounds: Rect::default(),
         index: Arc::from([]),
+        analytic: None,
     };
     assert_eq!(
         batch.bytes(),
@@ -875,6 +881,7 @@ mod gpu {
             sprite: None,
             bounds: Rect::new(0.0, 0.0, 32.0, 24.0),
             index: Arc::from([]),
+            analytic: None,
         };
         let upload = batch.upload().unwrap().into_words();
         assert_eq!(upload.len(), 4 + 12);
@@ -912,6 +919,7 @@ mod gpu {
             sprite: None,
             bounds: Rect::new(10.0, 7.0, 21.0, 17.0),
             index: Arc::from([]),
+            analytic: None,
         };
         let limits = RasterLimits::default();
         let mut gpu = motion_render::gpu::Gpu::new()?;

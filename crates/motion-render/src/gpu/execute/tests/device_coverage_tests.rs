@@ -170,31 +170,8 @@ fn assert_matches_cpu(crossing: bool) -> motion_core::Result {
 }
 
 pub(super) fn assert_visually_equivalent(actual: &[[u8; 4]], expected: &[[u8; 4]]) {
-    assert_eq!(actual.len(), expected.len());
-    let mut squared = 0.0;
-    let mut samples = 0;
-    for (actual, expected) in actual.iter().zip(expected) {
-        let a = actual.map(|value| f64::from(value) / 255.0);
-        let b = expected.map(|value| f64::from(value) / 255.0);
-        if a[3] == 0.0 && b[3] == 0.0 {
-            continue;
-        }
-        squared += (a[3] - b[3]).powi(2);
-        samples += 1;
-        for background in [0.0, 1.0] {
-            for channel in 0..3 {
-                let first = a[channel] * a[3] + background * (1.0 - a[3]);
-                let second = b[channel] * b[3] + background * (1.0 - b[3]);
-                squared += (first - second).powi(2);
-                samples += 1;
-            }
-        }
-    }
-    assert!(samples > 0, "Fixture must contain visible artwork");
-    let rms = (squared / f64::from(samples)).sqrt();
-    eprintln!("device_fill visual_rms={rms:.6}");
     // This scene permits localized antialiasing differences, including at crossing edges.
-    assert!(rms < 0.01, "Visual RMS difference {rms}");
+    crate::gpu::visual::compare_rgba8(actual, expected, 0.01).unwrap();
 }
 
 fn triangle(left: f64) -> motion_core::Result<Node> {

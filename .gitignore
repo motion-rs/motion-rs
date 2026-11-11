@@ -23,3 +23,8 @@ rustc-ice-*.txt
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 .motion/
+.github/skills/
+argon_review.md
+review*.md
+roadmap.md
+*refactor.md

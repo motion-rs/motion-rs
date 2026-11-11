@@ -3,7 +3,7 @@
 use super::{FrameHeader, GpuUniforms, OperationHeader, SourceFlags};
 use std::mem::{offset_of, size_of};
 
-use super::abi::{CoverageEdge, CoverageFill, CoverageParams, CoverageTile};
+use super::abi::{CoverageCurve, CoverageEdge, CoverageFill, CoverageParams, CoverageTile};
 use crate::raster::device::{COVERAGE_EDGE_BYTES, COVERAGE_FILL_BYTES, COVERAGE_PARAMS_BYTES};
 
 const _: () = {
@@ -28,6 +28,13 @@ const _: () = {
     assert!(offset_of!(CoverageEdge, points) == 0);
     assert!(offset_of!(CoverageEdge, fill) == 16);
     assert!(offset_of!(CoverageEdge, reserved) == 20);
+    assert!(size_of::<CoverageCurve>() == 48);
+    assert!(offset_of!(CoverageCurve, first) == 0);
+    assert!(offset_of!(CoverageCurve, second) == 16);
+    assert!(offset_of!(CoverageCurve, first_edge) == 32);
+    assert!(offset_of!(CoverageCurve, segments) == 36);
+    assert!(offset_of!(CoverageCurve, fill) == 40);
+    assert!(offset_of!(CoverageCurve, reserved) == 44);
     assert!(size_of::<CoverageTile>() == 16);
     assert!(offset_of!(CoverageTile, count) == 0);
     assert!(offset_of!(CoverageTile, offset) == 4);

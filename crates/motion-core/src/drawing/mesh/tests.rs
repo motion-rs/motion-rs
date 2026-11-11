@@ -1,7 +1,85 @@
-//! Unit tests for mesh gradient validation and rasterization.
+//! Unit tests for mesh gradient validation, baking and independent analytic patches.
 
 use super::*;
 use crate::ValidationErrorKind;
+
+#[test]
+fn analytic_patch_inverts_warped_affine_and_nearly_affine_geometry() {
+    use crate::{Color, MeshGradient, MeshVertex, Point};
+    let colors = [
+        Color::from_hex(0xff4020).with_alpha(0.25),
+        Color::from_hex(0x20dd30).with_alpha(0.5),
+        Color::from_hex(0x2060ee).with_alpha(0.75),
+        Color::WHITE,
+    ];
+    for positions in [
+        [
+            Point::new(0.0, 0.0),
+            Point::new(1.0, 0.0),
+            Point::new(0.0, 1.0),
+            Point::new(1.0, 1.0),
+        ],
+        [
+            Point::new(0.1, 0.2),
+            Point::new(0.9, 0.35),
+            Point::new(0.2, 1.1),
+            Point::new(1.0, 1.25),
+        ],
+        [
+            Point::new(0.0, 0.0),
+            Point::new(1.0, 0.0),
+            Point::new(0.0, 1.0),
+            Point::new(1.0, 1.0000001),
+        ],
+        [
+            Point::new(0.1, 0.0),
+            Point::new(1.0, 0.2),
+            Point::new(0.0, 0.9),
+            Point::new(0.8, 1.0),
+        ],
+    ] {
+        let mesh = MeshGradient::new(
+            2,
+            2,
+            positions
+                .into_iter()
+                .zip(colors)
+                .map(|(position, color)| MeshVertex { position, color })
+                .collect(),
+        )
+        .unwrap();
+        let patch = mesh.patch(0, 0).unwrap();
+        for u in [0.0, 0.1, 0.5, 0.9, 1.0] {
+            for v in [0.0, 0.1, 0.5, 0.9, 1.0] {
+                let mix = |axis: fn(Point) -> f64| {
+                    let top = axis(positions[0]) + (axis(positions[1]) - axis(positions[0])) * u;
+                    let bottom = axis(positions[2]) + (axis(positions[3]) - axis(positions[2])) * u;
+                    top + (bottom - top) * v
+                };
+                let point = Point::new(mix(|point| point.x), mix(|point| point.y));
+                let actual = patch.sample(point).unwrap().unwrap();
+                let smooth = |value: f64| value * value * (3.0 - 2.0 * value);
+                let expected = colors[0]
+                    .try_interpolate(&colors[1], smooth(u))
+                    .unwrap()
+                    .try_interpolate(
+                        &colors[2].try_interpolate(&colors[3], smooth(u)).unwrap(),
+                        smooth(v),
+                    )
+                    .unwrap()
+                    .to_linear_premultiplied();
+                for (actual, expected) in actual.into_iter().zip(expected) {
+                    assert!(
+                        (f64::from(actual) - expected).abs() <= 5e-7,
+                        "{positions:?} {u} {v}"
+                    );
+                }
+            }
+        }
+        assert!(patch.sample(Point::new(-2.0, -2.0)).unwrap().is_none());
+        assert!(patch.sample(Point::new(f64::NAN, 0.0)).is_err());
+    }
+}
 
 fn texel(image: &MeshImage, column: usize, row: usize) -> [f32; 4] {
     image.texel(0, column, row)

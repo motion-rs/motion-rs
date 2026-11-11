@@ -15,7 +15,7 @@ impl Gpu {
         let pipelines = self.coverage_pipelines();
         let params = CoverageParams {
             fills: device.fills.len() as u32,
-            edges: device.edges.len() as u32,
+            edges: device.edge_count,
             tiles: device.tiles,
             rows: device.rows,
         };
@@ -29,12 +29,25 @@ impl Gpu {
             bytemuck::cast_slice(&device.fills),
             wgpu::BufferUsages::STORAGE,
         );
-        let edges = self.upload_buffer(
-            "Device coverage edges",
-            bytemuck::cast_slice(&device.edges),
+        let sizes = device.buffer_sizes();
+        let edges = self.working_buffer(
+            "Device generated coverage edges",
+            sizes[1],
+            wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+        );
+        if !device.edges.is_empty() {
+            self.queue
+                .write_buffer(&edges, 0, bytemuck::cast_slice(&device.edges));
+        }
+        let curves = self.upload_buffer(
+            "Device coverage curves",
+            if device.curves.is_empty() {
+                &[0; 48]
+            } else {
+                bytemuck::cast_slice(&device.curves)
+            },
             wgpu::BufferUsages::STORAGE,
         );
-        let sizes = device.buffer_sizes();
         let tiles = self.working_buffer(
             "Device coverage tiles",
             sizes[2],
@@ -53,7 +66,7 @@ impl Gpu {
             wgpu::BufferUsages::STORAGE,
         );
         let buffers = [
-            &uniforms, &fills, &edges, &tiles, &indices, &carries, coverage,
+            &uniforms, &fills, &edges, &tiles, &indices, &carries, coverage, &curves,
         ];
         let entries = buffers
             .iter()
@@ -69,6 +82,7 @@ impl Gpu {
             entries: &entries,
         });
         let counts = [
+            (device.curves.len() as u32).div_ceil(64),
             params.edges.div_ceil(64),
             params.fills.div_ceil(64),
             params.edges.div_ceil(64),
@@ -76,6 +90,9 @@ impl Gpu {
             params.tiles,
         ];
         for (pipeline, groups) in pipelines.passes.iter().zip(counts) {
+            if groups == 0 {
+                continue;
+            }
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("Device coverage tiles"),
                 timestamp_writes: None,
@@ -85,6 +102,6 @@ impl Gpu {
             let groups_x = groups.min(self.device.limits().max_compute_workgroups_per_dimension);
             pass.dispatch_workgroups(groups_x, groups.div_ceil(groups_x), 1);
         }
-        working.extend([uniforms, fills, edges, tiles, indices, carries]);
+        working.extend([uniforms, fills, edges, tiles, indices, carries, curves]);
     }
 }

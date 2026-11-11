@@ -1,4 +1,4 @@
-//! Fills whose coverage the GPU computes from flattened edges, and their CPU materialization.
+//! GPU fill geometry, bounded curve uploads and explicit CPU reference materialization.
 
 #[cfg(test)]
 use super::polygon::scratch::PolygonScratch;
@@ -14,13 +14,21 @@ use motion_core::{Point, RasterLimits};
 use motion_core::{Transform, ValidationError};
 use std::mem::size_of;
 
+mod curves;
 mod tiles;
+
+pub(crate) use curves::DeviceCurve;
 
 pub(crate) use tiles::TileLayout;
 #[cfg(feature = "gpu")]
 pub(crate) use tiles::{
-    COVERAGE_EDGE_BYTES, COVERAGE_FILL_BYTES, COVERAGE_PARAMS_BYTES, COVERAGE_TILE_SIZE,
+    COVERAGE_CURVE_BYTES, COVERAGE_EDGE_BYTES, COVERAGE_FILL_BYTES, COVERAGE_PARAMS_BYTES,
+    COVERAGE_TILE_SIZE,
 };
+
+/// Conservative device work units for de Casteljau evaluation and one generated edge write.
+#[cfg(feature = "gpu")]
+pub(crate) const CURVE_FLATTEN_WORK_PER_SEGMENT: u64 = 32;
 
 /// Largest local coordinate magnitude that f32 edge records resolve to a small fraction of a byte.
 const DEVICE_COORDINATE_LIMIT: f64 = 8192.0;
@@ -42,8 +50,10 @@ pub(crate) struct DeviceGeometry {
     pub(crate) coverage_enabled: bool,
     pub(crate) device_fills: Vec<DeviceFill>,
     pub(crate) device_edges: Vec<[f64; 5]>,
+    pub(crate) device_curves: Vec<DeviceCurve>,
     pub(crate) device_totals: [u64; 2],
     pub(crate) fallback_paths: GpuFallbackCounts,
+    pub(crate) analytic_cpu_fallbacks: u64,
 }
 
 impl DeviceGeometry {
@@ -58,6 +68,14 @@ impl DeviceGeometry {
         tolerance: f64,
         scope: &mut RasterScope<'_>,
     ) -> Result<bool, ValidationError> {
+        if geometry.device.iter().any(|verb| {
+            matches!(
+                verb,
+                motion_core::PathVerb::QuadraticTo(..) | motion_core::PathVerb::CubicTo(..)
+            )
+        }) {
+            return self.curve_fill(scene, geometry, tolerance, scope);
+        }
         let (budget, path) = (&mut *scope.budget, scope.path);
         let edges = path_edges(
             geometry.device.iter().copied(),
@@ -135,6 +153,8 @@ impl DeviceGeometry {
             DeviceFill {
                 strip: scene.strips.len(),
                 edges: first..self.device_edges.len(),
+                curves: 0..0,
+                segments: 0,
                 rule: geometry.rule,
                 tiles,
             },
@@ -154,7 +174,12 @@ impl DeviceGeometry {
     pub(crate) fn stats(&self, preparation: crate::PreparationStats) -> GpuPreparationStats {
         GpuPreparationStats {
             preparation,
-            segment_count: self.device_edges.len() as u64,
+            segment_count: self.device_edges.len() as u64
+                + self
+                    .device_fills
+                    .iter()
+                    .map(|fill| u64::from(fill.segments))
+                    .sum::<u64>(),
             tile_count: self
                 .device_fills
                 .iter()
@@ -170,8 +195,10 @@ impl DeviceGeometry {
             } else {
                 self.device_fills.len() as u64 * COVERAGE_FILL_BYTES
                     + self.device_edges.len() as u64 * COVERAGE_EDGE_BYTES
+                    + self.device_curves.len() as u64 * COVERAGE_CURVE_BYTES
                     + COVERAGE_PARAMS_BYTES
             },
+            analytic_cpu_fallbacks: self.analytic_cpu_fallbacks,
             fallback_paths: self.fallback_paths,
         }
     }
@@ -204,6 +231,39 @@ impl DeviceGeometry {
             };
             debug_assert!(spans.is_empty());
             let mut edges = Vec::new();
+            if !fill.curves.is_empty() {
+                let mut verbs = Vec::new();
+                let curves = &self.device_curves[fill.curves.clone()];
+                let mut current = None;
+                for curve in curves {
+                    if current != Some(curve.points[0]) {
+                        budget.push(
+                            &mut verbs,
+                            motion_core::PathVerb::MoveTo(curve.points[0]),
+                            "gpu.materialize",
+                        )?;
+                    }
+                    let [_, first, second, end] = curve.points;
+                    budget.push(
+                        &mut verbs,
+                        if curve.segments == 1 {
+                            motion_core::PathVerb::LineTo(end)
+                        } else {
+                            motion_core::PathVerb::CubicTo(first, second, end)
+                        },
+                        "gpu.materialize",
+                    )?;
+                    current = Some(end);
+                }
+                edges = path_edges(
+                    verbs.iter().copied(),
+                    Transform::IDENTITY,
+                    curves[0].tolerance,
+                    &mut budget,
+                    "gpu.materialize",
+                )?;
+                budget.release(std::mem::size_of_val(verbs.as_slice()) as u64);
+            }
             for edge in &device_edges[fill.edges.clone()] {
                 budget.push(
                     &mut edges,

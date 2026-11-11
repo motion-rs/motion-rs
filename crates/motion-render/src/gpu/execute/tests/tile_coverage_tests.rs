@@ -45,7 +45,7 @@ fn tile_descriptors_admit_scratch_and_report_geometry_uploads() -> motion_core::
     assert_eq!(u64::from(plan.device.tiles), stats.tile_count);
     assert_eq!(u64::from(plan.device.indices), stats.tile_index_capacity);
     assert_eq!(
-        plan.device.buffer_sizes()[2..].iter().sum::<u64>(),
+        plan.device.buffer_sizes()[2..5].iter().sum::<u64>(),
         stats.tile_count * (16 + 16 * 4) + stats.tile_index_capacity.max(1) * 4
     );
     assert_eq!(plan.device.fills[0].columns, 12);
@@ -166,6 +166,7 @@ fn shader_coverage_structs_match_host_offsets() {
             vec![0, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44],
         ),
         ("CoverageEdge", 32, vec![0, 16, 20]),
+        ("CoverageCurve", 48, vec![0, 16, 32, 36, 40, 44]),
         ("CoverageTile", 16, vec![0, 4, 8, 12]),
     ] {
         let (_, definition) = shader

@@ -86,18 +86,23 @@ production compatibility paths.
 
 The v3 backend split has normalized FrameIr semantics and separate CPU/GPU preparation
 results. FrameIr retains admitted f64 device curves, Wang segment bounds, ordered
-scopes, paints, clips and filter domains without coverage. GPU fills use CPU-flattened
-device edges and GPU-generated f32 coverage, not a CPU PreparedFrame.
+scopes, paints, clips and filter domains without coverage. Eligible GPU curves are
+flattened into statically bounded edge storage on the device, followed by
+GPU-generated f32 coverage, not a CPU PreparedFrame.
 GPU coverage uses bounded 16-by-16 tile binning with signed row carries.
 Preparation reports expose segment/tile counts, geometry-upload bytes and classified
-per-path CPU coverage reasons.
-Automatic's independent-coverage startup self-check remains separate work.
-Remaining steps, accepted by visual equivalence with fixture-specific tolerances:
+per-path CPU coverage reasons; Automatic's startup self-check exercises independent
+CPU/GPU preparation with visual comparisons.
+Immutable image/mip/atlas buffers have bounded context-local cross-frame residency.
+Eligible analytic particles generate the consumed primitive records on the GPU;
+CPU materialization remains available for unsupported or imprecise cases.
+Mesh and generated atmosphere paints retain descriptors and evaluate independently
+on CPU/GPU; explicit image-baking APIs preserve their existing behavior.
+Remaining acceptance:
 
-1. Evaluate mesh and generated atmosphere paints independently on CPU/GPU instead
-   of baking them during shared preparation; retain the explicit baking APIs.
-2. Validate complex text, SVG, clipping and filtered scenes at larger resolutions
-   before claiming performance gains. GPU flattening follows that acceptance.
+Validate complex text, SVG, clipping and filtered scenes at larger resolutions
+before claiming performance gains. Functional GPU flattening, procedural evaluation
+and residency do not establish throughput acceptance.
 
 ### Additional capabilities
 

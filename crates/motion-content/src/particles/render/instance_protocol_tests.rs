@@ -112,7 +112,13 @@ fn compare_batches(style: ParticleStyle, renderer: Renderer) -> motion_core::Res
                 let mut nodes = Vec::new();
                 for command in &list.commands {
                     if let motion_core::DrawCommand::ParticleInstances { batch, .. } = command {
-                        let batch = batch.as_any().downcast_ref::<ParticleBatch>().unwrap();
+                        let mut batch = batch
+                            .as_any()
+                            .downcast_ref::<ParticleBatch>()
+                            .unwrap()
+                            .clone();
+                        // This fixture isolates generic primitive expansion, not trajectory evaluation.
+                        batch.analytic = None;
                         if expanded {
                             for instance in batch.instances.iter() {
                                 let mut single = batch.clone();

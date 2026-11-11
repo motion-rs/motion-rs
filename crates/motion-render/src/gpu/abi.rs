@@ -38,6 +38,18 @@ pub(in crate::gpu) struct CoverageEdge {
     pub(in crate::gpu) reserved: [u32; 3],
 }
 
+/// One cubic control hull expanded into an admitted disjoint edge range.
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+pub(in crate::gpu) struct CoverageCurve {
+    pub(in crate::gpu) first: [f32; 4],
+    pub(in crate::gpu) second: [f32; 4],
+    pub(in crate::gpu) first_edge: u32,
+    pub(in crate::gpu) segments: u32,
+    pub(in crate::gpu) fill: u32,
+    pub(in crate::gpu) reserved: u32,
+}
+
 #[derive(Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]
 #[repr(C)]
 pub(in crate::gpu) struct CoverageTile {
@@ -81,6 +93,8 @@ pub(super) enum PaintKind {
     Sweep = 3,
     Pattern = 4,
     RadialFocal = 5,
+    Mesh = 6,
+    Atmosphere = 7,
 }
 
 #[derive(Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]

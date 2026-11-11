@@ -504,6 +504,8 @@ fn shared_context_texture_target_self_check_and_device_loss_are_real() -> motion
     );
     assert!(context.self_check_result.get().is_none());
     context.self_check()?;
+    assert!(context.self_check_result.get().unwrap().is_ok());
+    context.clone().self_check()?;
     assert!(context.same_device(&context.clone()));
     let node = motion_core::Node::from(
         motion_core::Rect::new(0.25, 0.5, 12.75, 7.25).fill(motion_core::Color::rgb(20, 190, 230)),
@@ -619,6 +621,10 @@ fn shared_context_texture_target_self_check_and_device_loss_are_real() -> motion
     );
     context.device().destroy();
     let _ = wait_for_gpu(context.device(), None);
+    assert!(
+        context.self_check().is_err(),
+        "Cached success must not hide device loss"
+    );
     let error = first
         .render_frame(1, |_| node.clone())
         .expect_err("lost device fails");

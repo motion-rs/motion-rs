@@ -17,8 +17,17 @@ including packing, finite checks and RGBA16F/RGBA8/BGRA8 presentation. It comple
 one empty submission under validation/OOM scopes before returning the context.
 Clones reuse those pipelines; worker sessions do not repeat warm-up. This does not
 prove that all driver first-use costs disappear. Automatic still uses startup
-policy and a shared parity self-check, not a frame-latency calibration benchmark.
+policy and a shared visual self-check, not a frame-latency calibration benchmark.
 CPU and unsupported-precision early returns remain device-free.
+
+The once-only self-check prepares CPU reference coverage and GPU edge records
+independently. Its small fixtures cover spatial paints, group blending, curves,
+self-intersections under both fill rules, subpixel contours, nested geometric
+clips, filter guard bands and large-coordinate CPU coverage. Geometry fixtures
+must actually contain GPU coverage. Comparisons check alpha and linear-light
+compositing on black and white using fixture-specific RMS allowances; mutually
+transparent padding cannot dilute errors. Replay uses the same visual comparison,
+not byte equality. Success is shared by context clones but never hides later device loss.
 
 ## Shared Data and Output
 
@@ -32,8 +41,10 @@ GPU planning rejects unsupported precision or budgets before initialization. Ord
 draw/compute operations use finite linear-premultiplied pixels in RGBA32F working
 textures. Particle states and ordered tile metadata remain storage buffers, as do
 coverage/paint uploads and the final output boundary. These payloads are charged
-explicitly. GPU preparation flattens device curves on the CPU. Eligible fills keep their f64 flattened edges
-and the GPU computes f32 coverage before composition, without an
+explicitly. Eligible device curves retain statically Wang-sized descriptors.
+A GPU pass expands those descriptors into the edge records consumed by coverage;
+the host does not flatten or upload those curve edges. Line-only uploads remain
+compatible. The GPU computes f32 coverage before composition, without an
 intermediate u8 quantization. All other coverage is still generated on the CPU and uploaded.
 Where contours cross inside a pixel the GPU sums signed areas rather than reproducing
 the exact CPU sweep, allowing localized antialiasing differences. CPU rendering
@@ -41,6 +52,13 @@ prepares its own coverage with unchanged reference arithmetic. An Automatic star
 rejection prepares CPU coverage independently from the validated source before
 rendering; both preparation attempts count toward the request's work allowance.
 An already selected GPU never changes backends after a frame failure.
+
+Mesh and atmosphere paints upload admitted control/parameter descriptions rather
+than CPU-baked texels. CPU and WGSL independently evaluate patch geometry, Oklab
+color interpolation, seeded atmospheric noise and envelopes. Explicit baking APIs
+remain separate and preserve their prior arithmetic; selecting analytic mesh
+paint can differ from a baked image's tessellation and sampling. See
+[procedural paints](content.md#procedural-paints).
 
 ### Coverage tiles and preparation diagnostics
 
@@ -54,7 +72,8 @@ the same unquantized f32 samples as composition. Edge uploads are relative to th
 fill origin; area evaluation subtracts the tile origin for local arithmetic.
 
 Before selecting GPU coverage, host preparation admits conservative tile counts,
-index capacity and work from the actual f32 endpoints. One extra tile on each
+index capacity and work from line endpoints or curve control-point hulls and
+Wang segment upper bounds. One extra tile on each
 horizontal side covers interpolation rounding at seams. Each tile admits at most
 4096 edge references. A fill admits at most 2^26 tile work units and the frame at
 most 2^28, 2^24 bounding-box pixels and 32768 fills. Coordinates outside the local
@@ -72,7 +91,7 @@ before every count pass; each row carry and output sample has one writer.
 `PreparedGpuFrame::gpu_stats` exposes `GpuPreparationStats`: logical preparation
 totals, retained GPU segments, admitted tiles/index capacity, geometry-upload
 bytes and `GpuFallbackCounts`. Upload bytes count only binning uniforms and
-fill/edge descriptors, not CPU coverage, paints, textures or zeroed scratch.
+fill/line/curve descriptors, not CPU coverage, paints, textures or zeroed scratch.
 Fallback counts distinguish coordinate range, tile capacity, work/frame ceilings,
 decal paint and disabled device coverage (including encoded-sRGB blending).
 Analytic rectangles and CPU clip coverage are not fallback paths.
@@ -93,9 +112,13 @@ unchanged.
 
 Instance uploads use checked renderer-independent Disc, Glow, Sprite and Segment
 records: a 16-byte header, 48 bytes per primitive and optional shared sprite texels.
-Rust evaluates trajectory state and sprite alignment. GPU compute derives support
-and ordered tiles, not trajectory models. Upload and metadata storage are charged
-separately. See [particles](particles.md) for count, work and replay constraints.
+Rust-evaluated uploads remain compatible. Eligible built-in analytic trajectories
+instead upload explicit seeds, times and model parameters; a GPU pass generates
+the primitive records actually consumed by support, ordered tiles and composition.
+Unsupported or imprecise analytic cases retain diagnosed CPU materialization,
+not a backend switch. Upload, generated state and metadata storage are charged
+separately. Fixed-step simulation remains on the CPU. See
+[particles](particles.md) for count, work and replay constraints.
 
 Coverage uploads retain a local integer rectangle rather than expanding every draw
 to the entire canvas. Fills with strips refer to absolute ranges in one per-frame
@@ -249,6 +272,18 @@ quarter of the frame allowance and at most 64 MiB per shared context, with at mo
 512 buffers and 32 textures. Bind groups are not pooled; this is not a zero-allocation
 guarantee. Texture handles, buffer lease metadata and batch metadata are included
 in static admission.
+
+Immutable image/mip/atlas words instead use a separate shared context LRU.
+Binding 11 reads the immutable payload independently of per-draw parameters,
+coverage and instance state; repeated frames do not upload those words on a
+cache hit. Exact encoded content equality follows hashing, so changed pixels
+cannot alias an older resource. The default 64-entry, 64-MiB limit includes
+host comparison words and device payload, independently of the mutable pool.
+Frame admission conservatively covers a miss and bounded lookup work even for a
+hit. Resident buffers have dedicated in-flight leases and never enter the mutable
+working-buffer pool; eviction cannot overwrite pending frames. Explicit limits,
+clearing and cumulative residency observations are described in
+[resources](resources.md#limits-and-accounting).
 
 Hardware draw batches aggregate uploads in explicitly admitted
 `MAP_WRITE | COPY_SRC` staging buffers. After successful submission completion,

@@ -1,4 +1,4 @@
-// GPU edge binning and f32 area coverage. Host layouts are asserted in gpu/layout.rs.
+// GPU curve flattening, edge binning and f32 area coverage. Host layouts are asserted in gpu/layout.rs.
 struct CoverageParams {
     fills: u32,
     edges: u32,
@@ -26,6 +26,15 @@ struct CoverageEdge {
     reserved: array<u32, 3>,
 }
 
+struct CoverageCurve {
+    first: vec4f,
+    second: vec4f,
+    first_edge: u32,
+    segments: u32,
+    fill: u32,
+    reserved: u32,
+}
+
 struct CoverageTile {
     count: atomic<u32>,
     offset: u32,
@@ -35,13 +44,41 @@ struct CoverageTile {
 
 @group(0) @binding(0) var<uniform> params: CoverageParams;
 @group(0) @binding(1) var<storage, read> fills: array<CoverageFill>;
-@group(0) @binding(2) var<storage, read> edges: array<CoverageEdge>;
+@group(0) @binding(2) var<storage, read_write> edges: array<CoverageEdge>;
 @group(0) @binding(3) var<storage, read_write> tiles: array<CoverageTile>;
 @group(0) @binding(4) var<storage, read_write> indices: array<u32>;
 @group(0) @binding(5) var<storage, read_write> carries: array<f32>;
 @group(0) @binding(6) var<storage, read_write> coverage: array<u32>;
+@group(0) @binding(7) var<storage, read> curves: array<CoverageCurve>;
 
 const TILE_SIZE = 16u;
+
+fn curve_point(curve: CoverageCurve, time: f32) -> vec2f {
+    let a = mix(curve.first.xy, curve.first.zw, time);
+    let b = mix(curve.first.zw, curve.second.xy, time);
+    let c = mix(curve.second.xy, curve.second.zw, time);
+    return mix(mix(a, b, time), mix(b, c, time), time);
+}
+
+// Wang counts and control hull tile capacities are admitted before upload.
+// Each invocation exclusively owns its curve's statically sized output range.
+@compute @workgroup_size(64)
+fn flatten_curves(@builtin(global_invocation_id) id: vec3u, @builtin(num_workgroups) groups: vec3u) {
+    let index = id.x + id.y * groups.x * 64u;
+    if index >= arrayLength(&curves) {
+        return;
+    }
+    let curve = curves[index];
+    var previous = curve.first.xy;
+    for (var segment = 0u; segment < curve.segments; segment++) {
+        let point = select(
+            curve_point(curve, f32(segment + 1u) / f32(curve.segments)),
+            curve.second.zw, segment + 1u == curve.segments,
+        );
+        edges[curve.first_edge + segment] = CoverageEdge(vec4f(previous, point), curve.fill, array<u32, 3>(0u, 0u, 0u));
+        previous = point;
+    }
+}
 
 fn upper_lower(points: vec4f) -> vec4f {
     return select(points.zwxy, points, points.w > points.y);

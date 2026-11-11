@@ -20,6 +20,7 @@
 
 use std::sync::Arc;
 
+use super::AtmospherePaint;
 use crate::{Color, MeshPaint, Point, Rect, Transform, ValidationError};
 
 /// A preloaded static image sampled in local pixel coordinates, without I/O.
@@ -549,8 +550,10 @@ pub enum Paint {
     Sweep(SweepGradient),
     /// Bilinear linear-premultiplied sampling of a preloaded image.
     Pattern(ImagePattern),
-    /// Mesh gradient baked to an image over the painted bounds when a frame is prepared.
+    /// Analytic inverse-bilinear mesh evaluated independently by each backend.
     Mesh(MeshPaint),
+    /// Seeded atmospheric noise and envelope evaluated at an explicit time.
+    Atmosphere(AtmospherePaint),
 }
 
 impl Paint {
@@ -573,6 +576,7 @@ impl Paint {
             Self::Sweep(value) => value.0.validate(),
             Self::Pattern(value) => value.validate(),
             Self::Mesh(value) => value.validate(),
+            Self::Atmosphere(value) => value.validate(),
         }
     }
 }

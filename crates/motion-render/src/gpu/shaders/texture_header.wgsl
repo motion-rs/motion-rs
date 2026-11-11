@@ -66,6 +66,10 @@ var<storage, read_write> output_pixels: Pixels;
 @group(0) @binding(4)
 var<storage, read> operation_data: OperationData;
 
+// Immutable image mip texels are independent of per-draw coverage and mappings.
+@group(0) @binding(11)
+var<storage, read> resource_data: OperationData;
+
 @group(0) @binding(5)
 var<storage, read_write> failure_status: FailureStatus;
 

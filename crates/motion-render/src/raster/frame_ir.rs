@@ -17,6 +17,7 @@ mod normalize;
 mod tests;
 
 pub(super) use geometry::rectangle_verbs;
+pub(super) use geometry::wang;
 
 /// Maximum scratch bytes for a command-index error path, including every usize digit.
 pub(super) const COMMAND_PATH_BYTES: u64 = 64;

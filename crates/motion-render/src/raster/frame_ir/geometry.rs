@@ -124,7 +124,11 @@ pub(in crate::raster) fn rectangle_verbs(bounds: Rect) -> [PathVerb; 5] {
     ]
 }
 
-fn wang(points: [kurbo::Point; 4], tolerance: f64, path: &str) -> Result<u64, ValidationError> {
+pub(in crate::raster) fn wang(
+    points: [kurbo::Point; 4],
+    tolerance: f64,
+    path: &str,
+) -> Result<u64, ValidationError> {
     let [first, second, third, fourth] = points;
     let left = (third - second) - (second - first);
     let right = (fourth - third) - (third - second);

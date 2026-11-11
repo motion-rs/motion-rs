@@ -8,6 +8,7 @@ pub(crate) struct FrameView<'a> {
     scene: &'a PreparedScene,
     pub(super) device_fills: &'a [DeviceFill],
     pub(super) device_edges: &'a [[f64; 5]],
+    pub(super) device_curves: &'a [crate::raster::device::DeviceCurve],
     pub(super) device_totals: [u64; 2],
 }
 
@@ -41,6 +42,7 @@ impl FrameInput for PreparedFrame {
             scene: &self.scene,
             device_fills: &[],
             device_edges: &[],
+            device_curves: &[],
             device_totals: [0; 2],
         }
     }
@@ -52,6 +54,7 @@ impl FrameInput for GpuFrame {
             scene: &self.scene,
             device_fills: &self.geometry.device_fills,
             device_edges: &self.geometry.device_edges,
+            device_curves: &self.geometry.device_curves,
             device_totals: self.geometry.device_totals,
         }
     }

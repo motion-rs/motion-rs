@@ -16,6 +16,10 @@ pub(crate) const COVERAGE_FILL_BYTES: u64 = 48;
 #[cfg(feature = "gpu")]
 pub(crate) const COVERAGE_EDGE_BYTES: u64 = 32;
 
+/// Bytes in the host/WGSL coverage curve descriptor.
+#[cfg(feature = "gpu")]
+pub(crate) const COVERAGE_CURVE_BYTES: u64 = 48;
+
 /// Bytes in the host/WGSL coverage uniform.
 #[cfg(feature = "gpu")]
 pub(crate) const COVERAGE_PARAMS_BYTES: u64 = 16;
@@ -32,6 +36,83 @@ pub(crate) struct TileLayout {
 }
 
 impl TileLayout {
+    pub(super) fn admit_curves(
+        curves: &[super::DeviceCurve],
+        bounds: PixelRect,
+        budget: &mut Budget,
+        path: &str,
+    ) -> Result<Option<Self>, ValidationError> {
+        let columns = bounds.width().div_ceil(COVERAGE_TILE_SIZE);
+        let rows = bounds.height().div_ceil(COVERAGE_TILE_SIZE);
+        let tile_count = u64::from(columns) * u64::from(rows);
+        budget.bytes(tile_count * 4, path)?;
+        budget.work(tile_count + curves.len() as u64, path)?;
+        let mut counts = Vec::<u32>::new();
+        counts.try_reserve_exact(tile_count as usize).map_err(|_| {
+            ValidationError::limit(path, "max_bytes", "Could not reserve curve tile admission")
+        })?;
+        counts.resize(tile_count as usize, 0);
+        let mut indices = 0_u64;
+        let mut crowded = false;
+        for curve in curves {
+            // The f32 de Casteljau hull stays inside this hull plus one seam tile.
+            let axis = |x: bool, minimum: bool| {
+                curve
+                    .points
+                    .iter()
+                    .map(|point| {
+                        let value = if x {
+                            point.x - f64::from(bounds.left)
+                        } else {
+                            point.y - f64::from(bounds.top)
+                        };
+                        f64::from(value as f32)
+                    })
+                    .fold(
+                        if minimum {
+                            f64::INFINITY
+                        } else {
+                            f64::NEG_INFINITY
+                        },
+                        |a, b| if minimum { a.min(b) } else { a.max(b) },
+                    )
+            };
+            let tile = |value: f64, maximum: u32| {
+                (value / f64::from(COVERAGE_TILE_SIZE))
+                    .floor()
+                    .clamp(0.0, f64::from(maximum - 1)) as u32
+            };
+            let left = tile(axis(true, true), columns).saturating_sub(1);
+            let right = (tile(axis(true, false), columns) + 1).min(columns - 1);
+            let top = tile(axis(false, true), rows).saturating_sub(1);
+            let bottom = (tile(axis(false, false), rows) + 1).min(rows - 1);
+            budget.work(
+                u64::from(right - left + 1) * u64::from(bottom - top + 1),
+                path,
+            )?;
+            for row in top..=bottom {
+                for column in left..=right {
+                    let count = &mut counts[(row * columns + column) as usize];
+                    *count = count.saturating_add(curve.segments);
+                    crowded |= *count > MAX_TILE_EDGES;
+                    indices += u64::from(curve.segments);
+                }
+            }
+        }
+        budget.release(tile_count * 4);
+        if crowded || indices > u64::from(u32::MAX) {
+            return Ok(None);
+        }
+        Ok(Some(Self {
+            columns,
+            rows,
+            indices: indices as u32,
+            work: indices * (u64::from(COVERAGE_TILE_SIZE).pow(2) + 18)
+                + tile_count * 32
+                + bounds.pixels(),
+        }))
+    }
+
     pub(super) fn admit(
         edges: &[Edge],
         bounds: PixelRect,

@@ -1,5 +1,6 @@
 //! Logical drawing contracts and bounded rectangle/path fill commands.
 
+mod atmosphere;
 mod blend;
 mod canvas;
 mod clip;
@@ -11,6 +12,7 @@ pub mod paint;
 mod stroke;
 
 pub use crate::shape::{Shape, Styled};
+pub use atmosphere::{AtmosphereKind, AtmospherePaint, AtmosphereParameters};
 pub use blend::{BlendMode, BlendSpace, FillRule, MaskMode};
 pub use canvas::Canvas;
 pub use clip::{ClipGeometry, ClipMode, IntoShapeClip, PathClip, RectClip, ShapeClip};
@@ -19,7 +21,8 @@ pub use context::{DeferredContent, DrawContext, Drawable, RenderQuality};
 pub use evaluation::Evaluation;
 
 pub use mesh::{
-    MAX_MESH_POINTS_PER_AXIS, MAX_MESH_SUBDIVISIONS, MeshGradient, MeshImage, MeshPaint, MeshVertex,
+    MAX_MESH_POINTS_PER_AXIS, MAX_MESH_SUBDIVISIONS, MeshGradient, MeshImage, MeshPaint, MeshPatch,
+    MeshVertex,
 };
 pub use paint::{
     GradientExtend, GradientSpace, GradientUnits, ImagePattern, LinearGradient, Paint,

@@ -172,7 +172,7 @@ pub(crate) enum PreparedItem {
     },
 }
 
-/// A fill whose coverage the GPU computes from flattened edges instead of CPU strips.
+/// A fill whose coverage the GPU computes from lines or device-flattened curves.
 ///
 /// The fill owns one dense strip covering its pixel bounds; the strip's `alpha_offset` addresses
 /// an f32 sample block after the packed CPU alphas, which the GPU writes before composition.
@@ -182,6 +182,10 @@ pub(crate) struct DeviceFill {
     pub(crate) strip: usize,
     /// Range in the GPU frame's independently owned device edges.
     pub(crate) edges: Range<usize>,
+    /// Curve descriptors expanded by the GPU; empty for the line compatibility path.
+    pub(crate) curves: Range<usize>,
+    /// Statically admitted generated edge slots.
+    pub(crate) segments: u32,
     /// Winding rule that maps accumulated signed area to coverage.
     pub(crate) rule: motion_core::FillRule,
     /// Conservative GPU tile storage and work admission.

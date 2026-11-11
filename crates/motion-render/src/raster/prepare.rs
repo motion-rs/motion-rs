@@ -230,6 +230,11 @@ pub(crate) fn prepare_scene(
         budget.work(1, &path)?;
         let item = match item {
             IrItem::ParticleInstances { batch, transform } => {
+                if batch.analytic_fallback().is_some()
+                    && let Some(device) = device.as_deref_mut()
+                {
+                    device.analytic_cpu_fallbacks += 1;
+                }
                 if transform.inverse().is_none() {
                     budget.release(COMMAND_PATH_BYTES);
                     continue;

@@ -116,6 +116,8 @@ fn image_lifetimes_keep_sources_and_final_output_until_their_last_read() {
         parameters: GpuUniforms::new(&frame, GpuOp::Clear, frame.output_bounds),
         data: vec![1.0],
         quads: Vec::new(),
+        analytic: None,
+        resource: None,
     };
     let chain = vec![step(0, 0), step(1, 0), step(2, 0), step(3, 0)];
     let last = Plan::last_uses(&chain, 4, &mut budget).unwrap();
@@ -154,6 +156,8 @@ fn local_images_schedule_capacities_without_live_aliases_and_charge_work() {
             parameters,
             data: vec![1.0],
             quads: Vec::new(),
+            analytic: None,
+            resource: None,
         });
     }
     let mut budget = Budget::new(frame.size, limits).unwrap();

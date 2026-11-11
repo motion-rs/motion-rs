@@ -67,6 +67,10 @@ var<storage, read_write> output_pixels: Pixels;
 @group(0) @binding(4)
 var<storage, read> operation_data: OperationData;
 
+// Immutable image mip texels are independent of per-draw coverage and mappings.
+@group(0) @binding(11)
+var<storage, read> resource_data: OperationData;
+
 @group(0) @binding(5)
 var<storage, read_write> failure_status: FailureStatus;
 
@@ -395,10 +399,10 @@ fn paint_texel(column: i32, row: i32, width: i32, height: i32, base: u32) -> vec
 
     let offset = base + 4u * u32(coordinate.y * width + coordinate.x);
     return vec4f(
-            operation_data.values[offset],
-            operation_data.values[offset + 1u],
-            operation_data.values[offset + 2u],
-            operation_data.values[offset + 3u],
+            resource_data.values[offset],
+            resource_data.values[offset + 1u],
+            resource_data.values[offset + 2u],
+            resource_data.values[offset + 3u],
         );
 }
 
@@ -664,6 +668,157 @@ fn fill_source(coordinate: vec2u, record: u32) -> vec4f {
 }
 
 // Evaluate paints at pixel centers after mapping global coordinates into paint space.
+fn paint_word4(offset: u32) -> vec4f {
+    return vec4f(
+            operation_data.values[offset], operation_data.values[offset + 1u],
+            operation_data.values[offset + 2u], operation_data.values[offset + 3u],
+        );
+}
+
+fn mesh_cross(first: vec2f, second: vec2f) -> f32 {
+    return first.x * second.y - first.y * second.x;
+}
+
+// Twin of motion_core::drawing::mesh::MeshPatch: inverse bilinear geometry,
+// cubic smoothstep Oklab interpolation, straight alpha, then linear premultiplication.
+fn mesh_patch(point: vec2f, base: u32) -> vec4f {
+    let first = paint_word4(base);
+    let second = paint_word4(base + 4u);
+    let a = first.xy;
+    let b = first.zw - a;
+    let c = second.xy - a;
+    let d = second.zw - a - b - c;
+    let q = point - a;
+    let aa = -mesh_cross(b, d);
+    let bb = mesh_cross(q, d) - mesh_cross(b, c);
+    let cc = mesh_cross(q, c);
+    let scale = max(abs(aa), max(abs(bb), abs(cc)));
+    if scale == 0.0 {
+        return vec4f(0.0, 0.0, 0.0, -1.0);
+    }
+    var roots = vec2f(0.0);
+    if abs(aa) <= scale * 1e-12 {
+        if abs(bb) <= scale * 1e-12 {
+            return vec4f(0.0, 0.0, 0.0, -1.0);
+        }
+        roots = vec2f(-cc / bb);
+    } else {
+        let discriminant = bb * bb - 4.0 * aa * cc;
+        if discriminant < 0.0 {
+            return vec4f(0.0, 0.0, 0.0, -1.0);
+        }
+        let root = sqrt(discriminant);
+        // Stable quadratic roots preserve small roots of nearly affine patches.
+        let quotient = -0.5 * (bb + select(-root, root, bb >= 0.0));
+        if quotient == 0.0 {
+            roots = vec2f(0.0);
+        } else if bb >= 0.0 {
+            roots = vec2f(cc / quotient, quotient / aa);
+        } else {
+            roots = vec2f(quotient / aa, cc / quotient);
+        }
+    }
+    for (var index = 0u; index < 2u; index += 1u) {
+        let u = roots[index];
+        let direction = c + d * u;
+        let axis = select(0u, 1u, abs(direction.y) > abs(direction.x));
+        if direction[axis] == 0.0 {
+            continue;
+        }
+        let v = (q[axis] - b[axis] * u) / direction[axis];
+        if u < -1e-6 || u > 1.000001 || v < -1e-6 || v > 1.000001 {
+            continue;
+        }
+        let uv = clamp(vec2f(u, v), vec2f(0.0), vec2f(1.0));
+        let amount = uv * uv * (vec2f(3.0) - 2.0 * uv);
+        let top = mix(paint_word4(base + 8u), paint_word4(base + 12u), amount.x);
+        let bottom = mix(paint_word4(base + 16u), paint_word4(base + 20u), amount.x);
+        let lab = mix(top, bottom, amount.y);
+        let lms = vec3f(
+                dot(vec3f(0.9999999984505201, 0.3963377921737678, 0.21580375806075877), lab.xyz),
+                dot(vec3f(1.0000000088817607, -0.10556134232365634, -0.0638541747717059), lab.xyz),
+                dot(vec3f(1.0000000546724108, -0.08948418209496575, -1.2914855378640917), lab.xyz),
+            );
+        let cube = lms * lms * lms;
+        let rgb = vec3f(
+                dot(vec3f(4.076741661347994, -3.3077115904081937, 0.2309699287294278), cube),
+                dot(vec3f(-1.2684380040921763, 2.609757400663372, -0.34131939631021957), cube),
+                dot(vec3f(-0.004196086541837074, -0.7034186144594495, 1.7076147009309446), cube),
+            );
+        return checked(vec4f(rgb * lab.a, lab.a));
+    }
+    return vec4f(0.0, 0.0, 0.0, -1.0);
+}
+
+fn mesh_paint(point: vec2f, base: u32) -> vec4f {
+    var result = vec4f(0.0);
+    let count = u32(operation_data.values[base]);
+    // Lattice order preserves last-patch ownership where warped patches overlap.
+    for (var index = 0u; index < count; index += 1u) {
+        let color = mesh_patch(point, base + 1u + index * 24u);
+        if color.a >= 0.0 {
+            result = color;
+        }
+    }
+    return result;
+}
+
+// Twin of core atmosphere dust: fixed 3x3 lattice neighborhood, shared wrapping hashes.
+fn atmosphere_dust(point: vec2f, seed: u32, radius: f32, coverage: f32) -> f32 {
+    let cell = vec2i(floor(point));
+    var result = 0.0;
+    for (var dy = -1; dy <= 1; dy += 1) {
+        for (var dx = -1; dx <= 1; dx += 1) {
+            let neighbor = cell + vec2i(dx, dy);
+            let hash = noise_hash2(neighbor, seed);
+            if f32(hash) / 4294967295.0 >= coverage {
+                continue;
+            }
+            let center = vec2f(neighbor) + vec2f(
+                    f32(noise_hash32(hash ^ 0xa511e9b3u)), f32(noise_hash32(hash ^ 0x63d83595u)),
+                ) / 4294967295.0;
+            let mote_radius = radius * (0.6 + 0.4 * f32(noise_hash32(hash ^ 0x9e3779b9u)) / 4294967295.0);
+            let offset = point - center;
+            let weight = max(1.0 - dot(offset, offset) / (mote_radius * mote_radius), 0.0);
+            result = max(result, weight * weight);
+        }
+    }
+    return result;
+}
+
+// Twin of core AtmosphereParameters::sample. Pixels/wavelength/phase are canvas-local;
+// all inputs are admitted before execution, and no image or random history is shared.
+fn atmosphere_paint(local: vec2f, base: u32) -> vec4f {
+    let seed = bitcast<u32>(operation_data.values[base]);
+    let kind = operation_data.values[base + 1u];
+    let canvas = vec2f(operation_data.values[base + 2u], operation_data.values[base + 3u]);
+    let phase = vec2f(operation_data.values[base + 4u], operation_data.values[base + 5u]);
+    let scale = operation_data.values[base + 6u];
+    let opacity = operation_data.values[base + 7u];
+    let intensity = operation_data.values[base + 8u];
+    let lacunarity = operation_data.values[base + 9u];
+    let gain = operation_data.values[base + 10u];
+    let octaves = u32(operation_data.values[base + 11u]);
+    let tint = paint_word4(base + 12u);
+    let envelope = paint_word4(base + 16u);
+    let pixel = local * canvas;
+    let point = (pixel + phase) / scale;
+    let cloud = clamp(0.5 + 0.5 * noise_fbm(point, seed, octaves, lacunarity, gain, 1u), 0.0, 1.0);
+    var density = 0.0;
+    if kind == 0.0 {
+        let gradient = envelope.x * (1.0 - local.y) + envelope.y * local.y;
+        density = 1.0 - exp(-opacity * gradient * (0.35 + cloud));
+    } else if kind == 1.0 {
+        density = opacity * atmosphere_dust(point, seed, envelope.x / scale, envelope.y) * (0.7 + 0.3 * cloud);
+    } else {
+        let displacement = (local - envelope.xy) / envelope.zw;
+        density = opacity * exp(-2.0 * dot(displacement, displacement)) * (0.6 + 0.4 * cloud);
+    }
+    let alpha = clamp(density * tint.a, 0.0, 1.0);
+    let rgb = tint.rgb * intensity * clamp(density, 0.0, 1.0);
+    return checked(vec4f(rgb, alpha));
+}
+
 fn spatial_paint(coordinate: vec2u) -> vec4f {
     let point = vec2f(coordinate) + vec2f(0.5) - vec2f(value(14u), value(15u));
     var local = vec2f(
@@ -683,7 +838,10 @@ fn spatial_paint(coordinate: vec2u) -> vec4f {
         let first_size = vec2f(operation_data.values[base], operation_data.values[base + 1u]);
         let second_size = vec2f(operation_data.values[base + 2u], operation_data.values[base + 3u]);
         let blend = operation_data.values[base + 4u];
-        let first = image_level(uv, first_size, base + 6u, operation_data.values[base + 5u] != 0.0);
+        let first = image_level(
+                uv, first_size, bitcast<u32>(operation_data.values[base + 6u]),
+                operation_data.values[base + 5u] != 0.0,
+            );
         if blend == 0.0 {
             return first;
         }
@@ -691,7 +849,7 @@ fn spatial_paint(coordinate: vec2u) -> vec4f {
         let second = image_level(
                 uv,
                 second_size,
-                base + 6u + u32(first_size.x * first_size.y) * 4u,
+                bitcast<u32>(operation_data.values[base + 7u]),
                 false,
             );
         return checked(mix(first, second, blend));
@@ -699,6 +857,13 @@ fn spatial_paint(coordinate: vec2u) -> vec4f {
 
     if settings.operation.detail == 0u {
         local = (local - vec2f(value(6u), value(7u))) / vec2f(value(8u), value(9u));
+    }
+
+    if settings.operation.kind == 6u {
+        return mesh_paint(clamp(local, vec2f(0.0), vec2f(1.0)), base);
+    }
+    if settings.operation.kind == 7u {
+        return atmosphere_paint(local, base);
     }
 
     var position = 0.0;
@@ -1313,15 +1478,15 @@ fn fill_particle_tiles(@builtin(global_invocation_id) invocation: vec3u) {
 fn particle_texel(column: i32, row: i32, base: u32, width: i32, height: i32) -> vec4f {
     let offset = base + u32(clamp(row, 0, height - 1) * width + clamp(column, 0, width - 1)) * 4u;
     return vec4f(
-            operation_data.values[offset],
-            operation_data.values[offset + 1u],
-            operation_data.values[offset + 2u],
-            operation_data.values[offset + 3u],
+            resource_data.values[offset],
+            resource_data.values[offset + 1u],
+            resource_data.values[offset + 2u],
+            resource_data.values[offset + 3u],
         );
 }
 
-// Sprite RGBA follows the particle records and is bilinearly sampled at texel centers.
-fn particle_sprite(uv: vec2f, count: u32, cell: vec4f) -> vec4f {
+// Immutable sprite RGBA is separate from changing records and sampled at texel centers.
+fn particle_sprite(uv: vec2f, cell: vec4f) -> vec4f {
     let width = i32(operation_data.values[1u]);
     let height = i32(operation_data.values[2u]);
     let dimensions = vec2f(f32(width), f32(height));
@@ -1331,7 +1496,7 @@ fn particle_sprite(uv: vec2f, count: u32, cell: vec4f) -> vec4f {
     }
     let origin = vec2i(floor(position));
     let fraction = position - floor(position);
-    let base = 4u + count * particle_stride();
+    let base = 0u;
     let high = min(origin + vec2i(1), vec2i(cell.zw * dimensions - vec2f(1.0)));
     let top_left = particle_texel(origin.x, origin.y, base, width, height);
     let top_right = particle_texel(high.x, origin.y, base, width, height);
@@ -1441,7 +1606,7 @@ fn particle_batch(backdrop: vec4f, coordinate: vec2u) -> vec4f {
             } else {
                 let cell = select(vec4f(0.0, 0.0, 1.0, 1.0), extra, kind == 4u);
                 let uv = local / (2.0 * vec2f(radius * aspect, radius)) + vec2f(0.5);
-                color *= particle_sprite(cell.xy + uv * (cell.zw - cell.xy), count, cell);
+                color *= particle_sprite(cell.xy + uv * (cell.zw - cell.xy), cell);
                 coverage = 1.0;
             }
         } else if kind >= 6u && kind <= 11u {

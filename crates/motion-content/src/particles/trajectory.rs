@@ -2,6 +2,9 @@
 
 use super::*;
 use motion_core::animation::value_noise;
+#[cfg(feature = "gpu")]
+use motion_core::instances::{AnalyticInstanceState, AnalyticTrajectoryKind};
+use motion_core::instances::{AnalyticInstanceUpload, InstanceKind};
 use motion_core::{Point, Vector2};
 use std::ops::Range;
 
@@ -20,6 +23,17 @@ pub trait TrajectoryModel: Send + Sync {
 
     /// Complete state at this age; None means absent/dead.
     fn state(&self, index: u64, age_seconds: f32) -> Result<Option<Particle>, ValidationError>;
+
+    /// Optional seeded initial-state upload for supported random-access models.
+    /// Custom models and unsupported precision retain the ordinary evaluated path.
+    fn analytic_upload(
+        &self,
+        _age_seconds: f32,
+        _primitive: InstanceKind,
+        _align_to_velocity: bool,
+    ) -> Result<Option<AnalyticInstanceUpload>, ValidationError> {
+        Ok(None)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -276,6 +290,54 @@ macro_rules! common {
             }
         }
         impl TrajectoryModel for $name {
+            #[cfg(feature = "gpu")]
+            fn analytic_upload(
+                &self,
+                age: f32,
+                primitive: InstanceKind,
+                align: bool,
+            ) -> Result<Option<AnalyticInstanceUpload>, ValidationError> {
+                if age < 0.0 || age >= self.0.lifetime || self.0.count == 0 {
+                    return Ok(None);
+                }
+                let mut initial = Vec::new();
+                if self.0.count > MAX_INSTANCE_COUNT as u64 {
+                    return Err(limit(
+                        "Analytic initial-state count exceeds the instance allowance",
+                    ));
+                }
+                initial
+                    .try_reserve_exact(self.0.count as usize)
+                    .map_err(|_| limit("Analytic initial-state allocation failed"))?;
+                for index in 0..self.0.count {
+                    let particle = self.0.initial(index)?;
+                    initial.push(AnalyticInstanceState {
+                        position: particle.position,
+                        velocity: particle.velocity,
+                        custom: [particle.custom[0], particle.custom[1]],
+                        index: index as u32,
+                        rotation: particle.rotation,
+                    });
+                }
+                let kind = match self.0.kind {
+                    1 => AnalyticTrajectoryKind::Ballistic,
+                    2 => AnalyticTrajectoryKind::Converge,
+                    3 => AnalyticTrajectoryKind::Orbit,
+                    _ => AnalyticTrajectoryKind::NoiseDrift,
+                };
+                AnalyticInstanceUpload::new(
+                    kind,
+                    self.0.seed,
+                    age,
+                    self.0.lifetime,
+                    self.0.parameters,
+                    primitive,
+                    align,
+                    initial.into_iter(),
+                )
+                .map(Some)
+            }
+
             fn spawned(&self, from: Time, to: Time) -> Range<u64> {
                 if from <= Time::ZERO && to > Time::ZERO {
                     0..self.0.count
