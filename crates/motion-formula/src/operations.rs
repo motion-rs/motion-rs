@@ -5,22 +5,24 @@ use crate::{FormulaCompiler, FormulaOptions};
 
 use crate::{FormulaAsset, FormulaCompileError, FormulaSymbol};
 
-use motion_content::{VectorGroup, VectorItem, VectorTree};
+use motion_content::{CompileCache, VectorGroup, VectorItem, VectorTree};
 
 use motion_core::{Canvas, DrawContext, Drawable, Node, NodeModifiers, Rect, ValidationError};
 use std::collections::{BTreeMap, BTreeSet};
-use std::{
-    ops::Range,
-    sync::{Arc, OnceLock},
-};
+use std::{ops::Range, sync::Arc};
 
 /// A checked immutable formula subset; original geometry, clipping, viewport and
 /// baseline remain unchanged. Glyphs sharing a Typst cluster span stay together.
 #[derive(Clone, Debug)]
 pub struct FormulaSelection {
+    subset: CompileCache<Subset, Result<Arc<VectorTree>, ValidationError>>,
+}
+
+/// The immutable key of a selected subtree: an asset and the symbols kept.
+#[derive(Clone, Debug)]
+struct Subset {
     formula: FormulaAsset,
     indices: Arc<[usize]>,
-    tree: Arc<OnceLock<Result<Arc<VectorTree>, ValidationError>>>,
 }
 
 impl FormulaAsset {
@@ -32,9 +34,10 @@ impl FormulaAsset {
             .into());
         }
         Ok(FormulaSelection {
-            formula: self.clone(),
-            indices: indices.into(),
-            tree: Arc::new(OnceLock::new()),
+            subset: CompileCache::new(Subset {
+                formula: self.clone(),
+                indices: indices.into(),
+            }),
         })
     }
 
@@ -125,20 +128,25 @@ impl FormulaAsset {
 impl FormulaSelection {
     /// Selected source-order occurrences (not a reshaped substring).
     pub fn symbols(&self) -> Vec<&FormulaSymbol> {
-        self.indices
+        let subset = self.subset.key();
+        subset
+            .indices
             .iter()
-            .map(|index| &self.formula.symbols[*index])
+            .map(|index| &subset.formula.symbols[*index])
             .collect()
     }
 
     pub(crate) fn addresses(&self) -> Vec<Vec<usize>> {
-        self.indices
+        let subset = self.subset.key();
+        subset
+            .indices
             .iter()
             .filter_map(|index| {
-                self.formula
+                subset
+                    .formula
                     .tree
                     .ids()
-                    .get(&self.formula.symbols[*index].id)
+                    .get(&subset.formula.symbols[*index].id)
                     .cloned()
             })
             .collect()
@@ -147,54 +155,52 @@ impl FormulaSelection {
     /// Canonical selected vector subtree, without reshaping or changing glyph
     /// positions. Clones share a single bounded subset preparation.
     pub fn vector_tree(&self) -> Result<Arc<VectorTree>, ValidationError> {
-        self.tree
-            .get_or_init(|| {
-                let selected = self.addresses();
+        self.subset.get_or_compile(0, |subset| {
+            let selected = self.addresses();
 
-                fn prune(
-                    group: &VectorGroup,
-                    address: &mut Vec<usize>,
-                    selected: &[Vec<usize>],
-                ) -> VectorGroup {
-                    let mut result = group.clone();
-                    result.children = group
-                        .children
-                        .iter()
-                        .enumerate()
-                        .filter_map(|(index, item)| {
-                            address.push(index);
-                            let kept = if selected
-                                .iter()
-                                .any(|selected| address.starts_with(selected))
-                            {
-                                Some(item.clone())
-                            } else if selected
-                                .iter()
-                                .any(|selected| selected.starts_with(address))
-                            {
-                                match item {
-                                    VectorItem::Group(group) => {
-                                        Some(VectorItem::Group(prune(group, address, selected)))
-                                    }
-                                    _ => None,
+            fn prune(
+                group: &VectorGroup,
+                address: &mut Vec<usize>,
+                selected: &[Vec<usize>],
+            ) -> VectorGroup {
+                let mut result = group.clone();
+                result.children = group
+                    .children
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(index, item)| {
+                        address.push(index);
+                        let kept = if selected
+                            .iter()
+                            .any(|selected| address.starts_with(selected))
+                        {
+                            Some(item.clone())
+                        } else if selected
+                            .iter()
+                            .any(|selected| selected.starts_with(address))
+                        {
+                            match item {
+                                VectorItem::Group(group) => {
+                                    Some(VectorItem::Group(prune(group, address, selected)))
                                 }
-                            } else {
-                                None
-                            };
-                            address.pop();
-                            kept
-                        })
-                        .collect();
-                    result
-                }
-                let root = prune(self.formula.tree.root(), &mut Vec::new(), &selected);
-                let mut tree = VectorTree::new(self.formula.tree.view_box(), root)?;
-                if let Some(baseline) = self.formula.baseline {
-                    tree = tree.with_baseline(baseline);
-                }
-                Ok(Arc::new(tree))
-            })
-            .clone()
+                                _ => None,
+                            }
+                        } else {
+                            None
+                        };
+                        address.pop();
+                        kept
+                    })
+                    .collect();
+                result
+            }
+            let root = prune(subset.formula.tree.root(), &mut Vec::new(), &selected);
+            let mut tree = VectorTree::new(subset.formula.tree.view_box(), root)?;
+            if let Some(baseline) = subset.formula.baseline {
+                tree = tree.with_baseline(baseline);
+            }
+            Ok(Arc::new(tree))
+        })
     }
 
     /// Ordinary subset anchored in the original formula viewport.
@@ -202,10 +208,10 @@ impl FormulaSelection {
         match self.vector_tree() {
             Ok(tree) => Node::group([
                 tree.node(),
-                Node::from(Bounds(self.formula.tree.view_box())),
+                Node::from(Bounds(self.subset.key().formula.tree.view_box())),
             ])
             .pivot(motion_core::Pivot::Point(
-                self.formula.tree.view_box().center(),
+                self.subset.key().formula.tree.view_box().center(),
             )),
             Err(error) => motion_core::authoring::transition::diagnostic(error),
         }
@@ -217,10 +223,10 @@ impl FormulaSelection {
         let tree = self.vector_tree()?;
         Ok(Node::group([
             tree.write(progress, motion_content::WriteOptions::default())?,
-            Node::from(Bounds(self.formula.tree.view_box())),
+            Node::from(Bounds(self.subset.key().formula.tree.view_box())),
         ])
         .pivot(motion_core::Pivot::Point(
-            self.formula.tree.view_box().center(),
+            self.subset.key().formula.tree.view_box().center(),
         )))
     }
 
@@ -228,13 +234,17 @@ impl FormulaSelection {
     /// while leaving all other original formula content intact.
     pub fn apply(&self, callback: impl Fn(Node) -> Node) -> Node {
         let addresses = self.addresses().into_iter().collect::<BTreeSet<_>>();
-        self.formula.tree.node_mapped(&|address, node| {
-            if addresses.contains(address) {
-                callback(node)
-            } else {
-                node
-            }
-        })
+        self.subset
+            .key()
+            .formula
+            .tree
+            .node_mapped(&|address, node| {
+                if addresses.contains(address) {
+                    callback(node)
+                } else {
+                    node
+                }
+            })
     }
 }
 

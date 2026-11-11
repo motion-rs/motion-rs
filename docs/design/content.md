@@ -37,7 +37,11 @@ semantics retain diagnostics or fail; there is no hidden browser or bitmap rende
 VectorTree retains group transforms, opacity, IDs, paths, paints and image content.
 Element selection modifies ordinary Nodes. SVG, text and formulas share vector
 writing, geometric morphing and surface sampling rather than each owning an effect
-engine. Stroke writing uses arc length; fill reveal and temporary outline behavior
+engine. They also share one deferred-content pipeline: a compile key produces a
+compiled result (a vector tree, or a paragraph layout for text), authored
+`VectorSelection` values pick original groups, and `VectorTree::reveal` applies
+them and the optional write effect. A `CompileCache` is created from its immutable
+key; changing a compile parameter yields a new cache and nothing is cleared by hand. Stroke writing uses arc length; fill reveal and temporary outline behavior
 remain part of the chosen effect. Morphing needs explicit leaf/subpath correspondence
 and must handle unmatched geometry rather than assuming compatible topology.
 
@@ -59,12 +63,17 @@ not a second size-dependent text renderer. Font identity and variation coordinat
 are part of glyph/cache identity. Unsupported color-glyph formats are not implied
 by ordinary outline support.
 
-Paragraph layout retains measured lines, baselines, glyphs, grapheme boundaries and
-source information. Complete text/style/width/font-snapshot keys govern layout
-reuse. Position and paint changes need not reshape text. Per-part transforms reuse
-layout and the inherited scene-local clock; visible parts must not split UTF-8 or
-graphemes. Explicit eager APIs support inspection and truncation before rendering.
-Unsupported combined effects retain diagnostics rather than silently dropping one.
+Text is split into three stages. `ParagraphStyle` describes the paragraph (text, style,
+width, alignment, fonts). Shaping it yields `ParagraphLayout`, the single intermediate
+representation, which retains measured lines, baselines, glyphs, grapheme boundaries and
+source information. `Text` adds ink and one reveal effect (`write` or part animation;
+the last one requested wins) that reads that layout. Static drawing, handwriting, part
+animation and caption vectors are all produced from the same layout. Complete
+text/style/width/font-snapshot keys govern layout reuse through a `CompileCache`. Position
+and paint changes need not reshape text. Per-part transforms reuse layout and the
+inherited scene-local clock; visible parts must not split UTF-8 or graphemes. Explicit
+eager APIs support inspection and truncation before rendering. Captions reuse
+`ParagraphStyle` and keep only timing, stacking and caption-specific validation.
 
 ExportReport.fonts records actually observed faces and source-byte hashes, including
 cached draws. These are auditing aids, not cryptographic identity or a promise of
@@ -76,7 +85,8 @@ The typst feature compiles trusted single-page markup; formula adds math authori
 selection, writing and morphing. Heavy compiler dependencies stay in motion-formula.
 Formula::typst retains source/options without initializing a compiler or reading
 fonts. `size` and `fill` create a new immutable compile key (source plus options) with its
-own empty result cell, so a stale compilation is never reused. There is no LaTeX
+own empty `CompileCache`, so a stale compilation is never reused; selections cache their
+pruned tree the same way. There is no LaTeX
 conversion API or on-disk formula cache.
 
 A frozen compiler environment produces vector glyphs and geometric marks while

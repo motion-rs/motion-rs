@@ -1,11 +1,10 @@
 //! Caption styling and frozen per-cue paragraph layout for subtitle tracks.
 
 use crate::{
-    CaptionCue, CaptionTrack, FontLibrary, ParagraphLayout, Text, TextAlignment, TextSpan,
+    CaptionCue, CaptionTrack, FontLibrary, ParagraphLayout, ParagraphStyle, Text, TextAlignment,
+    TextSpan,
 };
-use motion_core::{
-    Color, DrawContext, Node, NodeModifiers, Rect, Shape, Size, Time, ValidationError,
-};
+use motion_core::{Color, Node, NodeModifiers, Rect, Shape, Size, Time, ValidationError};
 use std::sync::Arc;
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -183,7 +182,6 @@ impl CaptionStyle {
         {
             return Err(invalid("Invalid subtitle style, safe area or layout budget").into());
         }
-        let context = DrawContext::default().with_fonts(fonts.clone());
         let mut entries = Vec::new();
         let mut events = Vec::new();
         for (index, cue) in track.cues().iter().enumerate() {
@@ -191,19 +189,21 @@ impl CaptionStyle {
                 .runs(cue.text())?
                 .into_iter()
                 .map(|(text, color)| TextSpan::new(text).size(self.size).fill(color));
-            let text = Text::rich(spans)
+            let paragraph = ParagraphStyle::rich(spans)
                 .size(self.size)
                 .line_height(1.0 + 6.0 / self.size)
                 .alignment(TextAlignment::Center)
                 .max_width(safe.width() - 2.0 * self.padding.0)
                 .fonts(fonts);
-            let layout = text.layout(fonts)?;
+            let layout = paragraph.layout(fonts)?;
             if layout.lines().len() > self.lines {
                 return Err(
                     invalid("Subtitle exceeds its line limit; edit or retime the cue").into(),
                 );
             }
-            let node = text.vector_tree(&context)?.node();
+            let node = Text::from_paragraph(paragraph)
+                .vector_tree_of(&layout)?
+                .node();
             entries.push((cue.clone(), layout, node));
             events.push((cue.start(), true, index));
             events.push((cue.end(), false, index));

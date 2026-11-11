@@ -1,12 +1,12 @@
-//! Line fitting with ellipsis truncation and paragraph layout of rich text.
+//! Paragraph shaping: a validated description becomes the one `ParagraphLayout`.
 
 use super::*;
 
-impl Text {
+impl ParagraphStyle {
     /// Precomputes a paragraph limited to 1..=512 lines, adding an ellipsis only
-    /// when truncated. Returns the text and whether source content was removed.
+    /// when truncated. Returns the paragraph and whether source content was removed.
     /// Rich styles and extended grapheme boundaries are retained. The supplied
-    /// font snapshot is frozen on the returned text; no system discovery occurs.
+    /// font snapshot is frozen on the returned paragraph; no system discovery occurs.
     /// Preparation may reshape bounded suffix candidates and is not a frame-loop API.
     pub fn fit_lines(
         &self,
@@ -18,9 +18,10 @@ impl Text {
             return Err(invalid("max_lines", "Text line limit requires 1..=512"));
         }
         let full = self.layout(fonts)?;
+        let width = self.spec().width.map(f64::from_bits);
         let fits = |layout: &ParagraphLayout| {
             layout.lines.len() <= max_lines
-                && self.width.is_none_or(|width| {
+                && width.is_none_or(|width| {
                     layout.bounds.width() <= width
                         && layout.lines.iter().all(|line| line.width() <= width)
                 })
@@ -47,13 +48,15 @@ impl Text {
         cuts.sort_unstable();
         for end in cuts.into_iter().rev() {
             let mut spans = Vec::new();
+            let mut fills = Vec::new();
             let mut consumed = 0;
-            for source in self.spans.iter() {
+            for (source, fill) in self.spec().spans.iter().zip(self.fills.iter()) {
                 let count = end.saturating_sub(consumed).min(source.text.len());
                 if count > 0 {
                     let mut span = source.clone();
                     span.text = Arc::from(&source.text[..count]);
                     spans.push(span);
+                    fills.push(fill.clone());
                 }
                 consumed += source.text.len();
                 if consumed >= end {
@@ -64,17 +67,16 @@ impl Text {
                 last.text = Arc::from(format!("{}\u{2026}", last.text));
             } else {
                 let mut span = self
+                    .spec()
                     .spans
                     .first()
                     .cloned()
-                    .unwrap_or_else(|| TextSpan::new(""));
+                    .unwrap_or_else(|| SpanSpec::from(&TextSpan::new("")));
                 span.text = Arc::from("\u{2026}");
                 spans.push(span);
+                fills.push(self.fills.first().cloned().flatten());
             }
-            let mut candidate = self.clone();
-            candidate.spans = spans.into();
-            candidate.fonts = Some(fonts.clone());
-            candidate.invalidate_layout_cache();
+            let candidate = self.with_spans(spans, fills).fonts(fonts);
             let layout = candidate.layout(fonts)?;
             if fits(&layout) {
                 return Ok((candidate, true));
@@ -86,95 +88,16 @@ impl Text {
         ))
     }
 
-    /// Shapes once per text-style/font snapshot, returning actual line/ink metrics.
+    /// Shapes once per paragraph description and font snapshot, returning actual
+    /// line/ink metrics. Clones and equal descriptions share the result.
     pub fn layout(&self, fonts: &FontLibrary) -> Result<Arc<ParagraphLayout>, ValidationError> {
-        self.validate_layout()?;
-        if let Some(result) = self
-            .layout_cache
-            .lock()
-            .map_err(|_| invalid("cache", "Layout cache is poisoned"))?
-            .get(&fonts.snapshot_id())
-        {
-            return result.clone();
-        }
-        let key = self.layout_key();
-        let result = if let Some(layout) = fonts
-            .layout_cache
-            .lock()
-            .map_err(|_| invalid("cache", "Shared paragraph cache is poisoned"))?
-            .get(&key)
-            .cloned()
-        {
-            Ok(layout)
-        } else {
-            let result = self.shape(fonts).map(Arc::new);
-            if let Ok(layout) = &result {
-                let mut shared = fonts
-                    .layout_cache
-                    .lock()
-                    .map_err(|_| invalid("cache", "Shared paragraph cache is poisoned"))?;
-                if shared.len() >= 64 {
-                    shared.clear();
-                }
-                shared.insert(key, layout.clone());
-            }
-            result
-        };
-        let mut cache = self
-            .layout_cache
-            .lock()
-            .map_err(|_| invalid("cache", "Layout cache is poisoned"))?;
-        if cache.len() >= 8 {
-            cache.clear();
-        }
-        cache.insert(fonts.snapshot_id(), result.clone());
-        result
+        self.validate()?;
+        self.cache
+            .get_or_compile(fonts.snapshot_id(), |spec| shared_layout(spec, fonts))
     }
 
-    fn validate_layout(&self) -> Result<(), ValidationError> {
-        self.fill.validate()?;
-        if let Some((width, paint)) = &self.stroke {
-            if !width.is_finite() || *width < 0.0 {
-                return Err(invalid(
-                    "stroke",
-                    "Text stroke requires finite nonnegative width",
-                ));
-            }
-            paint.validate()?;
-        }
-        for span in self.spans.iter() {
-            if let Some(paint) = &span.fill {
-                paint.validate()?;
-            }
-        }
-        Ok(())
-    }
-
-    fn layout_key(&self) -> LayoutKey {
-        LayoutKey {
-            spans: self
-                .spans
-                .iter()
-                .map(|span| {
-                    (
-                        span.text.clone(),
-                        span.family.clone(),
-                        span.size.map(f64::to_bits),
-                        span.weight.map(|weight| weight.0),
-                        span.italic,
-                    )
-                })
-                .collect(),
-            family: self.family.clone(),
-            size: self.size.to_bits(),
-            weight: self.weight.0,
-            line_height: self.line_height.to_bits(),
-            spacing: self.spacing.to_bits(),
-            width: self.width.map(f64::to_bits),
-            alignment: self.alignment,
-        }
-    }
-
+    /// Layout using the bound fonts or the drawing environment's, through the
+    /// session cache when one is present.
     pub(super) fn resolve(
         &self,
         context: &DrawContext,
@@ -192,20 +115,20 @@ impl Text {
         let fonts = context
             .render_cache()
             .map_or_else(|| fonts.clone(), |cache| fonts.with_render_cache(cache));
-        self.validate_layout()?;
-        let key = self.layout_key();
-        let key_bytes = std::mem::size_of::<LayoutKey>()
-            + std::mem::size_of_val(key.spans.as_slice())
-            + key.family.len()
-            + key
+        self.validate()?;
+        let spec = self.spec();
+        let key_bytes = std::mem::size_of::<ParagraphSpec>()
+            + std::mem::size_of_val(spec.spans.as_slice())
+            + spec.family.len()
+            + spec
                 .spans
                 .iter()
-                .map(|span| span.0.len() + span.1.as_ref().map_or(0, |family| family.len()))
+                .map(|span| span.text.len() + span.family.as_ref().map_or(0, |family| family.len()))
                 .sum::<usize>();
         context
             .cache_layout(
-                (fonts.snapshot_id(), key),
-                || self.shape(&fonts).map(Arc::new),
+                (fonts.snapshot_id(), spec.clone()),
+                || spec.shape(&fonts).map(Arc::new),
                 |result| {
                     key_bytes.saturating_add(result.as_ref().map_or_else(
                         |error| error.message.len(),
@@ -223,14 +146,54 @@ impl Text {
             .clone()
     }
 
+    fn validate(&self) -> Result<(), ValidationError> {
+        self.fills.iter().flatten().try_for_each(Paint::validate)
+    }
+}
+
+/// Looks up or shapes a description in the layout cache shared by one font snapshot.
+fn shared_layout(
+    spec: &ParagraphSpec,
+    fonts: &FontLibrary,
+) -> Result<Arc<ParagraphLayout>, ValidationError> {
+    let poisoned = || invalid("cache", "Shared paragraph cache is poisoned");
+    if let Some(layout) = fonts
+        .layout_cache
+        .lock()
+        .map_err(|_| poisoned())?
+        .get(spec)
+        .cloned()
+    {
+        return Ok(layout);
+    }
+    let layout = Arc::new(spec.shape(fonts)?);
+    let mut shared = fonts.layout_cache.lock().map_err(|_| poisoned())?;
+    if shared.len() >= 64 {
+        shared.clear();
+    }
+    shared.insert(spec.clone(), layout.clone());
+    Ok(layout)
+}
+
+impl ParagraphSpec {
+    fn metrics(&self) -> (f64, f64, f64, Option<f64>) {
+        (
+            f64::from_bits(self.size),
+            f64::from_bits(self.line_height),
+            f64::from_bits(self.spacing),
+            self.width.map(f64::from_bits),
+        )
+    }
+
     fn paragraph_text(&self) -> Result<String, ValidationError> {
+        let (size, line_height, spacing, width) = self.metrics();
         if self.spans.len() > 256 {
             return Err(limited("Text exceeds 256 rich spans"));
         }
-        if !(1..=1000).contains(&self.weight.0)
+        if !(1..=1000).contains(&self.weight)
             || self.spans.iter().any(|span| {
                 span.weight
-                    .is_some_and(|weight| !(1..=1000).contains(&weight.0))
+                    .is_some_and(|weight| !(1..=1000).contains(&weight))
             })
         {
             return Err(invalid("weight", "Font weight must be in 1..=1000"));
@@ -257,17 +220,17 @@ impl Text {
         {
             return Err(limited("Paragraph exceeds its text/line allowance"));
         }
-        if !self.size.is_finite()
-            || self.size <= 0.0
-            || self.size > 4096.0
-            || self.size as f32 == 0.0
-            || !self.line_height.is_finite()
-            || !(0.1..=16.0).contains(&self.line_height)
-            || !self.spacing.is_finite()
-            || self.spacing.abs() > 4096.0
-            || !(self.spacing / self.size).is_finite()
-            || !((self.spacing / self.size) as f32).is_finite()
-            || self.width.is_some_and(|width| {
+        if !size.is_finite()
+            || size <= 0.0
+            || size > 4096.0
+            || size as f32 == 0.0
+            || !line_height.is_finite()
+            || !(0.1..=16.0).contains(&line_height)
+            || !spacing.is_finite()
+            || spacing.abs() > 4096.0
+            || !(spacing / size).is_finite()
+            || !((spacing / size) as f32).is_finite()
+            || width.is_some_and(|width| {
                 !width.is_finite() || width <= 0.0 || width > 1e7 || width as f32 == 0.0
             })
         {
@@ -276,20 +239,11 @@ impl Text {
                 "Invalid paragraph size, line-height, tracking or width",
             ));
         }
-        self.fill.validate()?;
-        if let Some((width, paint)) = &self.stroke {
-            if !width.is_finite() || *width < 0.0 {
-                return Err(invalid(
-                    "stroke",
-                    "Text stroke requires finite nonnegative width",
-                ));
-            }
-            paint.validate()?;
-        }
         Ok(text)
     }
 
     fn shape(&self, fonts: &FontLibrary) -> Result<ParagraphLayout, ValidationError> {
+        let (size, line_height, spacing, width) = self.metrics();
         let text = self.paragraph_text()?;
         let mut features = cosmic_text::FontFeatures::new();
         features
@@ -305,29 +259,26 @@ impl Text {
         }
         let defaults = cosmic_text::Attrs::new()
             .family(family(&self.family))
-            .weight(self.weight)
-            .letter_spacing((self.spacing / self.size) as f32)
+            .weight(cosmic_text::Weight(self.weight))
+            .letter_spacing((spacing / size) as f32)
             .font_features(features.clone());
         let mut styled = Vec::new();
         for (index, span) in self.spans.iter().enumerate() {
-            let size = span.size.unwrap_or(self.size);
+            let size = span.size.map_or(size, f64::from_bits);
             if !size.is_finite()
                 || size <= 0.0
                 || size > 4096.0
                 || size as f32 == 0.0
-                || !((self.spacing / size) as f32).is_finite()
-                || (size * self.line_height) as f32 == 0.0
+                || !((spacing / size) as f32).is_finite()
+                || (size * line_height) as f32 == 0.0
             {
                 return Err(invalid("span", "Invalid rich-span font size or tracking"));
-            }
-            if let Some(paint) = &span.fill {
-                paint.validate()?;
             }
             styled.push((
                 span.text.as_ref(),
                 cosmic_text::Attrs::new()
                     .family(family(span.family.as_deref().unwrap_or(&self.family)))
-                    .weight(span.weight.unwrap_or(self.weight))
+                    .weight(cosmic_text::Weight(span.weight.unwrap_or(self.weight)))
                     .style(if span.italic {
                         cosmic_text::Style::Italic
                     } else {
@@ -336,9 +287,9 @@ impl Text {
                     .metadata(index)
                     .metrics(cosmic_text::Metrics::new(
                         size as f32,
-                        (size * self.line_height) as f32,
+                        (size * line_height) as f32,
                     ))
-                    .letter_spacing((self.spacing / size) as f32)
+                    .letter_spacing((spacing / size) as f32)
                     .font_features(features.clone()),
             ));
         }
@@ -358,9 +309,9 @@ impl Text {
         let mut system = fonts.lock_font_system()?;
         let mut buffer = cosmic_text::Buffer::new(
             &mut system,
-            cosmic_text::Metrics::new(self.size as f32, (self.size * self.line_height) as f32),
+            cosmic_text::Metrics::new(size as f32, (size * line_height) as f32),
         );
-        buffer.set_size(self.width.map(|width| width as f32), None);
+        buffer.set_size(width.map(|width| width as f32), None);
         buffer.set_wrap(cosmic_text::Wrap::WordOrGlyph);
         let alignment = match self.alignment {
             TextAlignment::Start => None,
@@ -408,6 +359,7 @@ impl Text {
         let mut line_sources = Vec::new();
         let mut bounds = Rect::default();
         let mut baseline = 0.0;
+        let (_, _, _, width) = self.metrics();
         for run in buffer.layout_runs() {
             if lines.len() >= 4096 {
                 return Err(limited("Paragraph exceeds 4096 visual lines"));
@@ -418,7 +370,7 @@ impl Text {
             let line = Rect::new(
                 0.0,
                 f64::from(run.line_top),
-                self.width.unwrap_or(f64::from(run.line_w)),
+                width.unwrap_or(f64::from(run.line_w)),
                 f64::from(run.line_top + run.line_height),
             );
             bounds = bounds.union(line);

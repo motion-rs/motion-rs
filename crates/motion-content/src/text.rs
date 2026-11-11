@@ -40,11 +40,14 @@ use unicode_segmentation::UnicodeSegmentation;
 mod drawable;
 pub(crate) mod glyph;
 mod layout;
+mod paragraph;
 mod parts;
 #[cfg(test)]
 mod tests;
 
 pub use cosmic_text::Weight as FontWeight;
+pub use paragraph::ParagraphStyle;
+pub(crate) use paragraph::{ParagraphSpec, SharedLayouts, SpanSpec};
 pub use parts::{PartStyle, TextPart};
 
 /// Paragraph alignment, with start/end resolved by the paragraph direction.
@@ -177,47 +180,27 @@ impl ParagraphLayout {
     }
 }
 
-type LayoutCache = Arc<Mutex<BTreeMap<u64, Result<Arc<ParagraphLayout>, ValidationError>>>>;
-
-pub(crate) type SharedLayouts = Arc<Mutex<BTreeMap<LayoutKey, Arc<ParagraphLayout>>>>;
-
-type SpanLayoutKey = (Arc<str>, Option<Arc<str>>, Option<u64>, Option<u16>, bool);
-
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) struct LayoutKey {
-    spans: Vec<SpanLayoutKey>,
-    family: Arc<str>,
-    size: u64,
-    weight: u16,
-    line_height: u64,
-    spacing: u64,
-    width: Option<u64>,
-    alignment: TextAlignment,
-}
-
-/// multi-line Unicode text; cosmic-text is the sole paragraph shaper,
-/// while unhinted skrifa outlines enter the ordinary shared fill pipeline.
+/// Multi-line Unicode text: a [`ParagraphStyle`] shaped into a [`ParagraphLayout`],
+/// plus ink and one optional reveal effect. cosmic-text is the sole paragraph
+/// shaper, and unhinted skrifa outlines enter the ordinary shared fill pipeline.
+/// Static drawing, handwriting and part animation all read the same layout.
 #[derive(Clone, Debug)]
 pub struct Text {
-    spans: Arc<[TextSpan]>,
-    family: Arc<str>,
-    size: f64,
-    weight: FontWeight,
+    paragraph: ParagraphStyle,
     fill: Paint,
     stroke: Option<(f64, Paint)>,
-    line_height: f64,
-    spacing: f64,
-    width: Option<f64>,
-    alignment: TextAlignment,
-
-    write_progress: Option<f64>,
-    part_animation: Option<PartAnimation>,
+    reveal: Reveal,
     split: TextSplit,
     visible: Option<usize>,
+}
 
-    fonts: Option<FontLibrary>,
-
-    layout_cache: LayoutCache,
+/// The effect applied to the laid-out glyphs; the last one requested wins.
+#[derive(Clone, Debug, Default)]
+enum Reveal {
+    #[default]
+    None,
+    Write(f64),
+    Parts(PartAnimation),
 }
 
 #[derive(Clone)]
@@ -272,60 +255,46 @@ impl Text {
 
     /// Creates a paragraph with size 24, line height 1.3 and white fill.
     pub fn new(text: impl Into<Arc<str>>) -> Self {
-        Self::rich([TextSpan::new(text)])
+        Self::from_paragraph(ParagraphStyle::new(text))
     }
 
     /// Creates rich spans, whose unset styles inherit paragraph defaults.
     pub fn rich(spans: impl IntoIterator<Item = TextSpan>) -> Self {
+        Self::from_paragraph(ParagraphStyle::rich(spans))
+    }
+
+    /// Wraps a paragraph description with white fill and no effect.
+    pub fn from_paragraph(paragraph: ParagraphStyle) -> Self {
         Self {
-            write_progress: None,
-            part_animation: None,
-            spans: spans.into_iter().take(257).collect::<Vec<_>>().into(),
-            family: "".into(),
-            size: 24.0,
-            weight: FontWeight::NORMAL,
+            paragraph,
             fill: Color::WHITE.into(),
             stroke: None,
-            line_height: 1.3,
-            spacing: 0.0,
-            width: None,
-            alignment: TextAlignment::Start,
-            fonts: None,
+            reveal: Reveal::None,
             split: TextSplit::Characters,
             visible: None,
-            layout_cache: Arc::new(Mutex::new(BTreeMap::new())),
         }
     }
 
-    fn invalidate_layout_cache(&mut self) {
-        self.layout_cache = Arc::new(Mutex::new(BTreeMap::new()));
+    /// The paragraph description this text shapes.
+    pub fn paragraph(&self) -> &ParagraphStyle {
+        &self.paragraph
     }
 
     /// Selects an explicit family; empty uses the library's generic default.
     pub fn family(mut self, family: impl Into<Arc<str>>) -> Self {
-        let family = family.into();
-        if self.family != family {
-            self.family = family;
-            self.invalidate_layout_cache();
-        }
+        self.paragraph = self.paragraph.family(family);
         self
     }
 
     /// Sets finite logical size in (0,4096].
     pub fn size(mut self, size: f64) -> Self {
-        if self.size.to_bits() != size.to_bits() {
-            self.size = size;
-            self.invalidate_layout_cache();
-        }
+        self.paragraph = self.paragraph.size(size);
         self
     }
 
     /// Selects OpenType weight; variable weight participates in glyph identity.
     pub fn weight(mut self, weight: FontWeight) -> Self {
-        if self.weight != weight {
-            self.weight = weight;
-            self.invalidate_layout_cache();
-        }
+        self.paragraph = self.paragraph.weight(weight);
         self
     }
 
@@ -343,43 +312,31 @@ impl Text {
 
     /// Sets a positive relative line-height multiplier.
     pub fn line_height(mut self, height: f64) -> Self {
-        if self.line_height.to_bits() != height.to_bits() {
-            self.line_height = height;
-            self.invalidate_layout_cache();
-        }
+        self.paragraph = self.paragraph.line_height(height);
         self
     }
 
     /// Sets logical tracking, converted to em internally for shaping.
     pub fn letter_spacing(mut self, spacing: f64) -> Self {
-        if self.spacing.to_bits() != spacing.to_bits() {
-            self.spacing = spacing;
-            self.invalidate_layout_cache();
-        }
+        self.paragraph = self.paragraph.letter_spacing(spacing);
         self
     }
 
     /// Wraps to finite positive logical width.
     pub fn max_width(mut self, width: f64) -> Self {
-        if self.width.map(f64::to_bits) != Some(width.to_bits()) {
-            self.width = Some(width);
-            self.invalidate_layout_cache();
-        }
+        self.paragraph = self.paragraph.max_width(width);
         self
     }
 
     /// Selects bidirectional-aware paragraph alignment.
     pub fn alignment(mut self, alignment: TextAlignment) -> Self {
-        if self.alignment != alignment {
-            self.alignment = alignment;
-            self.invalidate_layout_cache();
-        }
+        self.paragraph = self.paragraph.alignment(alignment);
         self
     }
 
     /// Binds an explicit font snapshot, overriding a DrawContext environment.
     pub fn fonts(mut self, fonts: &FontLibrary) -> Self {
-        self.fonts = Some(fonts.clone());
+        self.paragraph = self.paragraph.fonts(fonts);
         self
     }
 
@@ -396,22 +353,70 @@ impl Text {
     }
 
     /// Defers vector handwriting to compilation with the current font environment.
+    /// It replaces any earlier part animation.
     pub fn write(mut self, progress: f64) -> Self {
-        self.write_progress = Some(progress);
+        self.reveal = Reveal::Write(progress);
         self
     }
 
     /// Defers per-part style evaluation to scene-local drawing time.
+    /// It replaces any earlier handwriting.
     pub fn animate_parts(
         mut self,
         delay: motion_core::Duration,
         style: impl Fn(&TextPart) -> PartStyle + Send + Sync + 'static,
     ) -> Self {
-        self.part_animation = Some(PartAnimation {
+        self.reveal = Reveal::Parts(PartAnimation {
             delay,
             style: Arc::new(style),
         });
         self
+    }
+
+    /// Precomputes a paragraph limited to 1..=512 lines; see
+    /// [`ParagraphStyle::fit_lines`]. Ink and effects are retained.
+    pub fn fit_lines(
+        &self,
+        max_lines: usize,
+        fonts: &FontLibrary,
+    ) -> Result<(Self, bool), ValidationError> {
+        self.validate_ink()?;
+        let (paragraph, truncated) = self.paragraph.fit_lines(max_lines, fonts)?;
+        Ok((
+            Self {
+                paragraph,
+                ..self.clone()
+            },
+            truncated,
+        ))
+    }
+
+    /// Shapes once per text-style/font snapshot, returning actual line/ink metrics.
+    pub fn layout(&self, fonts: &FontLibrary) -> Result<Arc<ParagraphLayout>, ValidationError> {
+        self.validate_ink()?;
+        self.paragraph.layout(fonts)
+    }
+
+    pub(super) fn resolve(
+        &self,
+        context: &DrawContext,
+    ) -> Result<Arc<ParagraphLayout>, ValidationError> {
+        self.validate_ink()?;
+        self.paragraph.resolve(context)
+    }
+
+    fn validate_ink(&self) -> Result<(), ValidationError> {
+        self.fill.validate()?;
+        if let Some((width, paint)) = &self.stroke {
+            if !width.is_finite() || *width < 0.0 {
+                return Err(invalid(
+                    "stroke",
+                    "Text stroke requires finite nonnegative width",
+                ));
+            }
+            paint.validate()?;
+        }
+        Ok(())
     }
 
     /// Applies the common vector handwriting effect with default contour/fill
@@ -421,8 +426,7 @@ impl Text {
         progress: f64,
         context: &DrawContext,
     ) -> Result<Node, ValidationError> {
-        self.vector_tree(context)?
-            .write(progress, crate::vector::WriteOptions::default())
+        self.vector_tree(context)?.reveal(&[], Some(progress))
     }
 
     /// Exports original shared glyph curves, color layers, bitmap strikes and
@@ -431,20 +435,20 @@ impl Text {
         &self,
         context: &DrawContext,
     ) -> Result<Arc<crate::vector::VectorTree>, ValidationError> {
-        use crate::vector::{VectorGroup, VectorImage, VectorItem, VectorPath, VectorTree};
         let layout = self.resolve(context)?;
-        let parts = layout.parts(self.split);
+        self.vector_tree_of(&layout)
+    }
+
+    /// Exports the glyphs of an already shaped layout, honoring visibility,
+    /// fills and stroke of this text.
+    pub fn vector_tree_of(
+        &self,
+        layout: &ParagraphLayout,
+    ) -> Result<Arc<crate::vector::VectorTree>, ValidationError> {
+        use crate::vector::{VectorGroup, VectorImage, VectorItem, VectorPath, VectorTree};
         let mut children = Vec::new();
-        for (index, glyph) in layout.glyphs.iter().enumerate() {
-            let owner = parts.iter().position(|part| part.owns(glyph)).unwrap_or(0);
-            if self.visible.is_some_and(|visible| owner >= visible) {
-                continue;
-            }
-            let fill = self.spans[glyph.span]
-                .fill
-                .as_ref()
-                .unwrap_or(&self.fill)
-                .clone();
+        for (index, glyph) in self.visible_glyphs(layout) {
+            let fill = self.glyph_fill(glyph);
             let mut ink = Vec::new();
             if !glyph.artwork.path.verbs().is_empty() {
                 ink.push(VectorItem::Path(VectorPath {
@@ -519,7 +523,7 @@ impl Text {
         }
         Ok(Arc::new(
             VectorTree::new(
-                self.local_bounds(context)?,
+                self.ink_bounds(layout),
                 VectorGroup {
                     children,
                     ..Default::default()

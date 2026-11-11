@@ -41,6 +41,7 @@ use motion_core::{
 };
 use std::{collections::BTreeMap, ops::Range, sync::Arc};
 
+mod deferred;
 mod effects;
 #[cfg(feature = "ink")]
 pub mod ink;
@@ -49,6 +50,7 @@ mod surface;
 #[cfg(test)]
 mod tests;
 
+pub use deferred::{CompileCache, VectorSelection};
 pub use effects::WriteOptions;
 pub use morph::Morph;
 pub use surface::{SurfaceTriangle, VectorSurface};

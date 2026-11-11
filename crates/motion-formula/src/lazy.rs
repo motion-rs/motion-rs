@@ -1,9 +1,9 @@
 //! Deferred mathematical content using the shared frozen formula compiler.
 
 use crate::{FormulaAsset, FormulaCompileError, FormulaCompiler, FormulaOptions};
+use motion_content::{CompileCache, VectorSelection};
 use motion_core::{Color, DeferredContent, DrawContext, Node, ValidationError};
 use std::{
-    collections::BTreeSet,
     ops::Range,
     sync::{Arc, OnceLock},
 };
@@ -14,48 +14,26 @@ enum Selection {
     Symbols(Range<usize>, Arc<dyn Fn(Node) -> Node + Send + Sync>),
 }
 
-/// An immutable compile key with the lazily filled result it determines.
-///
-/// A different key always gets a new, empty result cell, so changing a compile
-/// parameter can never expose a stale compilation.
-#[derive(Clone)]
-struct Compilation {
+/// Everything that determines a formula compilation.
+#[derive(Clone, Debug, PartialEq)]
+struct CompileKey {
     source: Arc<str>,
     options: FormulaOptions,
-    result: Arc<OnceLock<Result<Arc<FormulaAsset>, FormulaCompileError>>>,
 }
 
-impl Compilation {
-    fn new(source: Arc<str>, options: FormulaOptions) -> Self {
-        Self {
-            source,
-            options,
-            result: Arc::new(OnceLock::new()),
-        }
-    }
+type Compilation = CompileCache<CompileKey, Result<Arc<FormulaAsset>, FormulaCompileError>>;
 
-    fn with_options(&self, change: impl FnOnce(&mut FormulaOptions)) -> Self {
-        let mut options = self.options.clone();
-        change(&mut options);
-        Self::new(self.source.clone(), options)
-    }
-
-    fn compiled(&self) -> Result<Arc<FormulaAsset>, FormulaCompileError> {
-        self.result
-            .get_or_init(|| {
-                static COMPILER: OnceLock<FormulaCompiler> = OnceLock::new();
-                COMPILER
-                    .get_or_init(FormulaCompiler::new)
-                    .compile(self.source.clone(), &self.options)
-                    .map_err(|error| {
-                        error
-                            .downcast_ref::<FormulaCompileError>()
-                            .cloned()
-                            .unwrap_or_else(|| FormulaCompileError::new(error.to_string()))
-                    })
-            })
-            .clone()
-    }
+fn compile_key(key: &CompileKey) -> Result<Arc<FormulaAsset>, FormulaCompileError> {
+    static COMPILER: OnceLock<FormulaCompiler> = OnceLock::new();
+    COMPILER
+        .get_or_init(FormulaCompiler::new)
+        .compile(key.source.clone(), &key.options)
+        .map_err(|error| {
+            error
+                .downcast_ref::<FormulaCompileError>()
+                .cloned()
+                .unwrap_or_else(|| FormulaCompileError::new(error.to_string()))
+        })
 }
 
 /// Lazy Typst formula; compilation and selection errors occur at scene compilation.
@@ -70,8 +48,8 @@ impl std::fmt::Debug for Formula {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
             .debug_struct("Formula")
-            .field("source", &self.compilation.source)
-            .field("options", &self.compilation.options)
+            .field("source", &self.compilation.key().source)
+            .field("options", &self.compilation.key().options)
             .field("progress", &self.progress)
             .field("selections", &self.selections.len())
             .finish()
@@ -86,7 +64,10 @@ impl Formula {
     /// Retains Typst math without initializing the compiler or reading fonts.
     pub fn typst(source: impl Into<Arc<str>>) -> Self {
         Self {
-            compilation: Compilation::new(source.into(), FormulaOptions::default()),
+            compilation: Compilation::new(CompileKey {
+                source: source.into(),
+                options: FormulaOptions::default(),
+            }),
             progress: None,
             selections: Vec::new(),
         }
@@ -94,13 +75,13 @@ impl Formula {
 
     /// Sets logical Typst point size, validated when compiled.
     pub fn size(mut self, size: f64) -> Self {
-        self.compilation = self.compilation.with_options(|options| options.size = size);
+        self.compilation = self.compilation.map_key(|key| key.options.size = size);
         self
     }
 
     /// Sets the default source fill, preserving selected authored transforms.
     pub fn fill(mut self, fill: Color) -> Self {
-        self.compilation = self.compilation.with_options(|options| options.fill = fill);
+        self.compilation = self.compilation.map_key(|key| key.options.fill = fill);
         self
     }
 
@@ -138,7 +119,7 @@ impl Formula {
     }
 
     fn compiled(&self) -> Result<Arc<FormulaAsset>, FormulaCompileError> {
-        self.compilation.compiled()
+        self.compilation.get_or_compile(0, compile_key)
     }
 
     fn node(&self, context: &DrawContext) -> Result<Node, ValidationError> {
@@ -150,8 +131,8 @@ impl Formula {
             COMPILER
                 .get_or_init(FormulaCompiler::new)
                 .compile_cached(
-                    self.compilation.source.clone(),
-                    &self.compilation.options,
+                    self.compilation.key().source.clone(),
+                    &self.compilation.key().options,
                     Some(cache.partition(motion_core::CachePartition::Formula)),
                 )
                 .map_err(|error| invalid(error.to_string()))?
@@ -161,14 +142,14 @@ impl Formula {
         };
         let mut selections = Vec::new();
         for selected in &self.selections {
-            let (selection, map) = match selected {
-                Selection::Source(source, map) => (
+            let (selection, modify) = match selected {
+                Selection::Source(source, modify) => (
                     compiled
                         .select_subexpression(source)
                         .map_err(|error| invalid(error.to_string()))?,
-                    map,
+                    modify,
                 ),
-                Selection::Symbols(range, map) => {
+                Selection::Symbols(range, modify) => {
                     if range.start >= range.end || range.end > compiled.symbols().len() {
                         return Err(invalid("Formula symbol range is out of bounds"));
                     }
@@ -176,29 +157,13 @@ impl Formula {
                         compiled
                             .selection(range.clone().collect())
                             .map_err(|error| invalid(error.to_string()))?,
-                        map,
+                        modify,
                     )
                 }
             };
-            selections.push((
-                selection.addresses().into_iter().collect::<BTreeSet<_>>(),
-                map,
-            ));
+            selections.push(VectorSelection::shared(selection.addresses(), modify));
         }
-        let map = |address: &[usize], mut node: Node| {
-            for (selected, map) in &selections {
-                if selected.contains(address) {
-                    node = map(node);
-                }
-            }
-            node
-        };
-        let tree = compiled.vector_tree();
-        if let Some(progress) = self.progress {
-            tree.write_mapped(progress, motion_content::WriteOptions::default(), &map)
-        } else {
-            Ok(tree.node_mapped(&map))
-        }
+        compiled.vector_tree().reveal(&selections, self.progress)
     }
 }
 
@@ -230,7 +195,7 @@ mod tests {
             .fill(Color::WHITE)
             .write(0.5)
             .select_subexpression("x", |node| node.opacity(0.5));
-        assert!(formula.compilation.result.get().is_none());
+        assert!(!formula.compilation.is_compiled());
         let first = formula.compile().unwrap();
         assert!(Arc::ptr_eq(&first, &formula.compile().unwrap()));
         let list = Node::from(formula)
@@ -243,7 +208,7 @@ mod tests {
             .unwrap();
         assert!(!list.commands.is_empty());
         let invalid = Formula::typst("");
-        assert!(invalid.compilation.result.get().is_none());
+        assert!(!invalid.compilation.is_compiled());
         let error = Node::from(invalid)
             .named("bad-equation")
             .compile(

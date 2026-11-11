@@ -3,26 +3,60 @@
 use super::*;
 
 impl Text {
-    pub(super) fn glyph_node(&self, glyph: &TextGlyph) -> Node {
-        let paint = self.spans[glyph.span]
-            .fill
-            .as_ref()
+    pub(super) fn glyph_fill(&self, glyph: &TextGlyph) -> Paint {
+        self.paragraph
+            .fills
+            .get(glyph.span)
+            .and_then(Option::as_ref)
             .unwrap_or(&self.fill)
-            .clone();
-        let mut node = Node::from(GlyphDrawable {
+            .clone()
+    }
+
+    /// Glyphs whose owning part is within the visible count, with source indices.
+    pub(super) fn visible_glyphs<'a>(
+        &self,
+        layout: &'a ParagraphLayout,
+    ) -> Vec<(usize, &'a TextGlyph)> {
+        let parts = layout.parts(self.split);
+        layout
+            .glyphs
+            .iter()
+            .enumerate()
+            .filter(|(_, glyph)| {
+                let owner = parts.iter().position(|part| part.owns(glyph)).unwrap_or(0);
+                self.visible.is_none_or(|visible| owner < visible)
+            })
+            .collect()
+    }
+
+    pub(super) fn ink_bounds(&self, layout: &ParagraphLayout) -> Rect {
+        let margin = self.stroke.as_ref().map_or(0.0, |(width, _)| width * 2.0);
+        Rect::new(
+            layout.bounds.left - margin,
+            layout.bounds.top - margin,
+            layout.bounds.right + margin,
+            layout.bounds.bottom + margin,
+        )
+    }
+
+    fn glyph_drawable(&self, glyph: &TextGlyph) -> GlyphDrawable {
+        GlyphDrawable {
             artwork: glyph.artwork.clone(),
             transform: glyph.transform,
             bounds: glyph.bounds,
-            fill: paint,
+            fill: self.glyph_fill(glyph),
             stroke: self.stroke.clone(),
-        });
+        }
+    }
+
+    pub(super) fn glyph_node(&self, glyph: &TextGlyph) -> Node {
         if glyph.artwork.path.verbs().is_empty()
             && glyph.artwork.layers.is_empty()
             && glyph.artwork.bitmap.is_none()
         {
-            node = Node::empty();
+            return Node::empty();
         }
-        node
+        Node::from(self.glyph_drawable(glyph))
     }
 }
 
@@ -103,44 +137,25 @@ impl Drawable for GlyphDrawable {
 }
 
 impl Text {
-    /// Local ink bounds of the resolved text, including animation effects.
-    pub(crate) fn local_bounds(&self, context: &DrawContext) -> Result<Rect, ValidationError> {
-        if self.is_deferred() {
-            return DeferredContent::resolve(self, context)?
-                .measure_with(context, motion_core::ValidationLimits::default());
-        }
-        TextRun(self.clone()).bounds(context)
-    }
-
     pub(crate) fn is_deferred(&self) -> bool {
-        self.write_progress.is_some() || self.part_animation.is_some()
+        !matches!(self.reveal, Reveal::None)
     }
 }
 
 impl DeferredContent for Text {
     fn resolve(&self, context: &DrawContext) -> Result<Node, ValidationError> {
-        if !self.is_deferred() {
-            return Ok(Node::from(TextRun(self.clone())));
-        }
-        let mut base = self.clone();
-        base.write_progress = None;
-        base.part_animation = None;
-        if let Some(animation) = &self.part_animation {
-            if self.write_progress.is_some() {
-                return Err(invalid(
-                    "effects",
-                    "Use separate Text nodes for simultaneous handwriting and part transforms",
-                ));
+        match &self.reveal {
+            Reveal::None => Ok(Node::from(TextRun(self.clone()))),
+            Reveal::Write(progress) => {
+                if !progress.is_finite() {
+                    return Err(invalid("progress", "Text write progress must be finite"));
+                }
+                self.write_with_context(*progress, context)
             }
-            return base.animate_parts_resolved(context, animation.delay, animation.style.as_ref());
+            Reveal::Parts(animation) => {
+                self.animate_parts_resolved(context, animation.delay, animation.style.as_ref())
+            }
         }
-        let Some(progress) = self.write_progress else {
-            return Ok(Node::from(TextRun(base)));
-        };
-        if !progress.is_finite() {
-            return Err(invalid("progress", "Text write progress must be finite"));
-        }
-        base.write_with_context(progress, context)
     }
 
     fn baseline(&self, context: &DrawContext) -> Option<f64> {
@@ -164,13 +179,7 @@ struct TextRun(Text);
 impl Drawable for TextRun {
     fn bounds(&self, context: &DrawContext) -> Result<Rect, ValidationError> {
         let layout = self.0.resolve(context)?;
-        let margin = self.0.stroke.as_ref().map_or(0.0, |(width, _)| width * 2.0);
-        Ok(Rect::new(
-            layout.bounds.left - margin,
-            layout.bounds.top - margin,
-            layout.bounds.right + margin,
-            layout.bounds.bottom + margin,
-        ))
+        Ok(self.0.ink_bounds(&layout))
     }
 
     fn baseline(&self, context: &DrawContext) -> Option<f64> {
@@ -179,24 +188,8 @@ impl Drawable for TextRun {
 
     fn draw(&self, context: &DrawContext, canvas: &mut Canvas<'_>) -> Result<(), ValidationError> {
         let layout = self.0.resolve(context)?;
-        let parts = layout.parts(self.0.split);
-        for glyph in layout.glyphs.iter() {
-            let owner = parts.iter().position(|part| part.owns(glyph)).unwrap_or(0);
-            if self.0.visible.is_some_and(|visible| owner >= visible) {
-                continue;
-            }
-            GlyphDrawable {
-                artwork: glyph.artwork.clone(),
-                transform: glyph.transform,
-                bounds: glyph.bounds,
-                fill: self.0.spans[glyph.span]
-                    .fill
-                    .as_ref()
-                    .unwrap_or(&self.0.fill)
-                    .clone(),
-                stroke: self.0.stroke.clone(),
-            }
-            .draw(context, canvas)?;
+        for (_, glyph) in self.0.visible_glyphs(&layout) {
+            self.0.glyph_drawable(glyph).draw(context, canvas)?;
         }
         Ok(())
     }

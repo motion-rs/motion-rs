@@ -134,7 +134,7 @@ impl Input {
 }
 
 /// Compiler options; math input is Typst syntax without surrounding dollar signs.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct FormulaOptions {
     /// Em size in Typst points; output coordinates use 96 pixels/inch.
     pub size: f64,

@@ -90,7 +90,7 @@ Static SVG content is supported. Read diagnostics or errors for unsupported feat
 
 `Text` and `TextSpan` support families, weights, sizes, line height, letter spacing, width, alignment, rich text and outlines. Layout includes bidi, fallback and graphemes; UTF-8 bytes or individual code points cannot predict a character's width.
 
-`ParagraphLayout` provides actual glyphs, baselines, lines and source information. Use these layout results for fixed-width or multiline content, not `character_count * font_size`.
+`ParagraphStyle` holds the paragraph description (text, style, width, alignment, fonts); `Text::paragraph` exposes it and `Text::from_paragraph` wraps one. Its `layout` produces a `ParagraphLayout` with actual glyphs, baselines, lines and source information, which every output path (static drawing, `write`, `animate_parts`, captions) reuses. Use these layout results for fixed-width or multiline content, not `character_count * font_size`.
 
 `Text::write` and `animate_parts` can remain deferred effects using the inherited scene-local clock. Use explicit eager or context interfaces to inspect layout or prepare truncated content in advance. `fit_lines` is a precomputation, not work to repeat every frame.
 
@@ -98,8 +98,9 @@ Layout can be reused when fonts, content and layout parameters are unchanged. Co
 
 Text parts retain grapheme and source boundaries, visibility and baseline layout.
 Compose decorations such as underlines from measured text and ordinary geometry,
-not a second text renderer. Simultaneous handwriting and part transforms can require
-separate Text nodes; unsupported combinations retain diagnostics.
+not a second text renderer. A Text carries one reveal effect: calling `write` after
+`animate_parts` (or the reverse) replaces the earlier one, so use separate Text nodes
+for handwriting and part transforms together.
 
 ## Ink, Diagram and Captions
 

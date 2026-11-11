@@ -45,12 +45,12 @@ pub use particles::{
 pub use svg::{Svg, SvgAsset, SvgDiagnostic};
 #[cfg(feature = "text")]
 pub use text::{
-    FontWeight, ParagraphLayout, PartStyle, Text, TextAlignment, TextGlyph, TextPart, TextSpan,
-    TextSplit,
+    FontWeight, ParagraphLayout, ParagraphStyle, PartStyle, Text, TextAlignment, TextGlyph,
+    TextPart, TextSpan, TextSplit,
 };
 pub use vector::{
-    Morph, SurfaceTriangle, VectorGroup, VectorImage, VectorItem, VectorLeaf, VectorMask,
-    VectorPath, VectorSurface, VectorTree, WriteOptions,
+    CompileCache, Morph, SurfaceTriangle, VectorGroup, VectorImage, VectorItem, VectorLeaf,
+    VectorMask, VectorPath, VectorSelection, VectorSurface, VectorTree, WriteOptions,
 };
 
 /// Content authoring and core contracts without a renderer dependency.
@@ -63,8 +63,8 @@ pub mod prelude {
     };
     #[cfg(feature = "text")]
     pub use crate::{
-        FontFace, FontIdentifier, FontLibrary, FontWeight, ParagraphLayout, PartStyle, Text,
-        TextAlignment, TextGlyph, TextPart, TextSpan, TextSplit,
+        FontFace, FontIdentifier, FontLibrary, FontWeight, ParagraphLayout, ParagraphStyle,
+        PartStyle, Text, TextAlignment, TextGlyph, TextPart, TextSpan, TextSplit,
     };
     #[cfg(test)]
     pub use motion_render::{Composition, RenderOptions, RenderPrepare, Renderer, render_still};

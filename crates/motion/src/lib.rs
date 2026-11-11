@@ -239,8 +239,8 @@ pub use motion_content::{AnimatedImage, ImageLoopMode};
 pub use motion_content::{AssetsExt, Fit, Image, ImageAsset};
 #[cfg(feature = "text")]
 pub use motion_content::{
-    FontFace, FontLibrary, FontWeight, PartStyle, Text, TextAlignment, TextPart, TextSpan,
-    TextSplit,
+    FontFace, FontLibrary, FontWeight, ParagraphStyle, PartStyle, Text, TextAlignment, TextPart,
+    TextSpan, TextSplit,
 };
 #[cfg(feature = "svg")]
 pub use motion_content::{Svg, svg};
@@ -323,7 +323,9 @@ pub mod render {
 /// Immediately evaluated content operations for explicit preparation boundaries.
 pub mod eager {
     #[cfg(feature = "vector")]
-    pub use motion_content::{Morph, VectorTree, WriteOptions};
+    pub use motion_content::{CompileCache, Morph, VectorSelection, VectorTree, WriteOptions};
+    #[cfg(feature = "text")]
+    pub use motion_content::{ParagraphLayout, TextGlyph};
     pub use motion_core::MorphPath;
     #[cfg(feature = "formula")]
     pub use motion_formula::{FormulaAsset, FormulaCompiler, FormulaSelection};
@@ -365,8 +367,8 @@ pub mod prelude {
     pub use motion_content::{AssetsExt, Fit, Image, ImageAsset};
     #[cfg(feature = "text")]
     pub use motion_content::{
-        FontFace, FontLibrary, FontWeight, PartStyle, Text, TextAlignment, TextPart, TextSpan,
-        TextSplit,
+        FontFace, FontLibrary, FontWeight, ParagraphStyle, PartStyle, Text, TextAlignment,
+        TextPart, TextSpan, TextSplit,
     };
     pub use motion_core::Transition as _;
     pub use motion_encode::{Codec, EncoderPreset, ExportOptions};

@@ -17,6 +17,7 @@ impl Text {
             return Err(invalid("delay", "Text part delay must be nonnegative"));
         }
         let fonts = self
+            .paragraph
             .fonts
             .as_ref()
             .or_else(|| {

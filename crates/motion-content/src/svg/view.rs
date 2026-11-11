@@ -122,28 +122,14 @@ impl Svg {
                 return Err(unsupported(format!("SVG selection ID not found: {id}")));
             }
         }
-        let mut selected = std::collections::BTreeMap::<Vec<usize>, Vec<&Selection>>::new();
-        for (id, callback) in &self.selections {
-            selected
-                .entry(asset.tree.ids()[id.as_ref()].clone())
-                .or_default()
-                .push(callback);
-        }
-        let map = |address: &[usize], mut node: Node| {
-            if let Some(callbacks) = selected.get(address) {
-                for callback in callbacks {
-                    node = callback(node);
-                }
-            }
-            node
-        };
-        let mut node = if let Some(progress) = self.progress {
-            asset
-                .tree
-                .write_mapped(progress, crate::WriteOptions::default(), &map)?
-        } else {
-            asset.tree.node_mapped(&map)
-        };
+        let selections = self
+            .selections
+            .iter()
+            .map(|(id, modify)| {
+                VectorSelection::shared([asset.tree.ids()[id.as_ref()].clone()], modify)
+            })
+            .collect::<Vec<_>>();
+        let mut node = asset.tree.reveal(&selections, self.progress)?;
         let scale = (size.width / asset.size().width).min(size.height / asset.size().height);
         let transform = Transform::scale(scale).then(Transform::translate(
             (size.width - asset.size().width * scale) * 0.5,

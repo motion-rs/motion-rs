@@ -108,7 +108,7 @@ fn text_tree_preserves_actual_rich_paragraph_pixels_bounds_and_reading_order()
     let tree = text.vector_tree(&context)?;
     assert_eq!(
         tree.node().measure(ValidationLimits::default())?,
-        text.local_bounds(&context)?
+        tree.view_box()
     );
     let render = |node: Node| -> motion_core::Result<motion_render::FrameBuffer> {
         let frame = node
@@ -264,5 +264,63 @@ fn vector_effects_match_cpu_with_clips_images_morphs_and_surface_points() -> mot
         }
     }
     assert_eq!(cases, 24);
+    Ok(())
+}
+
+#[test]
+fn compile_cache_is_created_from_keys_and_compiles_each_variant_once() {
+    let cache = CompileCache::<u32, u32>::new(3);
+    let calls = std::cell::Cell::new(0);
+    let compile = |key: &u32| {
+        calls.set(calls.get() + 1);
+        key * 2
+    };
+    assert!(!cache.is_compiled());
+    assert_eq!(cache.get_or_compile(0, compile), 6);
+    assert_eq!(cache.clone().get_or_compile(0, compile), 6);
+    assert_eq!(calls.get(), 1);
+    assert_eq!(cache.get_or_compile(1, compile), 6);
+    assert_eq!(calls.get(), 2);
+
+    let same = cache.map_key(|key| *key = 3);
+    assert!(cache.shares(&same));
+    let changed = cache.map_key(|key| *key = 4);
+    assert!(!cache.shares(&changed));
+    assert!(!changed.is_compiled());
+    assert_eq!(changed.get_or_compile(0, compile), 8);
+    assert_eq!(cache.get_or_compile(0, compile), 6);
+}
+
+#[test]
+fn reveal_applies_selections_in_order_then_optionally_writes() -> motion_core::Result {
+    let rect = Rect::new(0.0, 0.0, 4.0, 4.0);
+    let tree = VectorTree::new(
+        rect,
+        VectorGroup {
+            children: vec![tile("a", rect, Color::WHITE), tile("b", rect, Color::BLACK)],
+            ..Default::default()
+        },
+    )?;
+    let address = tree.ids()["a"].clone();
+    let selections = [
+        VectorSelection::new([address.clone()], |node| node.opacity(0.5)),
+        VectorSelection::new([address], |node| node.opacity(0.5)),
+    ];
+    let plain = tree.reveal(&[], None)?;
+    let revealed = tree.reveal(&selections, None)?;
+    assert_ne!(
+        plain.compile(
+            Size::new(4.0, 4.0),
+            PixelSize::new(4, 4),
+            ValidationLimits::default()
+        )?,
+        revealed.compile(
+            Size::new(4.0, 4.0),
+            PixelSize::new(4, 4),
+            ValidationLimits::default()
+        )?
+    );
+    assert!(tree.reveal(&selections, Some(f64::NAN)).is_err());
+    assert!(tree.reveal(&selections, Some(0.5)).is_ok());
     Ok(())
 }

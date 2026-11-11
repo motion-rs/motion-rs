@@ -113,10 +113,10 @@ fn static_text_repeated_configuration_keeps_layout_and_validates_paint() -> moti
         .max_width(240.0)
         .alignment(TextAlignment::Start)
         .fill(Color::BLACK);
-    assert!(Arc::ptr_eq(&text.layout_cache, &same.layout_cache));
+    assert!(text.paragraph.cache.shares(&same.paragraph.cache));
     assert!(Arc::ptr_eq(&first, &same.layout(&fonts)?));
     let changed = text.clone().size(33.0);
-    assert!(!Arc::ptr_eq(&text.layout_cache, &changed.layout_cache));
+    assert!(!text.paragraph.cache.shares(&changed.paragraph.cache));
     assert!(!Arc::ptr_eq(&first, &changed.layout(&fonts)?));
     let invalid = motion_core::LinearGradient::new(Point::ORIGIN, Point::new(1.0, 0.0))
         .stop(f64::NAN, Color::WHITE)
