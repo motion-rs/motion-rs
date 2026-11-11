@@ -295,15 +295,8 @@ fn svg_effects_operations_and_focal_paints_match_cpu_gpu() -> motion_core::Resul
                     .prepare(motion_core::ValidationLimits::default(), limits)?
                     .blend_space(space);
                 let cpu = prepared.render_linear(limits)?;
-                let actual = gpu
-                    .render_linear(&prepared, motion_render::gpu::Plan::new(&prepared, limits)?)?;
-                assert_eq!(
-                    actual,
-                    gpu.render_linear(
-                        &prepared,
-                        motion_render::gpu::Plan::new(&prepared, limits)?
-                    )?
-                );
+                let actual = gpu.render_linear(&prepared, limits)?;
+                assert_eq!(actual, gpu.render_linear(&prepared, limits)?);
                 let cpu = cpu.to_format(
                     motion_render::PixelFormat::SrgbRgba8 {
                         premultiplied: false,

@@ -1,6 +1,7 @@
 use super::*;
+use crate::prepared::PreparedItem;
 use crate::raster::prepare::RenderPrepare;
-use crate::{PreparedFrame, PreparedItem, RasterLimits};
+use crate::{PreparedFrame, RasterLimits};
 use motion_core::Shape;
 use motion_core::{
     BlendMode, Canvas, Color, DisplayList, DrawCommand, DrawContext, Drawable, MaskMode, Node,
@@ -89,9 +90,9 @@ fn node_content_mask_scales_overlapping_children_once_and_preserves_mode() {
         let prepared = list
             .prepare(ValidationLimits::default(), RasterLimits::default())
             .unwrap();
-        assert_eq!(prepared.items().len(), list.commands.len());
+        assert_eq!(prepared.items.len(), list.commands.len());
         assert!(
-            prepared.items().iter().any(
+            prepared.items.iter().any(
                 |item| matches!(item, PreparedItem::BeginMask { mode: found } if *found == mode)
             )
         );
@@ -191,7 +192,7 @@ fn inverted_masks_preserve_only_source_in_empty_and_unpainted_regions() {
                     layer: crate::prepared::PreparedLayer { bounds, .. },
                 },
                 ..,
-            ] = frame.items()
+            ] = frame.items[..]
             else {
                 panic!("expected source capture")
             };

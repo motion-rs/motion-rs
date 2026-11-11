@@ -17,7 +17,7 @@ impl Gpu {
 
     /// Submits RGBA8 or aligned 8/10-bit YUV output and reads back only packed bytes.
     /// Accepts dedicated packed plans or conservative linear plans with extra packing charges.
-    pub fn submit_output(
+    pub(crate) fn submit_output(
         &mut self,
         frame: &PreparedFrame,
         mut plan: Plan,
@@ -234,7 +234,7 @@ impl Gpu {
     }
 
     /// Submits without waiting for readback. The caller must bound all in-flight plans.
-    pub fn submit_linear(
+    pub(crate) fn submit_linear(
         &mut self,
         frame: &PreparedFrame,
         plan: Plan,
@@ -370,16 +370,25 @@ impl Gpu {
         &self.info
     }
 
-    /// Executes an admitted plan synchronously and returns the read-back pixels as
-    /// unquantized [`crate::PixelFormat::LinearRgba32Float`] output; convert them with
-    /// [`crate::FrameBuffer::to_format`]. The plan already admitted this storage.
+    /// Logical peak bytes and work of the plan [`Gpu::render_linear`] would execute, computed
+    /// without a device.
+    pub fn plan_stats(
+        frame: &PreparedFrame,
+        limits: RasterLimits,
+    ) -> Result<crate::WorkStats, ValidationError> {
+        Ok(Plan::new(frame, limits)?.stats)
+    }
+
+    /// Plans `frame` within `limits`, executes it synchronously and returns the read-back
+    /// pixels as unquantized [`crate::PixelFormat::LinearRgba32Float`] output; convert them
+    /// with [`crate::FrameBuffer::to_format`]. Planning admits the storage before device access.
     /// Device loss, driver validation or nonfinite arithmetic fails the entire frame.
     pub fn render_linear(
         &mut self,
         frame: &PreparedFrame,
-        plan: Plan,
+        limits: RasterLimits,
     ) -> motion_core::Result<crate::FrameBuffer> {
-        let linear = self.render(frame, plan)?;
+        let linear = self.render(frame, Plan::new(frame, limits)?)?;
         crate::FrameBuffer::linear_unbounded(&linear).map_err(Into::into)
     }
 

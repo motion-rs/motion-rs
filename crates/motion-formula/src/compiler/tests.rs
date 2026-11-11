@@ -308,9 +308,7 @@ fn formula_writing_selection_and_morph_match_cpu_gpu() -> motion_core::Result<()
             let srgb = motion_render::PixelFormat::SrgbRgba8 {
                 premultiplied: false,
             };
-            let render = |gpu: &mut motion_render::gpu::Gpu| {
-                gpu.render_linear(&frame, motion_render::gpu::Plan::new(&frame, limits)?)
-            };
+            let render = |gpu: &mut motion_render::gpu::Gpu| gpu.render_linear(&frame, limits);
             let actual = render(&mut gpu)?;
             assert_eq!(actual, render(&mut gpu)?);
             let expected = frame.render_buffer(srgb, limits)?;

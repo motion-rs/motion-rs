@@ -54,10 +54,7 @@ fn morph_paths_match_gpu_and_replay_across_topology_changes() -> motion::Result 
             )?
             .prepare(ValidationLimits::default(), limits)?;
             let cpu = prepared.render_linear(limits)?;
-            let rendered = gpu.render_linear(
-                &prepared,
-                motion::render::gpu::Plan::new(&prepared, limits)?,
-            )?;
+            let rendered = gpu.render_linear(&prepared, limits)?;
             for row in 0..16 {
                 for column in 0..16 {
                     for (first, second) in cpu

@@ -21,6 +21,8 @@ use motion_core::RasterLimits;
 use prepare::RenderPrepare;
 
 #[cfg(test)]
+mod property_tests;
+#[cfg(test)]
 pub(crate) mod tests;
 
 /// Bias added before rounding scaled coverage. Accumulated areas can land a few ulps below an

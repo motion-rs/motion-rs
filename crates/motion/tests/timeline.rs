@@ -1130,10 +1130,7 @@ mod scenes {
                         .compile(design, PixelSize::new(32, 16), validation)?
                         .prepare(validation, limits)?;
                     let expected = prepared.render_linear(limits)?;
-                    let actual = gpu.render_linear(
-                        &prepared,
-                        motion::render::gpu::Plan::new(&prepared, limits)?,
-                    )?;
+                    let actual = gpu.render_linear(&prepared, limits)?;
                     for (left, right) in actual.linear_pixels().zip(expected.linear_pixels()) {
                         for (left, right) in left.iter().zip(right) {
                             maximum = maximum.max((left - right).abs());
@@ -1156,17 +1153,12 @@ mod scenes {
                         bytes = bytes.max(left.abs_diff(*right));
                         assert!(left.abs_diff(*right) <= 1);
                     }
-                    let replay = gpu
-                        .render_linear(
-                            &prepared,
-                            motion::render::gpu::Plan::new(&prepared, limits)?,
-                        )?
-                        .to_format(
-                            motion::render::PixelFormat::SrgbRgba8 {
-                                premultiplied: false,
-                            },
-                            limits,
-                        )?;
+                    let replay = gpu.render_linear(&prepared, limits)?.to_format(
+                        motion::render::PixelFormat::SrgbRgba8 {
+                            premultiplied: false,
+                        },
+                        limits,
+                    )?;
                     assert_eq!(replay, actual);
                     requests += 1;
                 }
@@ -1302,8 +1294,7 @@ mod scenes {
                     } else {
                         assert!(expected.linear_pixels().all(|pixel| pixel[3] == 0.0));
                     }
-                    let actual =
-                        gpu.render_linear(&frame, motion::render::gpu::Plan::new(&frame, limits)?)?;
+                    let actual = gpu.render_linear(&frame, limits)?;
                     for (left, right) in actual.linear_pixels().zip(expected.linear_pixels()) {
                         for (left, right) in left.iter().zip(right) {
                             maximum = maximum.max((left - right).abs());
@@ -1330,13 +1321,12 @@ mod scenes {
                         assert!(left.abs_diff(*right) <= 1);
                     }
                     assert_eq!(
-                        gpu.render_linear(&frame, motion::render::gpu::Plan::new(&frame, limits)?)?
-                            .to_format(
-                                motion::render::PixelFormat::SrgbRgba8 {
-                                    premultiplied: false
-                                },
-                                limits
-                            )?,
+                        gpu.render_linear(&frame, limits)?.to_format(
+                            motion::render::PixelFormat::SrgbRgba8 {
+                                premultiplied: false
+                            },
+                            limits
+                        )?,
                         actual
                     );
                     requests += 1;
@@ -1443,8 +1433,7 @@ mod scenes {
                         .prepare(validation, limits)?
                         .blend_space(space);
                     let expected = frame.render_linear(limits)?;
-                    let actual =
-                        gpu.render_linear(&frame, motion::render::gpu::Plan::new(&frame, limits)?)?;
+                    let actual = gpu.render_linear(&frame, limits)?;
                     for (left, right) in actual.linear_pixels().zip(expected.linear_pixels()) {
                         for (left, right) in left.iter().zip(right) {
                             maximum = maximum.max((left - right).abs());
@@ -1471,13 +1460,12 @@ mod scenes {
                         assert!(left.abs_diff(*right) <= 1, "space={space:?} case={index}");
                     }
                     assert_eq!(
-                        gpu.render_linear(&frame, motion::render::gpu::Plan::new(&frame, limits)?)?
-                            .to_format(
-                                motion::render::PixelFormat::SrgbRgba8 {
-                                    premultiplied: false
-                                },
-                                limits
-                            )?,
+                        gpu.render_linear(&frame, limits)?.to_format(
+                            motion::render::PixelFormat::SrgbRgba8 {
+                                premultiplied: false
+                            },
+                            limits
+                        )?,
                         actual
                     );
                     cases += 1;
@@ -1568,10 +1556,8 @@ mod scenes {
         #[test]
         #[ignore = "requires native GPU when enabled; no fonts or window"]
         fn camera_pixels_keep_viewport_hud_and_seek_replay() -> motion::Result {
-            use motion::render::{Composition, SceneCache};
-            use motion::{
-                Color, Node, NodeModifiers, Point, Rect, Renderer, SceneContext, Size, Time,
-            };
+            use motion::render::{Composition, Renderer, SceneCache};
+            use motion::{Color, Node, NodeModifiers, Point, Rect, SceneContext, Size, Time};
 
             #[cfg(feature = "gpu")]
             let backends = [Renderer::Cpu, Renderer::Gpu];

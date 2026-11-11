@@ -75,6 +75,6 @@ fn main() -> motion::Result {
             params: None,
         })
         .render(|options| look.render_options(options));
-    export(&timeline, &options, &motion::NoProgress)?;
+    export(&timeline, &options, &motion::encode::NoProgress)?;
     Ok(())
 }

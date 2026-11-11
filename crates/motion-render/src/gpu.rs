@@ -12,6 +12,7 @@ mod context;
 mod device;
 mod execute;
 mod layout;
+mod output_plan;
 mod particle_tiles;
 mod plan;
 #[cfg(test)]
@@ -21,6 +22,7 @@ mod tests;
 mod timing;
 
 pub use device::*;
+pub use output_plan::OutputPlan;
 pub use timing::{GpuTimingHandle, GpuTimings};
 
 pub(crate) use abi::output_shader;
@@ -63,7 +65,7 @@ struct Layer {
 /// Device-independent ordered GPU operations with static raster admission.
 /// Particle index bytes/work are admitted from a GPU prefix summary before composition.
 /// Constructing a plan does not initialize a device or submit work.
-pub struct Plan {
+pub(crate) struct Plan {
     size: PixelSize,
     output: usize,
     steps: Vec<Step>,
@@ -198,7 +200,7 @@ pub struct PendingTextureFrame {
 }
 
 /// Submitted encoded GPU output with independent scope and mapping completion.
-pub struct PendingOutputFrame {
+pub(crate) struct PendingOutputFrame {
     context: GpuContext,
     submission: wgpu::SubmissionIndex,
     readback: wgpu::Buffer,
@@ -216,7 +218,7 @@ pub struct PendingOutputFrame {
 
 /// Submitted linear frame with independently owned readback and error scopes.
 /// Dropping discards its output; finish waits for completion on the shared device.
-pub struct PendingLinearFrame {
+pub(crate) struct PendingLinearFrame {
     context: GpuContext,
     submission: wgpu::SubmissionIndex,
     readback: wgpu::Buffer,

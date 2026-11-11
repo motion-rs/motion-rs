@@ -28,7 +28,8 @@ mod resources {
                     motion::render::FrameClock::new(30, 150),
                 )
                 .with_options(
-                    motion::render::RenderOptions::default().backend(motion::Renderer::Gpu.into()),
+                    motion::render::RenderOptions::default()
+                        .backend(motion::render::Renderer::Gpu.into()),
                 )?
                 .frame_renderer(motion::Size::new(1.0, 1.0))
                 .err()
@@ -54,6 +55,7 @@ mod resources {
     }
 
     mod resource {
+        use motion::encode::NoProgress;
         use motion::extend::*;
         use motion::prelude::*;
         use std::{io, sync::Arc};
@@ -130,7 +132,8 @@ mod resources {
         #[ignore = "requires native FFmpeg with libx264; no fonts or window"]
         fn missing_asset_export_preserves_destination_and_allow_missing_commits() -> motion::Result
         {
-            use motion::{ExportOptions, Image, NoProgress, Node, Size};
+            use motion::encode::NoProgress;
+            use motion::{ExportOptions, Image, Node, Size};
             let directory = tempfile::tempdir()?;
             let destination = directory.path().join("output.mp4");
             std::fs::write(&destination, b"committed")?;

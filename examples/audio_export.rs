@@ -6,6 +6,7 @@ use clap::Parser;
 use motion::declarative::{
     Animated, AudioSpec, CompileOptions, Document, Element, SceneSpec, TrackSpec,
 };
+use motion::encode::NoProgress;
 use motion::prelude::*;
 use std::path::PathBuf;
 

@@ -56,13 +56,14 @@ Drawable returns local bounds and emits commands to a checked Canvas. It does no
 
 Each type is defined in one owning crate; lower layers do not depend on higher-level convenience namespaces. Core image, instance and font-snapshot protocols do not initialize content compilers, devices or windows.
 
-## Four Import Categories
+## Five Import Categories
 
 | Namespace | Purpose |
 | --- | --- |
-| `motion::prelude` | Ordinary authoring expressions and basic values |
+| `motion::prelude` | Authoring values and expressions only; no encoders, progress sinks or render intermediates |
 | `motion::extend` | Protocols such as `Drawable`, `Asset`, `AudioSource`, `RenderPrepare`, `Encoder` |
 | `motion::render` | Explicit low-level commands, budgets, sessions, formats, GPU |
+| `motion::encode` | Encoders and factories, progress sinks, `ExportReport`, `ExportPhase`, `NoProgress` |
 | `motion::eager` | Precompiled vectors/formulas and related operations |
 
 The facade directly reexports shared types without another wrapper layer. Internal modules do not chain imports through public preludes, and lower-level crates do not reexport every upstream convenience type.

@@ -1,6 +1,7 @@
 //! Shared benchmark settings, timing, summary statistics and report records.
 
 use motion::prelude::*;
+use motion::render::Renderer;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{

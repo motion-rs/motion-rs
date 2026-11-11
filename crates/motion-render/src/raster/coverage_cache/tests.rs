@@ -395,9 +395,9 @@ fn cached(
 }
 
 fn compare(actual: &PreparedFrame, expected: &PreparedFrame) {
-    assert_eq!(actual.strips(), expected.strips());
-    assert_eq!(actual.spans(), expected.spans());
-    assert_eq!(actual.alphas(), expected.alphas());
+    assert_eq!(actual.strips, expected.strips);
+    assert_eq!(actual.spans, expected.spans);
+    assert_eq!(actual.alphas, expected.alphas);
     assert_eq!(actual.stats(), expected.stats());
     assert_eq!(
         actual

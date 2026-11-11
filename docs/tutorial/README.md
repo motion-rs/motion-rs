@@ -41,7 +41,7 @@ All Rust examples use `rust,no_run`. Enable the features listed in each chapter 
 2. CPU is used unless stated otherwise. Enabling `gpu` adds support; it does not select the backend.
 3. File paths are relative to the program's working directory. Configure resource roots and font environments explicitly.
 4. By default, examples do not overwrite existing work, automatically launch windows or run performance measurements.
-5. Short authoring examples use `motion::prelude::*`. Use `motion::extend` for low-level protocols, `motion::render` for explicit rendering interfaces and `motion::eager` for precompiled content.
+5. Short authoring examples use `motion::prelude::*`. Use `motion::extend` for low-level protocols, `motion::render` for explicit rendering interfaces, `motion::encode` for encoders and progress sinks, and `motion::eager` for precompiled content.
 
 The [design contracts](../design/README.md) describe architecture, rendering and
 ownership; [development checks](../development.md) describe validation procedures.

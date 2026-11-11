@@ -594,16 +594,16 @@ fn compact_coverage_uploads_do_not_expand_solid_or_small_shapes_to_canvas() {
             };
             let local = planner.coverage_bounds(&fill.data);
             let mut expected = vec![0u8; (size.width * size.height) as usize];
-            for strip in frame.strips() {
+            for strip in &frame.strips {
                 for row in 0..strip.height {
                     for column in 0..strip.width {
                         expected[((strip.y + row) * size.width + strip.x + column) as usize] =
-                            frame.alphas()
+                            frame.alphas
                                 [strip.alpha_offset + (row * strip.width + column) as usize];
                     }
                 }
             }
-            for span in frame.spans() {
+            for span in &frame.spans {
                 for row in span.y..span.y + span.height {
                     for column in span.start_x..span.end_x {
                         expected[(row * size.width + column) as usize] = 255;
@@ -1164,4 +1164,49 @@ fn gpu_device_matches_cpu_filters_layers_masks_and_shared_output() {
     println!(
         "_gpu_parity cases={count} pixels={compared_pixels} max_linear_difference={max_linear_difference:e} max_rgba_difference={max_rgba_difference} pixels_over_one={large_difference_pixels} replay=pass overflow_recovery=pass"
     );
+}
+
+#[test]
+fn bounded_planning_retains_full_submission_limits_without_a_device() -> motion_core::Result {
+    let limits = RasterLimits::default();
+    let frame = Rect::new(0.25, 0.5, 28.0, 12.0)
+        .fill(Color::rgb(190, 40, 125))
+        .opacity(0.5)
+        .compile(
+            Size::new(32.0, 16.0),
+            PixelSize::new(32, 16),
+            ValidationLimits::default(),
+        )?
+        .prepare(ValidationLimits::default(), limits)?;
+    let plan = Plan::new(&frame, limits)?;
+    let peak = plan.stats.peak_bytes;
+    let bounded = Plan::new_with_planning_limit(&frame, limits, peak)?;
+    assert_eq!(bounded.stats, plan.stats);
+    let format = crate::PixelFormat::Yuv420 { bit_depth: 8 };
+    let packed = bounded.packed_stats(frame.size(), format)?;
+    assert!(packed.peak_bytes > peak);
+    assert_eq!(packed, plan.packed_stats(frame.size(), format)?);
+    let mut minimum = 1;
+    let mut maximum = peak;
+    while minimum < maximum {
+        let middle = minimum + (maximum - minimum) / 2;
+        if Plan::new_with_planning_limit(&frame, limits, middle).is_ok() {
+            maximum = middle;
+        } else {
+            minimum = middle + 1;
+        }
+    }
+    assert!(Plan::new_with_planning_limit(&frame, limits, minimum).is_ok());
+    let error = Plan::new_with_planning_limit(&frame, limits, minimum - 1)
+        .err()
+        .expect("one byte below minimum planning allowance must fail");
+    assert_eq!(error.kind, ValidationErrorKind::StructuralLimit);
+    assert_eq!(error.field, "max_bytes");
+    let dedicated = Plan::new_packed(&frame, limits, format)?;
+    let bounded =
+        Plan::new_packed_with_planning_limit(&frame, limits, dedicated.stats.peak_bytes, format)?;
+    assert_eq!(bounded.stats, dedicated.stats);
+    assert_eq!(bounded.packed_stats(frame.size(), format)?, dedicated.stats);
+    assert!(Plan::new_packed_with_planning_limit(&frame, limits, 1, format).is_err());
+    Ok(())
 }

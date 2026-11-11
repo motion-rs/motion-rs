@@ -6,6 +6,7 @@ use super::scenes::{artwork, teal, wave};
 use super::{DESIGN, support};
 use motion::extend::RenderPrepare;
 use motion::prelude::*;
+use motion::render::Renderer;
 use motion::render::{ValidationLimits, linear_to_srgb, srgb_to_linear};
 use std::hint::black_box;
 

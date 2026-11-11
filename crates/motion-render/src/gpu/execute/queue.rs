@@ -42,9 +42,15 @@ impl FrameQueue {
         self.renderer.pooled_readback_bytes()
     }
 
-    /// Submits only when both the three-frame cap and aggregate allowance admit it.
-    /// A rejected plan is not executed and existing queued frames are unchanged.
-    pub fn submit(&mut self, frame: &PreparedFrame, plan: Plan) -> motion_core::Result<()> {
+    /// Plans `frame` within `limits` and submits it only when both the three-frame cap and
+    /// aggregate allowance admit it. A rejected frame is not executed and existing queued
+    /// frames are unchanged.
+    pub fn submit(
+        &mut self,
+        frame: &PreparedFrame,
+        limits: RasterLimits,
+    ) -> motion_core::Result<()> {
+        let plan = Plan::new(frame, limits)?;
         if !self.packed.is_empty() {
             return Err(ValidationError::invalid(
                 "gpu.queue",
@@ -114,9 +120,9 @@ impl FrameQueue {
     pub fn submit_output(
         &mut self,
         frame: &PreparedFrame,
-        plan: Plan,
-        format: crate::PixelFormat,
+        plan: OutputPlan,
     ) -> motion_core::Result<()> {
+        let OutputPlan { plan, format, .. } = plan;
         if !self.pending.is_empty() {
             return Err(ValidationError::invalid(
                 "gpu.queue",

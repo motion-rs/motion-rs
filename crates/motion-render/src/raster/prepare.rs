@@ -78,7 +78,7 @@ impl RenderPrepare for DisplayList {
     ///     ValidationLimits::default(),
     /// )?;
     /// let prepared = list.prepare(ValidationLimits::default(), RasterLimits::default())?;
-    /// assert_eq!(prepared.items().len(), list.commands.len());
+    /// assert_eq!(prepared.size(), PixelSize::new(8, 4));
     /// let output = prepared.render_linear(RasterLimits::default())?;
     /// assert_eq!(output.linear_pixel(3, 0), Some([0.5; 4]));
     /// assert_eq!(output.linear_pixel(6, 0), Some([0.0; 4]));

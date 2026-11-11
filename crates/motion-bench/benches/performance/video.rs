@@ -3,8 +3,10 @@
 
 use super::artwork::rectangle;
 use super::{invalid, support};
+use motion::encode::NoProgress;
 use motion::prelude::*;
 use motion::render::RasterLimits;
+use motion::render::Renderer;
 
 pub(super) fn video_benchmark(
     report: &mut support::Report,

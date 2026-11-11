@@ -117,7 +117,7 @@ fn authoring_example_3() -> Result<(), Box<dyn std::error::Error>> {
             ValidationLimits::default(),
         )?
         .prepare(ValidationLimits::default(), RasterLimits::default())?;
-    assert_eq!(prepared.clips().len(), 1);
+    assert_eq!(prepared.clip_count(), 1);
     let output = prepared.render_linear(RasterLimits::default())?;
     assert_eq!(output.linear_pixel(0, 0), Some([128.0 / 255.0; 4]));
     assert_eq!(output.linear_pixel(1, 0), Some([1.0; 4]));

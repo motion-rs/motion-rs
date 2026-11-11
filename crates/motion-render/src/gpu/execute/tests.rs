@@ -1723,7 +1723,7 @@ fn hardware_fill_batches_preserve_rgba_tolerance_boundaries_and_pooling() -> mot
         .unwrap();
     let mut queue = FrameQueue::new(context.clone(), maximum * 3)?;
     for index in [4, 0, 2] {
-        queue.submit(&frames[index], Plan::new(&frames[index], limits)?)?;
+        queue.submit(&frames[index], limits)?;
     }
     for index in [4, 0, 2] {
         assert_eq!(
@@ -2503,15 +2503,11 @@ fn three_in_flight_frames_preserve_order_and_reject_before_submission() -> motio
     let mut serial = Gpu::from_context(context);
     for frame in &frames {
         expected.push(serial.render(frame, Plan::new(frame, limits)?)?);
-        queue.submit(frame, Plan::new(frame, limits)?)?;
+        queue.submit(frame, limits)?;
     }
     assert_eq!(queue.len(), 3);
     assert_eq!(queue.in_flight_bytes(), charge * 3);
-    assert!(
-        queue
-            .submit(&frames[0], Plan::new(&frames[0], limits)?)
-            .is_err()
-    );
+    assert!(queue.submit(&frames[0], limits).is_err());
     for expected in expected {
         assert_eq!(
             queue.finish_next()?.unwrap(),
@@ -2542,7 +2538,7 @@ fn three_in_flight_frames_preserve_order_and_reject_before_submission() -> motio
             );
         }
         let frame = &frames[index % 3];
-        queue.submit(frame, Plan::new(frame, limits)?)?;
+        queue.submit(frame, limits)?;
     }
     for frame in &frames {
         assert_eq!(
@@ -2558,12 +2554,9 @@ fn three_in_flight_frames_preserve_order_and_reject_before_submission() -> motio
         );
     }
     let mut tiny = FrameQueue::new(serial.context().clone(), charge - 1)?;
-    assert!(
-        tiny.submit(&frames[0], Plan::new(&frames[0], limits)?)
-            .is_err()
-    );
+    assert!(tiny.submit(&frames[0], limits).is_err());
     assert!(tiny.is_empty());
-    queue.submit(&frames[0], Plan::new(&frames[0], limits)?)?;
+    queue.submit(&frames[0], limits)?;
     drop(queue);
     assert_eq!(
         serial

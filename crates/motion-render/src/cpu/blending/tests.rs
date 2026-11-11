@@ -1,6 +1,7 @@
 use super::*;
+use crate::PreparedFrame;
+use crate::prepared::PreparedItem;
 use crate::raster::prepare::RenderPrepare;
-use crate::{PreparedFrame, PreparedItem};
 use motion_core::Shape;
 use motion_core::{
     BlendMode, Color, DrawCommand, Node, NodeModifiers, PixelSize, RasterLimits, Rect, Size,
@@ -510,7 +511,7 @@ fn node_mode_survives_commands_and_preparation() {
     let prepared = list
         .prepare(ValidationLimits::default(), RasterLimits::default())
         .unwrap();
-    assert!(prepared.items().iter().any(|item| matches!(
+    assert!(prepared.items.iter().any(|item| matches!(
         item,
         PreparedItem::PushLayer {
             layer: crate::prepared::PreparedLayer {

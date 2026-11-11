@@ -3,6 +3,7 @@
 use super::*;
 use motion_core::{FrameRate, Time};
 use motion_render::PixelFormat;
+use motion_render::gpu::OutputPlan;
 use std::ops::Range;
 
 #[cfg(test)]
@@ -91,19 +92,18 @@ pub(super) fn render(
         ))
     })
     .map_err(|error| error.at_frame(range.start as u64))?;
-    let plan = motion_render::gpu::Plan::new_packed(&first, limits, format)
+    let plan = OutputPlan::new(&first, limits, format)
         .and_then(|plan| plan.with_display(&options.render.display, range.start as u64))
         .map_err(|error| motion_core::Error::from(error).at_frame(range.start as u64))?;
     let peak = plan
-        .packed_stats(first.size(), format)
-        .map_err(|error| motion_core::Error::from(error).at_frame(range.start as u64))?
-        .peak_bytes;
-    let preparation_peak = first.stats().peak_bytes.max(plan.stats.peak_bytes);
+        .peak_bytes()
+        .map_err(|error| motion_core::Error::from(error).at_frame(range.start as u64))?;
+    let preparation_peak = first.stats().peak_bytes.max(plan.planning_peak_bytes());
     let (workers, slots, preparation_bytes, queue_bytes) =
         schedule(options, range.end - range.start - 1, preparation_peak, peak);
     let mut queue = motion_render::gpu::FrameQueue::new(context.clone(), queue_bytes)?;
     queue
-        .submit_output(&first, plan, format)
+        .submit_output(&first, plan)
         .map_err(|error| error.at_frame(range.start as u64))?;
     drop(first);
     let mut completed = range.start;
@@ -144,14 +144,14 @@ pub(super) fn render(
                         )
                         .and_then(|(frame, mut limits)| {
                             limits.max_bytes = options.render.limits.max_bytes;
-                            let plan = motion_render::gpu::Plan::new_packed_with_planning_limit(
+                            let plan = OutputPlan::with_planning_limit(
                                 &frame,
                                 limits,
                                 preparation_bytes,
                                 format,
                             )?
                             .with_display(&options.render.display, frame_index as u64)?;
-                            let charge = plan.packed_stats(frame.size(), format)?.peak_bytes;
+                            let charge = plan.peak_bytes()?;
                             Ok((frame, plan, charge))
                         }) {
                         Ok(prepared) => Ok(Some(prepared)),
@@ -187,7 +187,7 @@ pub(super) fn render(
                     encode_oldest(&mut queue)?;
                 }
                 queue
-                    .submit_output(&frame, plan, format)
+                    .submit_output(&frame, plan)
                     .map_err(|error| error.at_frame(index as u64))?;
                 Ok(true)
             },
@@ -216,10 +216,10 @@ pub(super) fn render(
                 ))
             })
             .map_err(|error| error.at_frame(index as u64))?;
-            let plan = motion_render::gpu::Plan::new_packed(&frame, limits, format)
+            let plan = OutputPlan::new(&frame, limits, format)
                 .map_err(|error| motion_core::Error::from(error).at_frame(index as u64))?;
             queue
-                .submit_output(&frame, plan, format)
+                .submit_output(&frame, plan)
                 .map_err(|error| error.at_frame(index as u64))?;
             encode_oldest(&mut queue)?;
         }

@@ -5,7 +5,8 @@
 use super::args::{ExportArgs, ProjectCommand, StillArgs, StudioArgs, ValidateArgs};
 use super::flags::parse_codec;
 use super::{Project, ProjectTimelineInfo, ValidationReport, invalid, json_error};
-use crate::{ExportOptions, ExportReport, Result, Time};
+use crate::encode::ExportReport;
+use crate::{ExportOptions, Result, Time};
 use clap::{CommandFactory, FromArgMatches, Parser, error::ErrorKind};
 use std::path::PathBuf;
 
@@ -191,7 +192,7 @@ impl Project {
         Ok(ProjectOutcome::Exported(crate::export(
             &timeline,
             &request,
-            &crate::NoProgress,
+            &crate::encode::NoProgress,
         )?))
     }
 

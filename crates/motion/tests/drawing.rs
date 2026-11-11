@@ -330,8 +330,9 @@ mod drawing {
         #[test]
         #[ignore = "requires a native GPU; no window or video export"]
         fn stroke_gpu_matches_cpu_and_replays() -> motion::Result {
+            use motion::Color;
             use motion::render::Composition;
-            use motion::{Color, Renderer};
+            use motion::render::Renderer;
             let composition = Composition::new(16, 16, motion::render::FrameClock::new(30, 12))
                 .with_options(motion::render::RenderOptions::default().background(Color::BLACK))?;
             let mut cpu = composition.frame_renderer(Size::new(8.0, 8.0))?;
@@ -501,7 +502,8 @@ mod drawing {
         #[ignore = "requires a native GPU; no window or video export"]
         fn svg_gpu_matches_cpu_and_replays() -> motion::Result {
             use motion::render::Composition;
-            use motion::{Color, FillRule, Node, NodeModifiers, Renderer, Shape, Size};
+            use motion::render::Renderer;
+            use motion::{Color, FillRule, Node, NodeModifiers, Shape, Size};
             let cases = [
                 ("M1 1q2 4 4 0t-4 0z", FillRule::EvenOdd),
                 ("M1 4c0-3 6-3 6 0s-6 3-6 0z", FillRule::NonZero),
@@ -686,10 +688,7 @@ mod drawing {
                     )?
                     .prepare(ValidationLimits::default(), limits)?;
                 let cpu = prepared.render_linear(limits)?;
-                let rendered = gpu.render_linear(
-                    &prepared,
-                    motion::render::gpu::Plan::new(&prepared, limits)?,
-                )?;
+                let rendered = gpu.render_linear(&prepared, limits)?;
                 for row in 0..8 {
                     for column in 0..8 {
                         for (first, second) in cpu
@@ -728,17 +727,12 @@ mod drawing {
                         ValidationLimits::default(),
                     )?
                     .prepare(ValidationLimits::default(), limits)?;
-                let replay = gpu
-                    .render_linear(
-                        &prepared,
-                        motion::render::gpu::Plan::new(&prepared, limits)?,
-                    )?
-                    .to_format(
-                        motion::render::PixelFormat::SrgbRgba8 {
-                            premultiplied: false,
-                        },
-                        limits,
-                    )?;
+                let replay = gpu.render_linear(&prepared, limits)?.to_format(
+                    motion::render::PixelFormat::SrgbRgba8 {
+                        premultiplied: false,
+                    },
+                    limits,
+                )?;
                 assert_eq!(replay.bytes(), saved[index]);
             }
             eprintln!(

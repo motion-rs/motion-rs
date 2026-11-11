@@ -1,7 +1,9 @@
 //! Film playback benchmarks with deterministic checksums and optional frame dumps.
 
+use motion::encode::NoProgress;
 use motion::prelude::*;
 use motion::render::FrameBuffer;
+use motion::render::Renderer;
 use serde_json::json;
 use std::hint::black_box;
 

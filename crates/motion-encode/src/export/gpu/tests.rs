@@ -8,71 +8,6 @@ use motion_render::PixelFormat;
 use std::sync::{Arc, Mutex};
 
 #[test]
-fn bounded_planning_retains_full_submission_limits_without_a_device() -> Result<()> {
-    let rate = FrameRate::NTSC;
-    let timeline = Timeline::new(Size::new(32.0, 16.0), rate)
-        .track(|track| {
-            track.push(
-                (|_: &motion_core::SceneContext<'_>| {
-                    Rect::new(0.25, 0.5, 28.0, 12.0)
-                        .fill(Color::rgb(190, 40, 125))
-                        .opacity(0.5)
-                })
-                .with_duration(motion_core::Duration::from_frame(4, rate)),
-            )
-        })
-        .build()?;
-    let options = ExportOptions::new("unused").backend(motion_render::BackendPreference::Cpu);
-    let mut renderer = composition(&timeline, &options.render)?.frame_renderer(timeline.size())?;
-    let (frame, limits) =
-        renderer.prepare_output_at(Time::ZERO, options.render.background, |context| {
-            timeline.render(context)
-        })?;
-    let plan = motion_render::gpu::Plan::new(&frame, limits)?;
-    let peak = plan.stats.peak_bytes;
-    let bounded = motion_render::gpu::Plan::new_with_planning_limit(&frame, limits, peak)?;
-    assert_eq!(bounded.stats, plan.stats);
-    let format = PixelFormat::Yuv420 { bit_depth: 8 };
-    let packed = bounded.packed_stats(frame.size(), format)?;
-    assert!(packed.peak_bytes > peak);
-    assert_eq!(packed, plan.packed_stats(frame.size(), format)?);
-    let mut minimum = 1;
-    let mut maximum = peak;
-    while minimum < maximum {
-        let middle = minimum + (maximum - minimum) / 2;
-        if motion_render::gpu::Plan::new_with_planning_limit(&frame, limits, middle).is_ok() {
-            maximum = middle;
-        } else {
-            minimum = middle + 1;
-        }
-    }
-    assert!(motion_render::gpu::Plan::new_with_planning_limit(&frame, limits, minimum).is_ok());
-    let error = motion_render::gpu::Plan::new_with_planning_limit(&frame, limits, minimum - 1)
-        .err()
-        .expect("one byte below minimum planning allowance must fail");
-    assert_eq!(
-        error.kind,
-        motion_core::ValidationErrorKind::StructuralLimit
-    );
-    assert_eq!(error.field, "max_bytes");
-    let dedicated = motion_render::gpu::Plan::new_packed(&frame, limits, format)?;
-    let bounded = motion_render::gpu::Plan::new_packed_with_planning_limit(
-        &frame,
-        limits,
-        dedicated.stats.peak_bytes,
-        format,
-    )?;
-    assert_eq!(bounded.stats, dedicated.stats);
-    assert_eq!(bounded.packed_stats(frame.size(), format)?, dedicated.stats);
-    assert!(
-        motion_render::gpu::Plan::new_packed_with_planning_limit(&frame, limits, 1, format)
-            .is_err()
-    );
-    assert!(renderer.selected_gpu_context()?.is_none());
-    Ok(())
-}
-
-#[test]
 fn packed_gpu_output_supports_both_yuv_bit_depths() {
     for bit_depth in [8, 10] {
         assert!(motion_render::gpu::Gpu::supports_packed_output(
@@ -312,9 +247,8 @@ fn gpu_export_pipeline_matches_linear_reference_and_cancels_transactionally() ->
             options.render.background,
             |context| timeline.render(context),
         )?;
-        let plan = motion_render::gpu::Plan::new(&frame, limits)?;
         expected.push(
-            gpu.render_linear(&frame, plan)?
+            gpu.render_linear(&frame, limits)?
                 .to_format(format, options.render.limits)?,
         );
     }
@@ -416,16 +350,16 @@ fn gpu_export_pipeline_matches_linear_reference_and_cancels_transactionally() ->
             changing_options.render.background,
             |context| changing.render(context),
         )?;
-        let plan = motion_render::gpu::Plan::new(&frame, limits)?;
+        let plan = OutputPlan::new(&frame, limits, format)?;
         if index == 0 {
-            first_peak = plan.packed_stats(frame.size(), format)?.peak_bytes;
-            preparation_peak = frame.stats().peak_bytes.max(plan.stats.peak_bytes);
+            first_peak = plan.peak_bytes()?;
+            preparation_peak = frame.stats().peak_bytes.max(plan.planning_peak_bytes());
         }
         if index == 2 {
             heavy_preparation_peak = frame.stats().peak_bytes;
-            heavy_planning_peak = plan.stats.peak_bytes;
+            heavy_planning_peak = plan.planning_peak_bytes();
         }
-        serial_queue.submit_output(&frame, plan, format)?;
+        serial_queue.submit_output(&frame, plan)?;
         expected.push(serial_queue.finish_next_output()?.unwrap());
     }
     changing_options.max_parallel_bytes = first_peak * 3 + preparation_peak * 4;

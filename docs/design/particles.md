@@ -60,7 +60,7 @@ read/modify/write races between packed vector components. Metadata, scan work,
 duplicate state storage and references all count toward logical budgets. Index,
 device-storage or work overflow fails the frame before public output commits;
 indices are never silently truncated. Returned frame stats include dynamic work
-and storage; Plan::stats contains static admission charges only.
+and storage; the internal GPU plan statistics contain static admission charges only.
 
 Tile composition has a separate shader-specialized pipeline. Ordinary scenes
 and small batches do not execute the tile lookup. Scalar WGSL coverage, blend

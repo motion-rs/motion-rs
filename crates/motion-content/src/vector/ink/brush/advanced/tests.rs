@@ -452,14 +452,12 @@ fn extended_brush_material_matches_cpu_gpu() -> motion_core::Result {
         limits,
     )?;
     let mut gpu = motion_render::gpu::Gpu::new()?;
-    let actual = gpu
-        .render_linear(&prepared, motion_render::gpu::Plan::new(&prepared, limits)?)?
-        .to_format(
-            motion_render::PixelFormat::SrgbRgba8 {
-                premultiplied: false,
-            },
-            limits,
-        )?;
+    let actual = gpu.render_linear(&prepared, limits)?.to_format(
+        motion_render::PixelFormat::SrgbRgba8 {
+            premultiplied: false,
+        },
+        limits,
+    )?;
     assert!(
         expected
             .bytes()
@@ -467,14 +465,12 @@ fn extended_brush_material_matches_cpu_gpu() -> motion_core::Result {
             .zip(actual.bytes())
             .all(|(expected, actual)| expected.abs_diff(*actual) <= 2)
     );
-    let replay = gpu
-        .render_linear(&prepared, motion_render::gpu::Plan::new(&prepared, limits)?)?
-        .to_format(
-            motion_render::PixelFormat::SrgbRgba8 {
-                premultiplied: false,
-            },
-            limits,
-        )?;
+    let replay = gpu.render_linear(&prepared, limits)?.to_format(
+        motion_render::PixelFormat::SrgbRgba8 {
+            premultiplied: false,
+        },
+        limits,
+    )?;
     assert_eq!(actual.bytes(), replay.bytes());
     Ok(())
 }

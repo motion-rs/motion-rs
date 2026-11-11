@@ -238,10 +238,8 @@ fn vector_effects_match_cpu_with_clips_images_morphs_and_surface_points() -> mot
                 )?
                 .prepare(ValidationLimits::default(), limits)?;
             let expected = prepared.render_linear(limits)?;
-            let actual =
-                gpu.render_linear(&prepared, motion_render::gpu::Plan::new(&prepared, limits)?)?;
-            let replay =
-                gpu.render_linear(&prepared, motion_render::gpu::Plan::new(&prepared, limits)?)?;
+            let actual = gpu.render_linear(&prepared, limits)?;
+            let replay = gpu.render_linear(&prepared, limits)?;
             assert_eq!(actual, replay);
             let a = expected.to_format(
                 motion_render::PixelFormat::SrgbRgba8 {

@@ -3,6 +3,7 @@
 use artwork::artwork_with_particles;
 use micro::microbenchmarks;
 use motion::prelude::*;
+use motion::render::Renderer;
 use motion::render::{Composition, FrameBuffer, RasterLimits};
 use stages::cpu_stages;
 use video::video_benchmark;

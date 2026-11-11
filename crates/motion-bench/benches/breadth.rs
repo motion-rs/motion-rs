@@ -21,6 +21,7 @@
 use harness::{composition, flag, limits, load_resources, parse_sizes, ppm, verify_replay};
 use micro::microbenchmarks;
 use motion::prelude::*;
+use motion::render::Renderer;
 use recording::{cpu_stages, record_frame, record_memory_frame, record_sequences};
 use scenes::artwork;
 

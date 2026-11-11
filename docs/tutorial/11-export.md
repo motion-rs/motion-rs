@@ -8,6 +8,7 @@ PNG sequences and GIF need no `ffmpeg`; native MP4/MOV/WebM encoding requires `f
 ## Minimal Example: PNG Sequence
 
 ```rust,no_run
+use motion::encode::NoProgress;
 use motion::prelude::*;
 use motion::render::{FrameBuffer};
 use motion::extend::{Encoder, ProgressSink};
@@ -46,6 +47,7 @@ Encoder capabilities are checked before opening output. Even dimensions, maximum
 With `ffmpeg` enabled, export directly:
 
 ```rust,no_run
+use motion::encode::NoProgress;
 use motion::prelude::*;
 
 fn main() -> motion::Result {

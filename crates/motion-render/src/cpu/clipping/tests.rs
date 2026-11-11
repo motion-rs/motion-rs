@@ -124,7 +124,7 @@ fn generic_shapes_and_rectangles_share_one_geometric_domain_in_either_order() {
         let frame = commands
             .prepare(ValidationLimits::default(), RasterLimits::default())
             .unwrap();
-        assert_eq!(frame.items().len(), commands.commands.len());
+        assert_eq!(frame.items.len(), commands.commands.len());
         let pixel = frame
             .compose_linear(RasterLimits::default())
             .unwrap()
@@ -980,7 +980,7 @@ fn rectangles_normalize_ancestors_but_keep_path_and_content_masks_independent() 
         let frame = commands
             .prepare(ValidationLimits::default(), RasterLimits::default())
             .unwrap();
-        assert_eq!(frame.items().len(), commands.commands.len());
+        assert_eq!(frame.items.len(), commands.commands.len());
         let output = frame.compose_linear(RasterLimits::default()).unwrap();
         for column in 0..2 {
             let geometric = if column == 0 { covered } else { 1.0 };
@@ -1366,7 +1366,7 @@ fn overlapping_children_receive_the_path_clip_once_per_completed_group() {
         .unwrap()
         .prepare(ValidationLimits::default(), RasterLimits::default())
         .unwrap();
-    assert_eq!(frame.clips().len(), 1);
+    assert_eq!(frame.clips.len(), 1);
     let output = frame.compose_linear(RasterLimits::default()).unwrap();
     assert_eq!(output.pixel(0, 0), Some([128.0 / 255.0; 4]));
     assert_eq!(output.pixel(1, 0), Some([1.0; 4]));
@@ -1433,7 +1433,7 @@ fn curves_and_fill_rules_generate_mask_coverage_without_paint_records() {
             .pixel(0, 0),
         Some([169.0 / 255.0; 4])
     );
-    assert_eq!(frame.paints().len(), 1);
+    assert_eq!(frame.paints.len(), 1);
     let mut path = Path2D::new();
     for (left, right) in [(0.0, 3.0), (1.0, 2.0)] {
         path.try_move_to(Point::new(left, 0.0)).unwrap();
@@ -1460,8 +1460,8 @@ fn curves_and_fill_rules_generate_mask_coverage_without_paint_records() {
                 [0.0; 4]
             })
         );
-        assert_eq!(frame.clips().len(), 1);
-        assert_eq!(frame.paints().len(), 1);
+        assert_eq!(frame.clips.len(), 1);
+        assert_eq!(frame.paints.len(), 1);
     }
 }
 
@@ -1502,7 +1502,7 @@ fn empty_offscreen_clips_and_invalid_hidden_geometry_remain_explicit() {
         rectangle(Rect::new(100.0, 100.0, 101.0, 101.0)),
     ] {
         let frame = prepare(&tile(2.0, 1.0, Color::WHITE).clip(clip), size);
-        assert_eq!(frame.clips().len(), 1);
+        assert_eq!(frame.clips.len(), 1);
         assert_eq!(
             frame
                 .compose_linear(RasterLimits::default())
@@ -1590,7 +1590,7 @@ fn clip_verbs_share_structural_limits_and_snapshots_preserve_old_boundaries() {
     );
     let replaced = clipped.clip(rectangle(Rect::new(0.0, 0.0, 2.0, 1.0)));
     let frame = prepare(&replaced, size);
-    assert_eq!(frame.clips().len(), 1);
+    assert_eq!(frame.clips.len(), 1);
     assert_eq!(
         frame
             .compose_linear(RasterLimits::default())
@@ -1701,7 +1701,7 @@ fn mask_subregions_full_spans_and_sibling_release_are_bounded() {
     let size = PixelSize::new(16, 5);
     let node = tile(16.0, 5.0, Color::WHITE).clip(rectangle(Rect::new(0.5, 0.0, 15.5, 5.0)));
     let frame = prepare(&node, size);
-    let record = &frame.clips()[0];
+    let record = &frame.clips[0];
     assert!(!record.strips.is_empty() && !record.spans.is_empty());
     let bounds = PixelRect {
         left: 4,

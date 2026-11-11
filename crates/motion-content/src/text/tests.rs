@@ -987,12 +987,7 @@ fn explicit_gpu_paragraphs_and_parts_match_cpu_and_replay() {
                 .prepare(validation, limits)
                 .unwrap();
             let cpu = frame.render_linear(limits).unwrap();
-            let actual = gpu
-                .render_linear(
-                    &frame,
-                    motion_render::gpu::Plan::new(&frame, limits).unwrap(),
-                )
-                .unwrap();
+            let actual = gpu.render_linear(&frame, limits).unwrap();
             for (pixel, (left, right)) in
                 actual.linear_pixels().zip(cpu.linear_pixels()).enumerate()
             {
@@ -1026,10 +1021,7 @@ fn explicit_gpu_paragraphs_and_parts_match_cpu_and_replay() {
                 assert!(left.abs_diff(*right) <= 1);
             }
             let replay = gpu
-                .render_linear(
-                    &frame,
-                    motion_render::gpu::Plan::new(&frame, limits).unwrap(),
-                )
+                .render_linear(&frame, limits)
                 .unwrap()
                 .to_format(
                     motion_render::PixelFormat::SrgbRgba8 {

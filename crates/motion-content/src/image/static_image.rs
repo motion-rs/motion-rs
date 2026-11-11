@@ -557,10 +557,7 @@ mod tests {
                         )?
                         .prepare(ValidationLimits::default(), limits)?;
                     let cpu = prepared.render_linear(limits)?;
-                    let output = gpu.render_linear(
-                        &prepared,
-                        motion_render::gpu::Plan::new(&prepared, limits)?,
-                    )?;
+                    let output = gpu.render_linear(&prepared, limits)?;
                     for row in 0..16 {
                         for column in 0..16 {
                             for (first, second) in cpu
@@ -588,17 +585,12 @@ mod tests {
                     for (first, second) in cpu.bytes().iter().zip(output.bytes()) {
                         assert!(first.abs_diff(*second) <= 1);
                     }
-                    let replay = gpu
-                        .render_linear(
-                            &prepared,
-                            motion_render::gpu::Plan::new(&prepared, limits)?,
-                        )?
-                        .to_format(
-                            motion_render::PixelFormat::SrgbRgba8 {
-                                premultiplied: false,
-                            },
-                            limits,
-                        )?;
+                    let replay = gpu.render_linear(&prepared, limits)?.to_format(
+                        motion_render::PixelFormat::SrgbRgba8 {
+                            premultiplied: false,
+                        },
+                        limits,
+                    )?;
                     assert_eq!(output, replay);
                     cases += 1;
                 }

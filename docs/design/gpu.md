@@ -318,8 +318,9 @@ or speedup acceptance.
 ## Limits and Validation
 
 `FrameQueue` reserves each submitted plan's logical peak, not its configured byte
-ceiling. Packed output uses `Plan::packed_stats` to include output/readback resources
-and validate work before submission. Queues still admit at most three frames and
+ceiling. Packed output uses `OutputPlan::peak_bytes` to include output/readback resources
+and validate work before submission. The plan itself is crate-private; callers plan through
+`OutputPlan`, `FrameQueue::submit` and `Gpu::render_linear`. Queues still admit at most three frames and
 reject excess aggregate bytes before executing a plan.
 
 Dedicated packed plans reserve output resources before optional batch-data padding.
@@ -346,10 +347,10 @@ and the separately validated post-freeze export wiring are retained in
 GPU exports, explicit or an Automatic request whose startup selection chose the GPU,
 prepare and submit the first selected frame normally. Its
 preparation/planning maximum and packed-plan peak size separate CPU worker slots
-and the GPU queue. Bounded workers prepare, build Plan and compute packed_stats;
+and the GPU queue. Bounded workers prepare, build an `OutputPlan` and read its peak;
 the ordered consumer only admits, submits and completes output for encoding.
 Planning charges conservatively include device/staging reservations as well as
-CPU data. Plan::new_with_planning_limit limits construction independently of the
+CPU data. `OutputPlan::with_planning_limit` limits construction independently of the
 original submission allowance. Worker count is not fixed at two or derived from
 the configured raster ceiling. Each completed plan is checked against in-flight
 bytes; the oldest output is completed when the queue needs space. If a later frame

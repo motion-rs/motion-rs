@@ -7,6 +7,7 @@ use super::scenes::artwork;
 use super::{DESIGN, MAX_NODES, invalid, support};
 use motion::extend::RenderPrepare;
 use motion::prelude::*;
+use motion::render::Renderer;
 use motion::render::{Composition, SceneCache, ValidationLimits};
 use std::hint::black_box;
 

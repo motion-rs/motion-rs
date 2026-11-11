@@ -124,7 +124,8 @@ impl PendingTextureFrame {
 
 impl PendingLinearFrame {
     /// Keeps this submission's timestamp result separate from subsequent frames.
-    pub fn timing_handle(&self) -> Option<GpuTimingHandle> {
+    #[cfg(test)]
+    pub(crate) fn timing_handle(&self) -> Option<GpuTimingHandle> {
         self.timestamps
             .as_ref()
             .map(super::super::timing::TimestampRecorder::handle)
@@ -208,14 +209,16 @@ impl PendingLinearFrame {
 
 impl PendingOutputFrame {
     /// Keeps this submission's timestamp result separate from subsequent frames.
-    pub fn timing_handle(&self) -> Option<GpuTimingHandle> {
+    #[cfg(test)]
+    pub(crate) fn timing_handle(&self) -> Option<GpuTimingHandle> {
         self.timestamps
             .as_ref()
             .map(super::super::timing::TimestampRecorder::handle)
     }
 
     /// Exact transferred payload bytes, excluding the four-byte finite/alpha status.
-    pub fn readback_bytes(&self) -> u64 {
+    #[cfg(test)]
+    pub(crate) fn readback_bytes(&self) -> u64 {
         self.readback.size()
     }
 

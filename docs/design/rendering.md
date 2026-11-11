@@ -1,7 +1,9 @@
 # Rendering and Export
 
-Import `motion::prelude` for authoring, `motion::render` for rendering contracts
-and `motion::extend` for implementation protocols. Logical sizes
+Import `motion::prelude` for authoring, `motion::render` for rendering contracts,
+`motion::encode` for encoders and progress sinks, and `motion::extend` for implementation
+protocols. Prepared coverage (strips, spans, paint records and layers) and the GPU plan
+are crate-private to `motion-render`; `PreparedFrame` exposes sizes, statistics and counts only. Logical sizes
 use f64; output PixelSize uses positive integer dimensions. A composition uniformly
 contains logical content in its output viewport.
 

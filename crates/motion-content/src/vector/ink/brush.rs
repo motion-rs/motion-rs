@@ -610,22 +610,18 @@ mod tests {
             limits,
         )?;
         let mut gpu = motion_render::gpu::Gpu::new()?;
-        let actual = gpu
-            .render_linear(&prepared, motion_render::gpu::Plan::new(&prepared, limits)?)?
-            .to_format(
-                motion_render::PixelFormat::SrgbRgba8 {
-                    premultiplied: false,
-                },
-                limits,
-            )?;
-        let replay = gpu
-            .render_linear(&prepared, motion_render::gpu::Plan::new(&prepared, limits)?)?
-            .to_format(
-                motion_render::PixelFormat::SrgbRgba8 {
-                    premultiplied: false,
-                },
-                limits,
-            )?;
+        let actual = gpu.render_linear(&prepared, limits)?.to_format(
+            motion_render::PixelFormat::SrgbRgba8 {
+                premultiplied: false,
+            },
+            limits,
+        )?;
+        let replay = gpu.render_linear(&prepared, limits)?.to_format(
+            motion_render::PixelFormat::SrgbRgba8 {
+                premultiplied: false,
+            },
+            limits,
+        )?;
         assert_eq!(actual.bytes(), replay.bytes());
         assert!(
             expected

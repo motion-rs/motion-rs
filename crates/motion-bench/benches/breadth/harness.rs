@@ -4,6 +4,7 @@
 use super::scenes::artwork;
 use super::{MAX_NODES, invalid, support};
 use motion::prelude::*;
+use motion::render::Renderer;
 use motion::render::{Composition, RasterLimits, RenderContext, ValidationLimits};
 
 pub(super) fn checksum(pixels: &[u32]) -> u64 {

@@ -58,7 +58,7 @@ impl PixelRect {
 
 /// Edge coverage in a band of up to four rows, possibly shifted by cached translation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Strip {
+pub(crate) struct Strip {
     /// First output column.
     pub(crate) x: u32,
     /// First output row; translated cached bands need not be four-row aligned.
@@ -71,36 +71,9 @@ pub struct Strip {
     pub(crate) alpha_offset: usize,
 }
 
-impl Strip {
-    /// First output column.
-    pub fn x(&self) -> u32 {
-        self.x
-    }
-
-    /// First output row.
-    pub fn y(&self) -> u32 {
-        self.y
-    }
-
-    /// Number of columns.
-    pub fn width(&self) -> u32 {
-        self.width
-    }
-
-    /// Number of rows, in 1..=4.
-    pub fn height(&self) -> u32 {
-        self.height
-    }
-
-    /// Row-major start in `PreparedFrame::alphas`; no padding between rows.
-    pub fn alpha_offset(&self) -> usize {
-        self.alpha_offset
-    }
-}
-
 /// A fully covered interval in a band of up to four rows.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Span {
+pub(crate) struct Span {
     /// Inclusive first column; cached translation may change its four-pixel phase.
     pub(crate) start_x: u32,
     /// Exclusive last column.
@@ -111,40 +84,18 @@ pub struct Span {
     pub(crate) height: u32,
 }
 
-impl Span {
-    /// Inclusive first column.
-    pub fn start_x(&self) -> u32 {
-        self.start_x
-    }
-
-    /// Exclusive last column.
-    pub fn end_x(&self) -> u32 {
-        self.end_x
-    }
-
-    /// First row.
-    pub fn y(&self) -> u32 {
-        self.y
-    }
-
-    /// Number of rows, in 1..=4.
-    pub fn height(&self) -> u32 {
-        self.height
-    }
-}
-
 /// A finite linear-sRGB premultiplied f32 constant paint record.
 /// Spatial descriptors are retained separately; use PreparedFrame::paint_at
 /// for a sample that also resolves gradients or image patterns.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct PaintRecord {
+pub(crate) struct PaintRecord {
     /// Extended linear RGB is retained; alpha is in 0..=1.
     pub linear_premultiplied: [f32; 4],
 }
 
 /// path-mask or cumulative geometric clip coverage in shared arrays.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ClipRecord {
+pub(crate) struct ClipRecord {
     /// Conservative device bounds, clipped to the internal raster.
     pub bounds: PixelRect,
     /// Disjoint partial coverage strips belonging to this clip.
@@ -155,7 +106,7 @@ pub struct ClipRecord {
 
 /// A normalized isolated layer shared by CPU and GPU scope consumers.
 #[derive(Clone, Debug, PartialEq)]
-pub struct PreparedLayer {
+pub(crate) struct PreparedLayer {
     /// Once-per-group opacity applied on completion.
     pub opacity: f64,
     /// Conservative raster capture bounds.
@@ -172,7 +123,7 @@ pub struct PreparedLayer {
 
 /// Ordered source-only effects and the unfiltered raster-space input bounds.
 #[derive(Clone, Debug, PartialEq)]
-pub struct PreparedFilters {
+pub(crate) struct PreparedFilters {
     /// Device input region before effects expand or shift it.
     pub source_bounds: Rect,
     /// Validated effects in declaration order.
@@ -182,7 +133,7 @@ pub struct PreparedFilters {
 /// Prepared operations in exactly the original command order.
 #[derive(Clone, Debug, PartialEq)]
 #[non_exhaustive]
-pub enum PreparedItem {
+pub(crate) enum PreparedItem {
     /// analytic/sprite/segment instances, without path coverage expansion.
     ParticleInstances {
         /// Validated immutable payload.
@@ -281,39 +232,23 @@ impl PreparedFrame {
     }
 
     /// Optional linear-premultiplied background, not rasterized during preparation.
-    pub fn background(&self) -> Option<PaintRecord> {
+    pub(crate) fn background(&self) -> Option<PaintRecord> {
         self.background
     }
 
-    /// Read-only operations in source order; collapsed instance transforms may be omitted.
-    pub fn items(&self) -> &[PreparedItem] {
-        &self.items
+    /// Number of independent path-mask and geometric clip regions.
+    pub fn clip_count(&self) -> usize {
+        self.clips.len()
     }
 
-    /// Shared edge strip metadata.
-    pub fn strips(&self) -> &[Strip] {
-        &self.strips
+    /// Number of edge coverage strips shared by all fills and clips.
+    pub fn strip_count(&self) -> usize {
+        self.strips.len()
     }
 
-    /// Shared interior intervals.
-    pub fn spans(&self) -> &[Span] {
-        &self.spans
-    }
-
-    /// Shared row-major edge coverage, nearest-rounded to u8.
-    pub fn alphas(&self) -> &[u8] {
-        &self.alphas
-    }
-
-    /// Constant records, one per fill; spatial fills have transparent placeholders.
-    /// paint_at resolves the shared spatial descriptors and their color tables.
-    pub fn paints(&self) -> &[PaintRecord] {
-        &self.paints
-    }
-
-    /// Independent path masks and cumulative geometric regions in shared arrays.
-    pub fn clips(&self) -> &[ClipRecord] {
-        &self.clips
+    /// Number of fully covered interior spans shared by all fills and clips.
+    pub fn span_count(&self) -> usize {
+        self.spans.len()
     }
 
     /// Logical retained/peak storage and admitted preparation work.

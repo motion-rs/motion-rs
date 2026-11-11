@@ -119,7 +119,7 @@ impl FrameExecution<'_> {
             |decision| decision.renderer == Renderer::Cpu,
         );
         let display = self.composition.options.display.clone();
-        if cpu && (!prepared.items().is_empty() || !display.is_identity()) {
+        if cpu && (!prepared.items.is_empty() || !display.is_identity()) {
             self.select_backend()?;
             let output_pool = self.output_pool.clone();
             let (frame, linear, output) = crate::FrameBuffer::from_prepared_display(
@@ -146,7 +146,7 @@ impl FrameExecution<'_> {
             }
             return Ok(frame);
         }
-        if prepared.items().is_empty() && cpu {
+        if prepared.items.is_empty() && cpu {
             self.select_backend()?;
             let pixels = u64::from(prepared.size().width) * u64::from(prepared.size().height);
             let limits = remaining(limits, pixels)

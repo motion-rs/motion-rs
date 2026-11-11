@@ -176,7 +176,7 @@ pub fn run() -> motion::Result {
 mod tests {
     use super::*;
     #[cfg(feature = "ffmpeg")]
-    use motion::encode::PcmBuffer;
+    use motion::encode::{NoProgress, PcmBuffer};
     #[cfg(feature = "ffmpeg")]
     use motion::extend::ProgressSink;
     use std::collections::BTreeSet;

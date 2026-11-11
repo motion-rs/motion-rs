@@ -10,7 +10,7 @@
 //! The rendering core has no desktop windows, widgets, or implicit playback clock.
 //! [`Row`] and [`Column`] provide deterministic layout inside the scene tree.
 //! The optional `studio` feature adds an egui desktop preview and export workbench.
-//! Import [`prelude`] for canonical authoring and rendering APIs.
+//! Import [`prelude`] for canonical authoring APIs.
 //!
 //! # Model
 //!
@@ -63,7 +63,8 @@
 //!
 //! # Where things live
 //!
-//! The prelude covers authoring, rendering and export. Everything else sits in an explicit
+//! The prelude covers authoring values and the everyday entry points (`render_still`,
+//! `export`, [`RenderOptions`], [`ExportOptions`]). Everything else sits in an explicit
 //! namespace, some behind a Cargo feature:
 //!
 //! | Need | Namespace | Feature |
@@ -77,6 +78,7 @@
 //! | Vector trees and morphs | `vector` | `vector` |
 //! | Extension protocols (`Drawable`, `DeferredContent`, `Transition`, `RenderPrepare`) | `extend` | always |
 //! | Compiled commands, caches, backends | `render` | always |
+//! | Encoders, progress sinks, export reports | `encode` | always |
 //! | Desktop preview | `studio` | `studio` |
 //!
 //! # Features and Resources
@@ -132,7 +134,8 @@
 //!
 //! # Import Boundaries
 //!
-//! Renderer internals belong to [`render`], and implementation protocols to [`extend`].
+//! Renderer internals belong to [`render`], encoders and progress sinks to [`encode`], and
+//! implementation protocols to [`extend`].
 //!
 //! ```compile_fail
 //! use motion::prelude::*;
@@ -152,6 +155,11 @@
 //! ```compile_fail
 //! use motion::prelude::*;
 //! fn particle_protocol(_: &dyn Emitter) {}
+//! ```
+//!
+//! ```compile_fail
+//! use motion::prelude::*;
+//! fn encoder_protocol(_: &dyn Encoder) {}
 //! ```
 //!
 //! ```compile_fail
@@ -218,12 +226,10 @@ pub use motion_core::{
     Vector2, Wipe, ZoomBlur, animation, authoring, color, geometry, noise, path2d, sample_offsets,
     shape, time, try_camera,
 };
-pub use motion_render::{BackendPreference, RenderOptions, Renderer, render_still};
+pub use motion_render::{BackendPreference, RenderOptions, render_still};
 
 pub use motion_encode::audio;
-pub use motion_encode::{
-    Codec, EncoderPreset, ExportOptions, ExportPhase, ExportReport, NoProgress, export,
-};
+pub use motion_encode::{Codec, EncoderPreset, ExportOptions, export};
 
 #[cfg(feature = "particles")]
 pub use motion_content::particles;
@@ -337,11 +343,11 @@ pub mod prelude {
         MaskMode, MotionBlur, Node, NodeModifiers, Noise, Oscillator, Paint, Path2D, PathSample,
         Pivot, PixelSize, Point, Polygon, Polyline, Pose, Project, ProjectBuilder, ProjectOutcome,
         ProjectTimelineInfo, Push, RadialGradient, Random, Rect, RegularPolygon, RenderOptions,
-        RenderQuality, Renderer, Ring, RoundedRect, Row, Sampling, Scene, SceneContext, Shape,
-        Side, Signal, Size, Skeleton, Slide, Source, Spline, Spring, Star, StrokeStyle, Styled,
-        SweepGradient, Time, TimeLiteral, Timeline, TimelineBuilder, TimelineWarning, Track,
-        TrackBuilder, Transform, TransformComponents, Tween, ValidationError, Vector2, Waveform,
-        Wipe, ZoomBlur, camera, export, group, key, math, piecewise, remap, render_still, scene,
+        RenderQuality, Ring, RoundedRect, Row, Sampling, Scene, SceneContext, Shape, Side, Signal,
+        Size, Skeleton, Slide, Source, Spline, Spring, Star, StrokeStyle, Styled, SweepGradient,
+        Time, TimeLiteral, Timeline, TimelineBuilder, TimelineWarning, Track, TrackBuilder,
+        Transform, TransformComponents, Tween, ValidationError, Vector2, Waveform, Wipe, ZoomBlur,
+        camera, export, group, key, math, piecewise, remap, render_still, scene,
     };
     pub use crate::{
         ApertureShape, BitDepth, Cdl, ColorWheels, DepthOfField, DepthPlane, DisplayTransform,
@@ -363,10 +369,7 @@ pub mod prelude {
         TextSplit,
     };
     pub use motion_core::Transition as _;
-    pub use motion_encode::{
-        Codec, Encoder, EncoderFactory, EncoderPreset, ExportOptions, ExportPhase, ExportReport,
-        NoProgress,
-    };
+    pub use motion_encode::{Codec, EncoderPreset, ExportOptions};
     #[cfg(feature = "formula")]
     pub use motion_formula::{Formula, FormulaOptions};
     #[cfg(feature = "typst")]

@@ -2,9 +2,10 @@
 #[cfg(test)]
 use crate::*;
 
+use crate::encode::ExportReport;
 use crate::extend::ProgressSink;
 use crate::render::FrameBuffer;
-use crate::{ExportOptions, ExportReport, RenderOptions, Result, Time, Timeline, TimelineBuilder};
+use crate::{ExportOptions, RenderOptions, Result, Time, Timeline, TimelineBuilder};
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::Value;
 use std::sync::Arc;
