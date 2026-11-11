@@ -73,6 +73,11 @@ impl PatternImage {
         self.0.extend_level(level, out);
     }
 
+    /// Stable identity of the shared pixel storage, for deduplicating per-frame accounting.
+    pub fn identity(&self) -> usize {
+        Arc::as_ptr(&self.0).cast::<()>() as usize
+    }
+
     fn same(&self, other: &Self) -> bool {
         Arc::ptr_eq(&self.0, &other.0) || self.0.content_eq(other.0.as_ref())
     }

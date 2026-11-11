@@ -114,13 +114,14 @@ impl<'a> FrameIr<'a> {
                     ..
                 } => {
                     let alpha_clip = if let Some(clip) = clip {
+                        let clip_path = format!("{path}.clip");
                         let matrix = transform(clip.transform);
                         let geometry = self.add_path(
                             GeometrySource::Path(&clip.path),
                             matrix,
                             clip.rule,
                             budget,
-                            &path,
+                            &clip_path,
                         )?;
                         let mut source = clip.clone();
                         source.transform = matrix;
@@ -130,7 +131,7 @@ impl<'a> FrameIr<'a> {
                                 path: geometry,
                             },
                             budget,
-                            &path,
+                            &clip_path,
                         )?)
                     } else {
                         None
@@ -307,14 +308,9 @@ impl<'a> FrameIr<'a> {
         if let Paint::Solid(color) = source {
             super::super::prepare::paint_record(*color, path)?;
         }
-        if let Paint::Mesh(mesh) = source {
-            self.resources(
-                std::mem::size_of_val(mesh.mesh.vertices()) as u64,
-                budget,
-                path,
-            )?;
-        }
-        if let Paint::Pattern(pattern) = source {
+        if let Paint::Pattern(pattern) = source
+            && self.seen_images.insert(pattern.image.identity())
+        {
             budget.work(pattern.image.levels() as u64, path)?;
             for level in 0..pattern.image.levels() {
                 let (width, height) = pattern.image.size(level);

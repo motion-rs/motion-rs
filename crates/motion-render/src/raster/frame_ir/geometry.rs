@@ -92,8 +92,6 @@ impl<'a> FrameIr<'a> {
         segments = segments.checked_add(1).ok_or_else(|| {
             ValidationError::limit(path, "max_work", "Path segment bound overflow")
         })?;
-        // Reserve future flattening work before a backend can begin generating segments.
-        budget.work(segments, path)?;
         self.segments = self.segments.checked_add(segments).ok_or_else(|| {
             ValidationError::limit(path, "max_work", "Frame segment bound overflow")
         })?;

@@ -393,8 +393,14 @@ pub(crate) fn prepare_scene(
     if has_plus_layers {
         layers::trim_plus_layers(&mut frame, &mut budget)?;
     }
-    // The IR dies after preparation; shared resource bytes transfer to the result.
-    budget.release(ir_stats.retained_bytes - ir.resource_bytes());
+    // The IR dies after preparation. Only a GPU frame keeps its admitted resource bytes for
+    // upload; a CPU frame borrows the immutable resources and owns no copy of them.
+    let kept = if device.is_some() {
+        ir.resource_bytes()
+    } else {
+        0
+    };
+    budget.release(ir_stats.retained_bytes - kept);
     frame.stats = PreparationStats {
         retained_bytes: budget.live_bytes(),
         peak_bytes: budget.peak_bytes(),

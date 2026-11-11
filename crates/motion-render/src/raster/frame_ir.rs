@@ -9,6 +9,7 @@ use motion_core::{
     FillRule, Paint, Path2D, PathClip, PathVerb, PixelSize, RasterLimits, Rect, RectClip,
     ShapeClip, Transform, ValidatedDisplayList, ValidationError, ValidationLimits,
 };
+use std::collections::HashSet;
 use std::mem::size_of;
 
 mod geometry;
@@ -35,6 +36,7 @@ pub(crate) struct FrameIr<'a> {
     clips: Vec<IrClip>,
     segments: u64,
     resource_bytes: u64,
+    seen_images: HashSet<usize>,
     stats: PreparationStats,
 }
 
@@ -95,6 +97,7 @@ impl<'a> FrameIr<'a> {
             clips: Vec::new(),
             segments: 0,
             resource_bytes: 0,
+            seen_images: HashSet::new(),
             stats: PreparationStats::default(),
         };
         frame.normalize(&list.commands, padding, &mut budget)?;

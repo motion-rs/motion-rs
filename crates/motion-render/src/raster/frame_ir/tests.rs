@@ -142,7 +142,9 @@ fn ir_admits_storage_work_wang_bound_and_padded_pixels_before_backend_work()
         max_work: 100,
         ..RasterLimits::default()
     };
-    assert!(FrameIr::build(&source, ValidationLimits::default(), limited, 1.0e-12).is_err());
+    // Flattening work is charged by the backend that flattens, not reserved by the IR.
+    let fine = FrameIr::build(&source, ValidationLimits::default(), limited, 1.0e-12)?;
+    assert!(prepare_ir(&fine, limited, None).is_err());
     assert!(
         FrameIr::build(
             &source,
@@ -224,5 +226,33 @@ fn warm_cpu_cache_does_not_make_gpu_preparation_depend_on_cpu_coverage()
         warm.render_linear(limits)?.bytes(),
         cold.render_linear(limits)?.bytes()
     );
+    Ok(())
+}
+
+#[test]
+fn repeated_pattern_fills_charge_shared_image_bytes_once() -> motion_core::Result {
+    let image = Arc::new(motion_content::ImageAsset::from_rgba8(
+        64,
+        64,
+        vec![200; 64 * 64 * 4],
+    )?);
+    let retained = |fills: usize| -> Result<u64, motion_core::Error> {
+        let nodes = (0..fills).map(|_| {
+            Node::from(
+                Rect::new(0.0, 0.0, 8.0, 8.0)
+                    .fill(motion_core::ImagePattern::from_asset(image.clone())),
+            )
+        });
+        let source = Node::group(nodes).compile(
+            Size::new(8.0, 8.0),
+            PixelSize::new(8, 8),
+            ValidationLimits::default(),
+        )?;
+        let ir = build(&source)?;
+        Ok(ir.stats().retained_bytes)
+    };
+    let one = retained(1)?;
+    let eight = retained(8)?;
+    assert!(eight - one < 64 * 64 * 8, "{one} -> {eight}");
     Ok(())
 }
