@@ -28,11 +28,11 @@ draw/compute operations use finite linear-premultiplied pixels in RGBA32F workin
 textures. Particle states and ordered tile metadata remain storage buffers, as do
 coverage/paint uploads and the final output boundary. These payloads are charged
 explicitly. CPU preparation flattens paths. Eligible fills keep their f64 flattened edges
-and the GPU computes their 8-bit coverage in a compute pass before composition; all other
-coverage is still generated on the CPU and uploaded. Where contours cross inside a pixel the
-GPU sums signed areas rather than reproducing the exact CPU sweep, so such pixels may differ
-by more than 2 LSB (12 of 38,400 in the star fixture). CPU rendering materializes the same
-coverage itself and is unchanged.
+and the GPU computes f32 coverage in a compute pass before composition, without an
+intermediate u8 quantization. All other coverage is still generated on the CPU and uploaded.
+Where contours cross inside a pixel the GPU sums signed areas rather than reproducing
+the exact CPU sweep, allowing localized antialiasing differences. CPU rendering
+materializes CPU coverage itself and is unchanged.
 
 Each dispatch uses a 256-byte `#[repr(C)]`/Pod `GpuUniforms` rather than a raw
 word array. Frame, bounds, operation, value rows, source rectangles and flags
@@ -60,7 +60,12 @@ clips use dense packed coverage, whose lookup does not grow with the record coun
 budget. Fully opaque and span-only payloads
 retain compact constants or sparse/packed records. Decals retain CPU f64 rejection
 and compact local payloads. Decals and coverage-cache hits keep CPU coverage.
-Shader decoding reproduces the original CPU f32 alpha bits. Geometric clip ratios
+Each six-word strip record includes a storage discriminator: CPU records address
+packed u8 alpha bytes, while device records address absolute f32 words in the same
+buffer. GPU coverage writes one sample per invocation; large frames use two-dimensional
+dispatch. Coverage storage and estimated pixel/edge visits are admitted before submission.
+CPU alpha decoding retains the original f32 values; device coverage stays f32 through
+composition. Geometric clip ratios
 retain their original f32 operation order. Conditional clips retain an eight-word
 bounded header and three independent alpha/child/ancestor payloads, which can
 themselves refer to the shared arrays, instead of CPU-expanded float pixels.

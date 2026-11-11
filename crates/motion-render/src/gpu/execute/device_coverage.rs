@@ -15,7 +15,7 @@ impl Gpu {
         let pipeline = self.coverage_pipeline();
         let parameters = [
             (device.fills.len() / crate::gpu::plan::FILL_WORDS) as u32,
-            device.words,
+            device.samples,
         ];
         let uniforms = self.upload_buffer(
             "Device coverage counts",
@@ -57,7 +57,9 @@ impl Gpu {
         });
         pass.set_pipeline(pipeline);
         pass.set_bind_group(0, &group, &[]);
-        pass.dispatch_workgroups(device.words.div_ceil(256), 1, 1);
+        let groups = device.samples.div_ceil(256);
+        let groups_x = groups.min(self.device.limits().max_compute_workgroups_per_dimension);
+        pass.dispatch_workgroups(groups_x, groups.div_ceil(groups_x), 1);
         drop(pass);
         working.extend([uniforms, fills, edges, rows]);
     }

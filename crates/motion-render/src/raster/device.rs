@@ -86,7 +86,7 @@ impl PreparedFrame {
         let alpha_offset = self
             .device_fills
             .last()
-            .map_or(0, |fill| Self::device_block_end(&self.strips[fill.strip]));
+            .map_or(0, |fill| Self::device_sample_end(&self.strips[fill.strip]));
         let strip = Strip {
             x: pixels.left,
             y: pixels.top,
@@ -105,9 +105,9 @@ impl PreparedFrame {
         Ok(true)
     }
 
-    /// First byte after a device strip's alpha block, rounded up to a whole word.
-    pub(crate) fn device_block_end(strip: &Strip) -> usize {
-        (strip.alpha_offset + (strip.width * strip.height) as usize).next_multiple_of(4)
+    /// First sample after a device strip's f32 coverage block.
+    pub(crate) fn device_sample_end(strip: &Strip) -> usize {
+        strip.alpha_offset + (strip.width * strip.height) as usize
     }
 
     /// Estimates how many edge visits the GPU makes: row crossings times the pixels per row.

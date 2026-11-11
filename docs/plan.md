@@ -82,6 +82,22 @@ production compatibility paths.
 
 ## Feature Extensions
 
+### Independent GPU preparation
+
+The v3 backend split is partial. FrameIr currently retains validated commands and
+frame dimensions; GPU fills use CPU-flattened edges and GPU-generated f32 coverage.
+Remaining steps, accepted by visual equivalence with fixture-specific tolerances:
+
+1. Evaluate mesh and generated atmosphere paints independently on CPU/GPU instead
+   of baking them during shared preparation; retain the explicit baking APIs.
+2. Replace per-row edge lists with bounded tile binning and relative coordinates,
+   expose per-path fallback statistics, and exercise GPU preparation in Automatic's
+   startup self-check.
+3. Validate complex text, SVG, clipping and filtered scenes at larger resolutions
+   before claiming performance gains. GPU flattening follows that acceptance.
+
+### Additional capabilities
+
 1. Expand output codecs/presets, alpha-capable output and color-management options.
    Each combination needs explicit capability checks and decoded-output fixtures.
 2. Extend SVG/filter support only through the shared vector/filter model. Unsupported

@@ -52,7 +52,7 @@ impl Planner<'_> {
             "gpu.frame_coverage",
         )?;
         let alpha_base = 4 + frame.strips.len() * 6 + frame.spans.len() * 4;
-        let device_base = frame.alphas.len().next_multiple_of(4);
+        let device_base = self.device_alpha_base();
         let mut data = Vec::new();
         data.try_reserve_exact(words as usize).map_err(|_| {
             ValidationError::limit(
@@ -78,18 +78,19 @@ impl Planner<'_> {
         ]);
         let mut device = frame.device_fills.iter().map(|fill| fill.strip).peekable();
         for (index, strip) in frame.strips.iter().enumerate() {
-            let shift = if device.next_if_eq(&index).is_some() {
-                device_base
+            let is_device = device.next_if_eq(&index).is_some();
+            let offset = if is_device {
+                device_base + strip.alpha_offset
             } else {
-                0
+                strip.alpha_offset
             };
             data.extend([
                 strip.x,
                 strip.y,
                 strip.width,
                 strip.height,
-                checked(strip.alpha_offset + shift)?,
-                0,
+                checked(offset)?,
+                u32::from(is_device),
             ]);
         }
         for span in &frame.spans {

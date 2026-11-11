@@ -9,18 +9,18 @@ pub(in crate::gpu) const FILL_WORDS: usize = 8;
 /// Fills, edges and row lists the coverage pass turns into frame alphas.
 #[derive(Default)]
 pub(in crate::gpu) struct DeviceCoverage {
-    /// Per fill: x, y, width, height, alpha word, row table start, rule, first word.
+    /// Per fill: x, y, width, height, coverage word, row table start, rule, first sample.
     pub(in crate::gpu) fills: Vec<u32>,
     /// Per edge: x0, y0, x1, y1 relative to the owning fill's origin, directed by winding.
     pub(in crate::gpu) edges: Vec<f32>,
     /// Per fill: height + 1 absolute offsets, then the edge indices crossing each row.
     pub(in crate::gpu) rows: Vec<u32>,
-    /// Alpha words the pass writes.
-    pub(in crate::gpu) words: u32,
+    /// f32 samples the pass writes, one per bounding-box pixel.
+    pub(in crate::gpu) samples: u32,
 }
 
 impl Planner<'_> {
-    /// Words before the device alpha block in the shared coverage buffer.
+    /// Words before the device f32 block in the shared coverage buffer.
     pub(super) fn device_alpha_base(&self) -> usize {
         4 + self.frame.strips.len() * 6
             + self.frame.spans.len() * 4
@@ -29,7 +29,7 @@ impl Planner<'_> {
 
     pub(super) fn device_words(&self) -> usize {
         self.frame.device_fills.last().map_or(0, |fill| {
-            PreparedFrame::device_block_end(&self.frame.strips[fill.strip]) / 4
+            PreparedFrame::device_sample_end(&self.frame.strips[fill.strip])
         })
     }
 
@@ -48,6 +48,8 @@ impl Planner<'_> {
             path,
         )?;
         self.budget.work(frame.device_edges.len() as u64, path)?;
+        self.budget
+            .work(frame.device_totals[0] + frame.device_totals[1], path)?;
         let alpha_base = self.device_alpha_base();
         let mut next_word = 0;
         for fill in &frame.device_fills {
@@ -110,23 +112,20 @@ impl Planner<'_> {
             for edge in edges {
                 device.edges.extend(local(edge));
             }
-            let words = PreparedFrame::device_block_end(strip) / 4 - strip.alpha_offset / 4;
+            let samples = PreparedFrame::device_sample_end(strip) - strip.alpha_offset;
             device.fills.extend([
                 strip.x,
                 strip.y,
                 width,
                 strip.height,
-                index(alpha_base + strip.alpha_offset / 4)?,
+                index(alpha_base + strip.alpha_offset)?,
                 index(rows_start)?,
                 u32::from(fill.rule == FillRule::EvenOdd),
                 index(next_word)?,
             ]);
-            next_word += words;
+            next_word += samples;
         }
-        if next_word > 65535 * 256 {
-            return Err(overflow());
-        }
-        device.words = index(next_word)?;
+        device.samples = index(next_word)?;
         Ok(device)
     }
 }

@@ -67,7 +67,7 @@ pub(crate) struct Strip {
     pub(crate) width: u32,
     /// Number of rows, in 1..=4 and contained in the output.
     pub(crate) height: u32,
-    /// Row-major start in PreparedFrame::alphas; no padding between rows.
+    /// Row-major start in PreparedFrame::alphas, or in the device f32 sample block for a device fill.
     pub(crate) alpha_offset: usize,
 }
 
@@ -169,7 +169,7 @@ pub(crate) enum PreparedItem {
 /// A fill whose coverage the GPU computes from flattened edges instead of CPU strips.
 ///
 /// The fill owns one dense strip covering its pixel bounds; the strip's `alpha_offset` addresses
-/// a four-byte aligned block after the CPU alphas, which the GPU writes before composition.
+/// an f32 sample block after the packed CPU alphas, which the GPU writes before composition.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct DeviceFill {
     /// Index of the dense strip in [`PreparedFrame::strips`].

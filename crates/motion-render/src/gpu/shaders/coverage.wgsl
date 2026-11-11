@@ -1,13 +1,13 @@
-// Compute 8-bit fill coverage from flattened edges into the shared frame coverage buffer.
+// Compute f32 fill coverage from flattened edges into the shared frame coverage buffer.
 struct Params {
-    // x: fill count, y: alpha words to write.
+    // x: fill count, y: f32 samples to write.
     counts: vec2u,
 }
 
 @group(0) @binding(0)
 var<uniform> params: Params;
 
-// Eight words per fill: x, y, width, height, alpha word, row table start, rule, first word.
+// Eight words per fill: x, y, width, height, coverage word, row table start, rule, first sample.
 @group(0) @binding(1)
 var<storage, read> fills: array<u32>;
 
@@ -83,18 +83,18 @@ fn rule_coverage(total: f32, rule: u32) -> f32 {
 }
 
 @compute @workgroup_size(256)
-fn coverage_pass(@builtin(global_invocation_id) id: vec3u) {
-    let word = id.x;
-    if word >= params.counts.y {
+fn coverage_pass(@builtin(global_invocation_id) id: vec3u, @builtin(num_workgroups) groups: vec3u) {
+    let sample = id.x + id.y * groups.x * 256u;
+    if sample >= params.counts.y {
         return;
     }
 
-    // The last fill whose first word is not past this one owns it.
+    // Each invocation owns one sample; large frames span multiple workgroup rows.
     var low = 0u;
     var high = params.counts.x - 1u;
     while low < high {
         let middle = low + (high - low + 1u) / 2u;
-        if fills[middle * FILL_WORDS + 7u] <= word {
+        if fills[middle * FILL_WORDS + 7u] <= sample {
             low = middle;
         } else {
             high = middle - 1u;
@@ -103,17 +103,8 @@ fn coverage_pass(@builtin(global_invocation_id) id: vec3u) {
 
     let base = low * FILL_WORDS;
     let size = vec2u(fills[base + 2u], fills[base + 3u]);
-    let pixels = size.x * size.y;
-    let first = (word - fills[base + 7u]) * 4u;
-    var packed = 0u;
-    for (var lane = 0u; lane < 4u; lane++) {
-        let index = first + lane;
-        if index >= pixels {
-            break;
-        }
-        let area = signed_area(fills[base + 5u], vec2u(index % size.x, index / size.x));
-        let value = u32(clamp(rule_coverage(area, fills[base + 6u]), 0.0, 1.0) * 255.0 + 0.5001);
-        packed |= value << (lane * 8u);
-    }
-    coverage[fills[base + 4u] + (word - fills[base + 7u])] = packed;
+    let index = sample - fills[base + 7u];
+    let area = signed_area(fills[base + 5u], vec2u(index % size.x, index / size.x));
+    let value = clamp(rule_coverage(area, fills[base + 6u]), 0.0, 1.0);
+    coverage[fills[base + 4u] + index] = bitcast<u32>(value);
 }

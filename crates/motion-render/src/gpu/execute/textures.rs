@@ -188,7 +188,7 @@ impl Gpu {
         if let Some(timestamps) = &timestamps {
             timestamps.write(&mut encoder, 0);
         }
-        if plan.device.words != 0 {
+        if plan.device.samples != 0 {
             self.encode_device_coverage(&mut encoder, &plan.device, &coverage, &mut working);
         }
         let mut budget = Budget::resume(
