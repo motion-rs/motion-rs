@@ -35,7 +35,10 @@ pub(super) fn spawn_analysis(
                     if timeline.soundtrack().clips().is_empty() {
                         return Ok(AudioOverview::default());
                     }
-                    let mixed = motion_encode::MixedAudio::from_timeline(&timeline, 8000)?;
+                    let mixed = motion_encode::MixedAudio::new(
+                        &timeline,
+                        motion_encode::MixOptions::new(8000),
+                    )?;
                     let peaks = motion_encode::audio::WaveformPyramid::from_source(
                         &mixed,
                         timeline.duration(),
@@ -58,8 +61,11 @@ pub(super) fn spawn_analysis(
                         overview.markers = analysis.onsets()?.times().to_vec();
                         overview.beat = analysis.beat_grid().ok();
                         overview.report = Some(
-                            motion_encode::MixedAudio::from_timeline(&timeline, 48000)?
-                                .loudness_report()?,
+                            motion_encode::MixedAudio::new(
+                                &timeline,
+                                motion_encode::MixOptions::new(48000),
+                            )?
+                            .loudness_report()?,
                         );
                         Ok(())
                     })();

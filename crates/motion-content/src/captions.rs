@@ -239,7 +239,10 @@ mod tests {
                 .is_err()
         );
         let clip = short.audio_clip(0, audio.clone(), (Time::ZERO, 1.seconds().after_origin()))?;
-        let mixed = motion_encode::MixedAudio::new(&[clip], 48_000, 2.seconds())?;
+        let mixed = motion_encode::MixedAudio::new(
+            motion_encode::MixSource::clips(&[clip], 2.seconds()),
+            motion_encode::MixOptions::new(48_000),
+        )?;
         let mut sample = [0.0; 2];
         assert_eq!(mixed.read(0, &mut sample), 1);
         assert_eq!(sample, [0.0; 2]);

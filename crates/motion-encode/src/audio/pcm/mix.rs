@@ -3,7 +3,10 @@
 use super::meter::BusMeter;
 #[cfg(feature = "audio")]
 use super::resample::resample;
-use super::{AudioClip, AudioSource, MAX_SAMPLES, ResampleQuality, ceil_frames, frames, invalid};
+use super::{
+    AudioClip, AudioSource, MAX_SAMPLES, MixOptions, MixSource, ResampleQuality, ceil_frames,
+    frames, invalid,
+};
 #[cfg(not(feature = "audio"))]
 use crate::audio::resample_disabled::resample;
 use motion_core::Duration;
@@ -28,62 +31,57 @@ pub struct MixedAudio {
 }
 
 impl MixedAudio {
-    /// Mixes the declared timeline sources in deterministic occurrence order.
-    pub fn from_timeline(timeline: &motion_core::Timeline, rate: u32) -> motion_core::Result<Self> {
-        Self::from_timeline_with(timeline, rate, ResampleQuality::default())
-    }
-
-    /// Like [`Self::from_timeline`] with an explicit resampler.
-    pub fn from_timeline_with(
-        timeline: &motion_core::Timeline,
-        rate: u32,
-        quality: ResampleQuality,
+    /// Mixes the source in deterministic occurrence order.
+    ///
+    /// A [`MixSource::Timeline`] resolves its audio files here, applies buses and the master
+    /// and honours [`MixOptions::range`] while preserving original fade/envelope clocks.
+    /// Clips are prepared at most [`MAX_CLIPS`](crate::audio::MAX_CLIPS) / 128 MiB stereo PCM.
+    /// Timeline gaps and EOF are silence. All sources/envelopes must be pure; callback panics
+    /// propagate.
+    pub fn new<'a>(
+        source: impl Into<MixSource<'a>>,
+        options: MixOptions,
     ) -> motion_core::Result<Self> {
-        let resolved = crate::audio::prepare_timeline(timeline)?;
-        Self::from_resolved(timeline, &resolved, rate, quality)
-    }
-
-    pub(crate) fn from_resolved(
-        timeline: &motion_core::Timeline,
-        resolved: &motion_core::ResolvedAudio,
-        rate: u32,
-        quality: ResampleQuality,
-    ) -> motion_core::Result<Self> {
-        Self::new_with(resolved.clips(), rate, resolved.duration(), quality)?
-            .process_buses(timeline.soundtrack().buses())?
-            .apply_master(timeline.soundtrack().master())
-    }
-
-    /// Mixes only a selected timeline interval while preserving original fade/envelope clocks.
-    pub fn from_window(
-        timeline: &motion_core::Timeline,
-        range: std::ops::Range<Duration>,
-        rate: u32,
-    ) -> motion_core::Result<Self> {
-        Self::from_window_with(timeline, range, rate, ResampleQuality::default())
-    }
-
-    /// Like [`Self::from_window`] with an explicit resampler.
-    pub fn from_window_with(
-        timeline: &motion_core::Timeline,
-        range: std::ops::Range<Duration>,
-        rate: u32,
-        quality: ResampleQuality,
-    ) -> motion_core::Result<Self> {
-        let resolved = crate::audio::prepare_timeline(timeline)?;
-        Self::from_resolved_window(timeline, &resolved, range, rate, quality)
-    }
-
-    pub(crate) fn from_resolved_window(
-        timeline: &motion_core::Timeline,
-        resolved: &motion_core::ResolvedAudio,
-        range: std::ops::Range<Duration>,
-        rate: u32,
-        quality: ResampleQuality,
-    ) -> motion_core::Result<Self> {
-        if range.start < Duration::ZERO || range.end < range.start {
-            return Err(invalid("range", "Invalid audio window").into());
+        let MixOptions {
+            sample_rate,
+            range,
+            resampler,
+        } = options;
+        match source.into() {
+            MixSource::Timeline(timeline) => {
+                let resolved = crate::audio::prepare_timeline(timeline)?;
+                Self::from_resolved(timeline, &resolved, sample_rate, range, resampler)
+            }
+            MixSource::Resolved { timeline, audio } => {
+                Self::from_resolved(timeline, audio, sample_rate, range, resampler)
+            }
+            MixSource::Clips { clips, duration } => match range {
+                None => Self::new_window(clips, sample_rate, duration, Duration::ZERO, resampler),
+                Some(range) => {
+                    let range = checked_window(range)?;
+                    Self::new_window(
+                        clips,
+                        sample_rate,
+                        range.end - range.start,
+                        range.start,
+                        resampler,
+                    )
+                }
+            },
         }
+    }
+
+    fn from_resolved(
+        timeline: &motion_core::Timeline,
+        resolved: &motion_core::ResolvedAudio,
+        rate: u32,
+        range: Option<std::ops::Range<Duration>>,
+        quality: ResampleQuality,
+    ) -> motion_core::Result<Self> {
+        let Some(range) = range else {
+            return Self::from_resolved_full(timeline, resolved, rate, quality);
+        };
+        let range = checked_window(range)?;
         let clips = resolved.clips();
         if timeline.soundtrack().master() != motion_core::Master::default()
             || !timeline.soundtrack().buses().is_empty()
@@ -91,25 +89,26 @@ impl MixedAudio {
                 !clip.parameters().effects.is_empty() || !clip.parameters().ducking.is_empty()
             })
         {
-            return Self::from_resolved(timeline, resolved, rate, quality)?.crop(range);
+            return Self::from_resolved_full(timeline, resolved, rate, quality)?.crop(range);
         }
         Self::new_window(clips, rate, range.end - range.start, range.start, quality)
     }
 
-    /// Prepares at most [`MAX_CLIPS`](crate::audio::MAX_CLIPS) clips / 128 MiB stereo PCM. Timeline gaps and EOF are
-    /// silence. All sources/envelopes must be pure; callback panics propagate.
-    pub fn new(clips: &[AudioClip], rate: u32, duration: Duration) -> motion_core::Result<Self> {
-        Self::new_with(clips, rate, duration, ResampleQuality::default())
-    }
-
-    /// Like [`Self::new`] with an explicit resampler.
-    pub fn new_with(
-        clips: &[AudioClip],
+    fn from_resolved_full(
+        timeline: &motion_core::Timeline,
+        resolved: &motion_core::ResolvedAudio,
         rate: u32,
-        duration: Duration,
         quality: ResampleQuality,
     ) -> motion_core::Result<Self> {
-        Self::new_window(clips, rate, duration, Duration::ZERO, quality)
+        Self::new_window(
+            resolved.clips(),
+            rate,
+            resolved.duration(),
+            Duration::ZERO,
+            quality,
+        )?
+        .process_buses(timeline.soundtrack().buses())?
+        .apply_master(timeline.soundtrack().master())
     }
 
     pub(super) fn new_window(
@@ -511,4 +510,13 @@ impl AudioSource for MixedAudio {
         }
         count
     }
+}
+
+fn checked_window(
+    range: std::ops::Range<Duration>,
+) -> motion_core::Result<std::ops::Range<Duration>> {
+    if range.start < Duration::ZERO || range.end < range.start {
+        return Err(invalid("range", "Invalid audio window").into());
+    }
+    Ok(range)
 }

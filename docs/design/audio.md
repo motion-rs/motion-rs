@@ -22,9 +22,10 @@ rules are in [Rendering and export](rendering.md#video-and-audio).
   reads must not depend on earlier reads; short reads and EOF leave the rest of the
   buffer silent; returned samples must be finite. Mixing supports mono and stereo.
 - File and nested-timeline sources are deferred. `Timeline::resolve_audio` returns a
-  `ResolvedAudio` (clips plus the output duration they need) without changing the timeline. `resolve_clip` and
-  `prepare_timeline` turn them into resolved sources at an execution boundary
-  (export, `MixedAudio`), never during scene evaluation. File sources are decoded
+  `ResolvedAudio` (clips plus the output duration they need) without changing the timeline. `MixedAudio::new` resolves
+  them into sources at an execution boundary (export, mixing, `fit_timeline`),
+  never during scene evaluation; callers holding a `ResolvedAudio` pass it with
+  `MixSource::resolved`. File sources are decoded
   lazily in windows and must not change while executing; explicit `PcmBuffer` data is
   frozen. Nested compositions are limited to 16 levels.
 
@@ -33,7 +34,7 @@ rules are in [Rendering and export](rendering.md#video-and-audio).
 | Limit | Value | Where checked |
 | --- | --- | --- |
 | Source sample rate / channels | 1..=192000 Hz, mono or stereo | `AudioClip::resolved_duration` |
-| Clips per prepared mix, file export or Studio list | 256 (`MAX_CLIPS`) | `MixedAudio::new_with`, Studio audio settings |
+| Clips per prepared mix, file export or Studio list | 256 (`MAX_CLIPS`) | `MixedAudio::new`, Studio audio settings |
 | Buses / effects per chain / ducking per clip | 16 / 16 / 4 | `Timeline` validation, `AudioClip` |
 | Effect tail | 0..=30 s; added to the clip duration | `AudioClip::resolved_duration` |
 | Declared span | at most 24 h (`MAX_SECONDS = 86_400`) | clip and mix validation |
@@ -49,7 +50,7 @@ rejected rather than truncated.
 
 ## Preparation Order
 
-Per clip (in `MixedAudio::new_with`): read the source window → effect chain at the
+Per clip (in `MixedAudio::new`): read the source window → effect chain at the
 **source rate** → resample to the mix rate → volume, envelope and fades → stereo
 width and pan → clip-level ducking → store as a `PreparedClip`.
 
@@ -83,7 +84,7 @@ Delay and reverb declare an explicit `tail` that truncates the decay; `tail()` e
 the occurrence by that much silent input. Custom effects must be deterministic and
 implement `validate` without processing PCM.
 
-Consequence: `MixedAudio::from_window` is only a direct window when there are no
+Consequence: `MixedAudio::new` with `MixOptions::range` is only a direct window when there are no
 effects, ducking, buses or master settings; otherwise it prepares the full timeline
 and crops, so effect and normalization clocks never restart at the window edge.
 `MixedAudio::crop` likewise crops prepared output.
@@ -119,7 +120,7 @@ the delivered track. `WaveformPyramid` builds peak envelopes (at most 1M base bi
 
 ## Export
 
-- Video: `export` resolves audio, builds one `MixedAudio::from_window_with` for the
+- Video: `export` resolves audio, builds one `MixedAudio::new` with `MixSource::resolved` and a `MixOptions::range` for the
   selected range at `ExportOptions.audio_sample_rate`, and passes it to
   `Encoder::open` before any frame is written.
 - Standalone: `export_audio` writes WAV (RIFF, or RF64 for large data) through a
@@ -133,8 +134,8 @@ the delivered track. `WaveformPyramid` builds peak envelopes (at most 1M base bi
 
 Studio plays audio through a worker thread, `cpal` and a lock-free ring buffer; it
 is not an export path. It requires 48 kHz stereo f32 output and mixes in 512-frame
-blocks, preparing `from_timeline` for processed timelines or short 8192-frame
-`from_window` ranges otherwise. A request is cancelled by `stop`; underruns, device
+blocks, preparing the whole timeline for processed timelines or short 8192-frame
+`MixOptions::range` windows otherwise. A request is cancelled by `stop`; underruns, device
 loss and mix errors surface as `AudioStatus::Failed` and never alter export.
 `AudioReadout` reports integrated LUFS, sample/true peak, correlation and bus
 meters from a prepared mix without a device. Audio drafts load without opening

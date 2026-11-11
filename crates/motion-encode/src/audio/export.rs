@@ -3,7 +3,7 @@
 //! Other containers (FLAC, Opus, WebM audio) are not offered: the native FFmpeg bridge only
 //! exposes the AAC encoder, so they would need new bindings.
 
-use super::pcm::{MixedAudio, ResampleQuality, ceil_frames, invalid};
+use super::pcm::{MixOptions, MixedAudio, ResampleQuality, ceil_frames, invalid};
 use motion_core::{AudioMetadata, AudioSource, Duration, Timeline};
 use std::{io::Write, ops::Range, path::PathBuf};
 
@@ -318,11 +318,11 @@ pub fn export_audio(
             }
         }
     }
-    let mix = MixedAudio::from_window_with(
+    let mix = MixedAudio::new(
         timeline,
-        range.clone(),
-        options.sample_rate,
-        options.resampler,
+        MixOptions::new(options.sample_rate)
+            .range(range.clone())
+            .resampler(options.resampler),
     )?;
     let frames = ceil_frames(range.end - range.start, options.sample_rate)?;
     let channels = options.channels.count();

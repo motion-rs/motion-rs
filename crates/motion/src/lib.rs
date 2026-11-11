@@ -222,7 +222,6 @@ pub use motion_render::{BackendPreference, RenderOptions, Renderer, render_still
 pub use motion_encode::audio;
 pub use motion_encode::{
     Codec, EncoderPreset, ExportOptions, ExportPhase, ExportReport, NoProgress, export,
-    export_with_encoder,
 };
 
 #[cfg(feature = "particles")]
@@ -273,9 +272,9 @@ pub mod encode {
     #[cfg(feature = "audio")]
     pub use motion_encode::{AudioAnalysis, AudioSignal};
     pub use motion_encode::{
-        Codec, Encoder, EncoderCapabilities, EncoderPreset, ExportOptions, ExportPhase,
-        ExportReport, FfmpegEncoder, GifEncoder, MixedAudio, NoProgress, PcmBuffer,
-        PngSequenceEncoder, ProgressSink, export, export_with_encoder,
+        Codec, Encoder, EncoderCapabilities, EncoderFactory, EncoderPreset, ExportOptions,
+        ExportPhase, ExportReport, FfmpegEncoder, GifEncoder, MixOptions, MixSource, MixedAudio,
+        NoProgress, PcmBuffer, PngSequenceEncoder, ProgressSink, export,
     };
 }
 
@@ -363,8 +362,8 @@ pub mod prelude {
     };
     pub use motion_core::Transition as _;
     pub use motion_encode::{
-        Codec, EncoderPreset, ExportOptions, ExportPhase, ExportReport, NoProgress,
-        export_with_encoder,
+        Codec, Encoder, EncoderFactory, EncoderPreset, ExportOptions, ExportPhase, ExportReport,
+        NoProgress,
     };
     #[cfg(feature = "formula")]
     pub use motion_formula::{Formula, FormulaOptions};

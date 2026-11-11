@@ -26,7 +26,8 @@ fn preview_uses_fractional_frame_sample_boundaries_and_same_mix() -> motion_core
     let mut prepared = PreviewMix::prepare(&request)?;
     let mut actual = [[0.0; 2]; 64];
     assert_eq!(prepared.read(&mut actual)?, 64);
-    let expected = motion_encode::MixedAudio::from_timeline(&timeline, 48_000)?;
+    let expected =
+        motion_encode::MixedAudio::new(&timeline, motion_encode::MixOptions::new(48_000))?;
     let mut reference = [[0.0; 2]; 64];
     expected.read(request.start, reference.as_flattened_mut());
     assert_eq!(actual, reference);
@@ -150,9 +151,11 @@ fn timeline_and_file_preview_sources_are_mixed_in_order() -> motion_core::Result
     let path = directory.path().join("preview.wav");
     let pcm = motion_encode::PcmBuffer::new(48_000, 1, vec![0.1; 4800])?;
     let mix = motion_encode::MixedAudio::new(
-        &[motion_core::AudioClip::source(pcm.clone())],
-        48_000,
-        100.milliseconds(),
+        motion_encode::MixSource::clips(
+            &[motion_core::AudioClip::source(pcm.clone())],
+            100.milliseconds(),
+        ),
+        motion_encode::MixOptions::new(48_000),
     )?;
     mix.write_wav(&mut std::fs::File::create(&path)?, 4800)?;
     let clip = motion_core::AudioClip::file(path).duration(100.milliseconds());
@@ -202,8 +205,11 @@ fn file_preview_windows_preserve_offsets_fades_and_export_crop() -> motion_core:
             .map(|index| (index % 128) as f32 / 512.0)
             .collect(),
     )?;
-    motion_encode::MixedAudio::new(&[motion_core::AudioClip::source(pcm)], 48_000, 1.seconds())?
-        .write_wav(&mut std::fs::File::create(&path)?, 48_000)?;
+    motion_encode::MixedAudio::new(
+        motion_encode::MixSource::clips(&[motion_core::AudioClip::source(pcm)], 1.seconds()),
+        motion_encode::MixOptions::new(48_000),
+    )?
+    .write_wav(&mut std::fs::File::create(&path)?, 48_000)?;
     let clip = motion_core::AudioClip::file(path)
         .offset(50.milliseconds())
         .start(20.milliseconds().after_origin())
@@ -219,8 +225,10 @@ fn file_preview_windows_preserve_offsets_fades_and_export_crop() -> motion_core:
     );
     let request = timeline_request(timeline.clone(), vec![], 10)?;
     let mut preview = PreviewMix::prepare(&request)?;
-    let expected =
-        motion_encode::MixedAudio::from_window(&timeline, 100.milliseconds()..1.seconds(), 48_000)?;
+    let expected = motion_encode::MixedAudio::new(
+        &timeline,
+        motion_encode::MixOptions::new(48_000).range(100.milliseconds()..1.seconds()),
+    )?;
     let mut position = 0;
     while preview.cursor < preview.total {
         let mut actual = [[0.0; 2]; BLOCK];

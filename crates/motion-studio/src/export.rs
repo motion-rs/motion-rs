@@ -124,38 +124,12 @@ impl ExportJob {
                         }
                         timeline = Arc::new(builder.build()?);
                     }
-                    let mut options = motion_encode::ExportOptions::new(&destination);
-                    options.render = scene.composition.studio_render_options(draft.backend);
-                    options.render.quality = motion_core::RenderQuality::Final;
-                    options.render.size = Some(draft.size);
-                    options.render.motion_blur = if draft.motion_blur {
-                        Some(motion_core::MotionBlur::default())
-                    } else {
-                        None
-                    };
-                    options.overwrite = draft.overwrite;
-                    if matches!(
+                    let mut options = draft.request(
+                        &destination,
+                        &scene.composition,
                         codec,
-                        motion_encode::Codec::ProRes4444
-                            | motion_encode::Codec::PngSequence
-                            | motion_encode::Codec::Gif { .. }
-                            | motion_encode::Codec::Vp9 { alpha: true, .. }
-                    ) {
-                        options.render.background = None;
-                    }
-                    options.codec = codec;
-                    if draft.range.0 < draft.range.1 {
-                        options.range = Some(
-                            motion_core::Time::from_frame(
-                                i64::from(draft.range.0),
-                                timeline.frame_rate(),
-                            )
-                                ..motion_core::Time::from_frame(
-                                    i64::from(draft.range.1),
-                                    timeline.frame_rate(),
-                                ),
-                        );
-                    }
+                        timeline.frame_rate(),
+                    );
                     let sink = StudioProgress {
                         control: &worker_control,
                         state: &worker_state,
@@ -241,6 +215,45 @@ pub(crate) struct ExportForm {
     pub motion_blur: bool,
     pub png: bool,
     pub frame: u32,
+}
+
+impl ExportForm {
+    /// The one conversion from transient form state to the encode request.
+    fn request(
+        &self,
+        destination: &std::path::Path,
+        composition: &motion_render::Composition,
+        codec: motion_encode::Codec,
+        rate: motion_core::FrameRate,
+    ) -> motion_encode::ExportOptions {
+        let mut options = motion_encode::ExportOptions::new(destination);
+        options.render = composition.studio_render_options(self.backend);
+        options.render.quality = motion_core::RenderQuality::Final;
+        options.render.size = Some(self.size);
+        options.render.motion_blur = if self.motion_blur {
+            Some(motion_core::MotionBlur::default())
+        } else {
+            None
+        };
+        options.overwrite = self.overwrite;
+        if matches!(
+            codec,
+            motion_encode::Codec::ProRes4444
+                | motion_encode::Codec::PngSequence
+                | motion_encode::Codec::Gif { .. }
+                | motion_encode::Codec::Vp9 { alpha: true, .. }
+        ) {
+            options.render.background = None;
+        }
+        options.codec = codec;
+        if self.range.0 < self.range.1 {
+            options.range = Some(
+                motion_core::Time::from_frame(i64::from(self.range.0), rate)
+                    ..motion_core::Time::from_frame(i64::from(self.range.1), rate),
+            );
+        }
+        options
+    }
 }
 
 pub(crate) struct QueuedExport {

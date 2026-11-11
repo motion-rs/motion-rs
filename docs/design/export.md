@@ -15,8 +15,8 @@ Timeline frame index -> Time::from_frame -> FrameRenderer::render_output_at
   -> FrameBuffer (in Encoder::input_format) -> Encoder::write -> Encoder::finish
 ```
 
-[`export`](../../crates/motion-encode/src/export.rs) and `export_with_encoder` own the
-orchestration; they run on the caller's thread and always write frames in order.
+[`export`](../../crates/motion-encode/src/export.rs) owns the
+orchestration for built-in and custom encoders (`ExportOptions::encoder`); it runs on the caller's thread and always write frames in order.
 
 | Stage | Contract |
 | --- | --- |

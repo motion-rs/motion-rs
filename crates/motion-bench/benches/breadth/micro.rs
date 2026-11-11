@@ -198,7 +198,13 @@ pub(super) fn microbenchmarks(
         );
     }
     let measured = support::measure(
-        || Ok(motion::encode::MixedAudio::new(&audio_clips, 48_000, 6.seconds())?.frames()),
+        || {
+            Ok(motion::encode::MixedAudio::new(
+                motion::encode::MixSource::clips(&audio_clips, 6.seconds()),
+                motion::encode::MixOptions::new(48_000),
+            )?
+            .frames())
+        },
         settings,
         2,
     )?;

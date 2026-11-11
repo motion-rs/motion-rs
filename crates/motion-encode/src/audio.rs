@@ -29,7 +29,9 @@ mod resample_disabled;
 pub use analysis::{AudioAnalysis, AudioMarkers, AudioSignal, AudioSpectrum, BeatGrid};
 pub use export::{AudioChannels, AudioExportOptions, AudioExportReport, AudioFormat, export_audio};
 pub use motion_core::{AudioChapter, AudioMetadata};
-pub use pcm::{AudioClip, AudioSource, MixedAudio, PcmBuffer, ResampleQuality};
+pub use pcm::{
+    AudioClip, AudioSource, MixOptions, MixSource, MixedAudio, PcmBuffer, ResampleQuality,
+};
 
 #[cfg(feature = "audio")]
 mod file_source;
@@ -55,9 +57,9 @@ pub fn resolve_clip(clip: &AudioClip) -> motion_core::Result<AudioClip> {
     if let Some(timeline) = clip.parameters().source.composition() {
         let _guard = CompositionGuard::enter()?;
         return Ok(
-            clip.with_resolved_source(std::sync::Arc::new(MixedAudio::from_timeline(
+            clip.with_resolved_source(std::sync::Arc::new(MixedAudio::new(
                 timeline,
-                clip.parameters().source.sample_rate(),
+                MixOptions::new(clip.parameters().source.sample_rate()),
             )?)),
         );
     }
@@ -80,15 +82,22 @@ pub fn resolve_clip(clip: &AudioClip) -> motion_core::Result<AudioClip> {
 }
 
 /// Resolves the timeline's flattened audio before output scheduling and encoder startup.
-pub fn prepare_timeline(
+pub(crate) fn prepare_timeline(
     timeline: &motion_core::Timeline,
 ) -> motion_core::Result<motion_core::ResolvedAudio> {
     timeline.resolve_audio(resolve_clip)
 }
 
 /// The timeline itself, or a copy lasting as long as its resolved audio when that is longer.
-/// Only timelines with an inferred duration are ever extended.
-pub fn fitted<'a>(
+/// Only timelines with an inferred duration are ever extended. Resolving the audio files is
+/// part of the call; a failing file is an error.
+pub fn fit_timeline(
+    timeline: &motion_core::Timeline,
+) -> motion_core::Result<std::borrow::Cow<'_, motion_core::Timeline>> {
+    fitted(timeline, &prepare_timeline(timeline)?)
+}
+
+pub(crate) fn fitted<'a>(
     timeline: &'a motion_core::Timeline,
     resolved: &motion_core::ResolvedAudio,
 ) -> motion_core::Result<std::borrow::Cow<'a, motion_core::Timeline>> {

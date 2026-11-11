@@ -3,7 +3,7 @@
 use super::{RenderOptions, invalid};
 use motion_core::{Color, FrameRate, Result, Time};
 use motion_render::{FrameBuffer, PixelFormat};
-use std::{ops::Range, path::PathBuf};
+use std::{ops::Range, path::PathBuf, sync::Arc};
 
 /// Native encoder speed/compression preset passed to libx264 and libx265.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -158,6 +158,8 @@ pub struct ExportOptions {
     pub range: Option<Range<Time>>,
     /// Current native codec capability.
     pub codec: Codec,
+    /// Caller-owned encoder replacing the native codec, PNG sequence and GIF encoders.
+    pub encoder: Option<EncoderFactory>,
     /// Audio delivery rate; supported AAC values are 44100, 48000 and 96000 Hz.
     pub audio_sample_rate: u32,
     /// Resampler used when audio sources differ from `audio_sample_rate`.
@@ -185,6 +187,7 @@ impl ExportOptions {
             },
             range: None,
             codec: Codec::default(),
+            encoder: None,
             audio_sample_rate: 48000,
             audio_resampler: Default::default(),
             audio_metadata: Default::default(),
@@ -208,6 +211,19 @@ impl ExportOptions {
             self.render.background = None;
         }
         self.codec = codec;
+        self
+    }
+
+    /// Exports through the encoder `create` returns instead of a native one.
+    ///
+    /// The factory runs once per [`export`](crate::export()) call, so one request can be reused.
+    pub fn encoder(
+        mut self,
+        create: impl Fn() -> Box<dyn Encoder> + Send + Sync + 'static,
+    ) -> Self {
+        self.encoder = Some(EncoderFactory {
+            create: Arc::new(create),
+        });
         self
     }
 
@@ -422,4 +438,17 @@ pub trait Encoder: Send {
 
     /// Finishes and commits only after every ordered frame has been submitted.
     fn finish(self: Box<Self>) -> Result<ExportReport>;
+}
+
+/// Creates the caller-owned [`Encoder`] of one export from [`ExportOptions::encoder`].
+#[derive(Clone)]
+pub struct EncoderFactory {
+    create: Arc<dyn Fn() -> Box<dyn Encoder> + Send + Sync>,
+}
+
+impl EncoderFactory {
+    /// Creates a fresh encoder for one export.
+    pub fn create(&self) -> Box<dyn Encoder> {
+        (self.create)()
+    }
 }

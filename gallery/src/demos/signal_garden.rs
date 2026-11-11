@@ -7,7 +7,7 @@
 
 use crate::{DemoMetadata, DemoParameters};
 use motion::audio::pcm::BusMeter;
-use motion::audio::{AudioAnalysis, AudioSignal, MixedAudio};
+use motion::audio::{AudioAnalysis, AudioSignal, MixOptions, MixedAudio};
 use motion::particles::{Orbit, ParticleStyle, ParticleTrajectory};
 use motion::prelude::*;
 use soundtrack::{audio_timeline, duck_db, meter, rms_db, soundtrack};
@@ -96,14 +96,14 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
         duration.after_origin().since_origin(),
     )
     .build()?;
-    let mix = MixedAudio::from_timeline(&output, RATE)?;
-    let dry = MixedAudio::from_timeline(
+    let mix = MixedAudio::new(&output, MixOptions::new(RATE))?;
+    let dry = MixedAudio::new(
         &audio_timeline(
             &soundtrack(duration.after_origin().since_origin(), false, seed)?,
             duration.after_origin().since_origin(),
         )
         .build()?,
-        RATE,
+        MixOptions::new(RATE),
     )?;
     let analysis = AudioAnalysis::from_source(&mix, duration)?;
     let bands = BANDS

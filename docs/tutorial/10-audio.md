@@ -85,7 +85,7 @@ This example requires `audio` and the runtime files `voice.wav` and `music.mp3`:
 
 ```rust,no_run
 use motion::prelude::*;
-use motion::encode::MixedAudio;
+use motion::encode::{MixOptions, MixedAudio};
 
 fn main() -> motion::Result {
     let narration = AudioClip::file("voice.wav")
@@ -101,13 +101,12 @@ fn main() -> motion::Result {
         .audio(music)
         .duration(6.seconds())
         .build()?;
-    let _resolved = motion::audio::prepare_timeline(&timeline)?;
-    let _mixed = MixedAudio::from_timeline(&timeline, 48_000)?;
+    let _mixed = MixedAudio::new(&timeline, MixOptions::new(48_000))?;
     Ok(())
 }
 ```
 
-`prepare_timeline` returns a `ResolvedAudio` (resolved clips plus the output duration they need); the timeline itself never changes. Preparation resolves file metadata and required windows. A file source remains a random-access file, not permanently frozen PCM. Keep inputs unchanged during execution. Use explicit eager PCM decoding for a snapshot independent of the file's lifetime.
+`MixedAudio::new` takes a `MixSource` (a `&Timeline` converts into one) and `MixOptions` (sample rate, optional `range`, `resampler`). The mixer resolves the audio files itself; the timeline never changes. A caller that resolved the audio already passes `MixSource::resolved(&timeline, &resolved)` with the `ResolvedAudio` from `Timeline::resolve_audio`, and loose clips use `MixSource::clips(&clips, duration)`. Resolution reads file metadata and required windows. A file source remains a random-access file, not permanently frozen PCM. Keep inputs unchanged during execution. Use explicit eager PCM decoding for a snapshot independent of the file's lifetime.
 
 Native timeline output defaults to 48 kHz stereo; `ExportOptions::audio_sample_rate` also accepts 44.1 and 96 kHz for AAC. Different source rates are resampled. Preserve exact timing with integer ticks and sample boundaries rather than rounding rational video rates before calculating audio length.
 
@@ -117,7 +116,7 @@ Master processing is opt-in. Identity settings preserve the old floating-point m
 
 ```rust,no_run
 use motion::prelude::*;
-use motion::audio::{MixedAudio, synth::{Synth, Wave}, effects::{Effect, EqKind}};
+use motion::audio::{MixOptions, MixedAudio, synth::{Synth, Wave}, effects::{Effect, EqKind}};
 use std::sync::Arc;
 
 fn main() -> motion::Result {
@@ -129,7 +128,7 @@ fn main() -> motion::Result {
         .audio_bus(music)
         .audio(AudioClip::source(tone).duration(2.seconds()).bus("music").fade_in(50.milliseconds()))
         .master(Master::safe()).build()?;
-    let mixed = MixedAudio::from_timeline(&timeline, 48_000)?;
+    let mixed = MixedAudio::new(&timeline, MixOptions::new(48_000))?;
     let _report = mixed.loudness_report()?;
     let _levels = mixed.bus_meters()[0].level(500.milliseconds());
     Ok(())
@@ -168,7 +167,7 @@ Windows look forward for offline motion graphics; they are not equivalent to the
 
 Output-range cropping preserves the original occurrence's fade and envelope clock. Video encoders receive a prepared, cropped mix rather than reinterpreting a separate file-audio configuration.
 
-`MixedAudio::from_timeline_with`/`from_window_with`/`new_with` and `ExportOptions::audio_resampler` select `ResampleQuality::Sinc` (32 zero-crossing Blackman-Harris windowed sinc, kernel stretched when downsampling) instead of the default FFT resampler. Delivery rates are 44100, 48000 and 96000 Hz. Sinc windows see silence beyond the requested interval, so the last few frames have a truncated kernel. Effects have no separate `latency`/`warmup` contract: they are baked from the clip origin, which already gives exact replay.
+`MixOptions::resampler` and `ExportOptions::audio_resampler` select `ResampleQuality::Sinc` (32 zero-crossing Blackman-Harris windowed sinc, kernel stretched when downsampling) instead of the default FFT resampler. Delivery rates are 44100, 48000 and 96000 Hz. Sinc windows see silence beyond the requested interval, so the last few frames have a truncated kernel. Effects have no separate `latency`/`warmup` contract: they are baked from the clip origin, which already gives exact replay.
 
 `export_audio(&timeline, &AudioExportOptions::new("mix.wav").format(AudioFormat::Wav24))` writes a standalone mix without video: 16/24-bit PCM or 32-bit float, mono or stereo, 8000..=192000 Hz, optional range, deterministic TPDF dither for 16-bit and `LIST INFO` tags (title, artist, album, comment, copyright, date, genre, software). Files above 4 GiB use an RF64 header; chapters are rejected. The destination is committed atomically and the report counts samples clipped by integer formats. FLAC/Opus/WebM audio are not offered because the FFmpeg bridge only exposes AAC.
 

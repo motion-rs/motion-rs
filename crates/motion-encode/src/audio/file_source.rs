@@ -214,7 +214,7 @@ pub(super) fn resolve(clip: &AudioClip) -> motion_core::Result<AudioClip> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::MixedAudio;
+    use crate::{MixOptions, MixedAudio};
     use motion_core::{Size, TimeLiteral, Timeline};
     use std::io::Write;
 
@@ -253,16 +253,18 @@ mod tests {
         options.codec = crate::Codec::default();
         assert!(crate::export(&timeline, &options, &crate::NoProgress).is_err());
         assert_eq!(std::fs::read(&path)?, original);
-        let full = MixedAudio::from_timeline(&timeline, 8000)?;
-        let window =
-            MixedAudio::from_window(&timeline, 50.milliseconds()..150.milliseconds(), 8000)?;
+        let full = MixedAudio::new(&timeline, MixOptions::new(8000))?;
+        let window = MixedAudio::new(
+            &timeline,
+            MixOptions::new(8000).range(50.milliseconds()..150.milliseconds()),
+        )?;
         let mut expected = vec![0.0; 1600];
         let mut actual = vec![0.0; 1600];
         full.read(400, &mut expected);
         window.read(0, &mut actual);
         assert_eq!(expected, actual);
         std::fs::remove_file(path)?;
-        assert!(MixedAudio::from_timeline(&timeline, 8000).is_err());
+        assert!(MixedAudio::new(&timeline, MixOptions::new(8000)).is_err());
         Ok(())
     }
 }

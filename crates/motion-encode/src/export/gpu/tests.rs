@@ -89,9 +89,9 @@ fn packed_gpu_output_supports_both_yuv_bit_depths() {
 #[test]
 #[ignore = "requires native GPU; ten-bit GPU export must agree with the CPU export within one code value"]
 fn ten_bit_gpu_export_matches_cpu_export_within_one_code_value() -> Result<()> {
-    struct Sink<'a>(&'a Mutex<Vec<FrameBuffer>>);
+    struct Sink(Arc<Mutex<Vec<FrameBuffer>>>);
 
-    impl Encoder for Sink<'_> {
+    impl Encoder for Sink {
         fn input_format(&self) -> PixelFormat {
             PixelFormat::Yuv420 { bit_depth: 10 }
         }
@@ -148,9 +148,11 @@ fn ten_bit_gpu_export_matches_cpu_export_within_one_code_value() -> Result<()> {
             .workers(2);
         options.render.limits.max_bytes = 16 * 1024 * 1024;
         options.render.gpu_context = Some(context.clone());
-        let written = Mutex::new(Vec::new());
-        export_with_encoder(&timeline, &options, &NoProgress, Box::new(Sink(&written)))?;
-        outputs.push(written.into_inner().unwrap());
+        let written = Arc::new(Mutex::new(Vec::new()));
+        let sink = written.clone();
+        let options = options.encoder(move || Box::new(Sink(sink.clone())));
+        export(&timeline, &options, &NoProgress)?;
+        outputs.push(std::mem::take(&mut *written.lock().unwrap()));
     }
     let (cpu, gpu) = (&outputs[0], &outputs[1]);
     assert_eq!(cpu.len(), 6);
@@ -263,7 +265,11 @@ fn automatic_backend_selecting_the_gpu_uses_the_pipeline() -> Result<()> {
         .backend(motion_render::BackendPreference::automatic())
         .workers(2);
     options.render.gpu_context = Some(motion_render::GpuContext::new()?);
-    export_with_encoder(&timeline, &options, &NoProgress, Box::new(Discard))?;
+    export(
+        &timeline,
+        &options.encoder(|| Box::new(Discard)),
+        &NoProgress,
+    )?;
     // The caller plus two preparation workers; the serial loop would use one thread.
     assert_eq!(threads.lock().unwrap().len(), 3);
     Ok(())
@@ -314,11 +320,11 @@ fn gpu_export_pipeline_matches_linear_reference_and_cancels_transactionally() ->
         )?);
     }
     threads.lock().unwrap().clear();
-    let written = Mutex::new(Vec::new());
+    let written = Arc::new(Mutex::new(Vec::new()));
 
-    struct Sink<'a>(&'a Mutex<Vec<FrameBuffer>>);
+    struct Sink(Arc<Mutex<Vec<FrameBuffer>>>);
 
-    impl Encoder for Sink<'_> {
+    impl Encoder for Sink {
         fn input_format(&self) -> PixelFormat {
             PixelFormat::Yuv420 { bit_depth: 8 }
         }
@@ -351,7 +357,11 @@ fn gpu_export_pipeline_matches_linear_reference_and_cancels_transactionally() ->
         }
     }
     options.render.gpu_context = Some(context);
-    let report = export_with_encoder(&timeline, &options, &NoProgress, Box::new(Sink(&written)))?;
+    let sink = written.clone();
+    let capturing = options
+        .clone()
+        .encoder(move || Box::new(Sink(sink.clone())));
+    let report = export(&timeline, &capturing, &NoProgress)?;
     assert_eq!(report.frames, 12);
     assert_eq!(threads.lock().unwrap().len(), 3);
     let actual = written.lock().unwrap();
@@ -428,13 +438,10 @@ fn gpu_export_pipeline_matches_linear_reference_and_cancels_transactionally() ->
     for count in calls.iter() {
         count.store(0, std::sync::atomic::Ordering::Relaxed);
     }
-    let written = Mutex::new(Vec::new());
-    export_with_encoder(
-        &changing,
-        &changing_options,
-        &NoProgress,
-        Box::new(Sink(&written)),
-    )?;
+    let written = Arc::new(Mutex::new(Vec::new()));
+    let sink = written.clone();
+    let changing_options = changing_options.encoder(move || Box::new(Sink(sink.clone())));
+    export(&changing, &changing_options, &NoProgress)?;
     assert_eq!(*written.lock().unwrap(), expected);
     assert_eq!(calls[0].load(std::sync::atomic::Ordering::Relaxed), 1);
     assert!(calls[2].load(std::sync::atomic::Ordering::Relaxed) >= 2);
@@ -454,14 +461,12 @@ fn gpu_export_pipeline_matches_linear_reference_and_cancels_transactionally() ->
             self.0.load(Ordering::Acquire)
         }
     }
-    let cancelled_frames = Mutex::new(Vec::new());
-    let error = export_with_encoder(
-        &timeline,
-        &options,
-        &Cancel(AtomicBool::new(false)),
-        Box::new(Sink(&cancelled_frames)),
-    )
-    .unwrap_err();
+    let cancelled_frames = Arc::new(Mutex::new(Vec::new()));
+    let sink = cancelled_frames.clone();
+    let capturing = options
+        .clone()
+        .encoder(move || Box::new(Sink(sink.clone())));
+    let error = export(&timeline, &capturing, &Cancel(AtomicBool::new(false))).unwrap_err();
     assert_eq!(error.kind(), motion_core::ErrorKind::Cancelled);
     assert_eq!(cancelled_frames.lock().unwrap().len(), 2);
     let directory = tempfile::tempdir()?;

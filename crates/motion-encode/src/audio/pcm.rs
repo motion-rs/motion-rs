@@ -11,7 +11,7 @@
 //! let source = PcmBuffer::new(48_000, 1, vec![0.25; 4800])?;
 //! let clip = AudioClip::source(source).start(50.milliseconds().after_origin()).pan(-1.0);
 //! let timeline = Timeline::new(Size::new(8.0, 4.0), 30).audio(clip).build()?;
-//! let mixed = MixedAudio::from_timeline(&timeline, 48_000)?;
+//! let mixed = MixedAudio::new(&timeline, MixOptions::new(48_000))?;
 //! let mut pcm = [0.0; 2];
 //! assert_eq!(mixed.read(2400, &mut pcm), 1);
 //! assert_eq!(pcm, [0.25, 0.0]);
@@ -24,12 +24,14 @@ use std::sync::Arc;
 
 mod meter;
 mod mix;
+mod options;
 mod resample;
 #[cfg(test)]
 mod tests;
 
 pub use meter::BusMeter;
 pub use mix::MixedAudio;
+pub use options::{MixOptions, MixSource};
 pub use resample::ResampleQuality;
 
 pub(crate) const MAX_SAMPLES: usize = 32 * 1024 * 1024;

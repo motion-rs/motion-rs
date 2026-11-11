@@ -14,12 +14,14 @@ fn nested_audio_preparation_depth_fails_without_poisoning_following_mixes() -> m
             .audio(AudioClip::composition(timeline).duration(1.milliseconds()))
             .build()?;
     }
-    assert!(MixedAudio::from_timeline(&timeline, 8000).is_err());
+    assert!(MixedAudio::new(&timeline, MixOptions::new(8000)).is_err());
     assert!(
         MixedAudio::new(
-            &[AudioClip::source(PcmBuffer::new(8000, 1, vec![0.1; 8])?)],
-            8000,
-            1.milliseconds()
+            MixSource::clips(
+                &[AudioClip::source(PcmBuffer::new(8000, 1, vec![0.1; 8])?)],
+                1.milliseconds()
+            ),
+            MixOptions::new(8000)
         )
         .is_ok()
     );
@@ -58,7 +60,7 @@ fn bus_tails_meter_windows_and_spatial_controls_are_preserved() -> motion_core::
             .duration(),
         1200.milliseconds()
     );
-    let mixed = MixedAudio::from_timeline(&timeline, 8000)?;
+    let mixed = MixedAudio::new(&timeline, MixOptions::new(8000))?;
     let mut tail = [0.0; 2];
     mixed.read(8400, &mut tail);
     assert!(tail[0] > 0.0);
@@ -72,9 +74,11 @@ fn bus_tails_meter_windows_and_spatial_controls_are_preserved() -> motion_core::
     let stereo = PcmBuffer::new(8000, 2, vec![0.4, -0.4])?;
     let mut mono = [1.0; 2];
     MixedAudio::new(
-        &[AudioClip::source(stereo).stereo_width(0.0)],
-        8000,
-        1.milliseconds(),
+        MixSource::clips(
+            &[AudioClip::source(stereo).stereo_width(0.0)],
+            1.milliseconds(),
+        ),
+        MixOptions::new(8000),
     )?
     .read(0, &mut mono);
     assert_eq!(mono, [0.0; 2]);
@@ -82,16 +86,19 @@ fn bus_tails_meter_windows_and_spatial_controls_are_preserved() -> motion_core::
         let source = PcmBuffer::new(8000, 2, vec![0.25; 2])?;
         let mut value = [0.0; 2];
         MixedAudio::new(
-            &[AudioClip::source(source).pan_law(law)],
-            8000,
-            1.milliseconds(),
+            MixSource::clips(&[AudioClip::source(source).pan_law(law)], 1.milliseconds()),
+            MixOptions::new(8000),
         )?
         .read(0, &mut value);
         assert_eq!(value, [0.25; 2]);
     }
     let panned = |clip: AudioClip| -> motion_core::Result<[f32; 2]> {
         let mut value = [0.0; 2];
-        MixedAudio::new(&[clip.pan(0.5)], 8000, 1.milliseconds())?.read(0, &mut value);
+        MixedAudio::new(
+            MixSource::clips(&[clip.pan(0.5)], 1.milliseconds()),
+            MixOptions::new(8000),
+        )?
+        .read(0, &mut value);
         Ok(value)
     };
     let stereo = || PcmBuffer::new(8000, 2, vec![0.25; 2]);
@@ -112,7 +119,11 @@ fn bus_tails_meter_windows_and_spatial_controls_are_preserved() -> motion_core::
         0.0,
     )?;
     let mut value = [0.0; 2];
-    MixedAudio::new(&[spatial], 8000, 1.milliseconds())?.read(0, &mut value);
+    MixedAudio::new(
+        MixSource::clips(&[spatial], 1.milliseconds()),
+        MixOptions::new(8000),
+    )?
+    .read(0, &mut value);
     assert!(value[0].abs() < 1e-6);
     assert_eq!(value[1], 0.5);
     Ok(())
@@ -121,7 +132,10 @@ fn bus_tails_meter_windows_and_spatial_controls_are_preserved() -> motion_core::
 #[test]
 fn master_gain_identity_and_random_access() -> motion_core::Result {
     let clip = AudioClip::source(PcmBuffer::new(1000, 2, vec![0.25; 200])?);
-    let mixed = MixedAudio::new(&[clip], 1000, 100.milliseconds())?;
+    let mixed = MixedAudio::new(
+        MixSource::clips(&[clip], 100.milliseconds()),
+        MixOptions::new(1000),
+    )?;
     let mut original = [0.0; 200];
     mixed.read(0, &mut original);
     let mut identity = [0.0; 200];
@@ -160,12 +174,15 @@ fn buses_nested_master_and_local_sound_declarations_are_preserved() -> motion_co
             ..Default::default()
         })
         .build()?;
-    let nested = MixedAudio::from_timeline(&parent, 8000)?;
+    let nested = MixedAudio::new(&parent, MixOptions::new(8000))?;
     let expected = 0.1 * super::super::effects::amplitude(-18.0);
     let mut samples = [0.0; 2];
     nested.read(4000, &mut samples);
     assert!((f64::from(samples[0]) - expected).abs() < 1e-6);
-    let window = MixedAudio::from_window(&parent, 500.milliseconds()..750.milliseconds(), 8000)?;
+    let window = MixedAudio::new(
+        &parent,
+        MixOptions::new(8000).range(500.milliseconds()..750.milliseconds()),
+    )?;
     let mut seek = [0.0; 2];
     window.read(0, &mut seek);
     assert_eq!(samples, seek);
@@ -178,13 +195,13 @@ fn buses_nested_master_and_local_sound_declarations_are_preserved() -> motion_co
         .track(|track| track.gap(1.seconds()).nest(child))
         .build()?;
     assert_eq!(timeline.soundtrack().clips().len(), 1);
-    let mix = MixedAudio::from_timeline(&timeline, 8000)?;
+    let mix = MixedAudio::new(&timeline, MixOptions::new(8000))?;
     mix.read(4000, &mut samples);
     assert_eq!(samples, [0.0; 2]);
     mix.read(9600, &mut samples);
     assert_eq!(samples, [0.1; 2]);
     let many = vec![AudioClip::source(PcmBuffer::new(4, 1, vec![0.01])?); 64];
-    assert!(MixedAudio::new(&many, 4, 1.seconds()).is_ok());
+    assert!(MixedAudio::new(MixSource::clips(&many, 1.seconds()), MixOptions::new(4)).is_ok());
     Ok(())
 }
 
@@ -196,16 +213,21 @@ fn envelope_ticks_round_trip_at_fractional_sample_boundaries_and_hard_pan_is_exa
     let clip = AudioClip::source(PcmBuffer::new(8192, 1, vec![1.0; 8])?)
         .pan(1.0)
         .volume_envelope(envelope);
-    let mixed = MixedAudio::new(&[clip], 8192, 1.milliseconds())?;
+    let mixed = MixedAudio::new(
+        MixSource::clips(&[clip], 1.milliseconds()),
+        MixOptions::new(8192),
+    )?;
     let mut frame = [7.0; 2];
     mixed.read(1, &mut frame);
     assert_eq!(frame, [0.0, 1.0]);
     assert!(
         MixedAudio::new(
-            &std::iter::repeat_n(AudioClip::source(PcmBuffer::new(4, 1, vec![1.0])?), 257)
-                .collect::<Vec<_>>(),
-            4,
-            1.seconds()
+            MixSource::clips(
+                &std::iter::repeat_n(AudioClip::source(PcmBuffer::new(4, 1, vec![1.0])?), 257)
+                    .collect::<Vec<_>>(),
+                1.seconds()
+            ),
+            MixOptions::new(4)
         )
         .is_err()
     );
@@ -216,15 +238,17 @@ fn envelope_ticks_round_trip_at_fractional_sample_boundaries_and_hard_pan_is_exa
 fn overlapping_clips_add_without_normalization_and_faulty_sources_fail() -> motion_core::Result {
     let source = PcmBuffer::new(4, 2, [1.0, 0.0].repeat(4))?;
     let mixed = MixedAudio::new(
-        &[
-            AudioClip::source(source.clone()),
-            AudioClip::source(source)
-                .start(500.milliseconds().after_origin())
-                .duration(500.milliseconds())
-                .volume(0.5),
-        ],
-        4,
-        1.seconds(),
+        MixSource::clips(
+            &[
+                AudioClip::source(source.clone()),
+                AudioClip::source(source)
+                    .start(500.milliseconds().after_origin())
+                    .duration(500.milliseconds())
+                    .volume(0.5),
+            ],
+            1.seconds(),
+        ),
+        MixOptions::new(4),
     )?;
     let mut output = [0.0; 8];
     mixed.read(0, &mut output);
@@ -249,10 +273,22 @@ fn overlapping_clips_add_without_normalization_and_faulty_sources_fail() -> moti
             output.len() + 1
         }
     }
-    assert!(MixedAudio::new(&[AudioClip::source(Fault)], 4, 1.seconds()).is_err());
+    assert!(
+        MixedAudio::new(
+            MixSource::clips(&[AudioClip::source(Fault)], 1.seconds()),
+            MixOptions::new(4)
+        )
+        .is_err()
+    );
     let bad_envelope = AudioClip::source(PcmBuffer::new(4, 1, vec![1.0])?)
         .volume_envelope(motion_core::Constant::new(f64::NAN));
-    assert!(MixedAudio::new(&[bad_envelope], 4, 1.seconds()).is_err());
+    assert!(
+        MixedAudio::new(
+            MixSource::clips(&[bad_envelope], 1.seconds()),
+            MixOptions::new(4)
+        )
+        .is_err()
+    );
     Ok(())
 }
 
@@ -269,7 +305,7 @@ fn mix_positions_offsets_fades_envelopes_pan_eof_and_replay_are_exact() -> motio
         .fade_in(500.milliseconds())
         .fade_out(500.milliseconds())
         .volume_envelope(motion_core::Constant::new(0.5));
-    let mix = MixedAudio::new(&[clip], 4, 2.seconds())?;
+    let mix = MixedAudio::new(MixSource::clips(&[clip], 2.seconds()), MixOptions::new(4))?;
     let mut all = [0.0; 16];
     assert_eq!(mix.read(0, &mut all), 8);
     assert_eq!(&all[..6], &[0.0; 6]);
@@ -291,15 +327,17 @@ fn mix_positions_offsets_fades_envelopes_pan_eof_and_replay_are_exact() -> motio
     #[cfg(not(feature = "audio"))]
     assert!(PcmBuffer::from_bytes(&wave).is_err());
     let mono = AudioClip::source(PcmBuffer::new(4, 1, vec![1.0; 4])?).pan(-1.0);
-    let mono = MixedAudio::new(&[mono], 4, 1.seconds())?;
+    let mono = MixedAudio::new(MixSource::clips(&[mono], 1.seconds()), MixOptions::new(4))?;
     let mut value = [0.0; 2];
     mono.read(0, &mut value);
     assert_eq!(value, [1.0, 0.0]);
     assert!(
         MixedAudio::new(
-            &[AudioClip::source(PcmBuffer::new(4, 1, vec![0.0; 4])?).pan(f64::NAN)],
-            4,
-            1.seconds()
+            MixSource::clips(
+                &[AudioClip::source(PcmBuffer::new(4, 1, vec![0.0; 4])?).pan(f64::NAN)],
+                1.seconds()
+            ),
+            MixOptions::new(4)
         )
         .is_err()
     );
@@ -315,7 +353,10 @@ fn rubato_resampling_preserves_tone_and_chunk_independent_queries() -> motion_co
         })
         .collect();
     let clip = AudioClip::source(PcmBuffer::new(44_100, 1, input)?).pan(-1.0);
-    let mix = MixedAudio::new(&[clip], 48_000, 100.milliseconds())?;
+    let mix = MixedAudio::new(
+        MixSource::clips(&[clip], 100.milliseconds()),
+        MixOptions::new(48_000),
+    )?;
     assert_eq!(mix.frames(), 4800);
     let mut output = vec![0.0; 9600];
     mix.read(0, &mut output);
@@ -386,14 +427,22 @@ fn procedural_audio_requires_duration_and_is_frozen_before_random_mix_reads() ->
     }
     let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let clip = AudioClip::source(Tone(calls.clone()));
-    assert!(MixedAudio::new(std::slice::from_ref(&clip), 48_000, 1.seconds()).is_err());
+    assert!(
+        MixedAudio::new(
+            MixSource::clips(std::slice::from_ref(&clip), 1.seconds()),
+            MixOptions::new(48_000)
+        )
+        .is_err()
+    );
     let mixed = MixedAudio::new(
-        &[clip
-            .duration(50.milliseconds())
-            .offset(25.milliseconds())
-            .pan(-1.0)],
-        48_000,
-        50.milliseconds(),
+        MixSource::clips(
+            &[clip
+                .duration(50.milliseconds())
+                .offset(25.milliseconds())
+                .pan(-1.0)],
+            50.milliseconds(),
+        ),
+        MixOptions::new(48_000),
     )?;
     let count = calls.load(std::sync::atomic::Ordering::Relaxed);
     assert!(count > 0);
@@ -589,22 +638,25 @@ fn clip_ducking_lowers_music_under_the_trigger_and_recovers() -> motion_core::Re
         .audio(music.ducked_by(&voice, duck))
         .audio(voice.clone())
         .build()?;
-    let mix = MixedAudio::from_timeline(&timeline, 8000)?;
+    let mix = MixedAudio::new(&timeline, MixOptions::new(8000))?;
     assert!((peak(&mix, 0.2, 0.8) - 0.4).abs() < 1e-6);
     let mid = f64::from(peak(&mix, 1.3, 1.6));
     let voice_only = f64::from(peak(
-        &MixedAudio::from_timeline(
+        &MixedAudio::new(
             &Timeline::new(Size::new(8.0, 8.0), 30)
                 .audio(voice.clone())
                 .build()?,
-            8000,
+            MixOptions::new(8000),
         )?,
         1.3,
         1.6,
     ));
     assert!(mid < voice_only + 0.4 * 0.3, "{mid} {voice_only}");
     assert!((peak(&mix, 3.0, 3.5) - 0.4).abs() < 1e-4);
-    let window = MixedAudio::from_window(&timeline, 900.milliseconds()..1400.milliseconds(), 8000)?;
+    let window = MixedAudio::new(
+        &timeline,
+        MixOptions::new(8000).range(900.milliseconds()..1400.milliseconds()),
+    )?;
     let (mut whole, mut cropped) = ([0.0; 2], [0.0; 2]);
     mix.read(7200 + 2000, &mut whole);
     window.read(2000, &mut cropped);
@@ -626,12 +678,12 @@ fn bus_ducking_uses_earlier_buses_and_rejects_forward_or_unknown_triggers() -> m
             .build()
             .unwrap()
     };
-    let mix = MixedAudio::from_timeline(&build("voice"), 8000)?;
+    let mix = MixedAudio::new(&build("voice"), MixOptions::new(8000))?;
     let ducked = f64::from(peak(&mix, 1.3, 1.6));
     assert!(ducked < 0.5 + 0.4 * 0.11);
     assert!((peak(&mix, 0.2, 0.8) - 0.4).abs() < 1e-6);
-    assert!(MixedAudio::from_timeline(&build("music"), 8000).is_err());
-    assert!(MixedAudio::from_timeline(&build("missing"), 8000).is_err());
+    assert!(MixedAudio::new(&build("music"), MixOptions::new(8000)).is_err());
+    assert!(MixedAudio::new(&build("missing"), MixOptions::new(8000)).is_err());
     let invalid_duck = Duck::new(5.0, 1.0);
     assert!(invalid_duck.validate().is_err());
     assert!(
@@ -663,7 +715,10 @@ fn ducking_triggers_follow_relocation_and_sinc_mixing_is_selectable() -> motion_
     let timeline = motion_core::Timeline::new(motion_core::Size::new(8.0, 8.0), 30)
         .audio(AudioClip::source(source))
         .build()?;
-    let sinc = MixedAudio::from_timeline_with(&timeline, 48_000, ResampleQuality::Sinc)?;
+    let sinc = MixedAudio::new(
+        &timeline,
+        MixOptions::new(48_000).resampler(ResampleQuality::Sinc),
+    )?;
     let mut samples = [0.0; 2];
     sinc.read(2400, &mut samples);
     let expected = 0.25 * std::f32::consts::FRAC_1_SQRT_2;

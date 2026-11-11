@@ -4,7 +4,7 @@ use super::atlas::{self, Page};
 use crate::{DemoMetadata, DemoParameters};
 use motion::audio::effects::{Effect, EqKind};
 use motion::audio::synth::{Adsr, Sound, Synth, Wave};
-use motion::audio::{Duck, Master, MixedAudio, PcmBuffer};
+use motion::audio::{Duck, Master, MixOptions, MixedAudio, PcmBuffer};
 use motion::extend::AudioSource;
 use motion::prelude::*;
 use std::sync::Arc;
@@ -422,10 +422,13 @@ fn prepare(page: usize, duration: Duration, seed: u32) -> motion::Result<Study> 
         }
         dry_timeline = processed_timeline.clone();
     }
-    let dry = Arc::new(MixedAudio::from_timeline(&dry_timeline.build()?, RATE)?);
-    let processed = Arc::new(MixedAudio::from_timeline(
+    let dry = Arc::new(MixedAudio::new(
+        &dry_timeline.build()?,
+        MixOptions::new(RATE),
+    )?);
+    let processed = Arc::new(MixedAudio::new(
         &processed_timeline.build()?,
-        RATE,
+        MixOptions::new(RATE),
     )?);
     let envelopes = overview(&dry, &processed);
     Ok(Study {

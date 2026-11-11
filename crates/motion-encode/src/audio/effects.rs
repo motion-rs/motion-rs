@@ -587,7 +587,7 @@ pub fn speech_clarity(clip: motion_core::AudioClip) -> motion_core::AudioClip {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{MixedAudio, PcmBuffer};
+    use crate::{MixOptions, MixSource, MixedAudio, PcmBuffer};
     use motion_core::{AudioClip, AudioSource, TimeLiteral};
 
     #[test]
@@ -612,7 +612,10 @@ mod tests {
             q: 0.707,
             gain_db: 0.0,
         });
-        let mix = MixedAudio::new(&[clip], 8000, 1.seconds())?;
+        let mix = MixedAudio::new(
+            MixSource::clips(&[clip], 1.seconds()),
+            MixOptions::new(8000),
+        )?;
         let mut full = vec![0.0; 16000];
         mix.read(0, &mut full);
         let mut window = [0.0; 64];
@@ -635,7 +638,10 @@ mod tests {
             .pan(-1.0)
             .effect(delay);
         assert_eq!(clip.resolved_duration()?, 51.milliseconds());
-        let mix = MixedAudio::new(&[clip], 1000, 51.milliseconds())?;
+        let mix = MixedAudio::new(
+            MixSource::clips(&[clip], 51.milliseconds()),
+            MixOptions::new(1000),
+        )?;
         let mut output = vec![0.0; 102];
         mix.read(0, &mut output);
         assert_eq!(output[20], 1.0);
@@ -675,11 +681,10 @@ mod tests {
         let timeline = Timeline::new(Size::new(1.0, 1.0), 30)
             .audio(AudioClip::source(pcm.clone()).effect(effect))
             .build()?;
-        let whole = crate::MixedAudio::from_timeline(&timeline, 8000)?;
-        let window = crate::MixedAudio::from_window(
+        let whole = crate::MixedAudio::new(&timeline, crate::MixOptions::new(8000))?;
+        let window = crate::MixedAudio::new(
             &timeline,
-            400.milliseconds()..600.milliseconds(),
-            8000,
+            crate::MixOptions::new(8000).range(400.milliseconds()..600.milliseconds()),
         )?;
         let mut first = [0.0; 80];
         let mut second = [0.0; 80];

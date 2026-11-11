@@ -4,6 +4,7 @@ use super::*;
 use motion_core::Shape;
 use motion_core::{Color, FrameRate, Node, NodeModifiers, Rect, Scene, Size, Time, TimeLiteral};
 use motion_render::PixelFormat;
+use std::sync::Arc;
 
 #[cfg(feature = "ffmpeg")]
 #[test]
@@ -124,12 +125,12 @@ fn parallel_export_matches_serial_pixels_ntsc_ranges_and_progress() -> Result<()
         })?
         .build()?;
 
-    struct Sink<'a> {
-        frames: &'a Mutex<Vec<FrameBuffer>>,
+    struct Sink {
+        frames: Arc<Mutex<Vec<FrameBuffer>>>,
         format: PixelFormat,
     }
 
-    impl Encoder for Sink<'_> {
+    impl Encoder for Sink {
         fn input_format(&self) -> PixelFormat {
             self.format
         }
@@ -194,7 +195,7 @@ fn parallel_export_matches_serial_pixels_ntsc_ranges_and_progress() -> Result<()
         for backend in backends {
             for workers in [1, 2, 4, 16] {
                 evaluations.lock().unwrap().clear();
-                let frames = Mutex::new(Vec::new());
+                let frames = Arc::new(Mutex::new(Vec::new()));
                 let progress = Progress(Mutex::new(Vec::new()), std::thread::current().id());
                 let mut options = ExportOptions::new("unused-parallel-custom-output")
                     .range(Time::from_frame(2, rate)..Time::from_frame(10, rate))
@@ -207,17 +208,16 @@ fn parallel_export_matches_serial_pixels_ntsc_ranges_and_progress() -> Result<()
                 ) {
                     options.render.background = None;
                 }
-                let report = export_with_encoder(
-                    &timeline,
-                    &options,
-                    &progress,
+                let sink = frames.clone();
+                let options = options.encoder(move || {
                     Box::new(Sink {
-                        frames: &frames,
+                        frames: sink.clone(),
                         format,
-                    }),
-                )?;
+                    })
+                });
+                let report = export(&timeline, &options, &progress)?;
                 assert_eq!(report.frames, 8);
-                let frames = frames.into_inner().unwrap();
+                let frames = std::mem::take(&mut *frames.lock().unwrap());
                 if reference.is_empty() {
                     reference = frames;
                 } else {
@@ -309,18 +309,17 @@ fn parallel_export_matches_serial_pixels_ntsc_ranges_and_progress() -> Result<()
     for count in calls.iter() {
         count.store(0, std::sync::atomic::Ordering::Relaxed);
     }
-    let frames = Mutex::new(Vec::new());
+    let frames = Arc::new(Mutex::new(Vec::new()));
     let progress = Progress(Mutex::new(Vec::new()), std::thread::current().id());
-    export_with_encoder(
-        &changing,
-        &options,
-        &progress,
+    let sink = frames.clone();
+    let options = options.encoder(move || {
         Box::new(Sink {
-            frames: &frames,
+            frames: sink.clone(),
             format,
-        }),
-    )?;
-    assert_eq!(frames.into_inner().unwrap(), reference);
+        })
+    });
+    export(&changing, &options, &progress)?;
+    assert_eq!(*frames.lock().unwrap(), reference);
     assert_eq!(calls[2].load(std::sync::atomic::Ordering::Relaxed), 1);
     assert!(
         calls[4].load(std::sync::atomic::Ordering::Relaxed) >= 2,
@@ -427,7 +426,12 @@ fn still_and_custom_encoder_share_transparent_pixels_absolute_ticks_and_cancella
     options.render.background = None;
     options.range = Some(150.milliseconds().after_origin()..450.milliseconds().after_origin());
     assert_eq!(
-        export_with_encoder(&timeline, &options, &NoProgress, Box::new(Sink))?.frames,
+        export(
+            &timeline,
+            &options.clone().encoder(|| Box::new(Sink)),
+            &NoProgress
+        )?
+        .frames,
         3
     );
 

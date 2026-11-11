@@ -270,7 +270,7 @@ impl AudioAnalysis {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::MixedAudio;
+    use crate::{MixOptions, MixSource, MixedAudio};
     use motion_core::{AudioClip, TimeLiteral};
 
     #[test]
@@ -323,7 +323,10 @@ mod tests {
         let clip = AudioClip::source(PcmBuffer::new(8192, 1, vec![1.0; 8192])?)
             .pan(-1.0)
             .volume_envelope(loudness);
-        let mixed = MixedAudio::new(&[clip], 8192, 1.seconds())?;
+        let mixed = MixedAudio::new(
+            MixSource::clips(&[clip], 1.seconds()),
+            MixOptions::new(8192),
+        )?;
         let mut output = [0.0; 2];
         mixed.read(4096, &mut output);
         assert!((f64::from(output[0]) - band.sample(500.milliseconds())).abs() < 1e-6);

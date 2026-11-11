@@ -34,8 +34,8 @@ mod render;
 mod tests;
 
 pub use options::{
-    BitDepth, Codec, Encoder, EncoderCapabilities, EncoderPreset, ExportOptions, ExportPhase,
-    ExportReport, NoProgress, ProgressSink,
+    BitDepth, Codec, Encoder, EncoderCapabilities, EncoderFactory, EncoderPreset, ExportOptions,
+    ExportPhase, ExportReport, NoProgress, ProgressSink,
 };
 use render::{output_rate, render_frame, render_workers, selected};
 
@@ -43,23 +43,24 @@ pub(crate) fn invalid(field: &str, message: &str) -> motion_core::Error {
     motion_core::ValidationError::invalid("export", field, message).into()
 }
 
-/// Exports using the selected native video codec, PNG sequence or GIF encoder.
-/// Native video encoding runs in-process without launching a subprocess.
+/// Exports using the encoder from [`ExportOptions::encoder`] or, without one, the selected
+/// native video codec, PNG sequence or GIF encoder. Every encoder shares the clock,
+/// resources and limits. Native video encoding runs in-process without launching a subprocess.
 pub fn export(
     timeline: &Timeline,
     options: &ExportOptions,
     progress: &dyn ProgressSink,
 ) -> Result<ExportReport> {
-    let encoder: Box<dyn Encoder + '_> = match options.codec {
-        Codec::PngSequence => Box::new(crate::encoder::png::PngSequenceEncoder::new()),
-        Codec::Gif { .. } => Box::new(crate::encoder::gif::GifEncoder::new()),
-        _ => Box::new(FfmpegEncoder::new(progress).codec(options.codec.clone())),
+    let encoder: Box<dyn Encoder + '_> = match (&options.encoder, &options.codec) {
+        (Some(factory), _) => factory.create(),
+        (None, Codec::PngSequence) => Box::new(crate::encoder::png::PngSequenceEncoder::new()),
+        (None, Codec::Gif { .. }) => Box::new(crate::encoder::gif::GifEncoder::new()),
+        (None, codec) => Box::new(FfmpegEncoder::new(progress).codec(codec.clone())),
     };
-    export_with_encoder(timeline, options, progress, encoder)
+    export_through(timeline, options, progress, encoder)
 }
 
-/// Exports through a caller-owned encoder using the same clock, resources and limits.
-pub fn export_with_encoder(
+fn export_through(
     timeline: &Timeline,
     options: &ExportOptions,
     progress: &dyn ProgressSink,
@@ -103,12 +104,11 @@ pub fn export_with_encoder(
         None
     } else {
         let range = options.range.as_ref().expect("normalized range");
-        Some(crate::MixedAudio::from_resolved_window(
-            timeline,
-            &resolved,
-            range.start.since_origin()..range.end.since_origin(),
-            options.audio_sample_rate,
-            options.audio_resampler,
+        Some(crate::MixedAudio::new(
+            crate::audio::MixSource::resolved(timeline, &resolved),
+            crate::audio::MixOptions::new(options.audio_sample_rate)
+                .range(range.start.since_origin()..range.end.since_origin())
+                .resampler(options.audio_resampler),
         )?)
     };
     cancelled(progress)?;

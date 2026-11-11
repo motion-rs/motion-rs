@@ -2,7 +2,7 @@
 #![cfg(feature = "audio")]
 
 use motion_core::{AudioSource, ErrorKind, ValidationError};
-use motion_encode::audio::MixedAudio;
+use motion_encode::audio::{MixOptions, MixedAudio};
 use motion_scene::*;
 use std::path::Path;
 
@@ -70,7 +70,7 @@ fn rms(mix: &MixedAudio, start: f64, end: f64) -> (f64, f64) {
 }
 
 fn mix(film: &CompiledDocument) -> MixedAudio {
-    MixedAudio::from_timeline(film.timeline(), RATE).unwrap()
+    MixedAudio::new(film.timeline(), MixOptions::new(RATE)).unwrap()
 }
 
 fn level(mix: &MixedAudio, start: f64, end: f64) -> f64 {

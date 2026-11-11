@@ -583,7 +583,8 @@ mod scenes {
                         .try_gap(1.seconds())
                 })?
                 .build()?;
-            let mixed = motion::encode::MixedAudio::from_timeline(&parent, 4)?;
+            let mixed =
+                motion::encode::MixedAudio::new(&parent, motion::encode::MixOptions::new(4))?;
             let mut values = [0.0; 20];
             mixed.read(0, &mut values);
             assert_eq!(&values[..4], &[0.0; 4]);
@@ -598,7 +599,8 @@ mod scenes {
                 )?))?
                 .build()?;
             assert_eq!(short.frame_count(), 1);
-            let _mix = motion::encode::MixedAudio::from_timeline(&parent, 48_000)?;
+            let _mix =
+                motion::encode::MixedAudio::new(&parent, motion::encode::MixOptions::new(48_000))?;
             Ok(())
         }
 

@@ -323,7 +323,7 @@ impl crate::MixedAudio {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{MixedAudio, PcmBuffer};
+    use crate::{MixOptions, MixedAudio, PcmBuffer};
     use motion_core::{AudioClip, Loudness, Size, TimeLiteral, Timeline};
 
     #[test]
@@ -382,7 +382,7 @@ mod tests {
         let timeline = Timeline::new(Size::new(1.0, 1.0), 30)
             .audio(AudioClip::source(PcmBuffer::new(48000, 2, signal)?))
             .build()?;
-        let mix = MixedAudio::from_timeline(&timeline, 48000)?;
+        let mix = MixedAudio::new(&timeline, MixOptions::new(48000))?;
         assert!((mix.loudness_report()?.integrated_lufs.unwrap() + 20.0).abs() < 0.1);
         assert!(mix.levels.get().is_some());
         assert!(std::sync::Arc::ptr_eq(&mix.levels, &mix.clone().levels));
@@ -396,9 +396,12 @@ mod tests {
                 ..Default::default()
             })
             .build()?;
-        let mix = MixedAudio::from_timeline(&timeline, 48000)?;
+        let mix = MixedAudio::new(&timeline, MixOptions::new(48000))?;
         assert!((mix.loudness_report()?.integrated_lufs.unwrap() + 23.0).abs() < 0.1);
-        let window = MixedAudio::from_window(&timeline, 1.seconds()..1500.milliseconds(), 48000)?;
+        let window = MixedAudio::new(
+            &timeline,
+            MixOptions::new(48000).range(1.seconds()..1500.milliseconds()),
+        )?;
         let mut expected = [0.0; 64];
         let mut actual = [0.0; 64];
         mix.read(48123, &mut expected);

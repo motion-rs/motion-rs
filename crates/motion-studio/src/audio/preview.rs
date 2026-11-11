@@ -418,8 +418,11 @@ impl PreviewMix {
         });
         let prepared = if let Some(timeline) = timeline.as_ref().filter(|_| processed) {
             Some(
-                motion_encode::MixedAudio::from_timeline(timeline, audio::SAMPLE_RATE as u32)
-                    .map_err(io::Error::other)?,
+                motion_encode::MixedAudio::new(
+                    timeline,
+                    motion_encode::MixOptions::new(audio::SAMPLE_RATE as u32),
+                )
+                .map_err(io::Error::other)?,
             )
         } else {
             None
@@ -456,10 +459,11 @@ impl PreviewMix {
                         )
                     };
                     self.native = Some(
-                        motion_encode::MixedAudio::from_window(
+                        motion_encode::MixedAudio::new(
                             timeline,
-                            time(position).since_origin()..time(self.window_end).since_origin(),
-                            audio::SAMPLE_RATE as u32,
+                            motion_encode::MixOptions::new(audio::SAMPLE_RATE as u32).range(
+                                time(position).since_origin()..time(self.window_end).since_origin(),
+                            ),
                         )
                         .map_err(io::Error::other)?,
                     );

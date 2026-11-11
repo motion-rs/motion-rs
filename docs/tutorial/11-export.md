@@ -78,7 +78,7 @@ The range maps to representable frame boundaries. Scene callbacks retain absolut
 
 ## Encoder Lifecycle
 
-`export` selects a built-in encoder; `export_with_encoder` accepts your own `Encoder`.
+`export` selects a built-in encoder; `ExportOptions::encoder` replaces it with a factory for your own `Encoder`, so `export` stays the only entry point.
 
 1. Check configuration, dimensions, audio capabilities and the selected range.
 2. Prepare the cropped mix, then call `Encoder::open`.

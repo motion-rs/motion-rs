@@ -67,7 +67,7 @@ impl AudioReadout {
 mod tests {
     use super::*;
     use motion_core::{AudioBus, AudioClip, Size, TimeLiteral, Timeline};
-    use motion_encode::PcmBuffer;
+    use motion_encode::{MixOptions, PcmBuffer};
 
     #[test]
     fn readout_reports_levels_and_bus_meters() -> motion_core::Result {
@@ -81,7 +81,7 @@ mod tests {
             .audio(AudioClip::source(PcmBuffer::new(48_000, 2, samples)?).bus("music"))
             .audio_bus(AudioBus::new("music"))
             .build()?;
-        let mix = MixedAudio::from_timeline(&timeline, 48_000)?;
+        let mix = MixedAudio::new(&timeline, MixOptions::new(48_000))?;
         let readout = AudioReadout::from_mix(&mix, Time::ZERO)?;
         assert!(readout.integrated_lufs.is_some());
         assert!((readout.sample_peak_db + 6.02).abs() < 0.1);

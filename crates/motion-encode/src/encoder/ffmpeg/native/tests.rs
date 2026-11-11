@@ -26,9 +26,8 @@ fn fractional_frame_rate_validation_preserves_audio_duration() -> Result {
     let clip = motion_core::AudioClip::source(crate::PcmBuffer::new(48_000, 1, vec![0.0])?)
         .duration(duration.since_origin());
     let options = NativeOptions::default().audio_mix(crate::MixedAudio::new(
-        &[clip],
-        48_000,
-        duration.since_origin(),
+        crate::MixSource::clips(&[clip], duration.since_origin()),
+        crate::MixOptions::new(48_000),
     )?)?;
     let rate = motion_core::FrameRate::NTSC;
     let frames =
@@ -314,9 +313,8 @@ fn audio_encoder_preserves_frame_count_and_encodes_delayed_padded_stereo_aac() -
             .fade_out(motion_core::Duration::from_seconds(0.1)),
     )?;
     let options = NativeOptions::default().audio_mix(crate::MixedAudio::new(
-        &[clip],
-        48_000,
-        motion_core::Duration::from_seconds(1.0),
+        crate::MixSource::clips(&[clip], motion_core::Duration::from_seconds(1.0)),
+        crate::MixOptions::new(48_000),
     )?)?;
     let destination = directory.path().join("output.mp4");
     let mut encoder = Encoder::new(&destination, (64, 64), 24, 24, &options)?;
@@ -362,9 +360,11 @@ fn pcm_delivery_rates_and_container_metadata_round_trip() -> Result {
             crate::audio::synth::Synth::new(crate::audio::synth::Wave::Sine, 440.0, rate, 0)?
                 .gain_db(-12.0)?;
         let options = NativeOptions::default().audio_mix(crate::MixedAudio::new(
-            &[AudioClip::source(source).duration(1.seconds())],
-            rate,
-            1.seconds(),
+            crate::MixSource::clips(
+                &[AudioClip::source(source).duration(1.seconds())],
+                1.seconds(),
+            ),
+            crate::MixOptions::new(rate),
         )?)?;
         let mut options = options;
         options
@@ -436,9 +436,8 @@ fn audio_cancellation_preserves_existing_destination() -> Result {
     let options = NativeOptions::default()
         .overwrite(true)
         .audio_mix(crate::MixedAudio::new(
-            &[clip],
-            48_000,
-            motion_core::Duration::from_seconds(1.0),
+            crate::MixSource::clips(&[clip], motion_core::Duration::from_seconds(1.0)),
+            crate::MixOptions::new(48_000),
         )?)?;
     let mut encoder = Encoder::new(&destination, (64, 64), 24, 24, &options)?;
     for _ in 0..24 {

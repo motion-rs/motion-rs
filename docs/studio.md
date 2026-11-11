@@ -221,6 +221,8 @@ backend and shutter settings also apply when streamed file audio is configured.
 Selected ranges preserve clip-local audio fades. PNG ignores audio. Preview-only
 registrations reject export before starting work.
 
+The Export form keeps only transient values (size, range, backend, shutter, codec choice); one conversion turns it into the encode `ExportOptions` that `export` consumes. A timeline scene registers a single `Timeline` that preview and export share, with audio files resolved by the mixer.
+
 Exports run separately, retain typed errors and observe cooperative cancellation.
 Closing discards queued work, cancels the active job and waits for cleanup. Existing output
 is replaced only after successful finalization with explicit overwrite permission.
