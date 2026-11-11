@@ -1,5 +1,7 @@
 //! Scene compilation: bounded layout/recording followed by device emission.
 
+use std::fmt::Write;
+
 use super::spatial::Bounds;
 use super::{Node, NodeKind};
 use crate::display_list::{Builder, mapped_bounds};
@@ -15,6 +17,9 @@ mod inspection;
 mod tests;
 
 pub use inspection::NodeInspection;
+
+/// Spare bytes reserved after a parent path for one `.children[n]` or `.commands[n]` suffix.
+const CHILD_PATH_SLACK: usize = 24;
 
 impl Node {
     /// Compiles content to flat device-space commands without rendering.
@@ -245,18 +250,12 @@ fn plan(
         NodeKind::Group(children)
         | NodeKind::Layout(_, children)
         | NodeKind::Accumulate(children) => {
-            let mut planned = Vec::new();
+            let mut planned = Vec::with_capacity(children.len());
+            let mut child_path = String::with_capacity(path.len() + CHILD_PATH_SLACK);
             for (index, child) in children.iter().enumerate() {
-                planned.push((
-                    index,
-                    plan(
-                        child,
-                        &format!("{path}.children[{index}]"),
-                        depth + 1,
-                        context,
-                        state,
-                    )?,
-                ));
+                child_path.clear();
+                let _ = write!(child_path, "{path}.children[{index}]");
+                planned.push((index, plan(child, &child_path, depth + 1, context, state)?));
             }
             if let NodeKind::Layout(layout, _) = node.data.kind {
                 let geometry: Vec<_> = planned
@@ -451,6 +450,7 @@ impl Plan {
         }
         match self.content {
             Content::Leaf(commands) => {
+                let mut command_path = String::with_capacity(self.path.len() + CHILD_PATH_SLACK);
                 for (index, mut command) in commands.into_iter().enumerate() {
                     match &mut command {
                         DrawCommand::FillRect {
@@ -476,7 +476,9 @@ impl Plan {
                             ));
                         }
                     }
-                    output.push(command, &format!("{}.commands[{index}]", self.path))?;
+                    command_path.clear();
+                    let _ = write!(command_path, "{}.commands[{index}]", self.path);
+                    output.push(command, &command_path)?;
                 }
             }
             Content::Children(children) => {

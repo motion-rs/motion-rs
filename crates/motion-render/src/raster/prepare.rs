@@ -11,6 +11,7 @@ use super::{CoverageCache, RasterScope, rect_clip};
 use crate::prepared::*;
 use filters::{command_filter_bytes, copy_filters, filter_padding, filter_support, shift_command};
 use motion_core::budget::Budget;
+use std::fmt::Write;
 use std::mem::size_of;
 
 mod coverage;
@@ -182,8 +183,10 @@ pub(crate) fn prepare_validated_with_cache(
     let mut filter_stack = Vec::new();
     let mut has_plus_layers = false;
     let mut rectangles = rect_clip::Preparation::default();
+    let mut path = String::new();
     for (index, command) in source.commands.iter().enumerate() {
-        let path = format!("display_list.commands[{index}]");
+        path.clear();
+        let _ = write!(path, "display_list.commands[{index}]");
         budget.work(1, &path)?;
         let shifted;
         let temporary = if padding == 0 {
