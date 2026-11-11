@@ -1,5 +1,7 @@
 //! Bounded session-owned pixel storage; idle capacity is separate from active payload.
 
+use motion_core::sync::MutexExt;
+
 #[derive(Debug)]
 pub(crate) struct BufferPool<Value> {
     shared: std::sync::Arc<std::sync::Mutex<Storage<Value>>>,
@@ -36,31 +38,19 @@ impl<Value> Clone for BufferPool<Value> {
 
 impl<Value> BufferPool<Value> {
     pub(crate) fn trim(&self, maximum: u64) {
-        self.shared
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .trim(maximum);
+        self.shared.lock_unpoisoned().trim(maximum);
     }
 
     pub(crate) fn bytes(&self) -> u64 {
-        self.shared
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .bytes
+        self.shared.lock_unpoisoned().bytes
     }
 
     pub(crate) fn take(&self, count: usize) -> Option<Vec<Value>> {
-        self.shared
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .take(count)
+        self.shared.lock_unpoisoned().take(count)
     }
 
     pub(crate) fn put(&self, buffer: Vec<Value>) {
-        self.shared
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .put(buffer);
+        self.shared.lock_unpoisoned().put(buffer);
     }
 }
 

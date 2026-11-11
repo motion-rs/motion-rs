@@ -51,10 +51,8 @@ impl WaveformPyramid {
             start += count as u64;
         }
         let mut levels = vec![peaks];
-        while levels.last().is_some_and(|level| level.len() > 1) {
-            let next = levels
-                .last()
-                .unwrap()
+        while let Some(level) = levels.last().filter(|level| level.len() > 1) {
+            let next = level
                 .chunks(2)
                 .map(|pair| pair.iter().copied().fold(0.0, f32::max))
                 .collect();

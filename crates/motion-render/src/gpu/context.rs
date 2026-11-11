@@ -1,6 +1,7 @@
 //! GPU context creation, device-limit validation of plans and render pipeline setup.
 
 use super::*;
+use motion_core::sync::MutexExt;
 use motion_core::{PixelSize, Shape, ValidationError};
 
 mod batch;
@@ -180,11 +181,7 @@ impl GpuContext {
 
     /// Serializes extension submissions with 2D execution and checks device loss.
     pub fn acquire_submission(&self) -> motion_core::Result<std::sync::MutexGuard<'_, ()>> {
-        let guard = self.submissions.lock().map_err(|_| {
-            motion_core::Error::Gpu(Box::new(std::io::Error::other(
-                "GPU submission lock poisoned",
-            )))
-        })?;
+        let guard = self.submissions.lock_unpoisoned();
         self.loss.check()?;
         Ok(guard)
     }
@@ -390,9 +387,7 @@ impl GpuContext {
 
     pub(super) fn return_working(&self, lease: WorkingLease, maximum: u64) {
         let maximum = maximum.min(64 * 1024 * 1024);
-        let Ok(mut pool) = self.working_pool.lock() else {
-            return;
-        };
+        let mut pool = self.working_pool.lock_unpoisoned();
         pool.trim(maximum);
         for buffer in lease.buffers {
             let bytes = buffer.size();
@@ -456,12 +451,12 @@ impl GpuContext {
                 "Could not reserve working texture lease",
             )
         })?;
-        let cached = self.working_pool.lock().ok().and_then(|mut pool| {
+        let cached = (|pool: &mut WorkingResourceStore| {
             let index = pool.textures.iter().position(|texture| matches(&texture))?;
             let texture = pool.textures.swap_remove(index);
             pool.bytes -= u64::from(size.width) * u64::from(size.height) * 16;
             Some(texture)
-        });
+        })(&mut self.working_pool.lock_unpoisoned());
         let texture = cached.unwrap_or_else(|| {
             #[cfg(test)]
             self.working_textures_created
@@ -486,7 +481,7 @@ impl GpuContext {
     }
 
     pub(super) fn staging_buffer(&self, size: u64) -> wgpu::Buffer {
-        let cached = self.working_pool.lock().ok().and_then(|mut pool| {
+        let cached = (|pool: &mut WorkingResourceStore| {
             while let Some(index) = pool
                 .staging
                 .iter()
@@ -501,7 +496,7 @@ impl GpuContext {
             let entry = pool.staging.swap_remove(index);
             pool.bytes -= entry.buffer.size();
             Some(entry.buffer)
-        });
+        })(&mut self.working_pool.lock_unpoisoned());
         cached.unwrap_or_else(|| {
             self.device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("Batch upload staging"),
@@ -519,7 +514,7 @@ impl GpuContext {
         usage: wgpu::BufferUsages,
     ) -> wgpu::Buffer {
         let usage = usage | wgpu::BufferUsages::COPY_DST;
-        let cached = self.working_pool.lock().ok().and_then(|mut pool| {
+        let cached = (|pool: &mut WorkingResourceStore| {
             let index = pool
                 .buffers
                 .iter()
@@ -527,7 +522,7 @@ impl GpuContext {
             let buffer = pool.buffers.swap_remove(index);
             pool.bytes -= buffer.size();
             Some(buffer)
-        });
+        })(&mut self.working_pool.lock_unpoisoned());
         cached.unwrap_or_else(|| {
             self.device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some(label),
@@ -678,7 +673,7 @@ impl GpuContext {
 
     /// Idle reusable working-buffer payload retained by this shared context.
     pub fn pooled_working_bytes(&self) -> u64 {
-        self.working_pool.lock().map_or(0, |pool| pool.bytes)
+        self.working_pool.lock_unpoisoned().bytes
     }
 
     /// Runs a shared once-only native/CPU parity scene, including alpha, geometry,

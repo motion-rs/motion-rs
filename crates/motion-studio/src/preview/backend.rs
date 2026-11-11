@@ -2,6 +2,7 @@
 //! setting and picks the faster backend for playback.
 
 use super::*;
+use motion_core::sync::MutexExt;
 use std::collections::VecDeque;
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
@@ -37,7 +38,7 @@ impl Calibration {
 
     pub fn choose(&self, scene: &StudioScene, settings: PreviewSettings, frame: u32) -> Choice {
         let cell = {
-            let mut entries = self.entries.lock().expect("preview calibration");
+            let mut entries = self.entries.lock_unpoisoned();
             if let Some(position) = entries.iter().position(|entry| entry.0 == settings) {
                 let entry = entries.remove(position).expect("preview calibration entry");
                 let cell = entry.1.clone();

@@ -344,12 +344,14 @@ impl Path2D {
     pub fn cubic_breakpoints(&self) -> Result<Vec<f64>, ValidationError> {
         let metrics = self.metrics()?;
         let mut points = vec![0.0];
+        let mut last = 0.0;
         if metrics.total > 0.0 {
             for segment in &metrics.segments {
                 if segment.length > 0.0 {
                     let fraction = (segment.start + segment.length) / metrics.total;
-                    if fraction > *points.last().unwrap() {
-                        points.push(fraction.min(1.0));
+                    if fraction > last {
+                        last = fraction.min(1.0);
+                        points.push(last);
                     }
                 }
             }
@@ -619,9 +621,8 @@ impl Path2D {
             if last.close
                 && ranges.len() > 1
                 && ranges[0].0 == origin
-                && ranges.last().unwrap().1 == origin + length
+                && let Some(tail) = ranges.pop_if(|tail| tail.1 == origin + length)
             {
-                let tail = ranges.pop().unwrap();
                 metrics.append(tail.0, tail.1, &mut output, false)?;
                 let head = ranges.remove(0);
                 metrics.append(head.0, head.1, &mut output, true)?;

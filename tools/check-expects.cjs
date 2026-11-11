@@ -72,24 +72,6 @@ const policies = [
     "The preceding path collection excludes paths without either a fill or stroke.",
   ],
   [
-    "motion-content/src/vector/ink/brush/draft.rs",
-    ["ink draft"],
-    "invariant",
-    "BrushStroke dispatches to the private ink draft path only with an ink material.",
-  ],
-  [
-    "motion-content/src/vector/ink/brush/draft.rs",
-    ["initialized atlas"],
-    "invariant",
-    "atlas returns only after get_or_init completes; cached errors are propagated before accessing artwork.",
-  ],
-  [
-    "motion-content/src/vector/ink/brush.rs",
-    ["unbounded material search cannot exhaust an allowance"],
-    "invariant",
-    "The unbounded search wrapper supplies no allowance; the bounded-exhaustion error requires an allowance.",
-  ],
-  [
     "motion-content/src/vector.rs",
     ["one isolated content sample"],
     "invariant",
@@ -102,12 +84,6 @@ const policies = [
     "Constructors install the initial keyframe and there is no public removal operation.",
   ],
   [
-    "motion-core/src/animation/primitives.rs",
-    ["Valid path easing"],
-    "convenience-panic",
-    "The path-easing convenience constructor deliberately rejects invalid path geometry by panicking.",
-  ],
-  [
     "motion-core/src/animation.rs",
     ["animation duration overflow"],
     "convenience-panic",
@@ -118,12 +94,6 @@ const policies = [
     ["typed resource key", "typed global key"],
     "invariant",
     "Resource keys include TypeId; only the matching Entry<A> is inserted under that key.",
-  ],
-  [
-    "motion-core/src/authoring/context/cache.rs",
-    ["scene cache lock poisoned"],
-    "poison-panic",
-    "Fail fast: a panic while holding this lock may have interrupted cache mutation; poisoning is not impossible.",
   ],
   [
     "motion-core/src/authoring/context/cache.rs",
@@ -280,7 +250,7 @@ const policies = [
   ],
   [
     "motion-render/src/composition/execution.rs",
-    ["selected native GPU", "GPU initialized"],
+    ["selected native GPU"],
     "invariant",
     "Backend selection installs the GPU before recording a successful GPU decision; failed Automatic selection resets it before recording a CPU decision.",
   ],
@@ -319,12 +289,6 @@ const policies = [
     ["new resource snapshot"],
     "invariant",
     "Shared assets are first replaced by a new unshared snapshot Arc before mutable access.",
-  ],
-  [
-    "motion-render/src/cpu/filter.rs",
-    ["point origin"],
-    "invariant",
-    "The nonempty point-operation group retains the tail used to report the final operation origin.",
   ],
   [
     "motion-render/src/cpu/filter.rs",
@@ -420,12 +384,6 @@ const policies = [
     "A saved-source index exists only on a filtered layer with an immutable filters descriptor.",
   ],
   [
-    "motion-render/src/gpu/plan/sparse.rs",
-    ["sparse upload"],
-    "invariant",
-    "The sparse path mutates the same step whose successful creation was checked immediately beforehand.",
-  ],
-  [
     "motion-render/src/gpu/plan.rs",
     ["root"],
     "invariant",
@@ -480,18 +438,6 @@ const policies = [
     "The native-window branch is enabled only after installing its prepared window state.",
   ],
   [
-    "motion-studio/src/export.rs",
-    ["export state", "export progress"],
-    "poison-panic",
-    "Fail fast on a poisoned export-state mutex; partially updated shared progress must not be reused.",
-  ],
-  [
-    "motion-studio/src/preview/backend.rs",
-    ["preview calibration"],
-    "poison-panic",
-    "Fail fast if calibration-cache mutation poisoned its mutex.",
-  ],
-  [
     "motion-studio/src/preview/backend.rs",
     ["preview calibration entry"],
     "invariant",
@@ -502,24 +448,6 @@ const policies = [
     ["thumbnail cache", "preview cache", "preview texture cache"],
     "invariant",
     "An index is selected from the same coordinator-owned deque immediately before removal, without intervening mutation.",
-  ],
-  [
-    "motion-studio/src/preview/pool.rs",
-    ["preview coordinator"],
-    "poison-panic",
-    "Fail fast after coordinator mutex/condvar poisoning rather than trusting interrupted cache/scheduling mutation.",
-  ],
-  [
-    "motion-studio/src/preview/textures.rs",
-    ["preview texture ring"],
-    "poison-panic",
-    "Fail fast after ring mutex poisoning; reservations may be inconsistent, including during Drop.",
-  ],
-  [
-    "motion-studio/src/preview/worker.rs",
-    ["preview mailbox"],
-    "poison-panic",
-    "Fail fast after mailbox mutex/condvar poisoning; a partial publication/request must not be reused.",
   ],
   [
     "motion-studio/src/preview/worker.rs",
@@ -544,6 +472,48 @@ const policies = [
     ["checker texture"],
     "invariant",
     "The preceding checker initialization installs the texture whenever the private cache is absent.",
+  ],
+  [
+    "motion-content/src/image/static_image.rs",
+    ["mip source texel in bounds"],
+    "invariant",
+    "The loops clamp every coordinate to the previous level's width and height.",
+  ],
+  [
+    "motion-content/src/svg/convert.rs",
+    ["filled path has a fill"],
+    "invariant",
+    "VectorPath::filled always sets a fill.",
+  ],
+  [
+    "motion-content/src/vector/ink/brush/advanced/pigment.rs",
+    ["Kubelka-Munk spectra"],
+    "invariant",
+    "The spectra are computed exactly when the mix mode is Kubelka-Munk, the only mode that reads them.",
+  ],
+  [
+    "motion-render/src/cpu/blending.rs",
+    ["nonseparable mix"],
+    "invariant",
+    "The nonseparable mix is computed for exactly the hue, saturation, color and luminosity modes matched here.",
+  ],
+  [
+    "motion-render/src/gpu/execute/textures/uploads.rs",
+    ["mapped staging buffer"],
+    "invariant",
+    "Every call is guarded by an installed staging buffer, which is created mapped together with its view.",
+  ],
+  [
+    "motion-render/src/raster/paint.rs",
+    ["gradient table has entries"],
+    "invariant",
+    "Gradient paints are validated to have at least two stops, and the table holds a row of entries per stop.",
+  ],
+  [
+    "motion-render/src/raster/polygon.rs",
+    ["inside span follows a crossing"],
+    "invariant",
+    "A span is inside only after a crossing has set the previous edge.",
   ],
 ];
 
@@ -644,7 +614,7 @@ function cfgValue(predicate) {
       : false;
 }
 
-function occurrences(source) {
+function occurrences(source, pattern = /\.\s*expect\s*\(/g, literals = true) {
   const masked = maskRust(source),
     excluded = [];
   for (const match of masked.matchAll(/#\[\s*(cfg\s*\(|test\s*\])/g)) {
@@ -663,7 +633,7 @@ function occurrences(source) {
     if (brace >= 0 && (semi < 0 || brace < semi))
       excluded.push([item, closing(masked, brace, "{", "}")]);
   }
-  return [...masked.matchAll(/\.\s*expect\s*\(/g)]
+  return [...masked.matchAll(pattern)]
     .filter(
       (match) =>
         !excluded.some(
@@ -671,6 +641,12 @@ function occurrences(source) {
         ),
     )
     .map((match) => {
+      if (!literals)
+        return {
+          line: source.slice(0, match.index).split("\n").length,
+          message: match[0],
+          index: match.index,
+        };
       const literal = source
         .slice(match.index)
         .match(/^\.\s*expect\s*\(\s*("(?:\\.|[^"\\])*")/);
@@ -726,8 +702,21 @@ function audit() {
       return fs.existsSync(directory) ? rustFiles(directory) : [];
     })
     .concat(rustFiles(path.join(root, "gallery", "src")));
-  return files.flatMap((file) =>
-    occurrences(fs.readFileSync(file, "utf8")).map((entry) => {
+  const used = new Set();
+  const entries = files.flatMap((file) => {
+    const source = fs.readFileSync(file, "utf8");
+    const relative = path.relative(root, file).split(path.sep).join("/");
+    for (const [pattern, advice] of [
+      [/\.\s*unwrap\s*\(\s*\)/g, "use expect with a registered invariant or return an error"],
+      [/\bunreachable!\s*\(/g, "give unreachable! the invariant that makes it unreachable"],
+    ]) {
+      const found = occurrences(source, pattern, false).find(
+        (entry) => !/^unreachable!\s*\(\s*"/.test(source.slice(entry.index)) ||
+          !entry.message.startsWith("unreachable"),
+      );
+      assert(!found, `Production ${found?.message} at ${relative}:${found?.line}: ${advice}`);
+    }
+    return occurrences(source).map((entry) => {
       const relative = path.relative(root, file).split(path.sep).join("/");
       const policy = policies.find(
         ([suffix, messages]) =>
@@ -737,14 +726,22 @@ function audit() {
         policy,
         `Unassessed expect: ${relative}:${entry.line} ${entry.message}`,
       );
+      used.add(`${policy[0]}\0${entry.message}`);
       return {
         file: relative,
         ...entry,
         decision: policy[2],
         reason: policy[3],
       };
-    }),
+    });
+  });
+  const stale = policies.flatMap(([suffix, messages]) =>
+    messages
+      .filter((message) => !used.has(`${suffix}\0${message}`))
+      .map((message) => `${suffix} ${message}`),
   );
+  assert.deepEqual(stale, [], "Stale expect policies");
+  return entries;
 }
 
 if (require.main === module) {

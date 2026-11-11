@@ -2,6 +2,7 @@
 //! pitch, onset detection, marker files and beat grids built on top of the offline traces.
 
 use super::*;
+use motion_core::sync::MutexExt;
 
 impl AudioSignal {
     /// Borrows offline values in hop order, without sampling or source reads.
@@ -244,11 +245,7 @@ impl AudioAnalysis {
         if bytes > 64 * 1024 * 1024 {
             return Err(invalid("analysis_bytes", "Analysis group exceeds 64 MiB").into());
         }
-        let mut cache = self
-            .pcm
-            .analysis
-            .lock()
-            .map_err(|_| invalid("cache", "Analysis cache is poisoned"))?;
+        let mut cache = self.pcm.analysis.lock_unpoisoned();
         if let Some(traces) = cache.get(&key) {
             return Ok(AudioSpectrum {
                 bands: traces.iter().cloned().map(AudioSignal).collect(),

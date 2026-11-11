@@ -16,7 +16,11 @@ frames. This is neither a deadline nor a process memory sandbox.
 Error retains category, optional frame and original source. Inspect `kind`, `frame`
 and `downcast_ref` rather than parsing messages. Synchronous callback panics propagate;
 worker boundaries convert them into scene-panic diagnostics. A failed immutable frame
-can be retried with healthy inputs without accepting partial output.
+can be retried with healthy inputs without accepting partial output. Library mutexes
+guard plain data that is valid after every statement, so a lock poisoned by a worker
+panic is recovered through `motion_core::sync` rather than turned into a second panic.
+The font engine is the exception: its third-party shaping state is not known to be
+valid after a panic, so a poisoned engine reports a validation error.
 
 ValidatedDisplayList retains a checked immutable command snapshot, not backend or
 raster admission. Image paints reference immutable pixel data without deferred

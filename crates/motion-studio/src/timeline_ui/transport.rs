@@ -5,6 +5,7 @@ use crate::app::{StudioApp, tool};
 use crate::theme;
 use eframe::egui::{self, RichText};
 use egui_phosphor::regular as icons;
+use motion_core::sync::MutexExt;
 
 use super::timecode;
 
@@ -154,8 +155,7 @@ impl StudioApp {
                     .inspection
                     .timeline_view
                     .waveform_result
-                    .lock()
-                    .unwrap_or_else(|error| error.into_inner());
+                    .lock_unpoisoned();
                 if let Some(Ok(overview)) = waveform.as_ref() {
                     if let Some(grid) = overview.beat {
                         ui.label(format!(

@@ -34,6 +34,7 @@ pub mod pixels;
 pub mod random;
 pub mod report;
 pub mod shape;
+pub mod sync;
 pub mod time;
 pub mod validation;
 

@@ -2,6 +2,7 @@
 //! frames, tracks render latency and caches thumbnails.
 
 use super::*;
+use motion_core::sync::{CondvarExt, MutexExt};
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
@@ -214,7 +215,7 @@ impl PreviewCoordinator {
             let wake = shared.clone();
             let slot_context = Context::default();
             let completed = Arc::new(move || {
-                let _guard = wake.0.lock().expect("preview coordinator");
+                let _guard = wake.0.lock_unpoisoned();
                 wake.1.notify_one();
             });
             slots.push(worker::PreviewWorker::spawn(
@@ -265,7 +266,7 @@ impl PreviewCoordinator {
     fn enqueue(&self, key: PreviewKey, mut settings: PreviewSettings, playback: bool) {
         let idle = settings.idle;
         settings.idle = false;
-        let mut state = self.shared.0.lock().expect("preview coordinator");
+        let mut state = self.shared.0.lock_unpoisoned();
         let next = PreviewRequest {
             key,
             settings,
@@ -295,23 +296,18 @@ impl PreviewCoordinator {
     }
 
     pub fn stop_prefetch(&self) {
-        let mut state = self.shared.0.lock().expect("preview coordinator");
+        let mut state = self.shared.0.lock_unpoisoned();
         state.prefetching = false;
         state.thumbnail = None;
         self.shared.1.notify_one();
     }
 
     pub fn take_reply(&self) -> Option<PreviewReply> {
-        self.shared
-            .0
-            .lock()
-            .expect("preview coordinator")
-            .reply
-            .take()
+        self.shared.0.lock_unpoisoned().reply.take()
     }
 
     pub fn request_thumbnail(&self, key: PreviewKey) {
-        let mut state = self.shared.0.lock().expect("preview coordinator");
+        let mut state = self.shared.0.lock_unpoisoned();
         let key = PreviewKey {
             renderer: Renderer::Cpu,
             ..key
@@ -324,7 +320,7 @@ impl PreviewCoordinator {
     }
 
     pub fn thumbnails(&self) -> Vec<(u32, Arc<ColorImage>)> {
-        let state = self.shared.0.lock().expect("preview coordinator");
+        let state = self.shared.0.lock_unpoisoned();
         state
             .thumbnails
             .entries
@@ -388,7 +384,7 @@ impl CoordinatorRuntime {
 
     fn run(mut self, coordinator: Arc<(Mutex<CoordinatorState>, Condvar)>) {
         loop {
-            let mut state = coordinator.0.lock().expect("preview coordinator");
+            let mut state = coordinator.0.lock_unpoisoned();
             if state.stopping {
                 break;
             }
@@ -398,7 +394,7 @@ impl CoordinatorRuntime {
             }
             changed |= self.thumbnail(&mut state);
             if !changed {
-                state = coordinator.1.wait(state).expect("preview coordinator");
+                state = coordinator.1.wait_unpoisoned(state);
             }
             drop(state);
         }
@@ -773,7 +769,7 @@ impl CoordinatorRuntime {
 
 impl Drop for PreviewCoordinator {
     fn drop(&mut self) {
-        self.shared.0.lock().expect("preview coordinator").stopping = true;
+        self.shared.0.lock_unpoisoned().stopping = true;
         self.shared.1.notify_one();
     }
 }

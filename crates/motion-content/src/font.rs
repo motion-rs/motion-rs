@@ -1,5 +1,6 @@
 //! Explicit immutable font snapshots shared by text and SVG parsing.
 
+use motion_core::sync::MutexExt;
 use std::sync::{
     Arc, Mutex, MutexGuard, OnceLock,
     atomic::{AtomicU64, Ordering},
@@ -359,10 +360,7 @@ impl FontLibrary {
 
     /// Logical retained source bytes, excluding parser and platform overhead.
     pub fn retained_bytes(&self) -> usize {
-        let used = self
-            .used_fonts
-            .lock()
-            .unwrap_or_else(|error| error.into_inner());
+        let used = self.used_fonts.lock_unpoisoned();
         let sources = used
             .values()
             .map(|(font, bytes)| (font.file_hash, *bytes))
@@ -378,10 +376,7 @@ impl FontLibrary {
     ) -> motion_core::FontIdentity {
         use std::hash::{Hash, Hasher};
 
-        let mut used = self
-            .used_fonts
-            .lock()
-            .unwrap_or_else(|error| error.into_inner());
+        let mut used = self.used_fonts.lock_unpoisoned();
         used.entry(id)
             .or_insert_with(|| {
                 let mut hash = std::collections::hash_map::DefaultHasher::new();
@@ -404,10 +399,7 @@ impl FontLibrary {
 
     /// Actual selected faces and non-cryptographic source hashes, in stable order.
     pub fn used_fonts(&self) -> Vec<motion_core::FontIdentity> {
-        let used = self
-            .used_fonts
-            .lock()
-            .unwrap_or_else(|error| error.into_inner());
+        let used = self.used_fonts.lock_unpoisoned();
         let mut fonts = used
             .values()
             .map(|(font, _)| font.clone())

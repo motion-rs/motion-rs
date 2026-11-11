@@ -422,8 +422,10 @@ impl ImageAsset {
             pixels: base.into(),
         }];
         let mut bytes = u64::from(width) * u64::from(height) * 8;
-        while levels.last().unwrap().width > 1 || levels.last().unwrap().height > 1 {
-            let previous = levels.last().unwrap();
+        while let Some(previous) = levels
+            .last()
+            .filter(|level| level.width > 1 || level.height > 1)
+        {
             let width = previous.width.div_ceil(2);
             let height = previous.height.div_ceil(2);
             bytes = bytes
@@ -447,7 +449,9 @@ impl ImageAsset {
                         for horizontal in
                             libm::floor(left) as u32..(libm::ceil(right) as u32).min(previous.width)
                         {
-                            let pixel = previous.pixel(horizontal, vertical).unwrap();
+                            let pixel = previous
+                                .pixel(horizontal, vertical)
+                                .expect("mip source texel in bounds");
                             let weight = (right.min(f64::from(horizontal + 1))
                                 - left.max(f64::from(horizontal)))
                                 * (bottom.min(f64::from(vertical + 1))

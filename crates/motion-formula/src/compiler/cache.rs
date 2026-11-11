@@ -4,6 +4,7 @@ use super::{
     FORMULA_BACKEND_VERSION, FormulaAsset, FormulaCompileError, FormulaCompiler, FormulaDiagnostic,
     FormulaOptions, MAX_SOURCE,
 };
+use motion_core::sync::MutexExt;
 use std::collections::BTreeMap;
 use std::sync::{Arc, OnceLock};
 
@@ -104,11 +105,7 @@ impl FormulaCompiler {
                 .map_err(Into::into);
         }
         let entry = {
-            let mut cache = self
-                .inner
-                .cache
-                .lock()
-                .map_err(|_| FormulaCompileError::new("FormulaAsset cache lock poisoned"))?;
+            let mut cache = self.inner.cache.lock_unpoisoned();
             if let Some(entry) = cache.entries.get(&key) {
                 entry.clone()
             } else {
@@ -138,11 +135,7 @@ impl FormulaCompiler {
                 .sum(),
         });
         {
-            let mut cache = self
-                .inner
-                .cache
-                .lock()
-                .map_err(|_| FormulaCompileError::new("FormulaAsset cache lock poisoned"))?;
+            let mut cache = self.inner.cache.lock_unpoisoned();
             if cache
                 .entries
                 .get(&key)
@@ -166,11 +159,7 @@ impl FormulaCompiler {
 
     /// Reports bounded cache ownership without compiling or touching devices.
     pub fn cache_stats(&self) -> motion_core::Result<FormulaCacheStats> {
-        let cache = self
-            .inner
-            .cache
-            .lock()
-            .map_err(|_| FormulaCompileError::new("FormulaAsset cache lock poisoned"))?;
+        let cache = self.inner.cache.lock_unpoisoned();
         Ok(FormulaCacheStats {
             entries: cache.entries.len(),
             retained_bytes: cache.bytes,

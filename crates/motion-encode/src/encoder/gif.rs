@@ -119,7 +119,7 @@ impl Encoder for GifEncoder {
             ));
         }
         let Codec::Gif { colors, .. } = options.codec else {
-            unreachable!()
+            unreachable!("open rejects every codec except GIF")
         };
         let mut rgba = frame.planes()[0].bytes().to_vec();
         let transparent = rgba.as_chunks::<4>().0.iter().any(|pixel| pixel[3] < 128);

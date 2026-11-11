@@ -385,7 +385,8 @@ impl Encoder {
 
     fn open(&mut self, path: &Path, crf: u8, audio: Option<AudioInput<'_>>) -> io::Result<()> {
         let path = path_string(path)?;
-        let quality = CString::new(crf.to_string()).unwrap();
+        let quality = CString::new(crf.to_string())
+            .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
         let codec = self.allocate_video(&path)?;
         self.configure_codec(&quality)?;
         self.allocate_video_frames(codec)?;

@@ -35,7 +35,7 @@ impl BatchUploads<'_> {
         let end = self.offset + bytes.len() as u64;
         self.mapped
             .as_mut()
-            .unwrap()
+            .expect("mapped staging buffer")
             .slice(self.offset as usize..end as usize)
             .copy_from_slice(bytes);
         encoder.copy_buffer_to_buffer(staging, self.offset, &buffer, 0, bytes.len() as u64);
@@ -72,7 +72,7 @@ impl BatchUploads<'_> {
             if self.staging.is_some() {
                 self.mapped
                     .as_mut()
-                    .unwrap()
+                    .expect("mapped staging buffer")
                     .slice(
                         (start + offset) as usize..(start + offset + source.len() as u64) as usize,
                     )
@@ -115,7 +115,7 @@ impl BatchUploads<'_> {
             if self.staging.is_some() {
                 self.mapped
                     .as_mut()
-                    .unwrap()
+                    .expect("mapped staging buffer")
                     .slice(
                         (start + offset) as usize..(start + offset + source.len() as u64) as usize,
                     )
@@ -160,7 +160,7 @@ impl BatchUploads<'_> {
             let next = offset.div_ceil(alignment) * alignment;
             let source = bytemuck::cast_slice(&step.data);
             if self.staging.is_some() {
-                let mapped = self.mapped.as_mut().unwrap();
+                let mapped = self.mapped.as_mut().expect("mapped staging buffer");
                 mapped
                     .slice((start + offset) as usize..(start + next) as usize)
                     .fill(0);

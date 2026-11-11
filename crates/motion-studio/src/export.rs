@@ -4,6 +4,7 @@
 use super::StudioScene;
 use crate::AudioOptions;
 use eframe::egui::Context;
+use motion_core::sync::MutexExt;
 use motion_encode::ProgressSink;
 use std::{
     io,
@@ -155,7 +156,7 @@ impl ExportJob {
                     }
                 })
                 .map_err(Arc::new);
-                *worker_state.lock().expect("export state") = JobState::Finished(result);
+                *worker_state.lock_unpoisoned() = JobState::Finished(result);
                 context.request_repaint();
             })?;
         Ok(Self {
@@ -168,7 +169,7 @@ impl ExportJob {
     }
 
     pub fn state(&self) -> JobState {
-        self.state.lock().expect("export state").clone()
+        self.state.lock_unpoisoned().clone()
     }
 
     pub fn cancel(&self) {
@@ -312,7 +313,7 @@ struct StudioProgress<'a> {
 impl motion_encode::ProgressSink for StudioProgress<'_> {
     fn phase(&self, phase: motion_encode::ExportPhase) {
         if phase == motion_encode::ExportPhase::Finalizing {
-            let mut state = self.state.lock().expect("export progress");
+            let mut state = self.state.lock_unpoisoned();
             if let JobState::Running(Some(progress)) = &mut *state {
                 progress.phase = motion_encode::ExportPhase::Finalizing;
             }
@@ -327,7 +328,7 @@ impl motion_encode::ProgressSink for StudioProgress<'_> {
     fn frame_completed(&self, completed: u64, total: u64) {
         self.current_frame
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        *self.state.lock().expect("export progress") = JobState::Running(Some(JobProgress {
+        *self.state.lock_unpoisoned() = JobState::Running(Some(JobProgress {
             completed_frames: completed,
             total_frames: total,
             phase: motion_encode::ExportPhase::Rendering,

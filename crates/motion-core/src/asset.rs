@@ -23,6 +23,7 @@
 //! # Ok::<(), motion_core::Error>(())
 //! ```
 
+use crate::sync::MutexExt;
 use std::{
     any::{Any, TypeId},
     collections::BTreeMap,
@@ -70,9 +71,7 @@ struct RequestFailures {
 
 impl RequestDiagnostics {
     fn locked(&self) -> std::sync::MutexGuard<'_, RequestFailures> {
-        self.0
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
+        self.0.lock_unpoisoned()
     }
 
     /// Captures a resource failure once by Arc identity, not by its text or semantic equality.
@@ -288,8 +287,7 @@ impl Assets {
         snapshot.context.namespace = NEXT.fetch_add(1, Ordering::Relaxed);
         let entries = self
             .entries
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .lock_unpoisoned()
             .iter()
             .filter(|(_, entry)| (entry.initialized)())
             .map(|(key, entry)| {
@@ -396,19 +394,11 @@ impl Assets {
             self.context.namespace,
             source,
         );
-        let mut entries = self
-            .entries
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut entries = self.entries.lock_unpoisoned();
         let Some(entry) = entries.remove(&key) else {
             return false;
         };
-        let mut global = self
-            .store
-            .0
-            .entries
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut global = self.store.0.entries.lock_unpoisoned();
         if global
             .get(&key)
             .and_then(Weak::upgrade)
@@ -489,10 +479,7 @@ impl Assets {
             self.context.namespace,
             source.clone(),
         );
-        let mut entries = self
-            .entries
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut entries = self.entries.lock_unpoisoned();
         if failure.is_none()
             && let Some(entry) = entries.get(&key)
         {
@@ -505,12 +492,7 @@ impl Assets {
                 diagnostics: self.diagnostics.clone(),
             };
         }
-        let mut global = self
-            .store
-            .0
-            .entries
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut global = self.store.0.entries.lock_unpoisoned();
         global.retain(|_, entry| entry.strong_count() > 0);
         let failure = failure.or_else(|| {
             (entries.len() >= self.store.0.limits.max_entries)

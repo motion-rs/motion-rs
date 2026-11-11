@@ -1,6 +1,7 @@
 //! Paragraph shaping: a validated description becomes the one `ParagraphLayout`.
 
 use super::*;
+use motion_core::sync::MutexExt;
 
 impl ParagraphStyle {
     /// Precomputes a paragraph limited to 1..=512 lines, adding an ellipsis only
@@ -156,18 +157,11 @@ fn shared_layout(
     spec: &ParagraphSpec,
     fonts: &FontLibrary,
 ) -> Result<Arc<ParagraphLayout>, ValidationError> {
-    let poisoned = || invalid("cache", "Shared paragraph cache is poisoned");
-    if let Some(layout) = fonts
-        .layout_cache
-        .lock()
-        .map_err(|_| poisoned())?
-        .get(spec)
-        .cloned()
-    {
+    if let Some(layout) = fonts.layout_cache.lock_unpoisoned().get(spec).cloned() {
         return Ok(layout);
     }
     let layout = Arc::new(spec.shape(fonts)?);
-    let mut shared = fonts.layout_cache.lock().map_err(|_| poisoned())?;
+    let mut shared = fonts.layout_cache.lock_unpoisoned();
     if shared.len() >= 64 {
         shared.clear();
     }

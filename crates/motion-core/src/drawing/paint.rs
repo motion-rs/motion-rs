@@ -266,8 +266,8 @@ impl Gradient {
     /// Checks ordered endpoint-inclusive stops and finite, nondegenerate geometry.
     pub fn validate(&self) -> Result<(), ValidationError> {
         if !(2..=64).contains(&self.stops.len())
-            || self.stops.first().unwrap().0 != 0.0
-            || self.stops.last().unwrap().0 != 1.0
+            || self.stops.first().map(|stop| stop.0) != Some(0.0)
+            || self.stops.last().map(|stop| stop.0) != Some(1.0)
             || self
                 .stops
                 .iter()

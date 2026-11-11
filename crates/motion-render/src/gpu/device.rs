@@ -1,6 +1,7 @@
 //! Shared native GPU creation, adapter identity and device-loss monitoring.
 
 use crate::{GpuBackend, GpuInfo, Renderer};
+use motion_core::sync::MutexExt;
 
 use motion_core::Result;
 use std::io;
@@ -110,22 +111,14 @@ impl DeviceMonitor {
         let monitor = Self::default();
         let state = monitor.0.clone();
         device.set_device_lost_callback(move |reason, message| {
-            *state
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner) =
-                Some(DeviceLoss { reason, message });
+            *state.lock_unpoisoned() = Some(DeviceLoss { reason, message });
         });
         monitor
     }
 
     /// Returns the recorded typed device-loss error, without attempting recovery or fallback.
     pub fn check(&self) -> Result {
-        match self
-            .0
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .clone()
-        {
+        match self.0.lock_unpoisoned().clone() {
             Some(cause) => Err(motion_core::Error::DeviceLost(Box::new(cause))),
             None => Ok(()),
         }

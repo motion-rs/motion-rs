@@ -1,6 +1,7 @@
 //! Real-time audio preview: a worker thread mixes the scene's audio and plays it through cpal,
 //! keeping the playhead in sync with the studio timeline.
 
+use motion_core::sync::{CondvarExt, MutexExt};
 use std::io;
 use std::sync::{
     Arc, Condvar, Mutex,
@@ -96,11 +97,7 @@ impl AudioPreview {
             start: request.start,
             length: request.total - request.start,
         });
-        self.inbox
-            .0
-            .lock()
-            .unwrap_or_else(|error| error.into_inner())
-            .pending = Some(request);
+        self.inbox.0.lock_unpoisoned().pending = Some(request);
         self.inbox.1.notify_one();
         Ok(())
     }
@@ -109,11 +106,7 @@ impl AudioPreview {
         if let Some(session) = self.session.take() {
             session.shared.cancelled.store(true, Ordering::Relaxed);
         }
-        let mut mailbox = self
-            .inbox
-            .0
-            .lock()
-            .unwrap_or_else(|error| error.into_inner());
+        let mut mailbox = self.inbox.0.lock_unpoisoned();
         mailbox.pending = None;
         self.inbox.1.notify_one();
     }
@@ -126,18 +119,13 @@ impl AudioPreview {
         }
         let fault = shared.fault.load(Ordering::Acquire);
         Some(if fault != 0 {
-            AudioStatus::Failed(
-                shared
-                    .error
-                    .lock()
-                    .unwrap_or_else(|error| error.into_inner())
-                    .clone()
-                    .unwrap_or_else(|| match fault {
-                        1 => "Audio preview buffer underrun".into(),
-                        2 => "Audio output device failed or disconnected".into(),
-                        _ => "Audio output has no usable playback timestamp".into(),
-                    }),
-            )
+            AudioStatus::Failed(shared.error.lock_unpoisoned().clone().unwrap_or_else(
+                || match fault {
+                    1 => "Audio preview buffer underrun".into(),
+                    2 => "Audio output device failed or disconnected".into(),
+                    _ => "Audio output has no usable playback timestamp".into(),
+                },
+            ))
         } else if !shared.ready.load(Ordering::Acquire) {
             AudioStatus::Preparing
         } else {
@@ -154,11 +142,7 @@ impl AudioPreview {
 impl Drop for AudioPreview {
     fn drop(&mut self) {
         self.stop();
-        self.inbox
-            .0
-            .lock()
-            .unwrap_or_else(|error| error.into_inner())
-            .closing = true;
+        self.inbox.0.lock_unpoisoned().closing = true;
         self.inbox.1.notify_one();
         if let Some(worker) = self.worker.take() {
             let _ = worker.join();
@@ -169,12 +153,9 @@ impl Drop for AudioPreview {
 fn worker(inbox: Inbox, context: egui::Context) {
     loop {
         let request = {
-            let mut mailbox = inbox.0.lock().unwrap_or_else(|error| error.into_inner());
+            let mut mailbox = inbox.0.lock_unpoisoned();
             while mailbox.pending.is_none() && !mailbox.closing {
-                mailbox = inbox
-                    .1
-                    .wait(mailbox)
-                    .unwrap_or_else(|error| error.into_inner());
+                mailbox = inbox.1.wait_unpoisoned(mailbox);
             }
             if mailbox.closing {
                 return;
@@ -191,10 +172,7 @@ fn worker(inbox: Inbox, context: egui::Context) {
         if let Err(error) = result
             && !shared.cancelled.load(Ordering::Relaxed)
         {
-            *shared
-                .error
-                .lock()
-                .unwrap_or_else(|error| error.into_inner()) = Some(error.to_string());
+            *shared.error.lock_unpoisoned() = Some(error.to_string());
             shared.fault.store(4, Ordering::Release);
             context.request_repaint();
         }
@@ -278,14 +256,13 @@ fn play(request: Request, inbox: &Inbox) -> io::Result<()> {
             stream.play().map_err(io::Error::other)?;
             started = true;
         }
-        let mailbox = inbox.0.lock().unwrap_or_else(|error| error.into_inner());
+        let mailbox = inbox.0.lock_unpoisoned();
         if shared.cancelled.load(Ordering::Relaxed) {
             return Ok(());
         }
         let _guard = inbox
             .1
-            .wait_timeout(mailbox, Duration::from_millis(4))
-            .unwrap_or_else(|error| error.into_inner());
+            .wait_timeout_unpoisoned(mailbox, Duration::from_millis(4));
     }
     Ok(())
 }

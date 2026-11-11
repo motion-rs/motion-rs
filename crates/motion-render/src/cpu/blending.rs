@@ -281,12 +281,14 @@ fn composite_mode(
                     }
                 }
                 BlendMode::SourceOver | BlendMode::Plus | BlendMode::LinearPlus => {
-                    unreachable!("handled separately")
+                    unreachable!(
+                        "source-over and additive modes are composited before the per-channel blend"
+                    )
                 }
                 BlendMode::Hue
                 | BlendMode::Saturation
                 | BlendMode::Color
-                | BlendMode::Luminosity => mixed_rgb.unwrap()[channel],
+                | BlendMode::Luminosity => mixed_rgb.expect("nonseparable mix")[channel],
             };
             source_value * (1.0 - backdrop_alpha)
                 + backdrop_value * (1.0 - source_alpha)

@@ -339,8 +339,8 @@ pub(super) fn validate(stroke: &Config) -> Result<(), ValidationError> {
     }
     if !options.pressure.is_empty()
         && (options.pressure.len() > 512
-            || options.pressure.first().unwrap().0 != 0.0
-            || options.pressure.last().unwrap().0 != 1.0
+            || options.pressure.first().map(|key| key.0) != Some(0.0)
+            || options.pressure.last().map(|key| key.0) != Some(1.0)
             || options.pressure.iter().any(|(time, pressure)| {
                 !time.is_finite()
                     || !(0.0..=1.0).contains(time)

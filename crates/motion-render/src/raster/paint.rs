@@ -254,7 +254,10 @@ impl Source {
             .stops
             .partition_point(|(offset, _)| *offset as f32 <= position);
         if upper == gradient.stops.len() {
-            return *self.gradient_table.last().unwrap();
+            return *self
+                .gradient_table
+                .last()
+                .expect("gradient table has entries");
         }
         let lower = upper.saturating_sub(1);
         let start = gradient.stops[lower].0 as f32;

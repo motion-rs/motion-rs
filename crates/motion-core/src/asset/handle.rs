@@ -1,6 +1,7 @@
 //! Shared lazy handles, lifecycle and sticky decoding results.
 
 use super::*;
+use crate::sync::MutexExt;
 
 /// Observable shared lifecycle with its sticky result; observing never starts loading.
 pub enum AssetState<A> {
@@ -91,12 +92,7 @@ impl<A: Asset> Drop for Entry<A> {
             self.context.namespace,
             self.source.clone(),
         );
-        let mut cache = self
-            .store
-            .0
-            .entries
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut cache = self.store.0.entries.lock_unpoisoned();
         if cache
             .get(&key)
             .is_some_and(|entry| entry.strong_count() == 0)

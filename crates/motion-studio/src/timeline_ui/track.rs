@@ -4,6 +4,7 @@
 use crate::app::StudioApp;
 use crate::theme;
 use eframe::egui::{self, Color32};
+use motion_core::sync::MutexExt;
 
 use super::{
     CACHE_HEIGHT, LABEL_WIDTH, ROW_HEIGHT, RULER_HEIGHT, WAVE_HEIGHT, boundary_at, frame_at,
@@ -56,8 +57,7 @@ impl StudioApp {
             && !matches!(
                 self.inspection.timeline_view
                     .waveform_result
-                    .lock()
-                    .unwrap_or_else(|error| error.into_inner())
+                    .lock_unpoisoned()
                     .as_ref(),
                 Some(Ok(values)) if values.peaks.is_empty()
             );
@@ -96,8 +96,7 @@ impl StudioApp {
                     .inspection
                     .timeline_view
                     .waveform_result
-                    .lock()
-                    .unwrap_or_else(|error| error.into_inner());
+                    .lock_unpoisoned();
                 if let Some(Ok(overview)) = waveform.as_ref()
                     && let Some(grid) = overview.beat
                 {
@@ -260,8 +259,7 @@ impl StudioApp {
                 .inspection
                 .timeline_view
                 .waveform_result
-                .lock()
-                .unwrap_or_else(|error| error.into_inner());
+                .lock_unpoisoned();
             match waveform.as_ref() {
                 Some(Ok(overview)) if !overview.peaks.is_empty() => {
                     let values = &overview.peaks;

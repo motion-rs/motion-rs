@@ -4,6 +4,7 @@ use super::{
     effects::{Biquad, amplitude},
     pcm::invalid,
 };
+use motion_core::sync::MutexExt;
 use motion_core::{AudioSource, Master};
 use std::{
     collections::VecDeque,
@@ -48,8 +49,7 @@ fn content_key(samples: &[f32], rate: u32) -> u64 {
 
 fn cached_report(samples: &[f32], rate: u32, key: u64) -> Option<LoudnessReport> {
     report_cache()
-        .lock()
-        .unwrap_or_else(|error| error.into_inner())
+        .lock_unpoisoned()
         .iter()
         .find(|entry| {
             entry.key == key
@@ -104,9 +104,7 @@ pub(crate) fn report(samples: &[f32], rate: u32) -> LoudnessReport {
     let report = measure(samples, rate);
     let bytes = samples.len().saturating_mul(4);
     if bytes <= 64 * 1024 * 1024 {
-        let mut cache = report_cache()
-            .lock()
-            .unwrap_or_else(|error| error.into_inner());
+        let mut cache = report_cache().lock_unpoisoned();
         while cache.len() >= 16
             || cache
                 .iter()

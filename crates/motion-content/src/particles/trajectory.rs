@@ -174,7 +174,7 @@ impl TrajectoryDefinition {
                         as f32;
                 }
             }
-            _ => unreachable!(),
+            _ => unreachable!("the model was matched by the enclosing arm"),
         }
         particle.age = age;
         particle.validate()?;

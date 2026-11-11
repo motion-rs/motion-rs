@@ -436,7 +436,7 @@ impl<'a> ItemPlanner<'a> {
         self.planner.budget.release(size_of::<Layer>() as u64);
         if let Some(index) = layer.filters {
             let PreparedItem::PushLayer { layer: descriptor } = &frame.items[index] else {
-                unreachable!()
+                unreachable!("filter layers are recorded at their push item")
             };
             let filters = descriptor.filters.as_ref().expect("source filter scope");
             layer.image =

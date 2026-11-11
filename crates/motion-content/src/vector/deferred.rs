@@ -1,10 +1,11 @@
 //! Shared deferred-content pipeline: compile key, compiled vector tree, selection, reveal.
 
 use super::{VectorTree, WriteOptions};
+use motion_core::sync::MutexExt;
 use motion_core::{Node, ValidationError};
 use std::{
     collections::{BTreeMap, BTreeSet},
-    sync::{Arc, Mutex, PoisonError},
+    sync::{Arc, Mutex},
 };
 
 /// Most results one cache retains before it starts over.
@@ -60,18 +61,14 @@ impl<K, V: Clone> CompileCache<K, V> {
 
     /// Whether any result has been compiled yet.
     pub fn is_compiled(&self) -> bool {
-        !self
-            .slots
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .is_empty()
+        !self.slots.lock_unpoisoned().is_empty()
     }
 
     /// Returns the result for a variant, compiling it once from the key.
     /// The compiler runs while the cache is locked, so concurrent callers
     /// never compile the same variant twice.
     pub fn get_or_compile(&self, variant: u64, compile: impl FnOnce(&K) -> V) -> V {
-        let mut slots = self.slots.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut slots = self.slots.lock_unpoisoned();
         if let Some(result) = slots.get(&variant) {
             return result.clone();
         }

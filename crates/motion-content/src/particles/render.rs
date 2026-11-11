@@ -53,7 +53,7 @@ fn render(
         | ParticleStyle::Plexus { radius, .. } => *radius,
         ParticleStyle::Sprites { size, .. } => *size,
         ParticleStyle::Trails { width, .. } => *width,
-        _ => unreachable!(),
+        _ => unreachable!("only dot, trail, plexus and sprite styles reach this branch"),
     };
     if !extent.is_finite() || !(0.0..=4096.0).contains(&extent) {
         return Err(invalid(
@@ -89,7 +89,7 @@ fn render(
         },
         ParticleStyle::Trails { width, .. } => (3, 1.0, *width, false, None),
         ParticleStyle::Plexus { radius, .. } => (4, *radius, 1.0, false, None),
-        _ => unreachable!(),
+        _ => unreachable!("only dot, trail, plexus and sprite styles reach this branch"),
     };
     if !radius.is_finite() || radius < 0.0 || !width.is_finite() || width < 0.0 {
         return Err(invalid("style", "Invalid particle style geometry"));

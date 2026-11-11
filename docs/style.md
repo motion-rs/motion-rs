@@ -69,7 +69,11 @@ private types and helpers
 - New APIs are fallible only. Existing panicking conveniences delegate to their
   `try_*` counterpart in one line and document the condition under `# Panics`.
 - Every production `expect` is registered in `tools/check-expects.cjs` with its
-  reason. **(CI)**
+  reason, and a registered message must still occur. Production code has no bare
+  `unwrap()` and no `unreachable!()` without a message naming the invariant. **(CI)**
+- Lock a `Mutex` or wait on a `Condvar` through `motion_core::sync` (`lock_unpoisoned`,
+  `wait_unpoisoned`) so a poisoned lock continues with its plain-data value instead of
+  panicking a second time; never `expect` a lock.
 
 ## Constants
 

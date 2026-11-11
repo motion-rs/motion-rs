@@ -522,9 +522,11 @@ impl Pair {
                     for segment in 1..segments.len() {
                         segments[segment][0] = segments[segment - 1][3];
                     }
-                    if closed {
-                        let first = segments[0][0];
-                        segments.last_mut().unwrap()[3] = first;
+                    if closed
+                        && let Some(first) = segments.first().map(|segment| segment[0])
+                        && let Some(last) = segments.last_mut()
+                    {
+                        last[3] = first;
                     }
                 }
                 contours.push(MatchedContour {

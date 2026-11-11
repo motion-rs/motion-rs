@@ -117,7 +117,7 @@ impl PigmentMix {
             result[channel] = match self {
                 Self::Linear => first[channel] * (1.0 - amount) + second[channel] * amount,
                 Self::KubelkaMunk => {
-                    let spectrum = spectra.as_ref().unwrap();
+                    let spectrum = spectra.as_ref().expect("Kubelka-Munk spectra");
                     match channel {
                         0 => spectrum[3] * 0.15 + spectrum[4] * 0.35 + spectrum[5] * 0.5,
                         1 => {

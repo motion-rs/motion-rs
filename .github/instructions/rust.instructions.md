@@ -47,6 +47,8 @@ lines, then move to `foo/tests.rs` declared with `#[cfg(test)] mod tests;` in th
   convenience delegates to its `try_*` form in one line and documents `# Panics`.
 - A production `expect` must be an invariant, keeps its exact message when code moves, and has an entry
   in `tools/check-expects.cjs` (file path suffix + message + reason). Prefer returning an error.
+  Do not add `unwrap()` or message-less `unreachable!()` to production code. Lock mutexes and wait on
+  condvars with `motion_core::sync::{MutexExt, CondvarExt}`; never `expect` a lock.
 - Validate before allocating: `Budget::bytes`, `Budget::work`, `release` and `reset_peak` /
   `merge_peak` for nested measurement. Do not poke budget fields.
 - No magic numbers in validation, limits or budget code: name the constant, document its unit, keep the

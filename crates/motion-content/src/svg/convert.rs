@@ -198,7 +198,7 @@ fn clip_mask(
             match node {
                 usvg::Node::Path(path) => {
                     let mut native = VectorPath::filled(geometry(path.data())?, Color::WHITE);
-                    native.fill.as_mut().unwrap().1 = path
+                    native.fill.as_mut().expect("filled path has a fill").1 = path
                         .fill()
                         .map_or(FillRule::NonZero, |fill| rule(fill.rule()));
                     children.push(VectorItem::Group(VectorGroup {
@@ -374,7 +374,7 @@ fn painted(
         .inverse()
         .ok_or_else(|| unsupported("Noninvertible SVG paint transform"))?;
     let mut item = VectorPath::filled(path.transformed(&inverse)?, paint);
-    item.fill.as_mut().unwrap().1 = fill_rule;
+    item.fill.as_mut().expect("filled path has a fill").1 = fill_rule;
     Ok(VectorItem::Group(VectorGroup {
         transform,
         children: vec![VectorItem::Path(item)],

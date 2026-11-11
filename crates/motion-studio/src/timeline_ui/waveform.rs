@@ -3,6 +3,7 @@
 //! meters into a shared slot the timeline panel polls while painting.
 
 use eframe::egui;
+use motion_core::sync::MutexExt;
 use std::sync::{Arc, Mutex};
 
 #[derive(Default)]
@@ -75,12 +76,10 @@ pub(super) fn spawn_analysis(
             ))
             .unwrap_or_else(|payload| Err(motion_core::Error::scene_panic("waveform", 0, payload)))
             .map_err(|error| error.to_string());
-            *result.lock().unwrap_or_else(|error| error.into_inner()) = Some(sampled);
+            *result.lock_unpoisoned() = Some(sampled);
             context.request_repaint();
         });
     if let Err(error) = spawned {
-        *waveform_result
-            .lock()
-            .unwrap_or_else(|error| error.into_inner()) = Some(Err(error.to_string()));
+        *waveform_result.lock_unpoisoned() = Some(Err(error.to_string()));
     }
 }

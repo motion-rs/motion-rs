@@ -412,7 +412,7 @@ fn integrate_cuts(
                 #[cfg(test)]
                 if mode == CutMode::Reference {
                     integrate_trapezoid_reference(
-                        previous.unwrap(),
+                        previous.expect("inside span follows a crossing"),
                         crossing.edge,
                         start - top,
                         end - top,
@@ -425,7 +425,7 @@ fn integrate_cuts(
                     continue;
                 }
                 integrate_trapezoid(
-                    previous.unwrap(),
+                    previous.expect("inside span follows a crossing"),
                     crossing.edge,
                     start - top,
                     end - top,

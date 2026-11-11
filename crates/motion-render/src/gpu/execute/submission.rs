@@ -2,6 +2,7 @@
 
 use super::*;
 use motion_core::PixelSize;
+use motion_core::sync::MutexExt;
 
 impl Gpu {
     /// Whether this size/format can be packed without byte-write races on the GPU.
@@ -401,11 +402,7 @@ impl Gpu {
     ) -> motion_core::Result<LinearFrame> {
         self.begin_timings();
         let context = self.context.clone();
-        let _submission = context.submissions.lock().map_err(|_| {
-            motion_core::Error::Gpu(Box::new(std::io::Error::other(
-                "GPU submission lock poisoned",
-            )))
-        })?;
+        let _submission = context.submissions.lock_unpoisoned();
         self.loss.check()?;
         plan.validate_device(&self.device.limits())?;
         let memory_scope = self.device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
@@ -485,11 +482,7 @@ impl Gpu {
             .into());
         }
         let context = self.context.clone();
-        let _submission = context.submissions.lock().map_err(|_| {
-            motion_core::Error::Gpu(Box::new(std::io::Error::other(
-                "GPU submission lock poisoned",
-            )))
-        })?;
+        let _submission = context.submissions.lock_unpoisoned();
         self.loss.check()?;
         plan.validate_device(&self.device.limits())?;
         let memory_scope = self.device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);

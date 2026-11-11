@@ -1,5 +1,6 @@
 //! Immutable, type-erased content environments carried by core scene contracts.
 
+use crate::sync::MutexExt;
 use std::{
     any::Any,
     fmt,
@@ -13,7 +14,7 @@ pub struct FontUsage(Arc<Mutex<Vec<FontIdentity>>>);
 impl FontUsage {
     /// Records a selected face once, including when its outline came from a cache.
     pub fn record(&self, font: FontIdentity) {
-        let mut fonts = self.0.lock().unwrap_or_else(|error| error.into_inner());
+        let mut fonts = self.0.lock_unpoisoned();
         if !fonts.contains(&font) {
             fonts.push(font);
         }
@@ -21,11 +22,7 @@ impl FontUsage {
 
     /// Returns stable face ordering independent of worker completion order.
     pub fn fonts(&self) -> Vec<FontIdentity> {
-        let mut fonts = self
-            .0
-            .lock()
-            .unwrap_or_else(|error| error.into_inner())
-            .clone();
+        let mut fonts = self.0.lock_unpoisoned().clone();
         fonts.sort_by(|left, right| {
             (&left.name, left.file_hash).cmp(&(&right.name, right.file_hash))
         });

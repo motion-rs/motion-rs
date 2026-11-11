@@ -118,7 +118,7 @@ fn parts(tree: &VectorTree) -> Result<Vec<Part>, ValidationError> {
                     )?;
                 }
             }
-            VectorItem::Group(_) => unreachable!(),
+            VectorItem::Group(_) => unreachable!("groups are flattened into leaves first"),
         }
     }
     Ok(result)

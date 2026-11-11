@@ -80,7 +80,7 @@ impl VectorTree {
             };
             remaining = (remaining - length).max(0.0);
             let VectorItem::Path(path) = leaf.item else {
-                unreachable!()
+                unreachable!("only path leaves are collected")
             };
             let mut children = Vec::new();
             if amount > 0.0 && handoff < 1.0 {

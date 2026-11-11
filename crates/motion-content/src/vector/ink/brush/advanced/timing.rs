@@ -44,7 +44,7 @@ impl BrushStrokeBuilder {
             let second = samples[index + 1].position;
             let next = samples[(index + 2).min(samples.len() - 1)].position;
             if first == second {
-                cumulative.push(*cumulative.last().unwrap());
+                cumulative.push(cumulative[index]);
                 continue;
             }
             let control_first = first + (second - previous) * (1.0 / 6.0);
@@ -62,8 +62,8 @@ impl BrushStrokeBuilder {
         let mut curve: Vec<(f64, f64)> = Vec::new();
         for (length, sample) in cumulative.iter().zip(samples) {
             let amount = *length / total;
-            if curve.last().is_some_and(|control| control.0 == amount) {
-                curve.last_mut().unwrap().1 = sample.pressure;
+            if let Some(control) = curve.last_mut().filter(|control| control.0 == amount) {
+                control.1 = sample.pressure;
             } else {
                 curve.push((amount, sample.pressure));
             }

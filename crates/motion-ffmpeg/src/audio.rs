@@ -403,7 +403,8 @@ impl Mixer {
             ));
         }
         let filename = path_string(&path)?;
-        let name = CString::new(format!("motion_source_{index}")).unwrap();
+        let name = CString::new(format!("motion_source_{index}"))
+            .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
         // SAFETY: The filter definition and the allocated context are null-checked, and the
         // context is owned by the live `self.graph`. `options` owns its dictionary (freed on drop)
         // and all C strings outlive the calls that read them.

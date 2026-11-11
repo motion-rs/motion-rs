@@ -1,6 +1,7 @@
 //! Preview worker threads that render queued frames and publish results to the coordinator.
 
 use super::*;
+use motion_core::sync::{CondvarExt, MutexExt};
 
 pub(crate) struct PreviewWorker {
     shared: Arc<(Mutex<PreviewRequestQueue>, Condvar)>,
@@ -39,7 +40,7 @@ impl PreviewWorker {
         #[cfg(feature = "gpu")] reservation: Option<textures::TextureReservation>,
     ) {
         let (mutex, wake) = &*self.shared;
-        let mut mailbox = mutex.lock().expect("preview mailbox");
+        let mut mailbox = mutex.lock_unpoisoned();
         mailbox.request_with_settings(key, settings);
         #[cfg(feature = "gpu")]
         {
@@ -49,7 +50,7 @@ impl PreviewWorker {
     }
 
     pub fn take_reply(&self) -> Option<PreviewReply> {
-        self.shared.0.lock().expect("preview mailbox").reply.take()
+        self.shared.0.lock_unpoisoned().reply.take()
     }
 }
 
@@ -73,7 +74,7 @@ fn run_preview_worker(
     loop {
         let mut completion = None;
         if let Some(front) = inflight.front_mut() {
-            let mailbox = worker.0.lock().expect("preview mailbox");
+            let mailbox = worker.0.lock_unpoisoned();
             if mailbox.stopping {
                 break;
             }
@@ -102,9 +103,9 @@ fn run_preview_worker(
             completed.0
         } else {
             let (mutex, wake) = &*worker;
-            let mut mailbox = mutex.lock().expect("preview mailbox");
+            let mut mailbox = mutex.lock_unpoisoned();
             while mailbox.pending.is_none() && !mailbox.stopping {
-                mailbox = wake.wait(mailbox).expect("preview mailbox");
+                mailbox = wake.wait_unpoisoned(mailbox);
             }
             if mailbox.stopping {
                 break;
@@ -279,7 +280,7 @@ fn publish_preview(
     diagnostics: Vec<Arc<motion_core::Error>>,
     started: std::time::Instant,
 ) -> bool {
-    let mut mailbox = worker.0.lock().expect("preview mailbox");
+    let mut mailbox = worker.0.lock_unpoisoned();
     let backend = image
         .as_ref()
         .map(|image| image.backend.clone())
@@ -312,7 +313,7 @@ fn publish_preview(
 impl Drop for PreviewWorker {
     fn drop(&mut self) {
         let (mutex, wake) = &*self.shared;
-        let mut mailbox = mutex.lock().expect("preview mailbox");
+        let mut mailbox = mutex.lock_unpoisoned();
         mailbox.stopping = true;
         mailbox.pending = None;
         #[cfg(feature = "gpu")]

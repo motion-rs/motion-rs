@@ -18,6 +18,7 @@
 
 use super::pcm::{MAX_SAMPLES, ceil_frames, invalid};
 use crate::PcmBuffer;
+use motion_core::sync::MutexExt;
 use motion_core::{AudioSource, Duration, FiniteAnimation, Signal, Time};
 use rustfft::{FftPlanner, num_complex::Complex};
 use std::{
@@ -157,14 +158,7 @@ impl AudioAnalysis {
     }
 
     fn trace(&self, key: Key) -> motion_core::Result<AudioSignal> {
-        if let Some(data) = self
-            .pcm
-            .analysis
-            .lock()
-            .map_err(|_| invalid("cache", "Analysis cache is poisoned"))?
-            .get(&key)
-            .cloned()
-        {
+        if let Some(data) = self.pcm.analysis.lock_unpoisoned().get(&key).cloned() {
             return Ok(AudioSignal(data[0].clone()));
         }
         let rate = self.pcm.sample_rate();
@@ -251,11 +245,7 @@ impl AudioAnalysis {
             hop_frames: hop,
             duration: self.pcm.duration().expect("finite PCM"),
         });
-        let mut cache = self
-            .pcm
-            .analysis
-            .lock()
-            .map_err(|_| invalid("cache", "Analysis cache is poisoned"))?;
+        let mut cache = self.pcm.analysis.lock_unpoisoned();
         if let Some(existing) = cache.get(&key) {
             return Ok(AudioSignal(existing[0].clone()));
         }

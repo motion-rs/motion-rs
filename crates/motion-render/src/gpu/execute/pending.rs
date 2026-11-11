@@ -256,7 +256,17 @@ impl PendingOutputFrame {
                 .slice(..)
                 .get_mapped_range()
                 .map_err(|error| motion_core::Error::Gpu(Box::new(error)))?;
-            let status = u32::from_le_bytes(status[..4].try_into().unwrap());
+            let status = status
+                .get(..4)
+                .and_then(|bytes| <[u8; 4]>::try_from(bytes).ok())
+                .map(u32::from_le_bytes)
+                .ok_or_else(|| {
+                    ValidationError::invalid(
+                        "gpu.pack",
+                        "status",
+                        "Pack status readback is shorter than four bytes",
+                    )
+                })?;
             if status & 1 != 0 {
                 return Err(ValidationError::invalid(
                     "gpu.pack",

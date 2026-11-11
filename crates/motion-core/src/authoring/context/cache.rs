@@ -1,5 +1,6 @@
 //! Shared LRU storage for pure authoring computations with optional byte accounting.
 
+use crate::sync::MutexExt;
 use std::any::{Any, TypeId};
 use std::collections::{VecDeque, hash_map::DefaultHasher};
 use std::hash::{Hash, Hasher};
@@ -91,8 +92,7 @@ impl SceneCache {
     /// Sum of the declared charges for currently retained entries.
     pub fn retained_bytes(&self) -> usize {
         self.entries
-            .lock()
-            .expect("scene cache lock poisoned")
+            .lock_unpoisoned()
             .iter()
             .map(|entry| entry.bytes)
             .sum()
@@ -105,10 +105,7 @@ impl SceneCache {
 
     /// Number of currently retained entries.
     pub fn len(&self) -> usize {
-        self.entries
-            .lock()
-            .expect("scene cache lock poisoned")
-            .len()
+        self.entries.lock_unpoisoned().len()
     }
 
     /// Whether no computed values are currently retained.
@@ -118,7 +115,7 @@ impl SceneCache {
 
     /// Removes retained entries without invalidating existing returned handles.
     pub fn clear(&self) {
-        let entries = std::mem::take(&mut *self.entries.lock().expect("scene cache lock poisoned"));
+        let entries = std::mem::take(&mut *self.entries.lock_unpoisoned());
         drop(entries);
     }
 
@@ -249,7 +246,7 @@ impl SceneCache {
         if bytes > self.max_bytes {
             return Ok(value);
         }
-        let mut entries = self.entries.lock().expect("scene cache lock poisoned");
+        let mut entries = self.entries.lock_unpoisoned();
         if let Some(index) = entries
             .iter()
             .position(|entry| entry.matches(&cache_key, &key))
@@ -258,7 +255,9 @@ impl SceneCache {
             let stored = entry.value.clone();
             entries.push_back(entry);
             drop(entries);
-            return Ok(stored.downcast().unwrap_or_else(|_| unreachable!()));
+            return Ok(stored
+                .downcast()
+                .unwrap_or_else(|_| unreachable!("the cache key encodes the value type")));
         }
         let mut retained: usize = entries.iter().map(|entry| entry.bytes).sum();
         let mut evicted = Vec::new();
@@ -285,12 +284,16 @@ impl SceneCache {
         key: &CacheKey,
         input: &Key,
     ) -> Option<Arc<Value>> {
-        let mut entries = self.entries.lock().expect("scene cache lock poisoned");
+        let mut entries = self.entries.lock_unpoisoned();
         let index = entries.iter().position(|entry| entry.matches(key, input))?;
         let entry = entries.remove(index).expect("located cache entry");
         let value = entry.value.clone();
         entries.push_back(entry);
         drop(entries);
-        Some(value.downcast().unwrap_or_else(|_| unreachable!()))
+        Some(
+            value
+                .downcast()
+                .unwrap_or_else(|_| unreachable!("the cache key encodes the value type")),
+        )
     }
 }

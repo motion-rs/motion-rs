@@ -1,5 +1,6 @@
 //! Double-precision path values, with copy-on-write geometry.
 
+use crate::sync::MutexExt;
 use std::sync::{Arc, Mutex, OnceLock};
 
 use kurbo::Shape as _;
@@ -298,7 +299,7 @@ impl Path2D {
     }
 
     pub(crate) fn cached_stroke(&self, key: [u64; 4]) -> Option<Path2D> {
-        let mut entries = self.data.strokes.get()?.lock().ok()?;
+        let mut entries = self.data.strokes.get()?.lock_unpoisoned();
         let index = entries.iter().position(|entry| entry.0 == key)?;
         let entry = entries.remove(index);
         let result = Self {
@@ -322,14 +323,11 @@ impl Path2D {
         let mut snapshot = (*outline.data).clone();
         snapshot.metrics.take();
         snapshot.strokes.take();
-        let Ok(mut entries) = self
+        let mut entries = self
             .data
             .strokes
             .get_or_init(|| Arc::new(Mutex::new(Vec::new())))
-            .lock()
-        else {
-            return;
-        };
+            .lock_unpoisoned();
         if entries.iter().any(|entry| entry.0 == key) {
             return;
         }

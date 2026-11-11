@@ -1,6 +1,7 @@
 //! GPU texture ring that recycles preview frame textures between workers and the viewer.
 
 use super::*;
+use motion_core::sync::MutexExt;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
@@ -63,11 +64,11 @@ impl TextureRing {
     /// Sizes the ring to the playback window: every in-flight job, every prefetched frame and the
     /// displayed one hold a slot, and a ring smaller than that evicts frames before they are shown.
     pub fn set_capacity(&self, slots: usize) {
-        self.0.lock().expect("preview texture ring").capacity = slots.clamp(MIN_SLOTS, MAX_SLOTS);
+        self.0.lock_unpoisoned().capacity = slots.clamp(MIN_SLOTS, MAX_SLOTS);
     }
 
     pub fn reserve(&self) -> Option<TextureReservation> {
-        let mut ring = self.0.lock().expect("preview texture ring");
+        let mut ring = self.0.lock_unpoisoned();
         let capacity = ring.capacity.saturating_sub(ring.slots.len())
             + ring.slots.iter().filter(|slot| available(slot)).count();
         if ring.reserved >= capacity {
@@ -83,7 +84,7 @@ impl TextureRing {
         width: u32,
         height: u32,
     ) -> Option<FrameTexture> {
-        let mut ring = self.0.lock().expect("preview texture ring");
+        let mut ring = self.0.lock_unpoisoned();
         if ring.size != (width, height)
             || ring
                 .context
@@ -129,7 +130,7 @@ impl TextureRing {
 
 impl Drop for TextureReservation {
     fn drop(&mut self) {
-        self.ring.0.lock().expect("preview texture ring").reserved -= 1;
+        self.ring.0.lock_unpoisoned().reserved -= 1;
     }
 }
 
