@@ -7,10 +7,19 @@ are crate-private to `motion-render`; `PreparedFrame` exposes sizes, statistics 
 use f64; output PixelSize uses positive integer dimensions. A composition uniformly
 contains logical content in its output viewport.
 
-## Shared Coverage and Effects
+## Backend preparation and effects
 
-Preparation validates and expands paths, flattens curves using device-space
-tolerance, integrates polygon area and records compact coverage for both backends.
+FrameIr validates all content and normalizes device-space curves, scopes, paints,
+clips and filter domains before allocating coverage. It admits structural storage,
+resource bytes and conservative Wang segment bounds. CPU and GPU preparation
+consume this immutable description independently; public RenderPrepare and
+PreparedFrame describe CPU coverage only. GPU sessions and packed export workers
+use a separate preparation result, while low-level GPU consumers can still
+explicitly upload a CPU prepared frame.
+
+CPU preparation flattens curves using device-space tolerance, integrates polygon
+area and records compact coverage. GPU fills have their own
+[coverage path](gpu.md#shared-data-and-output).
 Intersection-free bands use a verified area/cover prefix fast path; other bands
 retain precise row-wise integration. Neither path is a supersampling renderer.
 The reference and fallback path is:
@@ -62,7 +71,7 @@ admitted area values to zero and retains the same integration order, logical byt
 charges and failure boundaries; only vector capacity persists. Each session retains at
 most 1 MiB of idle capacity per vector, independently of shared coverage-cache entries;
 oversized storage is discarded after the path, including failed attempts.
-PreparedFrame layout is unchanged. Measured cold-preparation gains are workload-specific;
+Measured cold-preparation gains are workload-specific;
 they do not establish warm-frame, full-film or RSS gains. Shape-clip rasterization still
 allocates its own scratch.
 

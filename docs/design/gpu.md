@@ -22,7 +22,12 @@ CPU and unsupported-precision early returns remain device-free.
 
 ## Shared Data and Output
 
-Preparation retains f64 device geometry and shared coverage/paint/filter records.
+FrameIr admits f64 device curves, segment upper bounds, immutable resources and
+normalized composition semantics before either backend prepares coverage.
+GPU preparation owns device edge records separately from public CPU PreparedFrame
+values. FrameRenderer's explicit GPU preparation and packed export workers do not
+construct a CPU prepared frame or initialize a device. Low-level APIs can still
+consume an explicitly prepared CPU frame and upload its coverage.
 GPU planning rejects unsupported precision or budgets before initialization. Ordered
 draw/compute operations use finite linear-premultiplied pixels in RGBA32F working
 textures. Particle states and ordered tile metadata remain storage buffers, as do
@@ -32,7 +37,10 @@ and the GPU computes f32 coverage in a compute pass before composition, without 
 intermediate u8 quantization. All other coverage is still generated on the CPU and uploaded.
 Where contours cross inside a pixel the GPU sums signed areas rather than reproducing
 the exact CPU sweep, allowing localized antialiasing differences. CPU rendering
-materializes CPU coverage itself and is unchanged.
+prepares its own coverage with unchanged reference arithmetic. An Automatic startup
+rejection prepares CPU coverage independently from the validated source before
+rendering; both preparation attempts count toward the request's work allowance.
+An already selected GPU never changes backends after a frame failure.
 
 Each dispatch uses a 256-byte `#[repr(C)]`/Pod `GpuUniforms` rather than a raw
 word array. Frame, bounds, operation, value rows, source rectangles and flags

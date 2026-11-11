@@ -194,6 +194,7 @@ impl RenderSession {
             time: Some(time),
             limits,
             device_packing: request.device_packing,
+            preparation_backend: None,
             session: self,
         };
         match request.target {

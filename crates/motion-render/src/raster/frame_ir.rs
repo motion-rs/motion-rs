@@ -1,40 +1,51 @@
-//! Backend-neutral frame description built before any coverage exists.
+//! Immutable, admitted device-space geometry and ordered composition semantics.
 //!
-//! The validated display list already stores f64 paths that only a backend flattens. `FrameIr`
-//! adds the frame facts every backend needs before it allocates: the padded raster, the output
-//! window and the background.
+//! The CPU recipe accompanies device curves to preserve reference transform arithmetic and
+//! complete coverage-cache keys. It is not a display list and contains no coverage.
 
-use crate::prepared::{PaintRecord, PixelRect};
-use motion_core::{DisplayList, PixelSize, ValidationError, ValidationLimits};
+use crate::prepared::{PaintRecord, PixelRect, PreparationStats, PreparedLayer};
+use motion_core::budget::Budget;
+use motion_core::{
+    FillRule, Paint, Path2D, PathClip, PathVerb, PixelSize, RasterLimits, Rect, RectClip,
+    ShapeClip, Transform, ValidatedDisplayList, ValidationError, ValidationLimits,
+};
+use std::mem::size_of;
 
-use super::prepare::{filter_padding, paint_record};
+mod geometry;
+mod normalize;
+#[cfg(test)]
+mod tests;
 
-/// Immutable per-frame description shared by backend preparation.
+pub(super) use geometry::rectangle_verbs;
+
+/// Maximum scratch bytes for a command-index error path, including every usize digit.
+pub(super) const COMMAND_PATH_BYTES: u64 = 64;
+
+/// Backend-neutral ordered frame, owning normalization but borrowing immutable resources.
 pub(crate) struct FrameIr<'a> {
-    source: &'a DisplayList,
-    padding: u32,
     size: PixelSize,
     output_bounds: PixelRect,
     background: Option<PaintRecord>,
     tolerance: f64,
-    device_coverage: bool,
+    filter_halo: u32,
+    items: Vec<IrItem>,
+    paths: Vec<IrPath<'a>>,
+    paints: Vec<IrPaint<'a>>,
+    clips: Vec<IrClip>,
+    segments: u64,
+    resource_bytes: u64,
+    stats: PreparationStats,
 }
 
 impl<'a> FrameIr<'a> {
-    /// Validates the list and measures it. Fails before any raster allocation.
     pub(crate) fn build(
-        source: &'a motion_core::ValidatedDisplayList,
+        source: &'a ValidatedDisplayList,
         validation: ValidationLimits,
+        limits: RasterLimits,
         tolerance: f64,
     ) -> Result<Self, ValidationError> {
+        // Validate every branch before any normalization or backend visibility decisions.
         source.preflight(validation)?;
-        Self::from_list(source.display_list(), tolerance)
-    }
-
-    pub(crate) fn from_list(
-        source: &'a DisplayList,
-        tolerance: f64,
-    ) -> Result<Self, ValidationError> {
         if !tolerance.is_finite() || tolerance <= 0.0 {
             return Err(ValidationError::invalid(
                 "prepared",
@@ -42,8 +53,11 @@ impl<'a> FrameIr<'a> {
                 "Curve tolerance must be finite and positive",
             ));
         }
-        let padding = filter_padding(&source.commands)?;
-        let dimension = |value: u32, side: &'static str| {
+        let list = source.display_list();
+        let mut budget = Budget::new(list.output_size, limits)?;
+        budget.bytes(size_of::<Self>() as u64, "frame_ir")?;
+        let padding = normalize::padding(&list.commands, &mut budget)?;
+        let dimension = |value: u32| {
             padding
                 .checked_mul(2)
                 .and_then(|extra| value.checked_add(extra))
@@ -51,54 +65,44 @@ impl<'a> FrameIr<'a> {
                     ValidationError::limit(
                         "prepared.filters",
                         "max_pixels",
-                        if side == "width" {
-                            "Filter raster width overflow"
-                        } else {
-                            "Filter raster height overflow"
-                        },
+                        "Filter raster dimensions overflow",
                     )
                 })
         };
         let size = PixelSize::new(
-            dimension(source.output_size.width, "width")?,
-            dimension(source.output_size.height, "height")?,
+            dimension(list.output_size.width)?,
+            dimension(list.output_size.height)?,
         );
-        Ok(Self {
-            source,
-            padding,
+        limits.validate_size(size)?;
+        let mut frame = Self {
             size,
             output_bounds: PixelRect {
                 left: padding,
                 top: padding,
-                right: padding + source.output_size.width,
-                bottom: padding + source.output_size.height,
+                right: padding + list.output_size.width,
+                bottom: padding + list.output_size.height,
             },
-            background: source
+            background: list
                 .background
-                .map(|color| paint_record(color, "prepared.background"))
+                .map(|color| super::prepare::paint_record(color, "prepared.background"))
                 .transpose()?,
             tolerance,
-            device_coverage: false,
-        })
-    }
-
-    /// Lets eligible fills leave coverage to the GPU instead of building CPU strips.
-    pub(crate) fn with_device_coverage(mut self, enabled: bool) -> Self {
-        self.device_coverage = enabled;
-        self
-    }
-
-    pub(crate) fn device_coverage(&self) -> bool {
-        self.device_coverage
-    }
-
-    pub(crate) fn list(&self) -> &'a DisplayList {
-        self.source
-    }
-
-    /// Extra border on every side that keeps filter taps inside the raster.
-    pub(crate) fn padding(&self) -> u32 {
-        self.padding
+            filter_halo: 0,
+            items: Vec::new(),
+            paths: Vec::new(),
+            paints: Vec::new(),
+            clips: Vec::new(),
+            segments: 0,
+            resource_bytes: 0,
+            stats: PreparationStats::default(),
+        };
+        frame.normalize(&list.commands, padding, &mut budget)?;
+        frame.stats = PreparationStats {
+            retained_bytes: budget.live_bytes(),
+            peak_bytes: budget.peak_bytes(),
+            work: budget.work_done(),
+        };
+        Ok(frame)
     }
 
     pub(crate) fn size(&self) -> PixelSize {
@@ -116,27 +120,81 @@ impl<'a> FrameIr<'a> {
     pub(crate) fn tolerance(&self) -> f64 {
         self.tolerance
     }
+
+    pub(crate) fn filter_halo(&self) -> u32 {
+        self.filter_halo
+    }
+
+    pub(super) fn items(&self) -> &[IrItem] {
+        &self.items
+    }
+
+    pub(super) fn path(&self, index: usize) -> &IrPath<'a> {
+        &self.paths[index]
+    }
+
+    pub(super) fn paint(&self, index: usize) -> &IrPaint<'a> {
+        &self.paints[index]
+    }
+
+    pub(super) fn clip(&self, index: usize) -> &IrClip {
+        &self.clips[index]
+    }
+
+    pub(crate) fn stats(&self) -> PreparationStats {
+        self.stats
+    }
+
+    pub(crate) fn resource_bytes(&self) -> u64 {
+        self.resource_bytes
+    }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use motion_core::{Node, RasterLimits};
+pub(super) struct IrPath<'a> {
+    pub(super) source: GeometrySource<'a>,
+    pub(super) transform: Transform,
+    pub(super) rule: FillRule,
+    pub(super) bounds: Rect,
+    pub(super) device: Vec<PathVerb>,
+    pub(super) segment_upper_bound: u64,
+}
 
-    #[test]
-    fn ir_reports_padded_raster_and_output_window() -> Result<(), ValidationError> {
-        let list = Node::empty().compile(
-            motion_core::Size::new(8.0, 4.0),
-            PixelSize::new(8, 4),
-            ValidationLimits::default(),
-        )?;
-        let ir = FrameIr::build(&list, ValidationLimits::default(), 1.0 / 256.0)?;
-        assert_eq!(ir.padding(), 0);
-        assert_eq!(ir.size(), PixelSize::new(8, 4));
-        assert_eq!(ir.output_bounds().width(), 8);
-        assert!(FrameIr::build(&list, ValidationLimits::default(), 0.0).is_err());
-        let frame = super::super::prepare::prepare_ir(&ir, RasterLimits::default(), None)?;
-        assert_eq!(frame.size(), ir.size());
-        Ok(())
-    }
+#[derive(Clone, Copy)]
+pub(super) enum GeometrySource<'a> {
+    Rectangle(Rect),
+    Path(&'a Path2D),
+}
+
+pub(super) struct IrPaint<'a> {
+    pub(super) source: &'a Paint,
+    pub(super) bounds: Rect,
+    pub(super) transform: Transform,
+}
+
+pub(super) enum IrClip {
+    Alpha { source: PathClip, path: usize },
+    Rectangle { source: RectClip, path: usize },
+    Shape { source: ShapeClip, path: usize },
+}
+
+pub(super) enum IrItem {
+    ParticleInstances {
+        batch: std::sync::Arc<dyn motion_core::instances::InstanceBatch>,
+        transform: Transform,
+    },
+    PushLayer {
+        layer: PreparedLayer,
+        alpha_clip: Option<usize>,
+        rectangle_clip: Option<usize>,
+        shape_clip: Option<usize>,
+    },
+    PopLayer,
+    BeginMask {
+        mode: motion_core::MaskMode,
+    },
+    EndMask,
+    Fill {
+        path: usize,
+        paint: usize,
+    },
 }

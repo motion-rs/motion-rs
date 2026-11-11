@@ -1,7 +1,7 @@
 //! Scene evaluation and preparation: builds the scene, compiles it to a display list and
 //! prepares coverage under the remaining raster limits.
 
-use super::FrameExecution;
+use super::{FrameExecution, PreparedOutput};
 use crate::RasterLimits;
 use crate::composition::FrameTimings;
 use motion_core::{Color, Node, Result, SceneContext, Time, ValidationError};
@@ -11,7 +11,7 @@ impl FrameExecution<'_> {
         &mut self,
         node: Node,
         background: Option<Color>,
-    ) -> Result<(crate::PreparedFrame, RasterLimits)> {
+    ) -> Result<(PreparedOutput, RasterLimits)> {
         let validation = self.context().validation_limits();
         let assets = self
             .composition
@@ -37,33 +37,121 @@ impl FrameExecution<'_> {
             self.timings.as_mut().expect("enabled timings").compile += started.elapsed();
         }
         let started = self.timings.map(|_| std::time::Instant::now());
-        let device = self.composition.options.blend_space
-            == motion_core::drawing::BlendSpace::LinearRgb
-            && self
-                .backend
-                .as_ref()
-                .map_or(self.composition.options.backend.wants_gpu(), |decision| {
-                    decision.renderer == crate::Renderer::Gpu
-                });
-        let prepared = crate::prepared::prepare_validated_device(
-            &list,
-            validation,
-            self.limits,
-            if self.composition.options.quality == motion_core::RenderQuality::Draft {
-                0.35
-            } else {
-                1.0 / 256.0
-            },
-            Some(&mut self.coverage_cache),
-            device,
-        )?
-        .quality(self.composition.options.quality)
-        .blend_space(self.composition.options.blend_space);
+        let tolerance = if self.composition.options.quality == motion_core::RenderQuality::Draft {
+            0.35
+        } else {
+            1.0 / 256.0
+        };
+        let renderer = if let Some(renderer) = self.preparation_backend {
+            renderer
+        } else {
+            #[cfg(feature = "gpu")]
+            {
+                self.backend.as_ref().map_or_else(
+                    || {
+                        if self.composition.options.backend.wants_gpu() {
+                            crate::Renderer::Gpu
+                        } else {
+                            crate::Renderer::Cpu
+                        }
+                    },
+                    |decision| decision.renderer,
+                )
+            }
+            #[cfg(not(feature = "gpu"))]
+            {
+                self.select_backend()?
+            }
+        };
+        let quality = self.composition.options.quality;
+        let blend_space = self.composition.options.blend_space;
+        let prepared = match renderer {
+            crate::Renderer::Cpu => PreparedOutput::Cpu(
+                crate::raster::prepare::prepare_validated_with_cache(
+                    &list,
+                    validation,
+                    self.limits,
+                    tolerance,
+                    Some(&mut self.coverage_cache),
+                )?
+                .quality(quality)
+                .blend_space(blend_space),
+            ),
+            crate::Renderer::Gpu => {
+                #[cfg(feature = "gpu")]
+                {
+                    let frame = crate::raster::prepare::prepare_validated_device(
+                        &list,
+                        validation,
+                        self.limits,
+                        tolerance,
+                        Some(&mut self.coverage_cache),
+                        blend_space == motion_core::drawing::BlendSpace::LinearRgb,
+                    )?
+                    .quality(quality)
+                    .blend_space(blend_space);
+                    PreparedOutput::Gpu {
+                        frame,
+                        source: list,
+                        tolerance,
+                    }
+                }
+                #[cfg(not(feature = "gpu"))]
+                {
+                    return Err(motion_core::ValidationError::unsupported(
+                        "prepared",
+                        "backend",
+                        "GPU preparation requires the gpu feature",
+                    )
+                    .into());
+                }
+            }
+        };
         if let Some(started) = started {
             self.timings.as_mut().expect("enabled timings").coverage += started.elapsed();
         }
         let limits = remaining(self.limits, prepared.stats().work)?;
         Ok((prepared, limits))
+    }
+
+    pub(super) fn prepare_cpu_fallback(
+        &mut self,
+        prepared: PreparedOutput,
+        limits: RasterLimits,
+    ) -> Result<(PreparedOutput, RasterLimits)> {
+        match prepared {
+            PreparedOutput::Cpu(frame) => Ok((PreparedOutput::Cpu(frame), limits)),
+            #[cfg(feature = "gpu")]
+            PreparedOutput::Gpu {
+                frame,
+                source,
+                tolerance,
+            } => {
+                let spent = frame.stats();
+                let quality = frame.quality;
+                let blend_space = frame.blend_space;
+                drop(frame);
+                let limits = remaining(self.limits, spent.work)?;
+                let validation = self.context().validation_limits();
+                let started = self.timings.map(|_| std::time::Instant::now());
+                let mut frame = crate::raster::prepare::prepare_validated_with_cache(
+                    &source,
+                    validation,
+                    limits,
+                    tolerance,
+                    Some(&mut self.coverage_cache),
+                )?
+                .quality(quality)
+                .blend_space(blend_space);
+                frame.stats.work += spent.work;
+                frame.stats.peak_bytes = frame.stats.peak_bytes.max(spent.peak_bytes);
+                if let Some(started) = started {
+                    self.timings.as_mut().expect("enabled timings").coverage += started.elapsed();
+                }
+                let limits = remaining(self.limits, frame.stats().work)?;
+                Ok((PreparedOutput::Cpu(frame), limits))
+            }
+        }
     }
 
     pub(in crate::composition) fn prepare_frame(
@@ -72,7 +160,7 @@ impl FrameExecution<'_> {
         time: Option<Time>,
         background: Option<Color>,
         build: impl FnOnce(&SceneContext<'_>) -> Node,
-    ) -> Result<(crate::PreparedFrame, RasterLimits)> {
+    ) -> Result<(PreparedOutput, RasterLimits)> {
         self.last_stats = None;
         if self.timings.is_some() {
             self.timings = Some(FrameTimings::default());

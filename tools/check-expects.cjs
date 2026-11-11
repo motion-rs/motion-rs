@@ -414,12 +414,6 @@ const policies = [
     "The active-interval flag is set together with the preceding boundary in the same ordered sweep.",
   ],
   [
-    "motion-render/src/raster/prepare.rs",
-    ["validated filter support stack", "validated layer bounds stack"],
-    "invariant",
-    "DisplayList preflight checks layer/mask balance before these private matching push/pop walks.",
-  ],
-  [
     "motion-render/src/raster/rect_clip.rs",
     ["nonempty convex polygon"],
     "invariant",

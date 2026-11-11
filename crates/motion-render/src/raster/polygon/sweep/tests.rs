@@ -13,7 +13,7 @@ fn prepared(
         size_of::<PreparedFrame>() as u64 + std::mem::size_of_val(edges) as u64,
         "test",
     )?;
-    let mut frame = PreparedFrame {
+    let mut frame = PreparedScene {
         quality: motion_core::RenderQuality::Final,
         blend_space: motion_core::drawing::BlendSpace::LinearRgb,
         size,
@@ -29,10 +29,6 @@ fn prepared(
         strips: Vec::new(),
         spans: Vec::new(),
         alphas: Vec::new(),
-        device_fills: Vec::new(),
-        device_edges: Vec::new(),
-        device_totals: [0; 2],
-        device_enabled: false,
         paints: Vec::new(),
         paint_sources: Vec::new(),
         clips: Vec::new(),
@@ -108,7 +104,7 @@ fn prepared(
         peak_bytes: budget.peak_bytes(),
         work: budget.work_done(),
     };
-    Ok(frame)
+    Ok(PreparedFrame { scene: frame })
 }
 
 fn contour(points: &[Point], edges: &mut Vec<Edge>, budget: &mut Budget) {

@@ -5,6 +5,7 @@ use motion_core::Scene;
 use motion_core::Shape;
 use motion_core::{Color, FrameRate, Node, NodeModifiers, Rect, Size, Time};
 use motion_render::PixelFormat;
+use motion_render::gpu::OutputPlan;
 use std::sync::{Arc, Mutex};
 
 #[test]

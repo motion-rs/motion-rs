@@ -168,8 +168,10 @@ mod tests {
     fn disabled_gpu_fails_before_loading_invalid_font_data() {
         let error =
             crate::Composition::new(32, 32, crate::FrameClock::new(motion_core::fps!(30), 150))
-                .with_options(crate::RenderOptions::default().backend(Renderer::Gpu.into()))?
-                .frame_renderer(motion_core::Size::new(32.0, 32.0))
+                .with_options(crate::RenderOptions::default().backend(Renderer::Gpu.into()))
+                .and_then(|composition| {
+                    composition.frame_renderer(motion_core::Size::new(32.0, 32.0))
+                })
                 .err()
                 .expect("GPU is not compiled");
         assert_eq!(

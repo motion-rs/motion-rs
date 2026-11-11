@@ -79,7 +79,10 @@ fn scene(crossing: bool) -> motion_core::Result<Node> {
     ))
 }
 
-fn prepare(device: bool, crossing: bool) -> motion_core::Result<crate::PreparedFrame> {
+fn prepare(
+    device: bool,
+    crossing: bool,
+) -> motion_core::Result<crate::raster::gpu_prepare::GpuFrame> {
     prepare_node(scene(crossing)?, device, PixelSize::new(240, 160))
 }
 
@@ -87,7 +90,7 @@ fn prepare_node(
     node: Node,
     device: bool,
     size: PixelSize,
-) -> motion_core::Result<crate::PreparedFrame> {
+) -> motion_core::Result<crate::raster::gpu_prepare::GpuFrame> {
     let validation = ValidationLimits::default();
     let list = node.compile(
         motion_core::Size::new(f64::from(size.width), f64::from(size.height)),
@@ -121,7 +124,7 @@ fn device_fills_replace_cpu_coverage_and_materialize_back() -> motion_core::Resu
     let limits = RasterLimits::default();
     let device = prepare(true, true)?;
     let cpu = prepare(false, true)?;
-    assert_eq!(device.device_fills.len(), 5);
+    assert_eq!(device.geometry.device_fills.len(), 5);
     assert!(device.alphas.is_empty());
     let mut restored = device.clone();
     restored.materialize_device_coverage(limits)?;
@@ -211,15 +214,21 @@ fn device_float_coverage_layout_and_admission() -> motion_core::Result {
         true,
         PixelSize::new(3, 2),
     )?;
-    assert_eq!(frame.device_fills.len(), 2);
-    assert_eq!(frame.strips[frame.device_fills[0].strip].alpha_offset, 0);
-    assert_eq!(frame.strips[frame.device_fills[1].strip].alpha_offset, 1);
+    assert_eq!(frame.geometry.device_fills.len(), 2);
+    assert_eq!(
+        frame.strips[frame.geometry.device_fills[0].strip].alpha_offset,
+        0
+    );
+    assert_eq!(
+        frame.strips[frame.geometry.device_fills[1].strip].alpha_offset,
+        1
+    );
     let limits = RasterLimits::default();
     let plan = Plan::new(&frame, limits)?;
     assert_eq!(plan.device.samples, 2);
     let base = plan.device.fills[4] as usize;
     assert_eq!(plan.coverage.len(), base + 2);
-    for (index, fill) in frame.device_fills.iter().enumerate() {
+    for (index, fill) in frame.geometry.device_fills.iter().enumerate() {
         let strip = 4 + fill.strip * 6;
         assert_eq!(plan.coverage[strip + 4] as usize, base + index);
         assert_eq!(plan.coverage[strip + 5], 1);
@@ -250,7 +259,7 @@ fn device_float_coverage_survives_composition() -> motion_core::Result {
         PixelSize::new(3, 2),
     )?;
     let limits = RasterLimits::default();
-    assert_eq!(frame.device_fills.len(), 2);
+    assert_eq!(frame.geometry.device_fills.len(), 2);
     assert!(!frame.alphas.is_empty());
     let mut gpu = Gpu::new()?;
     let actual = gpu.render(&frame, Plan::new(&frame, limits)?)?;

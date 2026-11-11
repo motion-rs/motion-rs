@@ -67,14 +67,14 @@ fn write_lut(target: &mut [f32], lut: Option<&motion_core::Lut3d>, input: motion
 impl Plan {
     /// Builds all operations and accounts for uploads, captures, staging and output.
     /// Unsupported precision or exhausted logical budgets fail before device access.
-    pub fn new(frame: &PreparedFrame, limits: RasterLimits) -> Result<Self, ValidationError> {
+    pub fn new(frame: &impl FrameInput, limits: RasterLimits) -> Result<Self, ValidationError> {
         Self::with_planning_limit(frame, limits, limits.max_bytes, None)
     }
 
     /// Plans a supported packed output without unused floating-point readback storage.
     /// Packed storage, mapped readback and CPU planes are admitted before optional batching.
     pub fn new_packed(
-        frame: &PreparedFrame,
+        frame: &impl FrameInput,
         limits: RasterLimits,
         format: crate::PixelFormat,
     ) -> Result<Self, ValidationError> {
@@ -85,16 +85,17 @@ impl Plan {
     /// Device/staging reservations are included conservatively in the planning charge.
     /// `packed` selects a packed output format; `None` plans floating-point readback.
     pub fn with_planning_limit(
-        frame: &PreparedFrame,
+        frame: &impl FrameInput,
         limits: RasterLimits,
         max_bytes: u64,
         packed: Option<crate::PixelFormat>,
     ) -> Result<Self, ValidationError> {
+        let frame = frame.gpu_view();
         let planning_limits = RasterLimits {
             max_bytes: limits.max_bytes.min(max_bytes),
             ..limits
         };
-        let budget = Self::admit(frame, planning_limits, packed)?;
+        let budget = Self::admit(&frame, planning_limits, packed)?;
         let mut planner = Planner {
             frame,
             steps: Vec::new(),
@@ -216,7 +217,7 @@ impl Plan {
 
     /// Admits the fixed costs of a frame (plan, staging, output, readback) and builds the budget.
     fn admit(
-        frame: &PreparedFrame,
+        frame: &FrameView<'_>,
         limits: RasterLimits,
         packed: Option<crate::PixelFormat>,
     ) -> Result<Budget, ValidationError> {

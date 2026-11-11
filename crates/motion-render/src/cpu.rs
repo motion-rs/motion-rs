@@ -1,6 +1,6 @@
 //! Scalar linear-premultiplied composition of immutable coverage.
 
-use crate::prepared::{ClipRecord, PixelRect, PreparedFrame, PreparedItem, PreparedLayer};
+use crate::prepared::{ClipRecord, PixelRect, PreparedItem, PreparedLayer, PreparedScene};
 use crate::raster::prepare::pixel_bounds;
 use motion_core::budget::Budget;
 use motion_core::instances::{InstanceBlend, InstanceComposite};
@@ -19,7 +19,7 @@ mod tests;
 mod walk;
 
 #[cfg(test)]
-use crate::prepared::RenderPrepare;
+use crate::prepared::{PreparedFrame, RenderPrepare};
 
 pub(crate) fn particle_compositor(blend: InstanceBlend) -> InstanceComposite {
     fn composite_with_mode<const MODE: u8>(
@@ -125,7 +125,7 @@ impl LinearFrame {
     }
 }
 
-impl PreparedFrame {
+impl PreparedScene {
     /// Composes coverage with scalar linear-premultiplied layer blending.
     ///
     /// Independent render limits admit root pixels and every live capture before
@@ -251,18 +251,6 @@ impl PreparedFrame {
         stats: &mut WorkStats,
         fills: Option<&[usize]>,
     ) -> Result<LinearFrame, ValidationError> {
-        if self.has_device_coverage() {
-            let mut cpu = self.clone();
-            cpu.materialize_device_coverage(limits)?;
-            return cpu.render_linear_selected::<OPTIMIZE_LAYERS>(
-                limits,
-                pool,
-                output_bounds,
-                bounds,
-                stats,
-                fills,
-            );
-        }
         pool.trim(limits.max_bytes / 4);
         let mut budget = Budget::new(self.size, limits)?;
         let result = (|| {

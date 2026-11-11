@@ -1,7 +1,7 @@
 //! Host side of the GPU uniform ABI: operation codes, paint kinds, the `GpuUniforms`
 //! record shared with WGSL, and the generated shader constants that mirror them.
 
-use crate::prepared::{PixelRect, PreparedFrame};
+use crate::prepared::{PixelRect, PreparedScene};
 use motion_core::ValidationError;
 use motion_core::drawing::BlendMode;
 
@@ -102,7 +102,12 @@ pub(super) struct GpuUniforms {
 }
 
 impl GpuUniforms {
-    pub(super) fn new(frame: &PreparedFrame, operation: GpuOp, bounds: PixelRect) -> Self {
+    pub(super) fn new(
+        frame: impl AsRef<PreparedScene>,
+        operation: GpuOp,
+        bounds: PixelRect,
+    ) -> Self {
+        let frame = frame.as_ref();
         Self {
             frame: FrameHeader {
                 width: frame.size.width,

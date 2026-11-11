@@ -117,6 +117,7 @@ impl FrameRenderer {
             time: None,
             limits: self.session.limits,
             device_packing: false,
+            preparation_backend: None,
             session: &mut self.session,
         }
     }
@@ -199,7 +200,46 @@ impl FrameRenderer {
         background: Option<Color>,
         build: impl FnMut(&SceneContext<'_>) -> Node,
     ) -> Result<(crate::PreparedFrame, RasterLimits)> {
-        self.execution().prepare_output_at(time, background, build)
+        let mut execution = self.execution();
+        execution.preparation_backend = Some(crate::Renderer::Cpu);
+        let (prepared, limits) = execution.prepare_output_at(time, background, build)?;
+        match prepared {
+            super::execution::PreparedOutput::Cpu(frame) => Ok((frame, limits)),
+            #[cfg(feature = "gpu")]
+            super::execution::PreparedOutput::Gpu { .. } => {
+                Err(motion_core::ValidationError::invalid(
+                    "prepared",
+                    "backend",
+                    "CPU preparation returned a GPU frame",
+                )
+                .into())
+            }
+        }
+    }
+
+    /// Prepares exact ticks for independent GPU planning without selecting or submitting a device.
+    /// Returned remaining work allowance excludes the preparation already performed.
+    #[cfg(feature = "gpu")]
+    pub fn prepare_gpu_output_at(
+        &mut self,
+        time: Time,
+        background: Option<Color>,
+        build: impl FnMut(&SceneContext<'_>) -> Node,
+    ) -> Result<(crate::gpu::PreparedGpuFrame, RasterLimits)> {
+        let mut execution = self.execution();
+        execution.preparation_backend = Some(crate::Renderer::Gpu);
+        let (prepared, limits) = execution.prepare_output_at(time, background, build)?;
+        match prepared {
+            super::execution::PreparedOutput::Cpu(_) => Err(motion_core::ValidationError::invalid(
+                "prepared",
+                "backend",
+                "GPU preparation returned a CPU frame",
+            )
+            .into()),
+            super::execution::PreparedOutput::Gpu { frame, .. } => {
+                Ok((crate::gpu::PreparedGpuFrame::new(frame), limits))
+            }
+        }
     }
 
     /// Renders exact ticks to owned memory through the shared request executor.

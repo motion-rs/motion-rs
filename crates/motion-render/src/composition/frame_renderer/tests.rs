@@ -763,6 +763,37 @@ fn gpu_selection_is_explicit_and_lazy_without_a_device() -> Result {
 
 #[test]
 #[cfg(feature = "gpu")]
+fn gpu_output_preparation_is_independent_and_device_free() -> Result {
+    use crate::gpu::frame::FrameInput;
+    let mut renderer = composition()
+        .configure(|options| options.backend(Renderer::Gpu.into()))
+        .frame_renderer(Size::new(8.0, 4.0))?;
+    let build = |_: &SceneContext<'_>| {
+        Node::from(
+            motion_core::Circle::new(motion_core::Point::new(4.0, 2.0), 1.75)
+                .unwrap()
+                .fill(Color::WHITE),
+        )
+    };
+    let (gpu, limits) = renderer.prepare_gpu_output_at(Time::ZERO, None, build)?;
+    assert!(renderer.gpu_info().is_none());
+    assert_eq!(renderer.cached_coverage_bytes(), 0);
+    assert!(!gpu.gpu_view().items.is_empty());
+    assert!(gpu.gpu_view().alphas.is_empty());
+    assert_eq!(gpu.size(), PixelSize::new(8, 4));
+    let plan = gpu.plan(limits, crate::PixelFormat::Yuv420 { bit_depth: 8 })?;
+    assert!(plan.peak_bytes()? >= gpu.stats().retained_bytes);
+    assert!(renderer.gpu_info().is_none());
+    let (cpu, _) = renderer.prepare_output_at(Time::ZERO, None, build)?;
+    assert!(!cpu.alphas.is_empty());
+    assert!(renderer.cached_coverage_bytes() > 0);
+    assert!(renderer.gpu_info().is_none());
+    assert!(gpu.gpu_view().alphas.is_empty());
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "gpu")]
 #[ignore = "requires separate authorization to initialize native GPU devices"]
 fn gpu_device_session_seek_budget_and_recovery_match_cpu() -> Result {
     for (width, height) in [(8, 4), (65, 37), (127, 73)] {

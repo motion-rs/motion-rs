@@ -12,6 +12,19 @@ pub struct OutputPlan {
 }
 
 impl OutputPlan {
+    pub(crate) fn from_gpu(
+        frame: &PreparedGpuFrame,
+        limits: RasterLimits,
+        planning_bytes: u64,
+        format: crate::PixelFormat,
+    ) -> Result<Self, ValidationError> {
+        Ok(Self {
+            plan: Plan::with_planning_limit(frame, limits, planning_bytes, Some(format))?,
+            format,
+            size: frame.size(),
+        })
+    }
+
     /// Plans `frame` for a supported packed `format` without floating-point readback storage.
     /// Unsupported precision or exhausted logical budgets fail before device access.
     pub fn new(

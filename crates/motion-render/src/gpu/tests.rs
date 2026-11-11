@@ -545,7 +545,7 @@ fn gpu_plan_retains_shared_coverage_and_conditional_geometric_clips() {
         [CONDITIONAL_COVERAGE, layer.data.len() as u32, 0, 0, 8, 4]
     );
     let planner = Planner {
-        frame: &frame,
+        frame: frame.gpu_view(),
         steps: Vec::new(),
         budget: Budget::new(frame.size, RasterLimits::default()).unwrap(),
     };
@@ -588,7 +588,7 @@ fn compact_coverage_uploads_do_not_expand_solid_or_small_shapes_to_canvas() {
                 .unwrap();
             assert!(fill.data.len() < 128, "{width}: {}", fill.data.len());
             let planner = Planner {
-                frame: &frame,
+                frame: frame.gpu_view(),
                 steps: Vec::new(),
                 budget: Budget::new(size, RasterLimits::default()).unwrap(),
             };
@@ -752,7 +752,7 @@ fn gpu_plan_covers_all_filters_and_preserves_input_snapshot_and_guard_band() {
             );
             if matches!(step.parameters.operation.code, 1 | 2) && step.data.len() > 1 {
                 let planner = Planner {
-                    frame: &frame,
+                    frame: frame.gpu_view(),
                     steps: Vec::new(),
                     budget: Budget::new(frame.raster_size(), RasterLimits::default()).unwrap(),
                 };

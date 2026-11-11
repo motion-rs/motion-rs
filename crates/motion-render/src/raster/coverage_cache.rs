@@ -177,7 +177,7 @@ impl CoverageCache {
 
     fn rasterize_path(
         &mut self,
-        frame: &mut PreparedFrame,
+        frame: &mut PreparedScene,
         geometry: &Path2D,
         transform: Transform,
         rule: FillRule,
@@ -197,18 +197,6 @@ impl CoverageCache {
     }
 
     /// Whether a prepared coverage entry already exists for the fill.
-    pub(super) fn contains(
-        &self,
-        geometry: &Path2D,
-        transform: Transform,
-        size: PixelSize,
-        rule: FillRule,
-        tolerance: f64,
-    ) -> bool {
-        self.lookup(geometry, transform, size, rule, tolerance)
-            .is_some()
-    }
-
     pub(super) fn lookup(
         &self,
         geometry: &Path2D,
@@ -240,7 +228,7 @@ impl CoverageCache {
 
     pub(crate) fn polygon(
         &mut self,
-        frame: &mut PreparedFrame,
+        frame: &mut PreparedScene,
         geometry: &Path2D,
         transform: Transform,
         rule: FillRule,
@@ -318,7 +306,7 @@ impl CoverageCache {
 }
 
 fn restore(
-    frame: &mut PreparedFrame,
+    frame: &mut PreparedScene,
     entry: &Entry,
     budget: &mut Budget,
     path: &str,

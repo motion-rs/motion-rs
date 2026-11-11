@@ -9,8 +9,10 @@ use motion_core::{Color, Node, Result, SceneContext, Shape, Time, ValidationErro
 
 mod backend;
 mod preparation;
+mod prepared;
 
 use preparation::remaining;
+pub(super) use prepared::PreparedOutput;
 
 pub(super) struct FrameExecution<'a> {
     pub(super) composition: Composition,
@@ -18,6 +20,7 @@ pub(super) struct FrameExecution<'a> {
     pub(super) time: Option<Time>,
     pub(super) limits: RasterLimits,
     pub(super) device_packing: bool,
+    pub(super) preparation_backend: Option<Renderer>,
     pub(super) session: &'a mut RenderSession,
 }
 
@@ -63,7 +66,7 @@ impl FrameExecution<'_> {
         time: Time,
         background: Option<Color>,
         mut build: impl FnMut(&SceneContext<'_>) -> Node,
-    ) -> Result<(crate::PreparedFrame, RasterLimits)> {
+    ) -> Result<(PreparedOutput, RasterLimits)> {
         let rate = self.composition.clock.rate;
         let end = self.duration;
         if time < Time::ZERO || time >= end {
@@ -108,7 +111,7 @@ impl FrameExecution<'_> {
     fn finish_prepared_output(
         &mut self,
         index: u32,
-        prepared: crate::PreparedFrame,
+        prepared: PreparedOutput,
         limits: RasterLimits,
         format: crate::PixelFormat,
     ) -> Result<crate::FrameBuffer> {

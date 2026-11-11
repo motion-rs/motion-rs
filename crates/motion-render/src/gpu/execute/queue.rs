@@ -122,6 +122,23 @@ impl FrameQueue {
         frame: &PreparedFrame,
         plan: OutputPlan,
     ) -> motion_core::Result<()> {
+        self.submit_scene_output(frame, plan)
+    }
+
+    /// Submits independently prepared GPU output without constructing CPU coverage.
+    pub fn submit_gpu_output(
+        &mut self,
+        frame: &PreparedGpuFrame,
+        plan: OutputPlan,
+    ) -> motion_core::Result<()> {
+        self.submit_scene_output(&frame.frame.scene, plan)
+    }
+
+    fn submit_scene_output(
+        &mut self,
+        frame: &PreparedScene,
+        plan: OutputPlan,
+    ) -> motion_core::Result<()> {
         let OutputPlan { plan, format, .. } = plan;
         if !self.pending.is_empty() {
             return Err(ValidationError::invalid(

@@ -1,10 +1,12 @@
-//! Immutable shared coverage and paint records.
+//! CPU preparation results and common immutable composition records.
 
+#[cfg(any(feature = "gpu", test))]
 pub(crate) use crate::cpu::LinearFrame;
 pub use crate::cpu::WorkStats;
 pub(crate) use crate::raster::coverage_cache::CoverageCache;
 use crate::raster::paint;
 pub use crate::raster::prepare::RenderPrepare;
+#[cfg(feature = "gpu")]
 pub(crate) use crate::raster::prepare::prepare_validated_device;
 pub use motion_core::RasterLimits;
 use motion_core::{PixelSize, Rect};
@@ -172,9 +174,9 @@ pub(crate) enum PreparedItem {
 /// an f32 sample block after the packed CPU alphas, which the GPU writes before composition.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct DeviceFill {
-    /// Index of the dense strip in [`PreparedFrame::strips`].
+    /// Index of the dense strip in the GPU scene's common strip descriptors.
     pub(crate) strip: usize,
-    /// Range in [`PreparedFrame::device_edges`].
+    /// Range in the GPU frame's independently owned device edges.
     pub(crate) edges: Range<usize>,
     /// Winding rule that maps accumulated signed area to coverage.
     pub(crate) rule: motion_core::FillRule,
@@ -191,13 +193,43 @@ pub struct PreparationStats {
     pub work: u64,
 }
 
-/// Immutable coverage shared by future CPU/GPU consumers.
+/// Immutable CPU coverage, paints and composition semantics.
 ///
 /// Supports transformed rectangles, bounded flattened Bezier contours with either
 /// fill rule and isolated linear-blended layers.
 /// Private storage prevents callers forging ranges or editing validated geometry.
 #[derive(Clone, Debug, PartialEq)]
 pub struct PreparedFrame {
+    pub(crate) scene: PreparedScene,
+}
+
+impl std::ops::Deref for PreparedFrame {
+    type Target = PreparedScene;
+
+    fn deref(&self) -> &Self::Target {
+        &self.scene
+    }
+}
+
+impl std::ops::DerefMut for PreparedFrame {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.scene
+    }
+}
+
+impl AsRef<PreparedScene> for PreparedFrame {
+    fn as_ref(&self) -> &PreparedScene {
+        &self.scene
+    }
+}
+
+/// Common composition records; GPU coverage storage belongs to its own prepared frame.
+///
+/// This type is exposed only as the dereference target of [`PreparedFrame`].
+/// Its storage cannot be constructed or edited outside this crate.
+#[doc(hidden)]
+#[derive(Clone, Debug, PartialEq)]
+pub struct PreparedScene {
     pub(crate) quality: motion_core::RenderQuality,
     pub(crate) blend_space: motion_core::drawing::BlendSpace,
     pub(crate) size: PixelSize,
@@ -208,13 +240,6 @@ pub struct PreparedFrame {
     pub(crate) strips: Vec<Strip>,
     pub(crate) spans: Vec<Span>,
     pub(crate) alphas: Vec<u8>,
-    pub(crate) device_fills: Vec<DeviceFill>,
-    /// Flattened edges as top x, top y, bottom x, bottom y and winding.
-    pub(crate) device_edges: Vec<[f64; 5]>,
-    /// Pixels and estimated per-pixel edge visits already granted to device fills.
-    pub(crate) device_totals: [u64; 2],
-    /// Whether eligible fills may record GPU edges instead of CPU coverage.
-    pub(crate) device_enabled: bool,
     pub(crate) paints: Vec<PaintRecord>,
     pub(crate) paint_sources: Vec<Option<paint::Source>>,
     pub(crate) clips: Vec<ClipRecord>,
@@ -234,6 +259,74 @@ impl PreparedFrame {
         self
     }
 
+    /// Final integer output dimensions, excluding filter guard bands.
+    pub fn size(&self) -> PixelSize {
+        self.scene.size()
+    }
+
+    /// Internal raster dimensions, including any filter guard band.
+    pub fn raster_size(&self) -> PixelSize {
+        self.scene.raster_size()
+    }
+
+    /// Output window in raster coordinates; coverage includes guard bands.
+    pub fn output_bounds(&self) -> PixelRect {
+        self.scene.output_bounds()
+    }
+
+    /// Number of independent path-mask and geometric clip regions.
+    pub fn clip_count(&self) -> usize {
+        self.scene.clip_count()
+    }
+
+    /// Number of edge coverage strips belonging to fills and clips.
+    pub fn strip_count(&self) -> usize {
+        self.scene.strip_count()
+    }
+
+    /// Number of fully covered interior spans.
+    pub fn span_count(&self) -> usize {
+        self.scene.span_count()
+    }
+
+    /// Logical retained/peak storage and admitted preparation work.
+    pub fn stats(&self) -> PreparationStats {
+        self.scene.stats()
+    }
+
+    /// Composes CPU coverage and converts to the requested format.
+    pub fn render_buffer(
+        &self,
+        format: crate::PixelFormat,
+        limits: RasterLimits,
+    ) -> Result<crate::FrameBuffer, motion_core::ValidationError> {
+        self.scene.render_buffer(format, limits)
+    }
+
+    /// Composes unquantized linear-premultiplied f32 output on the CPU.
+    pub fn render_linear(
+        &self,
+        limits: RasterLimits,
+    ) -> Result<crate::FrameBuffer, motion_core::ValidationError> {
+        self.scene.render_linear(limits)
+    }
+
+    /// Samples a prepared paint at a finite device-space point.
+    pub fn paint_at(
+        &self,
+        index: usize,
+        point: motion_core::Point,
+    ) -> Result<[f32; 4], motion_core::ValidationError> {
+        self.scene.paint_at(index, point)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn has_device_coverage(&self) -> bool {
+        false
+    }
+}
+
+impl PreparedScene {
     /// Final integer output dimensions, excluding filter guard bands.
     pub fn size(&self) -> PixelSize {
         PixelSize::new(
@@ -260,11 +353,6 @@ impl PreparedFrame {
     /// Number of independent path-mask and geometric clip regions.
     pub fn clip_count(&self) -> usize {
         self.clips.len()
-    }
-
-    /// Whether some fill coverage exists only as GPU edge records; CPU rendering rejects such frames.
-    pub(crate) fn has_device_coverage(&self) -> bool {
-        !self.device_fills.is_empty()
     }
 
     /// Number of edge coverage strips shared by all fills and clips.

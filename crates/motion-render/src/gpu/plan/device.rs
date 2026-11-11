@@ -29,7 +29,7 @@ impl Planner<'_> {
 
     pub(super) fn device_words(&self) -> usize {
         self.frame.device_fills.last().map_or(0, |fill| {
-            PreparedFrame::device_sample_end(&self.frame.strips[fill.strip])
+            crate::raster::device::DeviceGeometry::device_sample_end(&self.frame.strips[fill.strip])
         })
     }
 
@@ -52,7 +52,7 @@ impl Planner<'_> {
             .work(frame.device_totals[0] + frame.device_totals[1], path)?;
         let alpha_base = self.device_alpha_base();
         let mut next_word = 0;
-        for fill in &frame.device_fills {
+        for fill in frame.device_fills {
             let strip = &frame.strips[fill.strip];
             let (width, height) = (strip.width, strip.height as usize);
             let rows_start = device.rows.len();
@@ -112,7 +112,8 @@ impl Planner<'_> {
             for edge in edges {
                 device.edges.extend(local(edge));
             }
-            let samples = PreparedFrame::device_sample_end(strip) - strip.alpha_offset;
+            let samples = crate::raster::device::DeviceGeometry::device_sample_end(strip)
+                - strip.alpha_offset;
             device.fills.extend([
                 strip.x,
                 strip.y,

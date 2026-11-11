@@ -4,7 +4,7 @@ use super::*;
 
 /// The live state of one linear render: budget, surface stack and peak storage.
 pub(super) struct LinearWalk<'a> {
-    pub(super) frame: &'a PreparedFrame,
+    pub(super) frame: &'a PreparedScene,
     pub(super) pool: &'a mut pool::SurfacePool,
     pub(super) budget: &'a mut Budget,
     pub(super) surfaces: Vec<Surface>,
@@ -14,7 +14,7 @@ pub(super) struct LinearWalk<'a> {
 
 impl<'a> LinearWalk<'a> {
     pub(super) fn new(
-        frame: &'a PreparedFrame,
+        frame: &'a PreparedScene,
         pool: &'a mut pool::SurfacePool,
         budget: &'a mut Budget,
         root: Surface,

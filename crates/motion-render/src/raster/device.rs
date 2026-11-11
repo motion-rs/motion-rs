@@ -1,9 +1,15 @@
 //! Fills whose coverage the GPU computes from flattened edges, and their CPU materialization.
 
-use super::polygon::{Edge, edge_bounds, path_edges, scratch::PolygonScratch};
+#[cfg(test)]
+use super::polygon::scratch::PolygonScratch;
+use super::polygon::{Edge, edge_bounds, path_edges};
 use super::{RasterScope, pixel_bounds};
-use crate::prepared::{DeviceFill, PixelRect, PreparedFrame, PreparedItem, Strip};
-use motion_core::{FillRule, Path2D, Point, RasterLimits, Transform, ValidationError};
+#[cfg(test)]
+use crate::prepared::PreparedItem;
+use crate::prepared::{DeviceFill, PixelRect, PreparedScene, Strip};
+#[cfg(test)]
+use motion_core::{Point, RasterLimits};
+use motion_core::{Transform, ValidationError};
 use std::mem::size_of;
 
 /// Largest local coordinate magnitude that f32 edge records resolve to a small fraction of a byte.
@@ -21,30 +27,37 @@ const DEVICE_MAX_FILL_VISITS: u64 = 1 << 26;
 /// Most per-pixel edge visits all device fills of a frame may cost.
 const DEVICE_MAX_FRAME_VISITS: u64 = 1 << 28;
 
-impl PreparedFrame {
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct DeviceGeometry {
+    pub(crate) device_fills: Vec<DeviceFill>,
+    pub(crate) device_edges: Vec<[f64; 5]>,
+    pub(crate) device_totals: [u64; 2],
+}
+
+impl DeviceGeometry {
     /// Flattens a fill and records its edges for GPU coverage.
     ///
     /// Returns `false` without recording anything when the path needs CPU coverage: its
     /// coordinates exceed f32 resolution or its estimated GPU cost exceeds the frame allowance.
     pub(super) fn device_fill(
         &mut self,
-        geometry: &Path2D,
-        transform: Transform,
-        rule: FillRule,
+        scene: &mut PreparedScene,
+        geometry: &super::frame_ir::IrPath<'_>,
         tolerance: f64,
         scope: &mut RasterScope<'_>,
     ) -> Result<bool, ValidationError> {
         let (budget, path) = (&mut *scope.budget, scope.path);
         let edges = path_edges(
-            geometry.verbs().iter().copied(),
-            transform,
+            geometry.device.iter().copied(),
+            Transform::IDENTITY,
             tolerance,
             budget,
             path,
         )?;
+        debug_assert!(edges.len() as u64 <= geometry.segment_upper_bound);
         let charged = (edges.len() * size_of::<Edge>()) as u64;
         let bounds = edge_bounds(&edges);
-        let pixels = pixel_bounds(bounds, self.size);
+        let pixels = pixel_bounds(bounds, scene.size);
         if edges.is_empty() || pixels.is_empty() {
             budget.release(charged);
             return Ok(true);
@@ -86,7 +99,7 @@ impl PreparedFrame {
         let alpha_offset = self
             .device_fills
             .last()
-            .map_or(0, |fill| Self::device_sample_end(&self.strips[fill.strip]));
+            .map_or(0, |fill| Self::device_sample_end(&scene.strips[fill.strip]));
         let strip = Strip {
             x: pixels.left,
             y: pixels.top,
@@ -94,13 +107,16 @@ impl PreparedFrame {
             height: pixels.height(),
             alpha_offset,
         };
-        self.device_fills.push(DeviceFill {
-            strip: self.strips.len(),
-            edges: first..self.device_edges.len(),
-            rule,
-        });
-        budget.push(&mut self.strips, strip, path)?;
-        budget.bytes(size_of::<DeviceFill>() as u64, path)?;
+        budget.push(
+            &mut self.device_fills,
+            DeviceFill {
+                strip: scene.strips.len(),
+                edges: first..self.device_edges.len(),
+                rule: geometry.rule,
+            },
+            path,
+        )?;
+        budget.push(&mut scene.strips, strip, path)?;
         self.device_totals = [used_pixels + area, used_visits + visits];
         Ok(true)
     }
@@ -128,8 +144,10 @@ impl PreparedFrame {
     /// Replaces every device fill with CPU strips, spans and alphas for CPU rendering.
     ///
     /// Strips are appended and the owning items repointed, so earlier indices stay valid.
+    #[cfg(test)]
     pub(crate) fn materialize_device_coverage(
         &mut self,
+        scene: &mut PreparedScene,
         limits: RasterLimits,
     ) -> Result<(), ValidationError> {
         if self.device_fills.is_empty() {
@@ -137,11 +155,12 @@ impl PreparedFrame {
         }
         let fills = std::mem::take(&mut self.device_fills);
         let device_edges = std::mem::take(&mut self.device_edges);
-        let mut budget = motion_core::budget::Budget::new(self.size, limits)?;
+        let mut budget = motion_core::budget::Budget::new(scene.size, limits)?;
+        budget.bytes(scene.stats.retained_bytes, "gpu.materialize")?;
         let mut scratch = PolygonScratch::default();
         let mut next = fills.iter().peekable();
-        for index in 0..self.items.len() {
-            let PreparedItem::Fill { strips, spans, .. } = &self.items[index] else {
+        for index in 0..scene.items.len() {
+            let PreparedItem::Fill { strips, spans, .. } = &scene.items[index] else {
                 continue;
             };
             let Some(fill) = next.next_if(|fill| strips.len() == 1 && strips.start == fill.strip)
@@ -149,26 +168,34 @@ impl PreparedFrame {
                 continue;
             };
             debug_assert!(spans.is_empty());
-            let edges = device_edges[fill.edges.clone()]
-                .iter()
-                .map(|edge| Edge {
-                    top: Point::new(edge[0], edge[1]),
-                    bottom: Point::new(edge[2], edge[3]),
-                    winding: edge[4] as i32,
-                })
-                .collect::<Vec<_>>();
-            let (strip_start, span_start) = (self.strips.len(), self.spans.len());
-            self.polygon_edges(
+            let mut edges = Vec::new();
+            for edge in &device_edges[fill.edges.clone()] {
+                budget.push(
+                    &mut edges,
+                    Edge {
+                        top: Point::new(edge[0], edge[1]),
+                        bottom: Point::new(edge[2], edge[3]),
+                        winding: edge[4] as i32,
+                    },
+                    "gpu.materialize",
+                )?;
+            }
+            let (strip_start, span_start) = (scene.strips.len(), scene.spans.len());
+            scene.polygon_edges(
                 &edges,
                 fill.rule,
                 &mut scratch,
                 &mut RasterScope::new(&mut budget, "gpu.device_fill"),
             )?;
-            if let PreparedItem::Fill { strips, spans, .. } = &mut self.items[index] {
-                *strips = strip_start..self.strips.len();
-                *spans = span_start..self.spans.len();
+            budget.release((edges.len() * size_of::<Edge>()) as u64);
+            if let PreparedItem::Fill { strips, spans, .. } = &mut scene.items[index] {
+                *strips = strip_start..scene.strips.len();
+                *spans = span_start..scene.spans.len();
             }
         }
+        scene.stats.retained_bytes = budget.live_bytes();
+        scene.stats.peak_bytes = scene.stats.peak_bytes.max(budget.peak_bytes());
+        scene.stats.work += budget.work_done();
         Ok(())
     }
 }

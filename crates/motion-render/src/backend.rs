@@ -156,6 +156,41 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "gpu")]
+    fn automatic_startup_rejection_prepares_cpu_paths_independently() -> motion_core::Result<()> {
+        use motion_core::{Circle, NodeModifiers, Point, Shape};
+        let build = |opacity| {
+            Ok::<_, motion_core::ValidationError>(
+                motion_core::Node::from(
+                    Circle::new(Point::new(8.0, 8.0), 6.25)?.fill(motion_core::Color::WHITE),
+                )
+                .opacity(opacity),
+            )
+        };
+        let composition =
+            crate::Composition::new(16, 16, crate::FrameClock::new(motion_core::fps!(30), 150));
+        let mut automatic = composition
+            .clone()
+            .configure(|options| options.backend(crate::BackendPreference::automatic()))
+            .frame_renderer(motion_core::Size::new(16.0, 16.0))?;
+        let tiny = build(1e-50)?;
+        automatic.render_frame(0, |_| tiny.clone())?;
+        assert!(automatic.gpu_info().is_none());
+        assert!(automatic.cached_coverage_bytes() > 0);
+        assert_eq!(
+            automatic.backend_decision().unwrap().renderer,
+            crate::Renderer::Cpu
+        );
+        let mut cpu = composition.frame_renderer(motion_core::Size::new(16.0, 16.0))?;
+        let opaque = build(1.0)?;
+        assert_eq!(
+            automatic.render_frame(1, |_| opaque.clone())?.bytes(),
+            cpu.render_frame(1, |_| opaque.clone())?.bytes()
+        );
+        Ok(())
+    }
+
+    #[test]
     #[cfg(not(feature = "gpu"))]
     fn automatic_without_feature_falls_back_before_rendering() -> motion_core::Result<()> {
         let mut session =

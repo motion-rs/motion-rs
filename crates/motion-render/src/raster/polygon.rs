@@ -24,7 +24,7 @@ pub(super) struct Crossing {
     horizontal: f64,
 }
 
-impl PreparedFrame {
+impl PreparedScene {
     pub(crate) fn polygon_path(
         &mut self,
         geometry: &motion_core::Path2D,

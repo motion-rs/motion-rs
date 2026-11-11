@@ -1,7 +1,7 @@
 //! Backend selection and dispatch of prepared frames to the CPU rasterizer or native GPU,
 //! including same-device texture targets and GPU timing collection.
 
-use super::FrameExecution;
+use super::{FrameExecution, PreparedOutput};
 use crate::composition::FrameStats;
 use crate::{RasterLimits, Renderer, WorkStats};
 use motion_core::Result;
@@ -176,11 +176,10 @@ impl FrameExecution<'_> {
     pub(super) fn render_prepared(
         &mut self,
         index: u32,
-        prepared: crate::PreparedFrame,
+        prepared: PreparedOutput,
         limits: RasterLimits,
     ) -> Result<crate::cpu::LinearFrame> {
         let result = (|| -> Result<_> {
-            let preparation = prepared.stats();
             #[cfg(feature = "gpu")]
             let plan = {
                 let preference = self.composition.options.backend;
@@ -220,15 +219,16 @@ impl FrameExecution<'_> {
                 }
                 plan
             };
-            let linear = match self.select_backend()? {
+            let (linear, preparation) = match self.select_backend()? {
                 Renderer::Cpu => {
+                    let (prepared, limits) = self.prepare_cpu_fallback(prepared, limits)?;
                     let started = self.timings.map(|_| std::time::Instant::now());
                     let linear = prepared.render_linear_pooled(limits, &mut self.cpu_pool)?;
                     if let Some(started) = started {
                         self.timings.as_mut().expect("enabled timings").composition +=
                             started.elapsed();
                     }
-                    linear
+                    (linear, prepared.stats())
                 }
                 Renderer::Gpu => {
                     #[cfg(feature = "gpu")]
@@ -243,7 +243,7 @@ impl FrameExecution<'_> {
                             .expect("selected native GPU")
                             .render(&prepared, plan)?;
                         self.record_gpu_timings();
-                        linear
+                        (linear, prepared.stats())
                     }
                     #[cfg(not(feature = "gpu"))]
                     {

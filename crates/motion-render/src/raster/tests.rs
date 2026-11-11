@@ -189,7 +189,7 @@ fn pixel_byte_and_work_limits_reject_one_unit_short_and_recover() {
     let frame = prepare(&source).unwrap();
     let exact = RasterLimits {
         max_pixels: 144,
-        max_bytes: frame.stats.retained_bytes,
+        max_bytes: frame.stats.peak_bytes,
         max_work: frame.stats.work,
     };
     assert_eq!(

@@ -115,7 +115,7 @@ impl<'edges> EdgeSweep<'edges> {
 
 #[cfg(test)]
 pub(crate) fn rasterize(
-    frame: &mut PreparedFrame,
+    frame: &mut PreparedScene,
     edges: &[Edge],
     pixels: PixelRect,
     rule: FillRule,
@@ -133,7 +133,7 @@ pub(crate) fn rasterize(
 }
 
 pub(super) fn rasterize_with_scratch(
-    frame: &mut PreparedFrame,
+    frame: &mut PreparedScene,
     edges: &[Edge],
     pixels: PixelRect,
     rule: FillRule,

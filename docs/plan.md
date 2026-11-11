@@ -84,8 +84,10 @@ production compatibility paths.
 
 ### Independent GPU preparation
 
-The v3 backend split is partial. FrameIr currently retains validated commands and
-frame dimensions; GPU fills use CPU-flattened edges and GPU-generated f32 coverage.
+The v3 backend split has normalized FrameIr semantics and separate CPU/GPU preparation
+results. FrameIr retains admitted f64 device curves, Wang segment bounds, ordered
+scopes, paints, clips and filter domains without coverage. GPU fills use CPU-flattened
+device edges and GPU-generated f32 coverage, not a CPU PreparedFrame.
 Remaining steps, accepted by visual equivalence with fixture-specific tolerances:
 
 1. Evaluate mesh and generated atmosphere paints independently on CPU/GPU instead

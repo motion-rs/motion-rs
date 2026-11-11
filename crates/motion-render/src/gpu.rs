@@ -11,10 +11,12 @@ mod abi;
 mod context;
 mod device;
 mod execute;
+pub(crate) mod frame;
 mod layout;
 mod output_plan;
 mod particle_tiles;
 mod plan;
+mod prepared;
 #[cfg(test)]
 mod target_tests;
 #[cfg(test)]
@@ -23,6 +25,7 @@ mod timing;
 
 pub use device::*;
 pub use output_plan::OutputPlan;
+pub use prepared::PreparedGpuFrame;
 pub use timing::{GpuTimingHandle, GpuTimings};
 
 pub(crate) use abi::output_shader;
@@ -31,6 +34,7 @@ use abi::{
     shader_constants,
 };
 
+use frame::{FrameInput, FrameView};
 use particle_tiles::ParticleTiles;
 
 const DIRECT_COVERAGE: u32 = u32::MAX - 2;
@@ -91,7 +95,7 @@ pub(crate) struct Plan {
 }
 
 struct Planner<'a> {
-    frame: &'a PreparedFrame,
+    frame: FrameView<'a>,
     steps: Vec<Step>,
 
     budget: Budget,
