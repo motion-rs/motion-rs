@@ -30,7 +30,7 @@ impl OutputPlan {
         format: crate::PixelFormat,
     ) -> Result<Self, ValidationError> {
         Ok(Self {
-            plan: Plan::new_packed_with_planning_limit(frame, limits, planning_bytes, format)?,
+            plan: Plan::with_planning_limit(frame, limits, planning_bytes, Some(format))?,
             format,
             size: frame.size(),
         })

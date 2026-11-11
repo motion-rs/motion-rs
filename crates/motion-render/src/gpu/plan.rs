@@ -65,7 +65,7 @@ impl Plan {
     /// Builds all operations and accounts for uploads, captures, staging and output.
     /// Unsupported precision or exhausted logical budgets fail before device access.
     pub fn new(frame: &PreparedFrame, limits: RasterLimits) -> Result<Self, ValidationError> {
-        Self::new_with_planning_limit(frame, limits, limits.max_bytes)
+        Self::with_planning_limit(frame, limits, limits.max_bytes, None)
     }
 
     /// Plans a supported packed output without unused floating-point readback storage.
@@ -75,30 +75,13 @@ impl Plan {
         limits: RasterLimits,
         format: crate::PixelFormat,
     ) -> Result<Self, ValidationError> {
-        Self::new_for_output(frame, limits, limits.max_bytes, Some(format))
-    }
-
-    /// Bounds packed planning separately while retaining the full submission allowance.
-    pub fn new_packed_with_planning_limit(
-        frame: &PreparedFrame,
-        limits: RasterLimits,
-        max_bytes: u64,
-        format: crate::PixelFormat,
-    ) -> Result<Self, ValidationError> {
-        Self::new_for_output(frame, limits, max_bytes, Some(format))
+        Self::with_planning_limit(frame, limits, limits.max_bytes, Some(format))
     }
 
     /// Bounds logical planning costs separately from the frame's submission allowance.
     /// Device/staging reservations are included conservatively in the planning charge.
-    pub fn new_with_planning_limit(
-        frame: &PreparedFrame,
-        limits: RasterLimits,
-        max_bytes: u64,
-    ) -> Result<Self, ValidationError> {
-        Self::new_for_output(frame, limits, max_bytes, None)
-    }
-
-    fn new_for_output(
+    /// `packed` selects a packed output format; `None` plans floating-point readback.
+    pub fn with_planning_limit(
         frame: &PreparedFrame,
         limits: RasterLimits,
         max_bytes: u64,

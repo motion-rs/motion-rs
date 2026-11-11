@@ -1180,7 +1180,7 @@ fn bounded_planning_retains_full_submission_limits_without_a_device() -> motion_
         .prepare(ValidationLimits::default(), limits)?;
     let plan = Plan::new(&frame, limits)?;
     let peak = plan.stats.peak_bytes;
-    let bounded = Plan::new_with_planning_limit(&frame, limits, peak)?;
+    let bounded = Plan::with_planning_limit(&frame, limits, peak, None)?;
     assert_eq!(bounded.stats, plan.stats);
     let format = crate::PixelFormat::Yuv420 { bit_depth: 8 };
     let packed = bounded.packed_stats(frame.size(), format)?;
@@ -1190,23 +1190,23 @@ fn bounded_planning_retains_full_submission_limits_without_a_device() -> motion_
     let mut maximum = peak;
     while minimum < maximum {
         let middle = minimum + (maximum - minimum) / 2;
-        if Plan::new_with_planning_limit(&frame, limits, middle).is_ok() {
+        if Plan::with_planning_limit(&frame, limits, middle, None).is_ok() {
             maximum = middle;
         } else {
             minimum = middle + 1;
         }
     }
-    assert!(Plan::new_with_planning_limit(&frame, limits, minimum).is_ok());
-    let error = Plan::new_with_planning_limit(&frame, limits, minimum - 1)
+    assert!(Plan::with_planning_limit(&frame, limits, minimum, None).is_ok());
+    let error = Plan::with_planning_limit(&frame, limits, minimum - 1, None)
         .err()
         .expect("one byte below minimum planning allowance must fail");
     assert_eq!(error.kind, ValidationErrorKind::StructuralLimit);
     assert_eq!(error.field, "max_bytes");
     let dedicated = Plan::new_packed(&frame, limits, format)?;
     let bounded =
-        Plan::new_packed_with_planning_limit(&frame, limits, dedicated.stats.peak_bytes, format)?;
+        Plan::with_planning_limit(&frame, limits, dedicated.stats.peak_bytes, Some(format))?;
     assert_eq!(bounded.stats, dedicated.stats);
     assert_eq!(bounded.packed_stats(frame.size(), format)?, dedicated.stats);
-    assert!(Plan::new_packed_with_planning_limit(&frame, limits, 1, format).is_err());
+    assert!(Plan::with_planning_limit(&frame, limits, 1, Some(format)).is_err());
     Ok(())
 }
