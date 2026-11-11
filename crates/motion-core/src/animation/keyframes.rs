@@ -1,6 +1,6 @@
 //! Finite tick-addressed keyframe tracks with explicit interpolation and holds.
 
-use super::{Animation, Easing};
+use super::{Easing, FiniteAnimation, Signal};
 use crate::{Duration, Interpolate};
 
 #[derive(Clone, Debug)]
@@ -31,7 +31,7 @@ struct Keyframe<Value> {
 /// assert_eq!(track.sample(500.milliseconds()), 2.5);
 /// assert_eq!(track.sample(1250.milliseconds()), 10.0);
 /// assert_eq!(track.sample(2.seconds()), 15.0);
-/// assert_eq!(track.duration(), Some(2.5.seconds()));
+/// assert_eq!(track.duration(), 2.5.seconds());
 /// ```
 #[derive(Clone, Debug)]
 pub struct Keyframes<Value> {
@@ -103,7 +103,7 @@ impl<Value: Clone> Keyframes<Value> {
     }
 }
 
-impl<Value: Interpolate + Send + Sync> Animation<Value> for Keyframes<Value> {
+impl<Value: Interpolate + Send + Sync> Signal<Value> for Keyframes<Value> {
     fn sample(&self, time: Duration) -> Value {
         let upper = self.points.partition_point(|point| point.at <= time);
         if upper == 0 {
@@ -121,9 +121,11 @@ impl<Value: Interpolate + Send + Sync> Animation<Value> for Keyframes<Value> {
         let progress = easing.apply((time - left.at) / duration);
         left.value.interpolate(&right.value, progress)
     }
+}
 
-    fn duration(&self) -> Option<Duration> {
-        Some(self.last().at)
+impl<Value: Interpolate + Send + Sync> FiniteAnimation<Value> for Keyframes<Value> {
+    fn duration(&self) -> Duration {
+        self.last().at
     }
 }
 
@@ -138,7 +140,7 @@ mod tests {
             .to(1.seconds(), 10.0, Easing::QuadraticIn)
             .hold(500.milliseconds())
             .to(2.5.seconds(), 20.0, Easing::Linear);
-        assert_eq!(track.duration(), Some(2.5.seconds()));
+        assert_eq!(track.duration(), 2.5.seconds());
         for (milliseconds, expected) in [
             (2_000, 15.0),
             (0, 0.0),
@@ -168,7 +170,7 @@ mod tests {
             .hold(start)
             .to(end, 3.0, Easing::Linear)
             .hold(Duration::from_ticks(i64::MAX) - end);
-        assert_eq!(track.duration(), Some(Duration::from_ticks(i64::MAX)));
+        assert_eq!(track.duration(), Duration::from_ticks(i64::MAX));
         assert_eq!(track.sample(start), 0.0);
         assert_eq!(track.sample(start + Duration::from_ticks(1)), 1.0);
         assert_eq!(track.sample(start + Duration::from_ticks(2)), 2.0);
@@ -208,7 +210,7 @@ mod tests {
             );
         }
         let constant = Keyframes::new(ExactOnly(3));
-        assert_eq!(constant.duration(), Some(Duration::ZERO));
+        assert_eq!(constant.duration(), Duration::ZERO);
         assert_eq!(constant.sample(Duration::ZERO), ExactOnly(3));
         assert_eq!(
             constant.sample(Duration::from_ticks(i64::MAX)),
@@ -241,7 +243,7 @@ mod tests {
         assert!(std::panic::catch_unwind(|| track().hold(Duration::from_ticks(-1))).is_err());
         let unchanged = track().hold(Duration::ZERO);
         assert_eq!(unchanged.points.len(), 2);
-        assert_eq!(unchanged.duration(), Some(Duration::from_ticks(10)));
+        assert_eq!(unchanged.duration(), Duration::from_ticks(10));
         assert!(
             std::panic::catch_unwind(|| {
                 Keyframes::new(0.0_f64)
@@ -274,11 +276,11 @@ mod tests {
         assert_eq!(local.sample(boxed.as_ref()), Point::new(5.0, 10.0));
         assert_eq!(track.clone().reverse().sample(500.milliseconds()), 10.0);
         let repeated = track.clone().repeat(2).delay(250.milliseconds());
-        assert_eq!(repeated.duration(), Some(4.25.seconds()));
+        assert_eq!(repeated.duration(), 4.25.seconds());
         assert_eq!(repeated.sample(2.25.seconds()), 0.0);
         assert_eq!(repeated.sample(4.25.seconds()), 20.0);
         let joined = track.then(Tween::new(20.0_f64, 40.0, 1.seconds()));
-        assert_eq!(joined.duration(), Some(3.seconds()));
+        assert_eq!(joined.duration(), 3.seconds());
         assert_eq!(joined.sample(2.5.seconds()), 30.0);
         assert_eq!(
             std::thread::spawn(move || boxed.sample(1.25.seconds()))

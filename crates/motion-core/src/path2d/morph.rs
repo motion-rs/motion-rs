@@ -672,7 +672,7 @@ mod tests {
 
     #[test]
     fn prepared_morphs_support_tweens_reverse_queries_and_checked_failures() {
-        use crate::{Animation, Duration, Tween};
+        use crate::{Duration, Signal, Tween};
         let source = Path2D::parse_svg("M1 1H5V5H1Z").unwrap();
         let target = Path2D::parse_svg("M3 3H9V9H3Z").unwrap();
         let (first, second) = MorphPath::pair(source.clone(), target.clone()).unwrap();

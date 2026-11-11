@@ -144,7 +144,7 @@ mod canonical_api_tests {
     fn canonical_root_and_prelude_bind_contracts() -> Result<(), Error> {
         fn scene_contract(_: &dyn Scene) {}
 
-        fn animation_contract(value: &dyn Animation<f64>) -> f64 {
+        fn animation_contract(value: &dyn Signal<f64>) -> f64 {
             value.sample(500.milliseconds())
         }
         let callback = |context: &SceneContext<'_>| {

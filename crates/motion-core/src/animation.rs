@@ -2,9 +2,10 @@
 
 use std::{marker::PhantomData, sync::Arc};
 
-use crate::{Duration, Point, Transform, Vector2};
+use crate::{Duration, Point, Time, Transform, Vector2};
 
 mod easing;
+mod interval;
 mod keyframes;
 mod primitives;
 mod spring;
@@ -12,6 +13,7 @@ mod spring;
 mod tests;
 
 pub use easing::Easing;
+pub use interval::Interval;
 pub use keyframes::Keyframes;
 pub use primitives::{
     Extrapolate, FollowPath, Noise, Oscillator, PathSample, Waveform, piecewise, remap, value_noise,
@@ -105,19 +107,14 @@ impl<First: Interpolate, Second: Interpolate> Interpolate for (First, Second) {
     }
 }
 
-/// A thread-safe, randomly addressable animation of values.
+/// A thread-safe, randomly addressable signal of values over signed local time.
 ///
-/// Finite implementations hold their endpoint values outside `[0, duration]`.
-/// Infinite implementations may use negative time. Sampling must not depend on
-/// earlier calls. A reported duration must be nonnegative and stable.
-pub trait Animation<Value>: Send + Sync {
+/// A signal has no end: it may be sampled at any signed time. Sampling must not
+/// depend on earlier calls. Signals with a known end implement
+/// [`FiniteAnimation`], which owns the duration-aware combinators.
+pub trait Signal<Value>: Send + Sync {
     /// Samples without advancing a clock or changing playback state.
     fn sample(&self, time: Duration) -> Value;
-
-    /// Returns the finite duration, or `None` for an unbounded signal.
-    fn duration(&self) -> Option<Duration> {
-        None
-    }
 
     /// Transforms values without changing timing.
     fn map<Output, Function>(self, function: Function) -> Map<Self, Function, Value>
@@ -132,11 +129,11 @@ pub trait Animation<Value>: Send + Sync {
         }
     }
 
-    /// Samples in parallel; the duration is infinite if either input is infinite.
+    /// Samples in parallel; the result is finite only if both inputs are finite.
     fn zip<OtherValue, Other>(self, other: Other) -> Zip<Self, Other>
     where
         Self: Sized,
-        Other: Animation<OtherValue>,
+        Other: Signal<OtherValue>,
     {
         Zip {
             first: self,
@@ -144,9 +141,26 @@ pub trait Animation<Value>: Send + Sync {
         }
     }
 
-    /// Delays a finite animation, holding its initial value before the offset.
-    /// Infinite signals shift their signed time instead. Negative offsets and
-    /// finite duration overflow panic at construction.
+    /// Shares a type-erased signal.
+    fn boxed(self) -> Arc<dyn Signal<Value>>
+    where
+        Self: Sized + 'static,
+    {
+        Arc::new(self)
+    }
+}
+
+/// A [`Signal`] with a nonnegative, stable duration.
+///
+/// Finite animations hold their endpoint values outside `[0, duration]`.
+/// Sequencing combinators exist only here, so an unbounded signal cannot be
+/// delayed, sequenced or repeated by construction.
+pub trait FiniteAnimation<Value>: Signal<Value> {
+    /// Returns the nonnegative duration.
+    fn duration(&self) -> Duration;
+
+    /// Delays the animation, holding its initial value before the offset.
+    /// Negative offsets and duration overflow panic at construction.
     fn delay(self, offset: Duration) -> Delay<Self>
     where
         Self: Sized,
@@ -155,7 +169,7 @@ pub trait Animation<Value>: Send + Sync {
             offset >= Duration::ZERO,
             "animation delay must be nonnegative"
         );
-        let duration = checked_duration(self.duration()).map(|duration| duration + offset);
+        let duration = checked_duration(self.duration()) + offset;
         Delay {
             source: self,
             offset,
@@ -164,7 +178,7 @@ pub trait Animation<Value>: Send + Sync {
     }
 
     /// Changes playback speed by a finite, strictly positive factor.
-    /// Durations round to the nearest tick; a collapsed finite animation becomes
+    /// Durations round to the nearest tick; a collapsed animation becomes
     /// instantaneous. Invalid factors and unrepresentable durations panic.
     fn speed(self, factor: f64) -> Speed<Self>
     where
@@ -175,7 +189,7 @@ pub trait Animation<Value>: Send + Sync {
             "animation speed must be finite and positive"
         );
         let source_duration = checked_duration(self.duration());
-        let duration = source_duration.map(|duration| duration / factor);
+        let duration = source_duration / factor;
         Speed {
             source: self,
             factor,
@@ -184,14 +198,14 @@ pub trait Animation<Value>: Send + Sync {
         }
     }
 
-    /// Runs two finite animations in sequence. The second owns their shared
-    /// boundary. Infinite sources or duration overflow panic at construction.
-    fn then<Next: Animation<Value>>(self, next: Next) -> Then<Self, Next>
+    /// Runs two animations in sequence. The second owns their shared
+    /// boundary. Duration overflow panics at construction.
+    fn then<Next: FiniteAnimation<Value>>(self, next: Next) -> Then<Self, Next>
     where
         Self: Sized,
     {
-        let first_duration = finite_duration(self.duration(), "then");
-        let next_duration = finite_duration(next.duration(), "then");
+        let first_duration = checked_duration(self.duration());
+        let next_duration = checked_duration(next.duration());
         Then {
             first: self,
             next,
@@ -200,26 +214,26 @@ pub trait Animation<Value>: Send + Sync {
         }
     }
 
-    /// Reverses a finite animation. Infinite sources panic at construction.
+    /// Reverses the animation.
     fn reverse(self) -> Reverse<Self>
     where
         Self: Sized,
     {
-        let duration = finite_duration(self.duration(), "reverse");
+        let duration = checked_duration(self.duration());
         Reverse {
             source: self,
             duration,
         }
     }
 
-    /// Plays a finite animation `count` times. Intermediate boundaries restart;
+    /// Plays the animation `count` times. Intermediate boundaries restart;
     /// the final boundary holds the target. Zero repeats hold the initial value.
-    /// Infinite sources or duration overflow panic at construction.
+    /// Duration overflow panics at construction.
     fn repeat(self, count: u32) -> Repeat<Self>
     where
         Self: Sized,
     {
-        let source_duration = finite_duration(self.duration(), "repeat");
+        let source_duration = checked_duration(self.duration());
         let duration = cycle_duration(source_duration, count);
         Repeat {
             source: self,
@@ -229,13 +243,13 @@ pub trait Animation<Value>: Send + Sync {
         }
     }
 
-    /// Plays a finite animation forward then backward, ending at its initial
-    /// value. Infinite sources or duration overflow panic at construction.
+    /// Plays the animation forward then backward, ending at its initial
+    /// value. Duration overflow panics at construction.
     fn ping_pong(self) -> PingPong<Self>
     where
         Self: Sized,
     {
-        let source_duration = finite_duration(self.duration(), "ping_pong");
+        let source_duration = checked_duration(self.duration());
         let duration = cycle_duration(source_duration, 2);
         PingPong {
             source: self,
@@ -244,8 +258,8 @@ pub trait Animation<Value>: Send + Sync {
         }
     }
 
-    /// Shares a type-erased animation, retaining sampling and combinators.
-    fn boxed(self) -> Arc<dyn Animation<Value>>
+    /// Shares a type-erased animation, retaining sampling, duration and combinators.
+    fn boxed_finite(self) -> Arc<dyn FiniteAnimation<Value>>
     where
         Self: Sized + 'static,
     {
@@ -253,7 +267,7 @@ pub trait Animation<Value>: Send + Sync {
     }
 }
 
-impl<Value, Function> Animation<Value> for Function
+impl<Value, Function> Signal<Value> for Function
 where
     Function: Fn(Duration) -> Value + Send + Sync,
 {
@@ -262,12 +276,20 @@ where
     }
 }
 
-impl<Value> Animation<Value> for Arc<dyn Animation<Value> + '_> {
+impl<Value> Signal<Value> for Arc<dyn Signal<Value> + '_> {
     fn sample(&self, time: Duration) -> Value {
         self.as_ref().sample(time)
     }
+}
 
-    fn duration(&self) -> Option<Duration> {
+impl<Value> Signal<Value> for Arc<dyn FiniteAnimation<Value> + '_> {
+    fn sample(&self, time: Duration) -> Value {
+        self.as_ref().sample(time)
+    }
+}
+
+impl<Value> FiniteAnimation<Value> for Arc<dyn FiniteAnimation<Value> + '_> {
+    fn duration(&self) -> Duration {
         self.as_ref().duration()
     }
 }
@@ -285,7 +307,7 @@ impl<Value> Constant<Value> {
     }
 }
 
-impl<Value: Clone + Send + Sync> Animation<Value> for Constant<Value> {
+impl<Value: Clone + Send + Sync> Signal<Value> for Constant<Value> {
     fn sample(&self, _time: Duration) -> Value {
         self.value.clone()
     }
@@ -307,7 +329,7 @@ impl<Value: Clone + Send + Sync> Animation<Value> for Constant<Value> {
 pub struct Tween<Value> {
     from: Value,
     to: Value,
-    duration: Duration,
+    interval: Interval,
     easing: Easing,
 }
 
@@ -324,17 +346,17 @@ impl<Value> Tween<Value> {
         to: Value,
         duration: Duration,
     ) -> Result<Self, crate::ValidationError> {
-        if duration < Duration::ZERO {
-            return Err(crate::ValidationError::invalid(
+        let interval = Interval::new(Time::ZERO, duration).map_err(|_| {
+            crate::ValidationError::invalid(
                 "tween",
                 "duration",
                 "tween duration must be nonnegative",
-            ));
-        }
+            )
+        })?;
         Ok(Self {
             from,
             to,
-            duration,
+            interval,
             easing: Easing::Linear,
         })
     }
@@ -354,27 +376,26 @@ impl<Value> Tween<Value> {
     }
 }
 
-impl<Value: Interpolate + Send + Sync> Animation<Value> for Tween<Value> {
+impl<Value: Interpolate + Send + Sync> Signal<Value> for Tween<Value> {
     fn sample(&self, time: Duration) -> Value {
-        if time < Duration::ZERO {
+        let progress = self.interval.progress(time.after_origin());
+        if progress <= 0.0 {
             return self.from.clone();
         }
-        if time >= self.duration {
+        if progress >= 1.0 {
             return self.to.clone();
         }
-        if time == Duration::ZERO {
-            return self.from.clone();
-        }
-        let progress = self.easing.apply(time / self.duration);
-        self.from.interpolate(&self.to, progress)
-    }
-
-    fn duration(&self) -> Option<Duration> {
-        Some(self.duration)
+        self.from.interpolate(&self.to, self.easing.apply(progress))
     }
 }
 
-/// Value mapping produced by [`Animation::map`].
+impl<Value: Interpolate + Send + Sync> FiniteAnimation<Value> for Tween<Value> {
+    fn duration(&self) -> Duration {
+        self.interval.duration()
+    }
+}
+
+/// Value mapping produced by [`Signal::map`].
 #[derive(Clone, Debug)]
 pub struct Map<Source, Function, Input> {
     source: Source,
@@ -382,54 +403,61 @@ pub struct Map<Source, Function, Input> {
     input: PhantomData<fn(Input)>,
 }
 
-impl<Input, Output, Source, Function> Animation<Output> for Map<Source, Function, Input>
+impl<Input, Output, Source, Function> Signal<Output> for Map<Source, Function, Input>
 where
-    Source: Animation<Input>,
+    Source: Signal<Input>,
     Function: Fn(Input) -> Output + Send + Sync,
 {
     fn sample(&self, time: Duration) -> Output {
         (self.function)(self.source.sample(time))
     }
+}
 
-    fn duration(&self) -> Option<Duration> {
+impl<Input, Output, Source, Function> FiniteAnimation<Output> for Map<Source, Function, Input>
+where
+    Source: FiniteAnimation<Input>,
+    Function: Fn(Input) -> Output + Send + Sync,
+{
+    fn duration(&self) -> Duration {
         self.source.duration()
     }
 }
 
-/// Parallel sampling produced by [`Animation::zip`].
+/// Parallel sampling produced by [`Signal::zip`].
 #[derive(Clone, Debug)]
 pub struct Zip<First, Second> {
     first: First,
     second: Second,
 }
 
-impl<FirstValue, SecondValue, First, Second> Animation<(FirstValue, SecondValue)>
+impl<FirstValue, SecondValue, First, Second> Signal<(FirstValue, SecondValue)>
     for Zip<First, Second>
 where
-    First: Animation<FirstValue>,
-    Second: Animation<SecondValue>,
+    First: Signal<FirstValue>,
+    Second: Signal<SecondValue>,
 {
     fn sample(&self, time: Duration) -> (FirstValue, SecondValue) {
         (self.first.sample(time), self.second.sample(time))
     }
+}
 
-    fn duration(&self) -> Option<Duration> {
-        Some(self.first.duration()?.max(self.second.duration()?))
+impl<FirstValue, SecondValue, First, Second> FiniteAnimation<(FirstValue, SecondValue)>
+    for Zip<First, Second>
+where
+    First: FiniteAnimation<FirstValue>,
+    Second: FiniteAnimation<SecondValue>,
+{
+    fn duration(&self) -> Duration {
+        self.first.duration().max(self.second.duration())
     }
 }
 
-fn checked_duration(duration: Option<Duration>) -> Option<Duration> {
-    if let Some(duration) = duration {
-        assert!(
-            duration >= Duration::ZERO,
-            "animation duration must be nonnegative"
-        );
-    }
+fn checked_duration(duration: Duration) -> Duration {
+    assert!(
+        duration >= Duration::ZERO,
+        "animation duration must be nonnegative"
+    );
     duration
-}
-
-fn finite_duration(duration: Option<Duration>, operation: &str) -> Duration {
-    checked_duration(duration).unwrap_or_else(|| panic!("{operation} requires a finite animation"))
 }
 
 fn cycle_duration(duration: Duration, count: u32) -> Duration {
@@ -441,60 +469,68 @@ fn cycle_duration(duration: Duration, count: u32) -> Duration {
     )
 }
 
-/// A delayed animation produced by [`Animation::delay`].
+/// A delayed animation produced by [`FiniteAnimation::delay`].
 #[derive(Clone, Debug)]
 pub struct Delay<Source> {
     source: Source,
     offset: Duration,
-    duration: Option<Duration>,
+    duration: Duration,
 }
 
-impl<Value, Source: Animation<Value>> Animation<Value> for Delay<Source> {
+impl<Value, Source: FiniteAnimation<Value>> Signal<Value> for Delay<Source> {
     fn sample(&self, time: Duration) -> Value {
-        let local = match self.duration {
-            Some(_) if time < self.offset => BEFORE_START,
-            Some(duration) if time >= duration => duration - self.offset,
-            _ => time - self.offset,
+        let local = if time < self.offset {
+            BEFORE_START
+        } else if time >= self.duration {
+            self.duration - self.offset
+        } else {
+            time - self.offset
         };
         self.source.sample(local)
     }
+}
 
-    fn duration(&self) -> Option<Duration> {
+impl<Value, Source: FiniteAnimation<Value>> FiniteAnimation<Value> for Delay<Source> {
+    fn duration(&self) -> Duration {
         self.duration
     }
 }
 
-/// A time-scaled animation produced by [`Animation::speed`].
+/// A time-scaled animation produced by [`FiniteAnimation::speed`].
 #[derive(Clone, Debug)]
 pub struct Speed<Source> {
     source: Source,
     factor: f64,
-    source_duration: Option<Duration>,
-    duration: Option<Duration>,
+    source_duration: Duration,
+    duration: Duration,
 }
 
-impl<Value, Source: Animation<Value>> Animation<Value> for Speed<Source> {
+impl<Value, Source: FiniteAnimation<Value>> Signal<Value> for Speed<Source> {
     fn sample(&self, time: Duration) -> Value {
-        let local = match (self.duration, self.source_duration) {
-            (Some(_), _) if time < Duration::ZERO => BEFORE_START,
-            (Some(duration), Some(source_duration)) if time >= duration => source_duration,
-            (Some(_), Some(_)) if self.factor == 1.0 => time,
-            (Some(_), Some(source_duration)) => Duration::from_ticks(
+        let local = if time < Duration::ZERO {
+            BEFORE_START
+        } else if time >= self.duration {
+            self.source_duration
+        } else if self.factor == 1.0 {
+            time
+        } else {
+            Duration::from_ticks(
                 (time.ticks() as f64 * self.factor)
                     .round()
-                    .clamp(0.0, source_duration.ticks() as f64) as i64,
-            ),
-            _ => time * self.factor,
+                    .clamp(0.0, self.source_duration.ticks() as f64) as i64,
+            )
         };
         self.source.sample(local)
     }
+}
 
-    fn duration(&self) -> Option<Duration> {
+impl<Value, Source: FiniteAnimation<Value>> FiniteAnimation<Value> for Speed<Source> {
+    fn duration(&self) -> Duration {
         self.duration
     }
 }
 
-/// A finite sequence produced by [`Animation::then`].
+/// A finite sequence produced by [`FiniteAnimation::then`].
 #[derive(Clone, Debug)]
 pub struct Then<First, Next> {
     first: First,
@@ -503,7 +539,7 @@ pub struct Then<First, Next> {
     duration: Duration,
 }
 
-impl<Value, First: Animation<Value>, Next: Animation<Value>> Animation<Value>
+impl<Value, First: FiniteAnimation<Value>, Next: FiniteAnimation<Value>> Signal<Value>
     for Then<First, Next>
 {
     fn sample(&self, time: Duration) -> Value {
@@ -517,20 +553,24 @@ impl<Value, First: Animation<Value>, Next: Animation<Value>> Animation<Value>
             self.next.sample(time - self.first_duration)
         }
     }
+}
 
-    fn duration(&self) -> Option<Duration> {
-        Some(self.duration)
+impl<Value, First: FiniteAnimation<Value>, Next: FiniteAnimation<Value>> FiniteAnimation<Value>
+    for Then<First, Next>
+{
+    fn duration(&self) -> Duration {
+        self.duration
     }
 }
 
-/// A reversed finite animation produced by [`Animation::reverse`].
+/// A reversed finite animation produced by [`FiniteAnimation::reverse`].
 #[derive(Clone, Debug)]
 pub struct Reverse<Source> {
     source: Source,
     duration: Duration,
 }
 
-impl<Value, Source: Animation<Value>> Animation<Value> for Reverse<Source> {
+impl<Value, Source: FiniteAnimation<Value>> Signal<Value> for Reverse<Source> {
     fn sample(&self, time: Duration) -> Value {
         let local = if time < Duration::ZERO {
             self.duration
@@ -541,13 +581,15 @@ impl<Value, Source: Animation<Value>> Animation<Value> for Reverse<Source> {
         };
         self.source.sample(local)
     }
+}
 
-    fn duration(&self) -> Option<Duration> {
-        Some(self.duration)
+impl<Value, Source: FiniteAnimation<Value>> FiniteAnimation<Value> for Reverse<Source> {
+    fn duration(&self) -> Duration {
+        self.duration
     }
 }
 
-/// A finite repetition produced by [`Animation::repeat`].
+/// A finite repetition produced by [`FiniteAnimation::repeat`].
 #[derive(Clone, Debug)]
 pub struct Repeat<Source> {
     source: Source,
@@ -556,7 +598,7 @@ pub struct Repeat<Source> {
     duration: Duration,
 }
 
-impl<Value, Source: Animation<Value>> Animation<Value> for Repeat<Source> {
+impl<Value, Source: FiniteAnimation<Value>> Signal<Value> for Repeat<Source> {
     fn sample(&self, time: Duration) -> Value {
         let local = if self.count == 0 || time < Duration::ZERO {
             BEFORE_START
@@ -567,13 +609,15 @@ impl<Value, Source: Animation<Value>> Animation<Value> for Repeat<Source> {
         };
         self.source.sample(local)
     }
+}
 
-    fn duration(&self) -> Option<Duration> {
-        Some(self.duration)
+impl<Value, Source: FiniteAnimation<Value>> FiniteAnimation<Value> for Repeat<Source> {
+    fn duration(&self) -> Duration {
+        self.duration
     }
 }
 
-/// A finite forward/backward cycle produced by [`Animation::ping_pong`].
+/// A finite forward/backward cycle produced by [`FiniteAnimation::ping_pong`].
 #[derive(Clone, Debug)]
 pub struct PingPong<Source> {
     source: Source,
@@ -581,7 +625,7 @@ pub struct PingPong<Source> {
     duration: Duration,
 }
 
-impl<Value, Source: Animation<Value>> Animation<Value> for PingPong<Source> {
+impl<Value, Source: FiniteAnimation<Value>> Signal<Value> for PingPong<Source> {
     fn sample(&self, time: Duration) -> Value {
         let local = if time < Duration::ZERO || time >= self.duration {
             BEFORE_START
@@ -592,9 +636,11 @@ impl<Value, Source: Animation<Value>> Animation<Value> for PingPong<Source> {
         };
         self.source.sample(local)
     }
+}
 
-    fn duration(&self) -> Option<Duration> {
-        Some(self.duration)
+impl<Value, Source: FiniteAnimation<Value>> FiniteAnimation<Value> for PingPong<Source> {
+    fn duration(&self) -> Duration {
+        self.duration
     }
 }
 

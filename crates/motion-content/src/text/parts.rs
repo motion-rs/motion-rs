@@ -129,7 +129,7 @@ impl TextPart {
     }
 
     /// Samples any typed animation at the delayed signed time.
-    pub fn sample<Value>(&self, animation: &impl motion_core::Animation<Value>) -> Value {
+    pub fn sample<Value>(&self, animation: &impl motion_core::Signal<Value>) -> Value {
         animation.sample(self.time.since_origin())
     }
 

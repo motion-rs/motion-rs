@@ -244,8 +244,8 @@ fn invalid(message: &str) -> ValidationError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Animation;
     use crate::Shape;
+    use crate::Signal;
     use crate::{
         Color, DrawCommand, Easing, Keyframes, PixelSize, Rect, Size, TimeLiteral, ValidationLimits,
     };

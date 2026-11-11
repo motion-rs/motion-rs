@@ -404,7 +404,7 @@ fn local_shifts_preserve_global_inputs_and_sample_tick_animations() {
     assert_eq!(local.clip_duration(), Some(4.seconds()));
     assert_eq!(local.progress(), 0.375);
     assert_eq!(local.sample(&Tween::new(0.0, 10.0, 3.seconds())), 5.0);
-    let signal: Arc<dyn Animation<Duration>> = Arc::new(|time| time);
+    let signal: Arc<dyn Signal<Duration>> = Arc::new(|time| time);
     assert_eq!(local.sample(&signal), local.elapsed());
     assert_eq!(local.size(), Size::new(640.5, 360.25));
     assert_eq!(local.bounds(), Rect::new(0.0, 0.0, 640.5, 360.25));

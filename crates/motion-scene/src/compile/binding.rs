@@ -5,7 +5,7 @@ use super::expr::{ExprAnimation, parse};
 use super::value::Prop;
 use crate::element::Element;
 use crate::value::Animated;
-use motion_core::{Animation, Duration};
+use motion_core::{Duration, Signal};
 use serde::Deserialize;
 use serde_json::Value;
 use std::sync::Arc;
@@ -17,7 +17,7 @@ const MAX_BINDING_DEPTH: usize = 32;
 const MAX_BINDINGS: usize = 1024;
 
 /// A numeric signal shared between the binding cache and expression terms.
-type Signal = Arc<dyn Animation<f64>>;
+type SharedSignal = Arc<dyn Signal<f64>>;
 
 impl<'a> Compiler<'a> {
     /// Records the element identifiers of one scene before its properties compile.
@@ -56,7 +56,7 @@ impl<'a> Compiler<'a> {
     }
 
     /// Compiles one numeric expression into a sampled animation.
-    pub(crate) fn expression(&mut self, source: &str, path: &str) -> Option<Signal> {
+    pub(crate) fn expression(&mut self, source: &str, path: &str) -> Option<SharedSignal> {
         let parsed = match parse(source, self.params) {
             Ok(parsed) => parsed,
             Err(message) => {
@@ -73,7 +73,7 @@ impl<'a> Compiler<'a> {
     }
 
     /// Resolves `id.path.to.property` to the other element's own numeric property.
-    fn reference(&mut self, reference: &str, path: &str) -> Option<Signal> {
+    fn reference(&mut self, reference: &str, path: &str) -> Option<SharedSignal> {
         if let Some(signal) = self.bindings.get(reference) {
             return Some(signal.clone());
         }
@@ -102,7 +102,7 @@ impl<'a> Compiler<'a> {
         Some(signal)
     }
 
-    fn resolve_reference(&mut self, reference: &str, path: &str) -> Option<Signal> {
+    fn resolve_reference(&mut self, reference: &str, path: &str) -> Option<SharedSignal> {
         let segments: Vec<&str> = reference.split('.').collect();
         let (id, property) = (segments[0], &segments[1..]);
         let Some(element) = self.ids.get(id).copied() else {
@@ -177,14 +177,14 @@ fn descend<'v>(mut value: &'v Value, segments: &[&str]) -> Option<&'v Value> {
     Some(value)
 }
 
-pub(super) fn scalar(property: Prop<f64>) -> Signal {
+pub(super) fn scalar(property: Prop<f64>) -> SharedSignal {
     match property {
         Prop::Fixed(value) => Arc::new(move |_: Duration| value),
         Prop::Varying(animation) => animation,
     }
 }
 
-fn project<const COUNT: usize>(property: Prop<[f64; COUNT]>, component: usize) -> Signal {
+fn project<const COUNT: usize>(property: Prop<[f64; COUNT]>, component: usize) -> SharedSignal {
     match property {
         Prop::Fixed(value) => {
             let value = value[component];

@@ -14,22 +14,64 @@ enum Selection {
     Symbols(Range<usize>, Arc<dyn Fn(Node) -> Node + Send + Sync>),
 }
 
+/// An immutable compile key with the lazily filled result it determines.
+///
+/// A different key always gets a new, empty result cell, so changing a compile
+/// parameter can never expose a stale compilation.
+#[derive(Clone)]
+struct Compilation {
+    source: Arc<str>,
+    options: FormulaOptions,
+    result: Arc<OnceLock<Result<Arc<FormulaAsset>, FormulaCompileError>>>,
+}
+
+impl Compilation {
+    fn new(source: Arc<str>, options: FormulaOptions) -> Self {
+        Self {
+            source,
+            options,
+            result: Arc::new(OnceLock::new()),
+        }
+    }
+
+    fn with_options(&self, change: impl FnOnce(&mut FormulaOptions)) -> Self {
+        let mut options = self.options.clone();
+        change(&mut options);
+        Self::new(self.source.clone(), options)
+    }
+
+    fn compiled(&self) -> Result<Arc<FormulaAsset>, FormulaCompileError> {
+        self.result
+            .get_or_init(|| {
+                static COMPILER: OnceLock<FormulaCompiler> = OnceLock::new();
+                COMPILER
+                    .get_or_init(FormulaCompiler::new)
+                    .compile(self.source.clone(), &self.options)
+                    .map_err(|error| {
+                        error
+                            .downcast_ref::<FormulaCompileError>()
+                            .cloned()
+                            .unwrap_or_else(|| FormulaCompileError::new(error.to_string()))
+                    })
+            })
+            .clone()
+    }
+}
+
 /// Lazy Typst formula; compilation and selection errors occur at scene compilation.
 #[derive(Clone)]
 pub struct Formula {
-    source: Arc<str>,
-    options: FormulaOptions,
+    compilation: Compilation,
     progress: Option<f64>,
     selections: Vec<Selection>,
-    cache: Arc<OnceLock<Result<Arc<FormulaAsset>, FormulaCompileError>>>,
 }
 
 impl std::fmt::Debug for Formula {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
             .debug_struct("Formula")
-            .field("source", &self.source)
-            .field("options", &self.options)
+            .field("source", &self.compilation.source)
+            .field("options", &self.compilation.options)
             .field("progress", &self.progress)
             .field("selections", &self.selections.len())
             .finish()
@@ -44,25 +86,21 @@ impl Formula {
     /// Retains Typst math without initializing the compiler or reading fonts.
     pub fn typst(source: impl Into<Arc<str>>) -> Self {
         Self {
-            source: source.into(),
-            options: FormulaOptions::default(),
+            compilation: Compilation::new(source.into(), FormulaOptions::default()),
             progress: None,
             selections: Vec::new(),
-            cache: Arc::new(OnceLock::new()),
         }
     }
 
     /// Sets logical Typst point size, validated when compiled.
     pub fn size(mut self, size: f64) -> Self {
-        self.options.size = size;
-        self.cache = Arc::new(OnceLock::new());
+        self.compilation = self.compilation.with_options(|options| options.size = size);
         self
     }
 
     /// Sets the default source fill, preserving selected authored transforms.
     pub fn fill(mut self, fill: Color) -> Self {
-        self.options.fill = fill;
-        self.cache = Arc::new(OnceLock::new());
+        self.compilation = self.compilation.with_options(|options| options.fill = fill);
         self
     }
 
@@ -100,20 +138,7 @@ impl Formula {
     }
 
     fn compiled(&self) -> Result<Arc<FormulaAsset>, FormulaCompileError> {
-        self.cache
-            .get_or_init(|| {
-                static COMPILER: OnceLock<FormulaCompiler> = OnceLock::new();
-                COMPILER
-                    .get_or_init(FormulaCompiler::new)
-                    .compile(self.source.clone(), &self.options)
-                    .map_err(|error| {
-                        error
-                            .downcast_ref::<FormulaCompileError>()
-                            .cloned()
-                            .unwrap_or_else(|| FormulaCompileError::new(error.to_string()))
-                    })
-            })
-            .clone()
+        self.compilation.compiled()
     }
 
     fn node(&self, context: &DrawContext) -> Result<Node, ValidationError> {
@@ -125,8 +150,8 @@ impl Formula {
             COMPILER
                 .get_or_init(FormulaCompiler::new)
                 .compile_cached(
-                    self.source.clone(),
-                    &self.options,
+                    self.compilation.source.clone(),
+                    &self.compilation.options,
                     Some(cache.partition(motion_core::CachePartition::Formula)),
                 )
                 .map_err(|error| invalid(error.to_string()))?
@@ -205,7 +230,7 @@ mod tests {
             .fill(Color::WHITE)
             .write(0.5)
             .select_subexpression("x", |node| node.opacity(0.5));
-        assert!(formula.cache.get().is_none());
+        assert!(formula.compilation.result.get().is_none());
         let first = formula.compile().unwrap();
         assert!(Arc::ptr_eq(&first, &formula.compile().unwrap()));
         let list = Node::from(formula)
@@ -218,7 +243,7 @@ mod tests {
             .unwrap();
         assert!(!list.commands.is_empty());
         let invalid = Formula::typst("");
-        assert!(invalid.cache.get().is_none());
+        assert!(invalid.compilation.result.get().is_none());
         let error = Node::from(invalid)
             .named("bad-equation")
             .compile(

@@ -34,7 +34,8 @@ Request times in any order: the animation samples the same time function. `ping_
 
 ## Animation and Interpolate
 
-`Animation<Value>` returns a value for an explicit `Time`. A finite animation's `duration()` is `Some(Duration)`; an infinite signal returns `None`.
+`Signal<Value>` returns a value for an explicit elapsed `Duration` and has no end. `FiniteAnimation<Value>` is a `Signal` with a nonnegative `duration()`; `Tween`, `Keyframes`, `FollowPath` and the combinators below are finite. `Spring`, `Oscillator`, `Noise`, `Constant` and plain closures are signals only.
+`Interval { start, duration }` maps a `Time` to clamped progress (`progress`) or eased progress (`ease`); `Tween`, `SceneContext::progress_in` and `ease_in` share it.
 `Interpolate` defines how two values interpolate using f64 progress. It does not automatically clamp every progress value to `[0, 1]`; springs and easing may intentionally overshoot.
 
 | Type | Suitable Use |
@@ -42,7 +43,7 @@ Request times in any order: the animation samples the same time function. `ping_
 | `Constant` | A time-invariant animation value |
 | `Tween` | Interpolation between two endpoints |
 | `Keyframes` | Absolute local time points, holds, piecewise easing |
-| `Spring` | Elastic transitions with physical parameters and a finite settling threshold |
+| `Spring` | Elastic signal with physical parameters; `settle_duration()` reports when it reaches its target |
 | `Oscillator` | Continuous sine, triangle, square or sawtooth signals |
 | `Noise` | Seeded smooth continuous noise |
 | `FollowPath` | Path position, tangent and angle sampled by arc length |
@@ -66,17 +67,17 @@ panic.
 
 | Method | Meaning and Constraints |
 | --- | --- |
-| `map` | Map sampled values to another value type |
-| `zip` | Sample two animations together |
+| `map` | Map sampled values to another value type (on any `Signal`) |
+| `zip` | Sample two signals together; finite only if both are |
 | `delay` | Add a leading delay; negative delays are invalid |
 | `speed` | Change speed with a valid factor |
 | `then` | Sequence finite animations |
 | `reverse` | Sample a finite animation backward |
 | `repeat` | Total play count, not the number of additional repetitions |
 | `ping_pong` | Forward then backward, independent of the previous frame |
-| `boxed` | Erase the concrete animation type for dynamic composition |
+| `boxed` / `boxed_finite` | Erase the concrete type as `Arc<dyn Signal>` or `Arc<dyn FiniteAnimation>` |
 
-Operations requiring a finite duration cannot apply directly to infinite signals. A zero-duration Tween still has explicit endpoint semantics before and after its boundary; it is not a deleted animation.
+`delay`, `speed`, `then`, `reverse`, `repeat` and `ping_pong` exist only on `FiniteAnimation`, so applying them to an infinite signal does not compile. A zero-duration Tween still has explicit endpoint semantics before and after its boundary; it is not a deleted animation.
 
 Repeat counts total plays; zero holds the initial value. Negative delays, invalid
 speed factors and duration overflow are rejected. For dynamic input, use checked
@@ -108,12 +109,12 @@ fn main() {
 }
 ```
 
-Spring mass, stiffness and damping are positive. A conservative settling envelope determines the finite duration. `settling_threshold` is a relative displacement-envelope threshold, not a pixel error. `initial_velocity` is measured in endpoint distances per second, not pixels per second.
+Spring mass, stiffness and damping are positive. A conservative settling envelope determines `settle_duration()`; the value is exactly the target from then on. `settling_threshold` is a relative displacement-envelope threshold, not a pixel error. `initial_velocity` is measured in endpoint distances per second, not pixels per second.
 
 The conservative duration is rounded to ticks; it is not inferred from a previous
 frame's displacement.
 
-Use an explicit infinite signal for undamped perpetual oscillation rather than asking a finite Spring to have no end time.
+Use an `Oscillator` or a closure for undamped perpetual oscillation rather than asking a Spring to have no end time. To delay a spring, sample it at a shifted time: `|time: Duration| spring.sample(time - delay)`.
 
 ## Where Morph Belongs
 

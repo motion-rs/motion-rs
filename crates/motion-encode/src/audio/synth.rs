@@ -1,7 +1,7 @@
 //! Random-access synthesis and seeded sound effects, without binary assets.
 
 use super::{effects::amplitude, pcm::invalid};
-use motion_core::{Animation, AudioSource, Duration};
+use motion_core::{AudioSource, Duration, FiniteAnimation, Signal};
 
 /// Segments in the oscillator sine table. Linear interpolation keeps the error below `3e-7`
 /// (about -130 dB), under 24-bit quantization.
@@ -67,7 +67,7 @@ impl Adsr {
     }
 }
 
-impl Animation<f64> for Adsr {
+impl Signal<f64> for Adsr {
     fn sample(&self, time: Duration) -> f64 {
         if time < Duration::ZERO || time >= self.duration {
             return 0.0;
@@ -86,9 +86,11 @@ impl Animation<f64> for Adsr {
         }
         self.sustain
     }
+}
 
-    fn duration(&self) -> Option<Duration> {
-        Some(self.duration)
+impl FiniteAnimation<f64> for Adsr {
+    fn duration(&self) -> Duration {
+        self.duration
     }
 }
 

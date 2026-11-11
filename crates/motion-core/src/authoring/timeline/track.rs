@@ -130,7 +130,7 @@ impl Track {
             let incoming = render(clip);
             let animation = crate::Tween::new(0.0f64, 1.0, transition.duration)
                 .easing(transition.effect.easing());
-            let progress = crate::Animation::sample(&animation, context.time() - clip.start);
+            let progress = crate::Signal::sample(&animation, context.time() - clip.start);
             if progress.is_finite() {
                 let local = context
                     .shifted(clip.start.since_origin())

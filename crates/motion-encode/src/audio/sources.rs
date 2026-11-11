@@ -502,7 +502,7 @@ mod tests {
         let analysis =
             super::super::analysis::AudioAnalysis::from_pcm(std::sync::Arc::new(shifted.clone()));
         assert!(
-            (motion_core::Animation::sample(&analysis.pitch()?, 500.milliseconds()) - 800.0).abs()
+            (motion_core::Signal::sample(&analysis.pitch()?, 500.milliseconds()) - 800.0).abs()
                 < 25.0
         );
         assert_eq!(pcm.time_stretch(2.0)?.frames(), 16000);

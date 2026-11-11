@@ -1,6 +1,6 @@
 //! Clock-free analytic oscillators, seeded noise, path motion and mappings.
 
-use super::{Animation, Easing, Interpolate};
+use super::{Easing, FiniteAnimation, Interpolate, Signal};
 use crate::{Duration, Path2D, Point, Vector2};
 use std::sync::Arc;
 
@@ -66,7 +66,7 @@ impl Oscillator {
     }
 }
 
-impl Animation<f64> for Oscillator {
+impl Signal<f64> for Oscillator {
     fn sample(&self, time: Duration) -> f64 {
         let cycles = time.as_seconds() * self.frequency + self.phase;
         assert!(cycles.is_finite(), "Oscillator phase overflow");
@@ -149,14 +149,14 @@ impl Noise {
     }
 
     /// Creates independently seeded X/Y noise with the same spectral settings.
-    pub fn vector(self) -> impl Animation<Vector2> {
+    pub fn vector(self) -> impl Signal<Vector2> {
         let mut vertical = self.clone();
         vertical.seed ^= 0x9e3779b97f4a7c15;
         move |time| Vector2::new(self.sample(time), vertical.sample(time))
     }
 }
 
-impl Animation<f64> for Noise {
+impl Signal<f64> for Noise {
     fn sample(&self, time: Duration) -> f64 {
         let mut position = time.as_seconds() * self.frequency;
         let mut amplitude = 1.0;
@@ -212,7 +212,7 @@ impl FollowPath {
     }
 }
 
-impl Animation<PathSample> for FollowPath {
+impl Signal<PathSample> for FollowPath {
     fn sample(&self, time: Duration) -> PathSample {
         let progress = if self.duration == Duration::ZERO {
             if time < Duration::ZERO { 0.0 } else { 1.0 }
@@ -228,9 +228,11 @@ impl Animation<PathSample> for FollowPath {
             angle: libm::atan2(tangent.y, tangent.x),
         }
     }
+}
 
-    fn duration(&self) -> Option<Duration> {
-        Some(self.duration)
+impl FiniteAnimation<PathSample> for FollowPath {
+    fn duration(&self) -> Duration {
+        self.duration
     }
 }
 
@@ -328,7 +330,6 @@ mod tests {
             Waveform::Sawtooth,
         ] {
             let value = Oscillator::new(waveform, 2.0).amplitude(3.0).offset(7.0);
-            assert_eq!(value.duration(), None);
             assert_eq!(
                 value.sample(125.milliseconds()),
                 value.sample(625.milliseconds())
@@ -374,7 +375,7 @@ mod tests {
             .path()
             .unwrap();
         let motion = FollowPath::new(path, 2.seconds());
-        assert_eq!(motion.duration(), Some(2.seconds()));
+        assert_eq!(motion.duration(), 2.seconds());
         assert_eq!(motion.sample(1.seconds()).position, Point::new(5.0, 0.0));
         assert_eq!(motion.sample((-1).seconds()).position, Point::ORIGIN);
         assert_eq!(motion.sample(3.seconds()).position, Point::new(10.0, 0.0));

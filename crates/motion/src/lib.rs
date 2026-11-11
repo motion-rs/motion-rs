@@ -1,7 +1,7 @@
 //! Programmable motion graphics and deterministic video rendering in Rust.
 //!
 //! A [`Scene`] maps signed-tick [`SceneContext`] inputs to an immutable [`Node`].
-//! [`Animation`] samples values without playback state; [`Timeline`] schedules
+//! [`Signal`] samples values without playback state; [`Timeline`] schedules
 //! tracks/clips and transitions. Public coordinates/colors use [`Point`],
 //! [`Rect`], [`Size`] and [`Color`] in logical authoring units.
 //! [`Project`], [`render_still`] and [`export()`] share resource/backend/output policy.
@@ -30,7 +30,7 @@
 //! pooling through `ink::BrushStroke` (configured with `ink::BrushStrokeBuilder`) and
 //! `ink::InkFill`; `ink::Paper` selects procedural or texture paper. Pressure and ink-load profiles
 //! are sampled in full arc length.
-//! [`Animation`] and [`Keyframes`] are analytic, clock-free samplers, not playback
+//! [`Signal`] and [`Keyframes`] are analytic, clock-free samplers, not playback
 //! tasks. [`Snapshot`] is opaque RGB; [`FrameBuffer`] stills preserve alpha.
 //! [`AudioClip`] supplies explicit timeline PCM, mixed into export or Studio Play.
 //! [`Skeleton`] solves 2D forward kinematics from timeline-compatible [`Pose`]
@@ -204,18 +204,19 @@ pub use motion_core::{camera, group, scene};
 pub use motion_core::{key, math};
 
 pub use motion_core::{
-    Alignment, AngleLiteral, Animation, ArcShape, Arrow, ArrowHead, Assets, AudioClip, BlendMode,
-    BlendSpace, Bone, BonePose, BoneTransform, Camera, Circle, Clip, Color, Column, Constant,
-    CrossFade, Direction, Duration, Easing, Ellipse, Error, ErrorKind, FillRule, Filter,
+    Alignment, AngleLiteral, ArcShape, Arrow, ArrowHead, Assets, AudioClip, BlendMode, BlendSpace,
+    Bone, BonePose, BoneTransform, Camera, Circle, Clip, Color, Column, Constant, CrossFade,
+    Direction, Duration, Easing, Ellipse, Error, ErrorKind, FillRule, Filter, FiniteAnimation,
     FontEnvironment, FrameRate, FunctionGraph, GradientExtend, GradientSpace, GradientUnits,
-    ImagePattern, Interpolate, Iris, IrisShape, Keyframes, Layout, Line, LineCap, LineJoin,
-    LinearGradient, MaskMode, MotionBlur, Node, NodeModifiers, Paint, Path2D, PathBuilder, Pivot,
-    PixelSize, Point, Polygon, Polyline, Pose, Push, RadialGradient, Random, Rect, RegularPolygon,
-    RenderQuality, Ring, RoundedRect, Row, Sampling, Scene, SceneContext, Shape, Side, Size,
-    Skeleton, Slide, Soundtrack, Source, Spline, Spring, Star, StrokeStyle, Styled, SweepGradient,
-    Time, TimeLiteral, Timeline, TimelineBuilder, TimelineWarning, Track, TrackBuilder, Transform,
-    TransformComponents, Tween, ValidationError, Vector2, Wipe, ZoomBlur, animation, authoring,
-    color, geometry, noise, path2d, sample_offsets, shape, time, try_camera,
+    ImagePattern, Interpolate, Interval, Iris, IrisShape, Keyframes, Layout, Line, LineCap,
+    LineJoin, LinearGradient, MaskMode, MotionBlur, Node, NodeModifiers, Paint, Path2D,
+    PathBuilder, Pivot, PixelSize, Point, Polygon, Polyline, Pose, Push, RadialGradient, Random,
+    Rect, RegularPolygon, RenderQuality, Ring, RoundedRect, Row, Sampling, Scene, SceneContext,
+    Shape, Side, Signal, Size, Skeleton, Slide, Soundtrack, Source, Spline, Spring, Star,
+    StrokeStyle, Styled, SweepGradient, Time, TimeLiteral, Timeline, TimelineBuilder,
+    TimelineWarning, Track, TrackBuilder, Transform, TransformComponents, Tween, ValidationError,
+    Vector2, Wipe, ZoomBlur, animation, authoring, color, geometry, noise, path2d, sample_offsets,
+    shape, time, try_camera,
 };
 pub use motion_render::{BackendPreference, RenderOptions, Renderer, render_still};
 
@@ -326,17 +327,17 @@ pub mod eager {
 /// (see the table in the crate documentation). Transition is in scope for its methods only.
 pub mod prelude {
     pub use crate::{
-        Alignment, AngleLiteral, Animation, ArcShape, Arrow, ArrowHead, Assets, AudioClip,
-        BackendPreference, BlendMode, BlendSpace, Bone, BonePose, BoneTransform, Camera, Circle,
-        Clip, ClipMode, Color, Column, Constant, CrossFade, Direction, Duration, Easing, Ellipse,
-        Error, ErrorKind, Extrapolate, FillRule, Filter, FollowPath, FontEnvironment, FrameRate,
+        Alignment, AngleLiteral, ArcShape, Arrow, ArrowHead, Assets, AudioClip, BackendPreference,
+        BlendMode, BlendSpace, Bone, BonePose, BoneTransform, Camera, Circle, Clip, ClipMode,
+        Color, Column, Constant, CrossFade, Direction, Duration, Easing, Ellipse, Error, ErrorKind,
+        Extrapolate, FillRule, Filter, FiniteAnimation, FollowPath, FontEnvironment, FrameRate,
         FunctionGraph, GradientExtend, GradientSpace, GradientUnits, ImagePattern, Interpolate,
-        Iris, IrisShape, Keyframes, Layout, Line, LineCap, LineJoin, LinearGradient, MaskMode,
-        MotionBlur, Node, NodeModifiers, Noise, Oscillator, Paint, Path2D, PathSample, Pivot,
-        PixelSize, Point, Polygon, Polyline, Pose, Project, ProjectBuilder, ProjectOutcome,
+        Interval, Iris, IrisShape, Keyframes, Layout, Line, LineCap, LineJoin, LinearGradient,
+        MaskMode, MotionBlur, Node, NodeModifiers, Noise, Oscillator, Paint, Path2D, PathSample,
+        Pivot, PixelSize, Point, Polygon, Polyline, Pose, Project, ProjectBuilder, ProjectOutcome,
         ProjectTimelineInfo, Push, RadialGradient, Random, Rect, RegularPolygon, RenderOptions,
         RenderQuality, Renderer, Ring, RoundedRect, Row, Sampling, Scene, SceneContext, Shape,
-        Side, Size, Skeleton, Slide, Source, Spline, Spring, Star, StrokeStyle, Styled,
+        Side, Signal, Size, Skeleton, Slide, Source, Spline, Spring, Star, StrokeStyle, Styled,
         SweepGradient, Time, TimeLiteral, Timeline, TimelineBuilder, TimelineWarning, Track,
         TrackBuilder, Transform, TransformComponents, Tween, ValidationError, Vector2, Waveform,
         Wipe, ZoomBlur, camera, export, group, key, math, piecewise, remap, render_still, scene,

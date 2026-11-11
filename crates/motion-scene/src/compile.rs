@@ -4,8 +4,8 @@ use crate::document::{Document, LookSpec, SceneSpec, TrackItem, TransitionEffect
 use crate::element::Element;
 use element::Built;
 use motion_core::{
-    Animation, CrossFade, Duration, Iris, Node, NodeModifiers, PixelSize, Push, Scene,
-    SceneContext, Size, Slide, Timeline, TrackBuilder, ValidationError, Wipe, ZoomBlur,
+    CrossFade, Duration, Iris, Node, NodeModifiers, PixelSize, Push, Scene, SceneContext, Signal,
+    Size, Slide, Timeline, TrackBuilder, ValidationError, Wipe, ZoomBlur,
 };
 use motion_render::{Look, RenderOptions};
 use serde_json::Value;
@@ -255,7 +255,7 @@ pub(crate) struct Compiler<'a> {
     /// Serialized forms of referenced elements, by `id`.
     documents: HashMap<String, Value>,
     /// Resolved bindings, by `id.property`.
-    bindings: HashMap<String, Arc<dyn Animation<f64>>>,
+    bindings: HashMap<String, Arc<dyn Signal<f64>>>,
     /// Bindings being resolved, for cycle detection.
     resolving: Vec<String>,
     #[cfg(feature = "text")]

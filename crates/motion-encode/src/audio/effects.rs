@@ -90,9 +90,9 @@ pub enum Effect {
 /// EQ automation sampled on the clip's native clock, with 64-frame coefficient ramps.
 pub struct AnimatedEq {
     kind: EqKind,
-    frequency: std::sync::Arc<dyn motion_core::Animation<f64>>,
-    q: std::sync::Arc<dyn motion_core::Animation<f64>>,
-    gain: std::sync::Arc<dyn motion_core::Animation<f64>>,
+    frequency: std::sync::Arc<dyn motion_core::Signal<f64>>,
+    q: std::sync::Arc<dyn motion_core::Signal<f64>>,
+    gain: std::sync::Arc<dyn motion_core::Signal<f64>>,
 }
 
 impl std::fmt::Debug for AnimatedEq {
@@ -108,7 +108,7 @@ impl AnimatedEq {
     /// Creates a frequency-automated EQ with static initial resonance and gain.
     pub fn new(
         kind: EqKind,
-        frequency: impl motion_core::Animation<f64> + 'static,
+        frequency: impl motion_core::Signal<f64> + 'static,
         q: f64,
         gain_db: f64,
     ) -> Self {
@@ -121,13 +121,13 @@ impl AnimatedEq {
     }
 
     /// Replaces resonance with a clip-local animation.
-    pub fn resonance(mut self, q: impl motion_core::Animation<f64> + 'static) -> Self {
+    pub fn resonance(mut self, q: impl motion_core::Signal<f64> + 'static) -> Self {
         self.q = std::sync::Arc::new(q);
         self
     }
 
     /// Replaces bell/shelf gain with a clip-local animation, in dB.
-    pub fn gain(mut self, gain: impl motion_core::Animation<f64> + 'static) -> Self {
+    pub fn gain(mut self, gain: impl motion_core::Signal<f64> + 'static) -> Self {
         self.gain = std::sync::Arc::new(gain);
         self
     }

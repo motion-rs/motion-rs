@@ -21,7 +21,7 @@ pub(super) fn microbenchmarks(
     };
     let bezier = Tween::new(0.0_f64, 1.0, 1.seconds()).easing(easing);
     let spring = Spring::default();
-    let tracks: [(&str, &dyn Animation<f64>); 2] =
+    let tracks: [(&str, &dyn Signal<f64>); 2] =
         [("animation/bezier", &bezier), ("animation/spring", &spring)];
     for (name, track) in tracks {
         let measurement = support::measure(

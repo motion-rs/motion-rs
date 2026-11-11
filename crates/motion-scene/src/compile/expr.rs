@@ -1,6 +1,6 @@
 //! Arithmetic expression parsing and evaluation over scene-local time.
 
-use motion_core::{Animation, Duration};
+use motion_core::{Duration, Signal};
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -79,16 +79,16 @@ pub(crate) enum Function {
 /// A compiled expression sampled as a numeric animation.
 pub(crate) struct ExprAnimation {
     expr: Expr,
-    references: Vec<Arc<dyn Animation<f64>>>,
+    references: Vec<Arc<dyn Signal<f64>>>,
 }
 
 impl ExprAnimation {
-    pub(crate) fn new(expr: Expr, references: Vec<Arc<dyn Animation<f64>>>) -> Self {
+    pub(crate) fn new(expr: Expr, references: Vec<Arc<dyn Signal<f64>>>) -> Self {
         Self { expr, references }
     }
 }
 
-impl Animation<f64> for ExprAnimation {
+impl Signal<f64> for ExprAnimation {
     fn sample(&self, time: Duration) -> f64 {
         let values: Vec<f64> = self
             .references

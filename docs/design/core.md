@@ -29,8 +29,11 @@ sample indices and time points are distinct inputs even when conversion is exact
 
 ## Stateless Animation
 
-Animation samples a value at an explicit elapsed Duration. A missing duration means an infinite
-signal; finite-only composition cannot invent an end time for one. Interpolate
+`Signal` samples a value at an explicit elapsed Duration and has no end. `FiniteAnimation`
+extends it with a nonnegative `duration()`; only finite animations offer `delay`, `then`,
+`repeat` and `ping_pong`, so composition cannot invent an end time for an unbounded
+signal. `Interval { start, duration }` is the single definition of clamped progress and
+easing over a time range; `SceneContext::progress_in`, `ease_in` and `Tween` use it. Interpolate
 accepts f64 progress and permits deliberate extrapolation. Oklab color interpolation
 can extrapolate RGB while clamping alpha. Transform interpolation accounts for
 translation, rotation, scale and skew rather than interpolating pixels.
@@ -38,8 +41,9 @@ translation, rotation, scale and skew rather than interpolating pixels.
 Keyframe destinations are absolute local times; holds are relative durations.
 The arriving point owns easing. Equal or decreasing times are errors, not sorted
 inputs. Built-in easing pins endpoints; Custom clamps its input but preserves its
-callback output. Springs use a conservative settling envelope rounded to ticks,
-not frame-by-frame state. Noise and path following are explicit reusable signals.
+callback output. Springs use a conservative settling envelope rounded to ticks
+(`settle_duration`), not frame-by-frame state; they, like Noise and Oscillator, are
+`Signal` only. Path following is a finite animation.
 
 Combinators keep timing independent of seek order and thread scheduling. Finite-only
 operations, invalid factors and overflow have checked boundaries, but convenience
@@ -141,7 +145,7 @@ outside the sampled subtree. Draft approximations are not Final export semantics
 ## Owning Sources
 
 - [Time](../../crates/motion-core/src/time.rs)
-- [Animation](../../crates/motion-core/src/animation.rs)
+- [Animation](../../crates/motion-core/src/animation.rs) (`Signal`, `FiniteAnimation`, `Interval`)
 - [Authoring](../../crates/motion-core/src/authoring.rs)
 - [Paths](../../crates/motion-core/src/path2d.rs)
 - [Drawing](../../crates/motion-core/src/drawing.rs)

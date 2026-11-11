@@ -15,10 +15,10 @@ pub struct AudioClip {
     fade_in: Duration,
     fade_out: Duration,
     pan: f64,
-    envelope: Option<Arc<dyn crate::Animation<f64>>>,
+    envelope: Option<Arc<dyn crate::Signal<f64>>>,
     limit: Option<Duration>,
     effects: Arc<Vec<Arc<dyn AudioEffect>>>,
-    pan_animation: Option<Arc<dyn crate::Animation<f64>>>,
+    pan_animation: Option<Arc<dyn crate::Signal<f64>>>,
     pan_law: PanLaw,
     stereo_width: f64,
     bus: Option<String>,
@@ -50,11 +50,11 @@ pub struct AudioClipParameters<'a> {
     /// Fade-out duration.
     pub fade_out: Duration,
     /// Optional pure local-time gain animation.
-    pub envelope: Option<&'a dyn crate::Animation<f64>>,
+    pub envelope: Option<&'a dyn crate::Signal<f64>>,
     /// Mono/stereo pan setting.
     pub pan: f64,
     /// Optional local-time pan animation, replacing the constant pan.
-    pub pan_animation: Option<&'a dyn crate::Animation<f64>>,
+    pub pan_animation: Option<&'a dyn crate::Signal<f64>>,
     /// Stereo balance law.
     pub pan_law: PanLaw,
     /// Mid/side width in 0..=2; one preserves the stereo source.
@@ -172,7 +172,7 @@ impl AudioClip {
     }
 
     /// Multiplies volume by a typed animation sampled at clip-local output time.
-    pub fn volume_envelope(mut self, envelope: impl crate::Animation<f64> + 'static) -> Self {
+    pub fn volume_envelope(mut self, envelope: impl crate::Signal<f64> + 'static) -> Self {
         self.envelope = Some(Arc::new(envelope));
         self
     }
@@ -227,7 +227,7 @@ impl AudioClip {
     }
 
     /// Sets a pure local-time pan animation, with values in -1..=1.
-    pub fn pan_animation(mut self, animation: impl crate::Animation<f64> + 'static) -> Self {
+    pub fn pan_animation(mut self, animation: impl crate::Signal<f64> + 'static) -> Self {
         self.pan_animation = Some(Arc::new(animation));
         self
     }
@@ -242,7 +242,7 @@ impl AudioClip {
     /// Width is the listener-to-edge distance; this is not HRTF or three-dimensional spatial audio.
     pub fn spatial(
         mut self,
-        position: impl crate::Animation<crate::Point> + 'static,
+        position: impl crate::Signal<crate::Point> + 'static,
         listener: crate::Point,
         width: f64,
         rolloff: f64,
@@ -259,7 +259,7 @@ impl AudioClip {
                 "Invalid listener, width or distance rolloff",
             ));
         }
-        let position: Arc<dyn crate::Animation<crate::Point>> = Arc::new(position);
+        let position: Arc<dyn crate::Signal<crate::Point>> = Arc::new(position);
         self.pan_animation = Some(Arc::new(SpatialPan {
             position: position.clone(),
             listener,
@@ -414,12 +414,12 @@ impl AudioClip {
 struct CompositionSource(crate::Timeline);
 
 struct SpatialPan {
-    position: Arc<dyn crate::Animation<crate::Point>>,
+    position: Arc<dyn crate::Signal<crate::Point>>,
     listener: crate::Point,
     width: f64,
 }
 
-impl crate::Animation<f64> for SpatialPan {
+impl crate::Signal<f64> for SpatialPan {
     fn sample(&self, time: Duration) -> f64 {
         let point = self.position.sample(time);
         if !point.x.is_finite() || !point.y.is_finite() {
@@ -427,21 +427,17 @@ impl crate::Animation<f64> for SpatialPan {
         }
         ((point.x - self.listener.x) / self.width).clamp(-1.0, 1.0)
     }
-
-    fn duration(&self) -> Option<Duration> {
-        self.position.duration()
-    }
 }
 
 struct SpatialGain {
-    position: Arc<dyn crate::Animation<crate::Point>>,
+    position: Arc<dyn crate::Signal<crate::Point>>,
     listener: crate::Point,
     width: f64,
     rolloff: f64,
-    previous: Option<Arc<dyn crate::Animation<f64>>>,
+    previous: Option<Arc<dyn crate::Signal<f64>>>,
 }
 
-impl crate::Animation<f64> for SpatialGain {
+impl crate::Signal<f64> for SpatialGain {
     fn sample(&self, time: Duration) -> f64 {
         let point = self.position.sample(time);
         if !point.x.is_finite() || !point.y.is_finite() {
@@ -453,10 +449,6 @@ impl crate::Animation<f64> for SpatialGain {
             .as_ref()
             .map_or(1.0, |previous| previous.sample(time))
             / (1.0 + self.rolloff * distance)
-    }
-
-    fn duration(&self) -> Option<Duration> {
-        self.position.duration()
     }
 }
 

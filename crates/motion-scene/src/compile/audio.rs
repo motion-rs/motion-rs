@@ -10,8 +10,8 @@ use crate::audio::{
 };
 use crate::document::Document;
 use motion_core::{
-    Animation, AudioBus, AudioClip, Duck, DuckTrigger, Duration, Limiter, Loudness, Master, PanLaw,
-    Point,
+    AudioBus, AudioClip, Duck, DuckTrigger, Duration, Limiter, Loudness, Master, PanLaw, Point,
+    Signal,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -142,7 +142,7 @@ impl Compiler<'_> {
             let position = self.animated(&spatial.position, &format!("{here}.position"));
             match (position, clip.take()) {
                 (Some(position), Some(next)) => {
-                    let animation: Arc<dyn Animation<Point>> = match position {
+                    let animation: Arc<dyn Signal<Point>> = match position {
                         Prop::Fixed(value) => Arc::new(move |_: Duration| point(value)),
                         Prop::Varying(animation) => {
                             Arc::new(move |time: Duration| point(animation.sample(time)))

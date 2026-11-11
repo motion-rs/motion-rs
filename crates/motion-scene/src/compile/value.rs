@@ -6,7 +6,8 @@ use crate::value::{
     OscillateSpec, TweenSpec,
 };
 use motion_core::{
-    Animation, Color, Duration, Easing, Interpolate, Keyframes, Noise, Oscillator, Tween,
+    Color, Duration, Easing, FiniteAnimation, Interpolate, Keyframes, Noise, Oscillator, Signal,
+    Tween,
 };
 use std::sync::Arc;
 
@@ -19,7 +20,7 @@ const MAX_FREQUENCY: f64 = 1e6;
 /// A compiled property: a constant or a shared clock-free sampler.
 pub(crate) enum Prop<Engine> {
     Fixed(Engine),
-    Varying(Arc<dyn Animation<Engine>>),
+    Varying(Arc<dyn Signal<Engine>>),
 }
 
 impl<Engine: Clone> Prop<Engine> {
@@ -59,7 +60,7 @@ pub(crate) trait Value: Clone {
     const ARITY: usize = 0;
 
     /// Combines one numeric signal per component into a value animation.
-    fn from_signals(_: &[Arc<dyn Animation<f64>>]) -> Option<Arc<dyn Animation<Self::Engine>>> {
+    fn from_signals(_: &[Arc<dyn Signal<f64>>]) -> Option<Arc<dyn Signal<Self::Engine>>> {
         None
     }
 }
@@ -77,7 +78,7 @@ impl Value for f64 {
 
     const ARITY: usize = 1;
 
-    fn from_signals(signals: &[Arc<dyn Animation<f64>>]) -> Option<Arc<dyn Animation<f64>>> {
+    fn from_signals(signals: &[Arc<dyn Signal<f64>>]) -> Option<Arc<dyn Signal<f64>>> {
         signals.first().cloned()
     }
 }
@@ -87,11 +88,11 @@ impl<const COUNT: usize> Value for [f64; COUNT] {
 
     const ARITY: usize = COUNT;
 
-    fn from_signals(signals: &[Arc<dyn Animation<f64>>]) -> Option<Arc<dyn Animation<Self>>> {
+    fn from_signals(signals: &[Arc<dyn Signal<f64>>]) -> Option<Arc<dyn Signal<Self>>> {
         let signals: Vec<_> = signals.to_vec();
         (signals.len() == COUNT).then(|| {
             Arc::new(move |time: Duration| std::array::from_fn(|index| signals[index].sample(time)))
-                as Arc<dyn Animation<Self>>
+                as Arc<dyn Signal<Self>>
         })
     }
 
@@ -181,7 +182,7 @@ impl Compiler<'_> {
         &mut self,
         motion: &MotionSpec<T>,
         path: &str,
-    ) -> Option<Arc<dyn Animation<T::Engine>>> {
+    ) -> Option<Arc<dyn Signal<T::Engine>>> {
         match motion {
             MotionSpec::Tween(tween) => self.tween(tween, &format!("{path}.tween")),
             MotionSpec::Keyframes(keyframes) => {
@@ -205,7 +206,7 @@ impl Compiler<'_> {
         &mut self,
         spec: &ExprSpec,
         path: &str,
-    ) -> Option<Arc<dyn Animation<T::Engine>>> {
+    ) -> Option<Arc<dyn Signal<T::Engine>>> {
         let sources = spec.sources();
         if T::ARITY == 0 {
             self.error(path, "expr", "Expressions apply only to numeric properties");
@@ -241,9 +242,9 @@ impl Compiler<'_> {
 
     fn scalar<T: Value>(
         &mut self,
-        signal: Arc<dyn Animation<f64>>,
+        signal: Arc<dyn Signal<f64>>,
         path: &str,
-    ) -> Option<Arc<dyn Animation<T::Engine>>> {
+    ) -> Option<Arc<dyn Signal<T::Engine>>> {
         let adapted = (T::ARITY == 1)
             .then(|| T::from_signals(&[signal]))
             .flatten();
@@ -257,7 +258,7 @@ impl Compiler<'_> {
         &mut self,
         tween: &TweenSpec<T>,
         path: &str,
-    ) -> Option<Arc<dyn Animation<T::Engine>>> {
+    ) -> Option<Arc<dyn Signal<T::Engine>>> {
         let from = self.value(&tween.from, &format!("{path}.from"));
         let to = self.value(&tween.to, &format!("{path}.to"));
         let duration = self.seconds(tween.duration, path, "duration");
@@ -281,7 +282,7 @@ impl Compiler<'_> {
         &mut self,
         keyframes: &KeyframesSpec<T>,
         path: &str,
-    ) -> Option<Arc<dyn Animation<T::Engine>>> {
+    ) -> Option<Arc<dyn Signal<T::Engine>>> {
         let Some(first) = keyframes.keys.first() else {
             self.error(path, "keys", "Keyframes require at least one key");
             return None;
@@ -317,15 +318,15 @@ impl Compiler<'_> {
     /// Applies mirror, then repeat, then delay, bounding the resulting duration.
     fn timing<Engine: Send + Sync + 'static>(
         &mut self,
-        animation: Arc<dyn Animation<Engine>>,
+        animation: Arc<dyn FiniteAnimation<Engine>>,
         timing: Timing,
         path: &str,
-    ) -> Option<Arc<dyn Animation<Engine>>> {
+    ) -> Option<Arc<dyn Signal<Engine>>> {
         let mut animation = animation;
-        let mut length = animation.duration().map_or(0.0, Duration::as_seconds);
+        let mut length = animation.duration().as_seconds();
         if timing.ping_pong {
             length *= 2.0;
-            animation = Arc::new(animation.ping_pong());
+            animation = animation.ping_pong().boxed_finite();
         }
         if let Some(count) = timing.repeat {
             length *= f64::from(count);
@@ -333,19 +334,17 @@ impl Compiler<'_> {
                 self.error(path, "repeat", "Repeated duration exceeds the time limit");
                 return None;
             }
-            animation = Arc::new(animation.repeat(count));
+            animation = animation.repeat(count).boxed_finite();
         }
         if let Some(delay) = timing.delay {
-            animation = Arc::new(animation.delay(self.seconds(delay, path, "delay")?));
+            animation = animation
+                .delay(self.seconds(delay, path, "delay")?)
+                .boxed_finite();
         }
         Some(animation)
     }
 
-    fn oscillate(
-        &mut self,
-        oscillate: &OscillateSpec,
-        path: &str,
-    ) -> Option<Arc<dyn Animation<f64>>> {
+    fn oscillate(&mut self, oscillate: &OscillateSpec, path: &str) -> Option<Arc<dyn Signal<f64>>> {
         let frequency = self.bounded(oscillate.frequency, 0.0, MAX_FREQUENCY, path, "frequency");
         let amplitude = self.signal(oscillate.amplitude.unwrap_or(1.0), path, "amplitude");
         let phase = self.signal(oscillate.phase.unwrap_or(0.0), path, "phase");
@@ -357,7 +356,7 @@ impl Compiler<'_> {
         Some(Arc::new(oscillator))
     }
 
-    fn noise(&mut self, noise: &NoiseSpec, path: &str) -> Option<Arc<dyn Animation<f64>>> {
+    fn noise(&mut self, noise: &NoiseSpec, path: &str) -> Option<Arc<dyn Signal<f64>>> {
         let frequency = self.bounded(
             noise.frequency.unwrap_or(1.0),
             0.0,

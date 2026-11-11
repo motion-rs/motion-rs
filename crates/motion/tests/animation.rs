@@ -87,7 +87,7 @@ mod values {
 
         #[test]
         fn curves_integrate_with_tweens_tracks_frames_and_parameter_validation() -> motion::Result {
-            use motion::{Animation, Easing, Keyframes, TimeLiteral, Tween};
+            use motion::{Easing, Keyframes, Signal, TimeLiteral, Tween};
             let movement = Tween::new(0.0_f64, 100.0, 2.seconds()).easing(Easing::CubicOut);
             assert_eq!(movement.sample(1.seconds()), 87.5);
             let track = Keyframes::new(0.0_f64)
@@ -152,8 +152,7 @@ mod values {
         }
 
         #[test]
-        fn generic_springs_share_frame_combinator_and_dynamic_sampling_contracts() -> motion::Result
-        {
+        fn generic_springs_share_frame_and_dynamic_sampling_contracts() -> motion::Result {
             let scalar = Spring::default().damping(20.0);
             let movement = Spring::new(Point::ORIGIN, Point::new(100.0, 40.0)).damping(20.0);
             let cache = motion::render::SceneCache::new(0);
@@ -168,19 +167,8 @@ mod values {
             let point = frame.sample(&movement);
             close(point.x, progress * 100.0);
             close(point.y, progress * 40.0);
-            let end = movement.duration().unwrap();
-            let repeated = movement.clone().repeat(2);
-            assert_eq!(repeated.duration(), Some(end + end));
-            assert_eq!(repeated.sample(end), Point::ORIGIN);
-            assert_eq!(repeated.sample(end + end), Point::new(100.0, 40.0));
-            let delayed = movement.clone().delay(1.seconds());
-            assert_eq!(delayed.sample(1.seconds()), Point::ORIGIN);
-            let joined = movement.clone().then(Tween::new(
-                Point::new(100.0, 40.0),
-                Point::new(200.0, 80.0),
-                1.seconds(),
-            ));
-            assert_eq!(joined.sample(end + 1.seconds()), Point::new(200.0, 80.0));
+            let end = movement.settle_duration();
+            assert_eq!(movement.sample(end), Point::new(100.0, 40.0));
             let transforms =
                 Spring::new([Transform::IDENTITY], [Transform::translate(100.0, 40.0)])
                     .damping(20.0);
@@ -203,7 +191,7 @@ mod values {
 
         #[test]
         fn authoring_scalars_have_f64_signatures_and_retain_precision() {
-            use motion::{Animation, Color, Node, NodeModifiers, Rect, Size, Tween};
+            use motion::{Color, Node, NodeModifiers, Rect, Signal, Size, Tween};
 
             let _: fn(f64, f64) -> Point = Point::new;
             let _: fn(f64, f64) -> Vector2 = Vector2::new;
@@ -267,7 +255,7 @@ mod values {
             let overshoot = spring.sample(500.milliseconds());
             assert!(overshoot.width < 0.0 && overshoot.height < 0.0);
             assert_eq!(overshoot.to_rect().size(), overshoot);
-            assert_eq!(spring.sample(spring.duration().unwrap()), Size::default());
+            assert_eq!(spring.sample(spring.settle_duration()), Size::default());
             Ok(())
         }
     }
@@ -297,7 +285,7 @@ mod values {
             let spring = Spring::new(Color::BLACK, Color::WHITE);
             assert!(spring.sample(500.milliseconds()).to_rgba_float()[0] > 1.0);
             assert_eq!(spring.sample(Duration::ZERO), Color::BLACK);
-            assert_eq!(spring.sample(spring.duration().unwrap()), Color::WHITE);
+            assert_eq!(spring.sample(spring.settle_duration()), Color::WHITE);
             let boxed = movement.map(|colors| colors[0]).boxed();
             assert_eq!(
                 std::thread::spawn(move || boxed.sample(250.milliseconds()))

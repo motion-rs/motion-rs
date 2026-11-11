@@ -298,16 +298,11 @@ fn easing_curves() -> Vec<(&'static str, Easing)> {
     ]
 }
 
-fn signal_studies(seed: u64) -> Vec<Arc<dyn Animation<f64>>> {
+fn signal_studies(seed: u64) -> Vec<Arc<dyn Signal<f64>>> {
     let mut studies = Vec::new();
     for damping in [9.0, 22.0, 38.0] {
-        studies.push(
-            Spring::new(0.0, 1.0)
-                .stiffness(121.0)
-                .damping(damping)
-                .delay(0.2.seconds())
-                .boxed(),
-        );
+        let spring = Spring::new(0.0, 1.0).stiffness(121.0).damping(damping);
+        studies.push((move |time: Duration| spring.sample(time - 0.2.seconds())).boxed());
     }
     for waveform in [
         Waveform::Sine,
@@ -322,7 +317,7 @@ fn signal_studies(seed: u64) -> Vec<Arc<dyn Animation<f64>>> {
 }
 
 fn animation_plot(
-    animation: &dyn Animation<f64>,
+    animation: &dyn Signal<f64>,
     progress: f64,
     signed: bool,
 ) -> motion::Result<Node> {
@@ -380,7 +375,7 @@ fn animation_plot(
     ]))
 }
 
-fn composition_studies() -> Vec<Arc<dyn Animation<f64>>> {
+fn composition_studies() -> Vec<Arc<dyn Signal<f64>>> {
     let movement = Tween::new(0.0, 1.0, 1.2.seconds()).easing(Easing::CubicInOut);
     vec![
         movement.clone().delay(0.55.seconds()).boxed(),
@@ -424,7 +419,7 @@ fn flight_path() -> Result<Path2D, ValidationError> {
 
 fn path_board(
     path: &Path2D,
-    flight: &impl Animation<PathSample>,
+    flight: &impl Signal<PathSample>,
     progress: f64,
 ) -> motion::Result<Node> {
     let time = (progress * 3.2).seconds();

@@ -230,8 +230,7 @@ mod tests {
     #[test]
     fn sequences_preserve_original_trim_rate_and_boundary_tables() -> motion_core::Result {
         use motion_core::{
-            Animation, Easing, FrameRate, Keyframes, SceneCache, SceneContext, Size, Time,
-            TimeLiteral,
+            Easing, FrameRate, Keyframes, SceneCache, SceneContext, Signal, Size, Time, TimeLiteral,
         };
         let rate = FrameRate::from(24);
         let images = (0..120)

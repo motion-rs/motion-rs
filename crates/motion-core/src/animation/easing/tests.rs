@@ -4,7 +4,7 @@ use super::*;
 
 #[test]
 fn checked_animation_inputs_report_errors_without_changing_samples() {
-    use crate::{Animation, TimeLiteral, Tween};
+    use crate::{Signal, TimeLiteral, Tween};
     assert!(Tween::try_new(0.0, 1.0, (-1).seconds()).is_err());
     assert!(
         Tween::try_new(0.0, 1.0, 1.seconds())
@@ -310,7 +310,7 @@ fn custom_curves_clone_across_threads_without_debug_evaluating_them() {
 
 #[test]
 fn inputs_preserve_double_precision_across_clip_durations() {
-    use crate::{Animation, Duration, Keyframes, TimeLiteral, Tween};
+    use crate::{Duration, Keyframes, Signal, TimeLiteral, Tween};
     for curve in [
         Easing::Linear,
         Easing::QuadraticIn,

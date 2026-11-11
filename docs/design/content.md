@@ -75,7 +75,9 @@ identical glyph rasterization on another platform.
 The typst feature compiles trusted single-page markup; formula adds math authoring,
 selection, writing and morphing. Heavy compiler dependencies stay in motion-formula.
 Formula::typst retains source/options without initializing a compiler or reading
-fonts. There is no LaTeX conversion API or on-disk formula cache.
+fonts. `size` and `fill` create a new immutable compile key (source plus options) with its
+own empty result cell, so a stale compilation is never reused. There is no LaTeX
+conversion API or on-disk formula cache.
 
 A frozen compiler environment produces vector glyphs and geometric marks while
 retaining source ranges and rendered symbol occurrences in FormulaAsset. Source,

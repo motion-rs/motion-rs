@@ -3,7 +3,7 @@
 use std::hash::Hash;
 use std::sync::Arc;
 
-use crate::{Animation, Duration, FrameRate, Node, Point, Random, Rect, Size, Time};
+use crate::{Duration, FrameRate, Interval, Node, Point, Random, Rect, Signal, Size, Time};
 
 mod cache;
 mod partition;
@@ -204,23 +204,12 @@ impl<'a> SceneContext<'a> {
     /// Zero duration jumps at start. Panics for negative duration. Wide integer
     /// differences allow queries across opposite signed tick extremes.
     pub fn progress_in(&self, start: Time, duration: Duration) -> f64 {
-        assert!(
-            duration >= Duration::ZERO,
-            "interval duration must be nonnegative"
-        );
-        let elapsed = i128::from(self.time.ticks()) - i128::from(start.ticks());
-        if elapsed < 0 {
-            0.0
-        } else if elapsed >= i128::from(duration.ticks()) {
-            1.0
-        } else {
-            elapsed as f64 / duration.ticks() as f64
-        }
+        interval(start, duration).progress(self.time)
     }
 
     /// Eased local interval progress, with the same clamping as progress_in.
     pub fn ease_in(&self, start: Time, duration: Duration, easing: crate::Easing) -> f64 {
-        easing.apply(self.progress_in(start, duration))
+        interval(start, duration).ease(self.time, easing)
     }
 
     /// Exact rational authoring frame rate shared by still, preview and export clocks.
@@ -247,7 +236,7 @@ impl<'a> SceneContext<'a> {
     }
 
     /// Samples an animation using local, not global, time.
-    pub fn sample<Value>(&self, animation: &(impl Animation<Value> + ?Sized)) -> Value {
+    pub fn sample<Value>(&self, animation: &(impl Signal<Value> + ?Sized)) -> Value {
         animation.sample(self.time.since_origin())
     }
 
@@ -334,12 +323,8 @@ impl<'a> SceneContext<'a> {
         duration: Duration,
         build: impl FnOnce(&SceneContext<'a>) -> Node,
     ) -> Node {
-        assert!(
-            duration >= Duration::ZERO,
-            "interval duration must be nonnegative"
-        );
-        let elapsed = i128::from(self.time.ticks()) - i128::from(start.ticks());
-        if elapsed < 0 || elapsed >= i128::from(duration.ticks()) {
+        let interval = interval(start, duration);
+        if !interval.contains(self.time) {
             Node::empty()
         } else {
             build(&Self {
@@ -348,7 +333,9 @@ impl<'a> SceneContext<'a> {
                     .shifted(start.since_origin())
                     .with_clip_duration(duration)
             })
-            .with_scene_time(Time::from_ticks(elapsed as i64))
+            .with_scene_time(Time::from_ticks(
+                (i128::from(self.time.ticks()) - i128::from(start.ticks())) as i64,
+            ))
         }
     }
 
@@ -579,4 +566,8 @@ impl<'a> SceneContext<'a> {
     ) -> Arc<Value> {
         self.cache.get_with_cost(key, build, cost)
     }
+}
+
+fn interval(start: Time, duration: Duration) -> Interval {
+    Interval::new(start, duration).unwrap_or_else(|error| panic!("{}", error.message))
 }

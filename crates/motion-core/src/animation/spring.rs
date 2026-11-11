@@ -1,6 +1,6 @@
 //! Closed-form damped spring response and conservative tick-based settling time.
 
-use super::Animation;
+use super::Signal;
 use crate::{Duration, Interpolate, TICKS_PER_SECOND};
 
 /// A finite physical spring between arbitrary interpolatable values.
@@ -24,7 +24,7 @@ use crate::{Duration, Interpolate, TICKS_PER_SECOND};
 /// let movement = Spring::new(Point::ORIGIN, Point::new(100.0, 40.0))
 ///     .damping(20.0)
 ///     .settling_threshold(0.0001);
-/// let end = movement.duration().unwrap();
+/// let end = movement.settle_duration();
 /// assert_eq!(movement.sample(end), Point::new(100.0, 40.0));
 /// assert_eq!(movement.sample((-1).seconds()), Point::ORIGIN);
 /// ```
@@ -80,6 +80,11 @@ impl<Value> Spring<Value> {
         self.rebuild()
     }
 
+    /// Returns the conservative time at which the spring reaches its target exactly.
+    pub fn settle_duration(&self) -> Duration {
+        self.response.duration
+    }
+
     fn rebuild(mut self) -> Self {
         self.response = Response::new(self.parameters);
         self
@@ -92,7 +97,7 @@ impl Default for Spring<f64> {
     }
 }
 
-impl<Value: Interpolate + Send + Sync> Animation<Value> for Spring<Value> {
+impl<Value: Interpolate + Send + Sync> Signal<Value> for Spring<Value> {
     fn sample(&self, time: Duration) -> Value {
         if time <= Duration::ZERO {
             return self.from.clone();
@@ -102,10 +107,6 @@ impl<Value: Interpolate + Send + Sync> Animation<Value> for Spring<Value> {
         }
         self.from
             .interpolate(&self.to, self.response.progress(time.as_seconds()))
-    }
-
-    fn duration(&self) -> Option<Duration> {
-        Some(self.response.duration)
     }
 }
 
@@ -414,7 +415,7 @@ mod tests {
         for time in [100.milliseconds(), 300.milliseconds(), 500.milliseconds()] {
             close(base.sample(time), scaled.sample(time));
         }
-        assert!((base.duration().unwrap().ticks() - scaled.duration().unwrap().ticks()).abs() <= 1);
+        assert!((base.settle_duration().ticks() - scaled.settle_duration().ticks()).abs() <= 1);
     }
 
     #[test]
@@ -426,8 +427,7 @@ mod tests {
                 assert!((nearby.sample(time) - critical.sample(time)).abs() < 1e-11);
             }
             assert!(
-                (nearby.duration().unwrap().as_seconds()
-                    / critical.duration().unwrap().as_seconds()
+                (nearby.settle_duration().as_seconds() / critical.settle_duration().as_seconds()
                     - 1.0)
                     .abs()
                     < 1e-4
@@ -438,7 +438,7 @@ mod tests {
     #[test]
     fn default_threshold_and_random_order_sampling_pin_exact_endpoints() {
         let spring = Spring::default();
-        let end = spring.duration().unwrap();
+        let end = spring.settle_duration();
         assert!(end > Duration::ZERO);
         assert_eq!(spring.sample(Duration::from_ticks(i64::MIN)), 0.0);
         assert_eq!(spring.sample(Duration::ZERO), 0.0);
@@ -459,7 +459,7 @@ mod tests {
             }
         }
         let tighter = spring.clone().settling_threshold(1e-6);
-        assert!(tighter.duration().unwrap() > end);
+        assert!(tighter.settle_duration() > end);
         let smallest = spring.settling_threshold(f64::from_bits(1));
         let response = smallest.response;
         assert!(

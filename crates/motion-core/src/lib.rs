@@ -37,7 +37,9 @@ pub mod shape;
 pub mod time;
 pub mod validation;
 
-pub use animation::{Animation, Constant, Easing, Interpolate, Keyframes, Spring, Tween};
+pub use animation::{
+    Constant, Easing, FiniteAnimation, Interpolate, Interval, Keyframes, Signal, Spring, Tween,
+};
 pub use animation::{
     Extrapolate, FollowPath, Noise, Oscillator, PathSample, Waveform, piecewise, remap,
 };
@@ -108,7 +110,6 @@ pub mod prelude {
     pub use crate::{
         AngleLiteral, Color, Pivot, Point, Rect, Size, Transform, TransformComponents, Vector2,
     };
-    pub use crate::{Animation, Constant, Easing, Interpolate, Keyframes, Spring, Tween};
     pub use crate::{
         ApertureShape, Cdl, ColorWheels, DepthOfField, DepthPlane, Elevation, HeightFrom, Lut1d,
         Lut3d, LutInput, Optics, ShutterCurve, ShutterSampling,
@@ -133,6 +134,9 @@ pub mod prelude {
     pub use crate::{
         Canvas, DeferredContent, DrawCommand, DrawContext, Drawable, FillRule, LineCap, LineJoin,
         Paint, PathClip, RectClip, RenderQuality, Shape, ShapeClip, StrokeStyle, Styled,
+    };
+    pub use crate::{
+        Constant, Easing, FiniteAnimation, Interpolate, Keyframes, Signal, Spring, Tween,
     };
     pub use crate::{
         CrossFade, Iris, IrisShape, MotionBlur, Push, Slide, Transition, Wipe, ZoomBlur,

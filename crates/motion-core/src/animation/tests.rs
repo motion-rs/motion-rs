@@ -4,10 +4,10 @@ use super::*;
 use crate::{Point, TimeLiteral};
 
 #[test]
-fn delay_and_speed_preserve_boundaries_signed_signals_and_collapsed_durations() {
+fn delay_and_speed_preserve_boundaries_and_collapsed_durations() {
     let tween = Tween::new(0.0_f64, 10.0, Duration::from_ticks(10));
     let delayed = tween.clone().delay(Duration::from_ticks(5));
-    assert_eq!(delayed.duration(), Some(Duration::from_ticks(15)));
+    assert_eq!(delayed.duration(), Duration::from_ticks(15));
     for (ticks, expected) in [
         (i64::MIN, 0.0),
         (5, 0.0),
@@ -18,32 +18,16 @@ fn delay_and_speed_preserve_boundaries_signed_signals_and_collapsed_durations() 
         assert_eq!(delayed.sample(Duration::from_ticks(ticks)), expected);
     }
     let faster = tween.clone().speed(2.0);
-    assert_eq!(faster.duration(), Some(Duration::from_ticks(5)));
+    assert_eq!(faster.duration(), Duration::from_ticks(5));
     assert_eq!(faster.sample(Duration::from_ticks(2)), 4.0);
     assert_eq!(faster.sample(Duration::from_ticks(5)), 10.0);
     assert_eq!(faster.sample(Duration::from_ticks(i64::MIN)), 0.0);
     let collapsed = tween.speed(100.0);
-    assert_eq!(collapsed.duration(), Some(Duration::ZERO));
+    assert_eq!(collapsed.duration(), Duration::ZERO);
     assert_eq!(collapsed.sample(BEFORE_START), 0.0);
     assert_eq!(collapsed.sample(Duration::ZERO), 10.0);
-    let signed = |time: Duration| time.ticks();
-    assert_eq!(
-        signed
-            .delay(Duration::from_ticks(5))
-            .sample(Duration::from_ticks(-3)),
-        -8
-    );
-    assert_eq!(signed.speed(2.0).sample(Duration::from_ticks(-3)), -6);
-    assert_eq!(
-        signed.speed(1.0).sample(Duration::from_ticks(i64::MIN)),
-        i64::MIN
-    );
-    assert_eq!(
-        Constant::new(7).delay(1.seconds()).speed(2.0).duration(),
-        None
-    );
     let maximum = Tween::new(0.0_f64, 1.0, Duration::from_ticks(i64::MAX)).speed(2.0);
-    let near_end = maximum.duration().unwrap() - Duration::from_ticks(1);
+    let near_end = maximum.duration() - Duration::from_ticks(1);
     let value = maximum.sample(near_end);
     assert!(value.is_finite() && (0.0..=1.0).contains(&value));
 }
@@ -54,7 +38,7 @@ fn finite_combinators_use_exact_integer_boundaries_and_arbitrary_order() {
     let sequence = tween
         .clone()
         .then(Tween::new(100.0_f64, 110.0, Duration::from_ticks(5)));
-    assert_eq!(sequence.duration(), Some(Duration::from_ticks(15)));
+    assert_eq!(sequence.duration(), Duration::from_ticks(15));
     for (ticks, expected) in [
         (15, 110.0),
         (0, 0.0),
@@ -67,7 +51,7 @@ fn finite_combinators_use_exact_integer_boundaries_and_arbitrary_order() {
         assert_eq!(sequence.sample(Duration::from_ticks(ticks)), expected);
     }
     let reversed = tween.clone().reverse();
-    assert_eq!(reversed.duration(), Some(Duration::from_ticks(10)));
+    assert_eq!(reversed.duration(), Duration::from_ticks(10));
     for (ticks, expected) in [
         (10, 0.0),
         (0, 10.0),
@@ -78,7 +62,7 @@ fn finite_combinators_use_exact_integer_boundaries_and_arbitrary_order() {
         assert_eq!(reversed.sample(Duration::from_ticks(ticks)), expected);
     }
     let repeated = tween.clone().repeat(3);
-    assert_eq!(repeated.duration(), Some(Duration::from_ticks(30)));
+    assert_eq!(repeated.duration(), Duration::from_ticks(30));
     for (ticks, expected) in [
         (30, 10.0),
         (0, 0.0),
@@ -91,7 +75,7 @@ fn finite_combinators_use_exact_integer_boundaries_and_arbitrary_order() {
         assert_eq!(repeated.sample(Duration::from_ticks(ticks)), expected);
     }
     let round_trip = tween.clone().ping_pong();
-    assert_eq!(round_trip.duration(), Some(Duration::from_ticks(20)));
+    assert_eq!(round_trip.duration(), Duration::from_ticks(20));
     for (ticks, expected) in [
         (20, 0.0),
         (0, 0.0),
@@ -107,7 +91,7 @@ fn finite_combinators_use_exact_integer_boundaries_and_arbitrary_order() {
         .repeat(2)
         .speed(2.0)
         .delay(Duration::from_ticks(5));
-    assert_eq!(composed.duration(), Some(Duration::from_ticks(25)));
+    assert_eq!(composed.duration(), Duration::from_ticks(25));
     assert_eq!(composed.sample(Duration::from_ticks(10)), 10.0);
     assert_eq!(composed.sample(Duration::from_ticks(15)), 0.0);
 }
@@ -132,7 +116,7 @@ fn instantaneous_sources_keep_distinct_before_and_after_values() {
 }
 
 #[test]
-fn invalid_or_infinite_compositions_and_duration_overflows_fail_at_construction() {
+fn invalid_compositions_and_duration_overflows_fail_at_construction() {
     fn tween() -> Tween<f64> {
         Tween::new(0.0_f64, 1.0, 1.seconds())
     }
@@ -141,23 +125,17 @@ fn invalid_or_infinite_compositions_and_duration_overflows_fail_at_construction(
     }
     assert!(std::panic::catch_unwind(|| Tween::new(0.0_f64, 1.0, BEFORE_START)).is_err());
     assert!(std::panic::catch_unwind(|| tween().delay(BEFORE_START)).is_err());
-    let infinite = Constant::new(0.0_f64);
-    assert!(std::panic::catch_unwind(|| infinite.clone().then(tween())).is_err());
-    assert!(std::panic::catch_unwind(|| tween().then(infinite.clone())).is_err());
-    assert!(std::panic::catch_unwind(|| infinite.clone().reverse()).is_err());
-    assert!(std::panic::catch_unwind(|| infinite.clone().repeat(0)).is_err());
-    assert!(std::panic::catch_unwind(|| infinite.clone().ping_pong()).is_err());
 
     fn maximum() -> Tween<f64> {
         Tween::new(0.0_f64, 1.0, Duration::from_ticks(i64::MAX))
     }
     assert_eq!(
         maximum().repeat(1).duration(),
-        Some(Duration::from_ticks(i64::MAX))
+        Duration::from_ticks(i64::MAX)
     );
     assert_eq!(
         maximum().speed(1.0).duration(),
-        Some(Duration::from_ticks(i64::MAX))
+        Duration::from_ticks(i64::MAX)
     );
     assert!(std::panic::catch_unwind(|| maximum().repeat(2)).is_err());
     assert!(std::panic::catch_unwind(|| maximum().ping_pong()).is_err());
@@ -167,13 +145,15 @@ fn invalid_or_infinite_compositions_and_duration_overflows_fail_at_construction(
 
     struct Invalid;
 
-    impl Animation<f64> for Invalid {
+    impl Signal<f64> for Invalid {
         fn sample(&self, _time: Duration) -> f64 {
             0.0
         }
+    }
 
-        fn duration(&self) -> Option<Duration> {
-            Some(BEFORE_START)
+    impl FiniteAnimation<f64> for Invalid {
+        fn duration(&self) -> Duration {
+            BEFORE_START
         }
     }
     assert!(std::panic::catch_unwind(|| Invalid.reverse()).is_err());
@@ -212,16 +192,14 @@ fn map_zip_closures_and_type_erasure_preserve_timing_and_thread_safety() {
     let mapped = tween
         .clone()
         .map(|value| Point::new(value, value * 2.0))
-        .boxed();
+        .boxed_finite();
     let zipped = mapped.clone().zip(Tween::new(0.0_f64, 3.0, 3.seconds()));
-    assert_eq!(zipped.duration(), Some(3.seconds()));
+    assert_eq!(zipped.duration(), 3.seconds());
     assert_eq!(zipped.sample(1.seconds()), (Point::new(4.0, 8.0), 1.0));
     assert_eq!(zipped.sample(4.seconds()), (Point::new(8.0, 16.0), 3.0));
-    assert_eq!(tween.zip(Constant::new(7)).duration(), None);
     let signal = (|time: Duration| time.ticks())
         .map(|ticks| ticks.to_string())
         .boxed();
-    assert_eq!(signal.duration(), None);
     assert_eq!(signal.sample(Duration::from_ticks(-17)), "-17");
     assert_eq!(
         std::thread::spawn(move || mapped.sample(1.seconds()))

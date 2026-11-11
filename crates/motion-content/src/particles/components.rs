@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::VectorTree;
-use motion_core::{Animation, Path2D, Point, Rect, Vector2};
+use motion_core::{Path2D, Point, Rect, Signal, Vector2};
 
 mod image;
 mod modifiers;
@@ -38,7 +38,7 @@ macro_rules! emitter {
             }
             /// Uses seeded stochastic fractional births at each fixed step; its
             /// expected birth count follows the animation, without hidden cursors.
-            pub fn rate_animation(mut self, rate: impl Animation<f64> + 'static) -> Self {
+            pub fn rate_animation(mut self, rate: impl Signal<f64> + 'static) -> Self {
                 self.0.rate = EmissionRate::Animated(Arc::new(rate));
                 self
             }
@@ -171,7 +171,7 @@ impl PathEmitter {
     }
 
     /// Advances along an animated normalized arc length, retaining tangent launch velocity.
-    pub fn along_path(mut self, progress: impl Animation<f64> + 'static) -> Self {
+    pub fn along_path(mut self, progress: impl Signal<f64> + 'static) -> Self {
         self.0.path_progress = Some(Arc::new(progress));
         self
     }
@@ -298,7 +298,7 @@ enum EmitterSource {
 #[derive(Clone)]
 enum EmissionRate {
     Constant(f64),
-    Animated(Arc<dyn Animation<f64>>),
+    Animated(Arc<dyn Signal<f64>>),
 }
 
 #[derive(Clone)]
@@ -313,7 +313,7 @@ struct EmitterSettings {
     size: f32,
     depth: [f32; 2],
     palette: Option<Arc<[[f32; 4]]>>,
-    path_progress: Option<Arc<dyn Animation<f64>>>,
+    path_progress: Option<Arc<dyn Signal<f64>>>,
     paint: Option<Arc<(motion_core::Paint, Rect)>>,
 }
 

@@ -68,7 +68,7 @@ pub(super) struct Pulse {
     pub(super) fade: f64,
 }
 
-impl Animation<f64> for Pulse {
+impl Signal<f64> for Pulse {
     fn sample(&self, time: Duration) -> f64 {
         let seconds = time.as_seconds();
         if seconds < self.start || seconds >= self.end {

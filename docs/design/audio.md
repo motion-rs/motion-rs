@@ -110,7 +110,7 @@ and crops, so effect and normalization clocks never restart at the window edge.
 
 `AudioAnalysis` (feature `audio`) wraps one immutable `PcmBuffer`, or freezes a bounded
 interval of any pure source via `from_source`. It yields `AudioSignal`
-(a stateless `Animation<f64>`, linear interpolation, 0 outside its duration):
+(a stateless finite `FiniteAnimation<f64>`, linear interpolation, 0 outside its duration):
 `loudness` (linear RMS, not LUFS), `band`, `pitch`, `onset_strength`;
 `AudioSpectrum` (`spectrum`, `chroma`); `AudioMarkers` (`onsets`, JSON read/write);
 and `BeatGrid`. Traces are computed with forward Hann windows, cached per PCM
