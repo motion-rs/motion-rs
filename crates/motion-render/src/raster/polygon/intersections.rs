@@ -4,7 +4,7 @@ use super::*;
 use motion_core::ValidationError;
 
 #[derive(Clone, Copy)]
-struct Interval {
+pub(super) struct Interval {
     index: usize,
     left: f64,
     right: f64,
@@ -28,12 +28,35 @@ fn row_cuts_batched(
     path: &str,
     batched: bool,
 ) -> Result<Vec<f64>, ValidationError> {
+    let mut scratch = RowScratch::default();
+    fill_row_cuts(edges, row, right, batched, &mut scratch, budget, path)?;
+    Ok(scratch.cuts)
+}
+
+/// Fills `scratch.cuts` with the unsorted row boundaries; other scratch vectors are working
+/// storage and are left cleared of meaning for the next call.
+pub(super) fn fill_row_cuts(
+    edges: &[Edge],
+    row: u32,
+    right: u32,
+    batched: bool,
+    scratch: &mut RowScratch,
+    budget: &mut Budget,
+    path: &str,
+) -> Result<(), ValidationError> {
+    let RowScratch {
+        cuts,
+        intervals,
+        live,
+        ..
+    } = scratch;
+    cuts.clear();
+    intervals.clear();
+    live.clear();
     let top = f64::from(row);
     let bottom = top + 1.0;
-    let mut cuts = Vec::new();
-    budget.push(&mut cuts, top, path)?;
-    budget.push(&mut cuts, bottom, path)?;
-    let mut intervals = Vec::new();
+    budget.push(cuts, top, path)?;
+    budget.push(cuts, bottom, path)?;
     let admitted = batched && budget.work(edges.len() as u64, path).is_ok();
     for (index, edge) in edges.iter().enumerate() {
         if !admitted {
@@ -41,7 +64,7 @@ fn row_cuts_batched(
         }
         for vertical in [edge.top.y, edge.bottom.y] {
             if vertical > top && vertical < bottom {
-                budget.push(&mut cuts, vertical, path)?;
+                budget.push(cuts, vertical, path)?;
             }
         }
         if edge.top.y >= bottom || edge.bottom.y <= top {
@@ -62,7 +85,7 @@ fn row_cuts_batched(
         } else {
             (f64::NEG_INFINITY, f64::INFINITY)
         };
-        budget.push(&mut intervals, Interval { index, left, right }, path)?;
+        budget.push(intervals, Interval { index, left, right }, path)?;
     }
     #[cfg(test)]
     let vertex_cuts = cuts.len();
@@ -73,37 +96,28 @@ fn row_cuts_batched(
             .total_cmp(&second.left)
             .then(first.index.cmp(&second.index))
     });
-    let mut live: Vec<usize> = Vec::new();
     for (position, interval) in intervals.iter().enumerate() {
         budget.work(1 + live.len() as u64, path)?;
         let previous = live.len();
         live.retain(|index| intervals[*index].right >= interval.left);
         budget.release(((previous - live.len()) * size_of::<usize>()) as u64);
         let admitted = batched && budget.work(live.len() as u64, path).is_ok();
-        for &other in &live {
+        for &other in live.iter() {
             if !admitted {
                 budget.work(1, path)?;
             }
             let first = interval.index.max(intervals[other].index);
             let second = interval.index.min(intervals[other].index);
-            push_intersection(
-                edges[first],
-                edges[second],
-                top,
-                bottom,
-                &mut cuts,
-                budget,
-                path,
-            )?;
+            push_intersection(edges[first], edges[second], top, bottom, cuts, budget, path)?;
         }
-        budget.push(&mut live, position, path)?;
+        budget.push(live, position, path)?;
     }
     budget.release(
         (intervals.len() * size_of::<Interval>() + live.len() * size_of::<usize>()) as u64,
     );
     #[cfg(test)]
     super::sweep::diagnostics::row(cuts.len() > vertex_cuts);
-    Ok(cuts)
+    Ok(())
 }
 
 fn push_intersection(

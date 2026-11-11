@@ -31,7 +31,7 @@ Contracts that already exist are in [rendering](design/rendering.md),
 [GPU rendering](design/gpu.md) and [architecture](design/architecture.md).
 
 Performance measurements are paused. Four merged deliverables remain from earlier reviews,
-while R10 and R12 come from the Gallery profile in review 7, which also lists
+while R12 comes from the Gallery profile in review 7, which also lists
 output-changing proposals that need separate approval. IDs track review requests, not a
 measured priority ranking; duplicate requests are grouped by deliverable.
 
@@ -41,11 +41,10 @@ measured priority ranking; duplicate requests are grouped by deliverable.
 | R3 | Explicit opt-in subtree raster cache (P-9 / S-7) | Isolated-layer API, bounded lifetime/identity and separate output-change approval |
 | R4 | General cold item-parallel prepare (S-3) | Per-item admission/scratch, ordered assembly and deterministic failure; disabled cached-copy experiment removed |
 | R6 | Current-source performance acceptance (N-6 / M2 / M4) | Record actual suite workload/sampling and absolute timings; full films, process RSS, GUI presentation and cross-device automated milestone gates remain separate |
-| R10 | Extend session polygon scratch reuse to active-edge and intersection buffers; band-area reuse has focused cold-path evidence but unresolved warm/off-target regressions | Bit-identical coverage; logical byte and work admission unchanged; separate measured cold gains from general acceptance |
 | R12 | Prepare independent audio buses in parallel and merge them in a fixed order | Bit-identical PCM and loudness reports for every worker count |
 
-Whole-band area/cover and Gallery default-budget restoration are implemented; their
-functional gates do not establish timing gains or all-frame admission. Studio's
+Whole-band area/cover, session polygon scratch reuse (R10) and Gallery default-budget
+restoration are implemented; their functional gates do not establish timing gains or all-frame admission. Studio's
 first-review L shortcut is tracked as R7. Streaming native encoding, measured frame
 workers, pooled GPU textures, shared content caches and CPU pixel/encoded-plane pooling are
 implemented, not new tasks. Full-frame linear APIs remain supported; automatic subtree
@@ -93,8 +92,27 @@ production compatibility paths.
    Keep offline deterministic preparation separate from real-time device ownership.
 5. Extend particle models and generic field/simulation operators, then optimize
    dense neighbor queries. Smoke/fire artwork stays in applications, not core.
-6. Explore IK/constraints, richer procedural materials, video sources and project
-   persistence. Define bounded resources, timing, failure and cache contracts first.
+6. Explore IK/constraints, richer procedural materials and project persistence.
+   Define bounded resources, timing, failure and cache contracts first.
+7. Add path boolean operations (union, intersection, difference, xor) to the shared
+   vector model. Results must be deterministic, bounded through `Budget` and
+   `RasterLimits`, and identical for the CPU and GPU backends; degenerate and
+   self-intersecting inputs need explicit fixtures and diagnostics.
+8. Add mesh gradients (patch grids with per-vertex colors). Admit patch and subdivision
+   counts before allocation, define color space and interpolation, and keep the CPU
+   backend, GPU plan, WGSL shader and host ABI in agreement.
+9. Add 2.5D perspective: transform layers in 3D with a camera, depth ordering and
+   perspective-correct sampling, without turning the engine into a 3D renderer. Define
+   projection, clipping and backface behavior once, with CPU/GPU pixel agreement.
+10. Add video input sources decoded through `motion-ffmpeg`. Time maps explicitly from
+    Timeline time to source frames, so seeking replays exactly. Define bounded decode
+    memory, unsupported-codec and variable-frame-rate failure, and audio extraction.
+    The decoder opens only files named through `Assets`.
+11. Add hardware-accelerated encoding (for example VideoToolbox, NVENC, VAAPI) as an
+    explicit, opt-in encoder choice. Check capability before use and report
+    unavailability instead of falling back silently; keep software encoding the
+    deterministic reference. Each encoder needs decoded-output fixtures and a named
+    ignored hardware execution.
 
 ## Declarative Documents
 

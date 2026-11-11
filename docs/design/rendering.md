@@ -56,14 +56,15 @@ Coordinate precision, generated storage and work guards remain intact. Replay
 uses the [same-environment determinism contract](reliability.md#determinism),
 not a cross-platform byte-identity promise or an exact curve-area guarantee.
 
-Session preparation reuses polygon band-area storage across coverage-cache misses.
-Every band still initializes its admitted area values to zero and retains the same
-integration order, logical byte/work charges and failure boundaries. Each session
-retains at most 1 MiB of idle area capacity, independently of shared coverage-cache
-entries; oversized storage is discarded after the path, including failed attempts.
-PreparedFrame layout is unchanged. Active-edge and intersection scratch still
-allocate independently. Measured cold-preparation gains are workload-specific;
-they do not establish warm-frame, full-film or RSS gains.
+Session preparation reuses polygon band-area, edge-sweep, active-edge, row-crossing and
+trapezoid-column storage across coverage-cache misses. Every band still initializes its
+admitted area values to zero and retains the same integration order, logical byte/work
+charges and failure boundaries; only vector capacity persists. Each session retains at
+most 1 MiB of idle capacity per vector, independently of shared coverage-cache entries;
+oversized storage is discarded after the path, including failed attempts.
+PreparedFrame layout is unchanged. Measured cold-preparation gains are workload-specific;
+they do not establish warm-frame, full-film or RSS gains. Shape-clip rasterization still
+allocates its own scratch.
 
 CPU composition is scalar. Solid SourceOver spans hoist the remaining-alpha term out
 of the pixel loop; every other mode keeps its per-pixel formula and operation order. No

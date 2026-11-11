@@ -4,12 +4,14 @@ use super::*;
 use motion_core::{FillRule, PathVerb, Point, Rect, Transform, ValidationError};
 
 mod intersections;
+pub(crate) mod scratch;
 pub(crate) mod shape_clip;
 mod sweep;
 #[cfg(test)]
 mod tests;
 
 pub use motion_core::geometry::flatten::{Edge, path_edges};
+use scratch::{ColumnScratch, PolygonScratch, RowScratch};
 
 #[cfg(test)]
 use kurbo::{CubicBez, ParamCurve};
@@ -17,7 +19,7 @@ use kurbo::{CubicBez, ParamCurve};
 use motion_core::geometry::flatten::{add_edge, flatten_curve};
 
 #[derive(Clone, Copy)]
-struct Crossing {
+pub(super) struct Crossing {
     edge: Edge,
     horizontal: f64,
 }
@@ -37,7 +39,7 @@ impl PreparedFrame {
             transform,
             rule,
             tolerance,
-            &mut Vec::new(),
+            &mut PolygonScratch::default(),
             &mut RasterScope::new(budget, path),
         )
     }
@@ -48,7 +50,7 @@ impl PreparedFrame {
         transform: Transform,
         rule: FillRule,
         tolerance: f64,
-        areas: &mut Vec<f64>,
+        scratch: &mut PolygonScratch,
         scope: &mut RasterScope<'_>,
     ) -> Result<(), ValidationError> {
         let coefficients = transform.coefficients().map(f64::to_bits);
@@ -65,7 +67,7 @@ impl PreparedFrame {
                 Transform::from_coefficients(normalized),
                 rule,
                 tolerance,
-                areas,
+                scratch,
                 scope,
             )?;
             for strip in &mut self.strips[strips..] {
@@ -79,7 +81,7 @@ impl PreparedFrame {
             }
             return Ok(());
         }
-        self.polygon_path_raw(geometry, transform, rule, tolerance, areas, scope)
+        self.polygon_path_raw(geometry, transform, rule, tolerance, scratch, scope)
     }
 
     fn polygon_path_raw(
@@ -88,7 +90,7 @@ impl PreparedFrame {
         transform: Transform,
         rule: FillRule,
         tolerance: f64,
-        areas: &mut Vec<f64>,
+        scratch: &mut PolygonScratch,
         scope: &mut RasterScope<'_>,
     ) -> Result<(), ValidationError> {
         let (budget, path) = (&mut *scope.budget, scope.path);
@@ -110,7 +112,7 @@ impl PreparedFrame {
             transform,
             rule,
             tolerance,
-            areas,
+            scratch,
             scope,
         )
     }
@@ -129,7 +131,7 @@ impl PreparedFrame {
             transform,
             rule,
             tolerance,
-            &mut Vec::new(),
+            &mut PolygonScratch::default(),
             &mut RasterScope::new(budget, path),
         )
     }
@@ -140,7 +142,7 @@ impl PreparedFrame {
         transform: Transform,
         rule: FillRule,
         tolerance: f64,
-        areas: &mut Vec<f64>,
+        scratch: &mut PolygonScratch,
         scope: &mut RasterScope<'_>,
     ) -> Result<(), ValidationError> {
         let (budget, path) = (&mut *scope.budget, scope.path);
@@ -165,7 +167,7 @@ impl PreparedFrame {
                 &edges,
                 pixels,
                 rule,
-                areas,
+                scratch,
                 &mut RasterScope::new(budget, path),
             )?;
         }
@@ -315,6 +317,7 @@ fn sort_work(count: usize, budget: &mut Budget, path: &str) -> Result<(), Valida
     )
 }
 
+#[cfg(test)]
 fn integrate_row(
     edges: &[Edge],
     band: Band,
@@ -322,8 +325,27 @@ fn integrate_row(
     areas: &mut [f64],
     scope: &mut RasterScope<'_>,
 ) -> Result<(), ValidationError> {
-    let cuts = intersections::row_cuts(edges, band.row, band.right, scope.budget, scope.path)?;
-    integrate_cuts(edges, band, rule, areas, cuts, CutMode::Merged, scope)
+    integrate_row_with(edges, band, rule, areas, &mut RowScratch::default(), scope)
+}
+
+fn integrate_row_with(
+    edges: &[Edge],
+    band: Band,
+    rule: FillRule,
+    areas: &mut [f64],
+    scratch: &mut RowScratch,
+    scope: &mut RasterScope<'_>,
+) -> Result<(), ValidationError> {
+    intersections::fill_row_cuts(
+        edges,
+        band.row,
+        band.right,
+        true,
+        scratch,
+        scope.budget,
+        scope.path,
+    )?;
+    integrate_cuts(edges, band, rule, areas, scratch, CutMode::Merged, scope)
 }
 
 #[cfg(test)]
@@ -334,8 +356,19 @@ fn integrate_row_adjacent(
     areas: &mut [f64],
     scope: &mut RasterScope<'_>,
 ) -> Result<(), ValidationError> {
-    let cuts = intersections::row_cuts(edges, band.row, band.right, scope.budget, scope.path)?;
-    integrate_cuts(edges, band, rule, areas, cuts, CutMode::Adjacent, scope)
+    let mut scratch = RowScratch {
+        cuts: intersections::row_cuts(edges, band.row, band.right, scope.budget, scope.path)?,
+        ..RowScratch::default()
+    };
+    integrate_cuts(
+        edges,
+        band,
+        rule,
+        areas,
+        &mut scratch,
+        CutMode::Adjacent,
+        scope,
+    )
 }
 
 #[cfg(test)]
@@ -346,9 +379,25 @@ fn integrate_row_reference(
     areas: &mut [f64],
     scope: &mut RasterScope<'_>,
 ) -> Result<(), ValidationError> {
-    let cuts =
-        intersections::row_cuts_reference(edges, band.row, band.right, scope.budget, scope.path)?;
-    integrate_cuts(edges, band, rule, areas, cuts, CutMode::Reference, scope)
+    let mut scratch = RowScratch {
+        cuts: intersections::row_cuts_reference(
+            edges,
+            band.row,
+            band.right,
+            scope.budget,
+            scope.path,
+        )?,
+        ..RowScratch::default()
+    };
+    integrate_cuts(
+        edges,
+        band,
+        rule,
+        areas,
+        &mut scratch,
+        CutMode::Reference,
+        scope,
+    )
 }
 
 /// How adjacent inside regions of one row interval are integrated.
@@ -368,15 +417,21 @@ fn integrate_cuts(
     band: Band,
     rule: FillRule,
     areas: &mut [f64],
-    mut cuts: Vec<f64>,
+    scratch: &mut RowScratch,
     mode: CutMode,
     scope: &mut RasterScope<'_>,
 ) -> Result<(), ValidationError> {
     let (budget, path) = (&mut *scope.budget, scope.path);
+    let RowScratch {
+        cuts,
+        crossings,
+        columns,
+        ..
+    } = scratch;
     let top = f64::from(band.row);
     sort_work(cuts.len(), budget, path)?;
     cuts.sort_unstable_by(f64::total_cmp);
-    let mut crossings = scratch::<Crossing>(edges.len() as u64, budget, path)?;
+    reuse_scratch(crossings, edges.len() as u64, budget, path)?;
     for interval in cuts.windows(2) {
         let [start, end] = [interval[0], interval[1]];
         budget.work(1, path)?;
@@ -397,7 +452,7 @@ fn integrate_cuts(
         crossings.sort_unstable_by(|first, second| first.horizontal.total_cmp(&second.horizontal));
         let mut winding = 0i32;
         let mut previous: Option<Edge> = None;
-        for crossing in &crossings {
+        for crossing in crossings.iter() {
             budget.work(1, path)?;
             let inside = match rule {
                 FillRule::NonZero => winding != 0,
@@ -431,6 +486,7 @@ fn integrate_cuts(
                     end - top,
                     band,
                     areas,
+                    columns,
                     &mut RasterScope::new(budget, path),
                 )?;
             }
@@ -540,6 +596,7 @@ impl<'a> Columns<'a> {
     }
 }
 
+#[expect(clippy::too_many_arguments)]
 fn integrate_trapezoid(
     left_edge: Edge,
     right_edge: Edge,
@@ -547,6 +604,7 @@ fn integrate_trapezoid(
     end: f64,
     band: Band,
     areas: &mut [f64],
+    columns: &mut ColumnScratch,
     scope: &mut RasterScope<'_>,
 ) -> Result<(), ValidationError> {
     let Band { left, right, .. } = band;
@@ -561,11 +619,12 @@ fn integrate_trapezoid(
     }
     let width = (last - first) as usize;
     budget.work(width as u64 * 3, path)?;
-    let mut area = scratch::<f64>(width as u64, budget, path)?;
-    let mut cover = scratch::<f64>(width as u64, budget, path)?;
+    let ColumnScratch { area, cover } = columns;
+    reuse_scratch(area, width as u64, budget, path)?;
+    reuse_scratch(cover, width as u64, budget, path)?;
     area.resize(width, 0.0);
     cover.resize(width, 0.0);
-    let mut columns = Columns::new(first, last, &mut cover, &mut area);
+    let mut columns = Columns::new(first, last, cover, area);
     for (begin, finish) in [
         (
             Point::new(left_edge.at(row + start), start),
@@ -579,7 +638,7 @@ fn integrate_trapezoid(
         columns.segment(begin, finish, budget, path)?;
     }
     columns.resolve(end - start);
-    for (target, value) in areas[(first - left) as usize..].iter_mut().zip(&area) {
+    for (target, value) in areas[(first - left) as usize..].iter_mut().zip(area.iter()) {
         *target += value;
     }
     budget.release(width as u64 * 16);

@@ -14,13 +14,26 @@ struct EdgeSweep<'edges> {
 }
 
 impl<'edges> EdgeSweep<'edges> {
+    #[cfg(test)]
     fn new(
         edges: &'edges [Edge],
         budget: &mut Budget,
         path: &str,
     ) -> Result<Self, ValidationError> {
+        Self::with_buffers(edges, Vec::new(), Vec::new(), budget, path)
+    }
+
+    /// Builds the sweep inside reused vectors; `finish` hands them back.
+    fn with_buffers(
+        edges: &'edges [Edge],
+        mut starts: Vec<usize>,
+        mut live: Vec<usize>,
+        budget: &mut Budget,
+        path: &str,
+    ) -> Result<Self, ValidationError> {
         budget.work(edges.len() as u64, path)?;
-        let mut starts = scratch::<usize>(edges.len() as u64, budget, path)?;
+        reuse_scratch(&mut starts, edges.len() as u64, budget, path)?;
+        live.clear();
         starts.extend(0..edges.len());
         sort_work(starts.len(), budget, path)?;
         starts.sort_unstable_by(|first, second| {
@@ -33,7 +46,7 @@ impl<'edges> EdgeSweep<'edges> {
         Ok(Self {
             edges,
             starts,
-            live: Vec::new(),
+            live,
             cursor: 0,
         })
     }
@@ -44,7 +57,8 @@ impl<'edges> EdgeSweep<'edges> {
         height: u32,
         budget: &mut Budget,
         path: &str,
-    ) -> Result<Vec<Edge>, ValidationError> {
+        active: &mut Vec<Edge>,
+    ) -> Result<(), ValidationError> {
         budget.work(self.live.len() as u64, path)?;
         let previous = self.live.len();
         self.live
@@ -75,9 +89,9 @@ impl<'edges> EdgeSweep<'edges> {
             self.live.sort_unstable();
         }
         budget.work(self.live.len() as u64, path)?;
-        let mut result = scratch::<Edge>(self.live.len() as u64, budget, path)?;
-        result.extend(self.live.iter().map(|index| self.edges[*index]));
-        Ok(result)
+        reuse_scratch(active, self.live.len() as u64, budget, path)?;
+        active.extend(self.live.iter().map(|index| self.edges[*index]));
+        Ok(())
     }
 
     fn next_row(&self, minimum: u32, bottom: u32) -> u32 {
@@ -93,8 +107,9 @@ impl<'edges> EdgeSweep<'edges> {
         })
     }
 
-    fn release(self, budget: &mut Budget) {
+    fn finish(self, budget: &mut Budget) -> (Vec<usize>, Vec<usize>) {
         budget.release(((self.starts.len() + self.live.len()) * size_of::<usize>()) as u64);
+        (self.starts, self.live)
     }
 }
 
@@ -112,7 +127,7 @@ pub(crate) fn rasterize(
         edges,
         pixels,
         rule,
-        &mut Vec::new(),
+        &mut PolygonScratch::default(),
         &mut RasterScope::new(budget, path),
     )
 }
@@ -122,17 +137,30 @@ pub(super) fn rasterize_with_scratch(
     edges: &[Edge],
     pixels: PixelRect,
     rule: FillRule,
-    areas: &mut Vec<f64>,
+    scratch: &mut PolygonScratch,
     scope: &mut RasterScope<'_>,
 ) -> Result<(), ValidationError> {
     let (budget, path) = (&mut *scope.budget, scope.path);
+    let PolygonScratch {
+        areas,
+        starts,
+        live,
+        active,
+        row: row_scratch,
+    } = scratch;
     let left = pixels.left / 4 * 4;
     let right = (u64::from(pixels.right).div_ceil(4) * 4).min(u64::from(frame.size.width)) as u32;
     let mut row = pixels.top / 4 * 4;
-    let mut sweep = EdgeSweep::new(edges, budget, path)?;
+    let mut sweep = EdgeSweep::with_buffers(
+        edges,
+        std::mem::take(starts),
+        std::mem::take(live),
+        budget,
+        path,
+    )?;
     while row < pixels.bottom {
         let height = (frame.size.height - row).min(4);
-        let active = sweep.band(row, height, budget, path)?;
+        sweep.band(row, height, budget, path, active)?;
         if active.is_empty() {
             row = sweep.next_row(row + height, pixels.bottom);
             continue;
@@ -142,8 +170,8 @@ pub(super) fn rasterize_with_scratch(
         reuse_scratch(areas, count, budget, path)?;
         areas.resize(count as usize, 0.0);
         for vertical in row..row + height {
-            integrate_row(
-                &active,
+            integrate_row_with(
+                active,
                 Band {
                     row: vertical,
                     left,
@@ -151,11 +179,12 @@ pub(super) fn rasterize_with_scratch(
                 },
                 rule,
                 &mut areas[(vertical - row) as usize * (right - left) as usize..],
+                row_scratch,
                 &mut RasterScope::new(budget, path),
             )?;
         }
         #[cfg(test)]
-        diagnostics::band(&active, row, height);
+        diagnostics::band(active, row, height);
         frame.polygon_band(
             areas,
             Band { row, left, right },
@@ -165,7 +194,7 @@ pub(super) fn rasterize_with_scratch(
         budget.release(count * size_of::<f64>() as u64 + (active.len() * size_of::<Edge>()) as u64);
         row += height;
     }
-    sweep.release(budget);
+    (*starts, *live) = sweep.finish(budget);
     Ok(())
 }
 

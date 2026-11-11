@@ -216,7 +216,10 @@ fn sparse_bands_match_all_edge_integrals_with_less_admitted_work() {
         let mut reference = Budget::new(PixelSize::new(8, 1024), RasterLimits::default()).unwrap();
         let mut sweep = EdgeSweep::new(&edges, &mut optimized, "test").unwrap();
         for row in (0..1024).step_by(4) {
-            let active = sweep.band(row, 4, &mut optimized, "test").unwrap();
+            let mut active = Vec::new();
+            sweep
+                .band(row, 4, &mut optimized, "test", &mut active)
+                .unwrap();
             for vertical in row..row + 4 {
                 let mut expected = [0.0; 8];
                 let mut actual = [0.0; 8];
@@ -248,7 +251,7 @@ fn sparse_bands_match_all_edge_integrals_with_less_admitted_work() {
             }
             optimized.release((active.len() * size_of::<Edge>()) as u64);
         }
-        sweep.release(&mut optimized);
+        sweep.finish(&mut optimized);
         assert_eq!(optimized.live_bytes(), 0);
         assert!(
             optimized.work_done() < reference.work_done() / 4,
@@ -379,7 +382,10 @@ fn half_open_band_membership_and_source_order_survive_expiration() {
     let mut budget = Budget::new(PixelSize::new(16, 9), RasterLimits::default()).unwrap();
     let mut sweep = EdgeSweep::new(&edges, &mut budget, "test").unwrap();
     for (row, height) in [(0, 4), (4, 4), (8, 1)] {
-        let actual = sweep.band(row, height, &mut budget, "test").unwrap();
+        let mut actual = Vec::new();
+        sweep
+            .band(row, height, &mut budget, "test", &mut actual)
+            .unwrap();
         let expected: Vec<_> = edges
             .iter()
             .filter(|edge| edge.top.y < f64::from(row + height) && edge.bottom.y > f64::from(row))
@@ -392,7 +398,7 @@ fn half_open_band_membership_and_source_order_survive_expiration() {
         }
         budget.release((actual.len() * size_of::<Edge>()) as u64);
     }
-    sweep.release(&mut budget);
+    sweep.finish(&mut budget);
     assert_eq!(budget.live_bytes(), 0);
 }
 
@@ -489,9 +495,12 @@ fn active_indices_and_band_copies_obey_exact_limits_and_release() {
     let mut budget = Budget::new(PixelSize::new(16, 9), RasterLimits::default()).unwrap();
     let mut sweep = EdgeSweep::new(&edges, &mut budget, "test").unwrap();
     for (row, height) in [(0, 4), (4, 4), (8, 1)] {
-        let active = sweep.band(row, height, &mut budget, "test").unwrap();
+        let mut active = Vec::new();
+        sweep
+            .band(row, height, &mut budget, "test", &mut active)
+            .unwrap();
         budget.release((active.len() * size_of::<Edge>()) as u64);
     }
-    sweep.release(&mut budget);
+    sweep.finish(&mut budget);
     assert_eq!(budget.live_bytes(), 0);
 }

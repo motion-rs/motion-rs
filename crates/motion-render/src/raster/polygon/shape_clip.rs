@@ -208,6 +208,7 @@ fn integrate(
     let (row, right) = (band.row, band.right);
     let (budget, path) = (&mut *scope.budget, scope.path);
     let mut cuts = intersections::row_cuts(edges, row, right, budget, path)?;
+    let mut columns = ColumnScratch::default();
     sort_work(cuts.len(), budget, path)?;
     cuts.sort_unstable_by(f64::total_cmp);
     let mut crossings = scratch::<Boundary>(edges.len() as u64, budget, path)?;
@@ -248,6 +249,7 @@ fn integrate(
                     end - top,
                     band,
                     areas,
+                    &mut columns,
                     &mut RasterScope::new(budget, path),
                 )?;
             }

@@ -1,4 +1,5 @@
 use super::*;
+use crate::raster::polygon::scratch::MAX_IDLE_SCRATCH_BYTES;
 use motion_core::{
     Color, DisplayList, DrawCommand, Node, Paint, PixelSize, Shape, Size, ValidationError,
     ValidationLimits,
@@ -40,12 +41,12 @@ fn polygon_area_scratch_reuses_cold_frames_without_changing_pixels_or_admission(
             &cached(&source, &mut cache, exact, 1.0 / 256.0).unwrap(),
             &expected,
         );
-        assert!(cache.polygon_areas.is_empty());
-        assert!(cache.polygon_areas.capacity() > 0);
+        assert!(cache.polygon_scratch.areas.is_empty());
+        assert!(cache.polygon_scratch.areas.capacity() > 0);
         if index == 0 {
-            allocation = cache.polygon_areas.as_ptr();
+            allocation = cache.polygon_scratch.areas.as_ptr();
         } else {
-            assert_eq!(cache.polygon_areas.as_ptr(), allocation);
+            assert_eq!(cache.polygon_scratch.areas.as_ptr(), allocation);
         }
         for limits in [
             RasterLimits {
@@ -66,7 +67,7 @@ fn polygon_area_scratch_reuses_cold_frames_without_changing_pixels_or_admission(
                 (actual.kind, actual.field, actual.path),
                 (fresh.kind, fresh.field, fresh.path)
             );
-            assert!(cache.polygon_areas.is_empty());
+            assert!(cache.polygon_scratch.areas.is_empty());
             cache.shared.clear();
             compare(
                 &cached(&source, &mut cache, exact, 1.0 / 256.0).unwrap(),
@@ -74,10 +75,11 @@ fn polygon_area_scratch_reuses_cold_frames_without_changing_pixels_or_admission(
             );
         }
         cache
-            .polygon_areas
-            .resize(cache.polygon_areas.capacity(), f64::NAN);
+            .polygon_scratch
+            .areas
+            .resize(cache.polygon_scratch.areas.capacity(), f64::NAN);
     }
-    assert!(CoverageCache::default().polygon_areas.capacity() == 0);
+    assert!(CoverageCache::default().polygon_scratch.areas.capacity() == 0);
 }
 
 #[test]
@@ -91,7 +93,7 @@ fn polygon_area_scratch_discards_oversized_idle_storage_even_after_failure() {
             ..RasterLimits::default()
         },
     ] {
-        cache.polygon_areas = vec![f64::NAN; MAX_POLYGON_SCRATCH_BYTES / size_of::<f64>() + 1];
+        cache.polygon_scratch.areas = vec![f64::NAN; MAX_IDLE_SCRATCH_BYTES / size_of::<f64>() + 1];
         let mut frame = source
             .prepare(ValidationLimits::default(), RasterLimits::default())
             .unwrap();
@@ -106,7 +108,7 @@ fn polygon_area_scratch_discards_oversized_idle_storage_even_after_failure() {
             &mut RasterScope::new(&mut budget, "test"),
         );
         assert_eq!(result.is_ok(), limits.max_work != 1);
-        assert_eq!(cache.polygon_areas.capacity(), 0);
+        assert_eq!(cache.polygon_scratch.areas.capacity(), 0);
     }
 }
 

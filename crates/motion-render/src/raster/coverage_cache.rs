@@ -12,9 +12,6 @@ use std::sync::Arc;
 #[cfg(test)]
 mod tests;
 
-/// Maximum idle polygon area storage retained by one session, in bytes.
-const MAX_POLYGON_SCRATCH_BYTES: usize = 1024 * 1024;
-
 #[derive(Clone)]
 struct Entry {
     hash: u64,
@@ -75,7 +72,7 @@ impl Hash for ContentKey {
 pub(crate) struct CoverageCache {
     shared: Arc<motion_core::SceneCache>,
     pub(super) paints: super::paint::TableCache,
-    polygon_areas: Vec<f64>,
+    polygon_scratch: super::polygon::scratch::PolygonScratch,
 }
 
 impl Default for CoverageCache {
@@ -155,7 +152,7 @@ impl CoverageCache {
                 .partition(motion_core::CachePartition::Coverage)
                 .clone(),
             paints: super::paint::TableCache::new(cache),
-            polygon_areas: Vec::new(),
+            polygon_scratch: Default::default(),
         }
     }
 
@@ -192,13 +189,10 @@ impl CoverageCache {
             transform,
             rule,
             tolerance,
-            &mut self.polygon_areas,
+            &mut self.polygon_scratch,
             scope,
         );
-        self.polygon_areas.clear();
-        if self.polygon_areas.capacity() > MAX_POLYGON_SCRATCH_BYTES / size_of::<f64>() {
-            self.polygon_areas = Vec::new();
-        }
+        self.polygon_scratch.trim();
         result
     }
 
