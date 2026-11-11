@@ -189,7 +189,7 @@ pub use motion_core::{
 };
 pub use motion_encode::BitDepth;
 pub use motion_render::look;
-pub use motion_render::look::{GateWeave, Look};
+pub use motion_render::look::{GateWeave, Look, SceneEffects};
 pub use motion_render::{DisplayTransform, FilmGrain, OutputTransfer, ToneMap};
 
 pub use motion_core::ClipMode;
@@ -303,8 +303,9 @@ pub mod render {
         AssetStatus, AudioClipParameters, BoundaryAdjustment, BoundaryEdge, BoxedError,
         CacheLimits, DisplayList, DrawCommand, FilterOperation, FontIdentity, Handle,
         IntoShapeClip, MAX_PATH_VERBS, MAX_STROKE_VERBS, MAX_SVG_PATH_BYTES, MorphPath, PathClip,
-        PathVerb, RasterLimits, RectClip, RequestDiagnostics, ResourcePool, SceneCache, SceneStats,
-        ShapeClip, TICKS_PER_SECOND, ValidatedDisplayList, ValidationErrorKind, ValidationLimits,
+        PathVerb, RasterLimits, RectClip, RequestDiagnostics, ResourcePool, SceneCache,
+        SceneLimits, SceneStats, ShapeClip, TICKS_PER_SECOND, ValidatedDisplayList,
+        ValidationErrorKind, ValidationLimits,
     };
     pub use motion_core::{
         budget, drawing, instances, linear_to_srgb, premultiply, rec709_luminance, srgb_to_linear,
@@ -345,7 +346,7 @@ pub mod prelude {
     pub use crate::{
         ApertureShape, BitDepth, Cdl, ColorWheels, DepthOfField, DepthPlane, DisplayTransform,
         Elevation, FilmGrain, GateWeave, HeightFrom, Look, Lut1d, Lut3d, LutInput, Optics,
-        OutputTransfer, ShutterCurve, ShutterSampling, ToneMap,
+        OutputTransfer, SceneEffects, ShutterCurve, ShutterSampling, ToneMap,
     };
     pub use crate::{
         AudioBus, AudioChapter, AudioEffect, AudioMetadata, Limiter, Loudness, Master, PanLaw,

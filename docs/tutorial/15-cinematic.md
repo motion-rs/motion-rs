@@ -204,6 +204,12 @@ sample). `render_options` carries only the display transform. Use a 24fps timeli
 display-only, `cinematic()` adds restrained bloom/lens/shutter, and `film(seed)`
 adds encoded grain and gate drift. Recipes remain editable pure data.
 
+A `Look` pairs `look.effects` (`SceneEffects`: filters, shutter, gate drift, which change the
+scene) with `look.display` (`DisplayTransform`: output grading). `look.into_parts()` returns both.
+`DisplayTransform.look` grades the composited scene-linear frame before tone mapping, while a
+`Filter::Cdl` inside `effects.filters` is a node filter applied to the shutter-accumulated frame
+before composition.
+
 Main10 is restricted to H.265. The native path writes little-endian 16-bit plane
 bytes using FFmpeg byte strides. GPU rendering packs 10-bit Y/U/V (the GPU export pipeline honours
 `Codec::H265 { bit_depth, .. }`, and agrees with the CPU export within one code value)

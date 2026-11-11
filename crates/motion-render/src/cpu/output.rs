@@ -1,6 +1,6 @@
 //! Explicit SDR output conversion of immutable linear-premultiplied frames.
 
-use super::LinearFrame;
+use super::{LinearFrame, WorkStats};
 use motion_core::{PixelSize, RasterLimits, ValidationError, budget::Budget};
 
 #[cfg(test)]
@@ -130,16 +130,6 @@ fn threshold_byte(value: f32, thresholds: &[u32; 255]) -> u8 {
     }
 }
 
-/// Logical output conversion totals, independent of rendering work.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct OutputStats {
-    /// Peak source frame, output frame and pixel payload bytes; not process RSS.
-    /// Excludes the shared immutable 16,320-byte sRGB threshold table.
-    pub peak_bytes: u64,
-    /// Pixels converted, including transparent pixels.
-    pub work: u64,
-}
-
 /// Read-only, tightly packed row-major sRGB RGBA8 output with linear alpha.
 ///
 /// RGB is SDR-clipped and ordered-dithered. Premultiplication, when requested,
@@ -149,7 +139,7 @@ pub struct Rgba8Frame {
     size: PixelSize,
     pixels: Vec<[u8; 4]>,
     premultiplied: bool,
-    stats: OutputStats,
+    stats: WorkStats,
 }
 
 pub(crate) struct RgbaEncoder {
@@ -324,7 +314,7 @@ impl Rgba8Frame {
     }
 
     /// Conversion work and peak logical source/output storage.
-    pub fn stats(&self) -> OutputStats {
+    pub fn stats(&self) -> WorkStats {
         self.stats
     }
 
@@ -341,7 +331,7 @@ impl Rgba8Frame {
     pub(crate) fn into_snapshot_with_stats(
         self,
         limits: RasterLimits,
-    ) -> Result<(crate::Snapshot, OutputStats), ValidationError> {
+    ) -> Result<(crate::Snapshot, WorkStats), ValidationError> {
         Self::snapshot_from_bytes(
             self.size,
             self.bytes(),
@@ -355,7 +345,7 @@ impl Rgba8Frame {
         source: &[u8],
         source_bytes: u64,
         limits: RasterLimits,
-    ) -> Result<(crate::Snapshot, OutputStats), ValidationError> {
+    ) -> Result<(crate::Snapshot, WorkStats), ValidationError> {
         let mut budget = Budget::new(size, limits)?;
         if source.len() as u64 != u64::from(size.width) * u64::from(size.height) * 4 {
             return Err(ValidationError::invalid(
@@ -390,7 +380,7 @@ impl Rgba8Frame {
         pixels.extend(rgba.iter().map(|pixel| u32::from_be_bytes(*pixel) >> 8));
         Ok((
             crate::Snapshot::from_pixels(size.width as usize, size.height as usize, pixels),
-            OutputStats {
+            WorkStats {
                 peak_bytes: budget.peak_bytes(),
                 work: budget.work_done(),
             },
@@ -485,7 +475,7 @@ impl LinearFrame {
             size: self.size,
             pixels,
             premultiplied,
-            stats: OutputStats {
+            stats: WorkStats {
                 peak_bytes: budget.peak_bytes(),
                 work: budget.work_done(),
             },

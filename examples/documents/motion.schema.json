@@ -163,24 +163,24 @@
         }
       ]
     },
-    "ArrowHeadSpec": {
+    "ArrowHead": {
       "anyOf": [
         {
-          "description": "Arrow head geometry; mirrors [`motion_core::ArrowHead`].",
+          "description": "arrow-head geometry; Vee is an open strokable head.",
           "oneOf": [
             {
               "const": "triangle",
-              "description": "Filled triangle.",
+              "description": "Filled triangular head integrated with the shaft.",
               "type": "string"
             },
             {
               "const": "vee",
-              "description": "Two open sides.",
+              "description": "Two open sides, intended for stroke paint.",
               "type": "string"
             },
             {
               "const": "none",
-              "description": "Shaft only.",
+              "description": "Shaft segment only.",
               "type": "string"
             }
           ]
@@ -212,7 +212,7 @@
                 {
                   "anyOf": [
                     {
-                      "$ref": "#/$defs/ArrowHeadSpec"
+                      "$ref": "#/$defs/ArrowHead"
                     },
                     {
                       "type": "null"
@@ -544,99 +544,99 @@
         }
       ]
     },
-    "BlendModeSpec": {
+    "BlendMode": {
       "anyOf": [
         {
-          "description": "Subtree compositing mode; mirrors [`BlendMode`].",
+          "description": "Linear-light layer blending, with explicit compositing space.\n\nSeparable modes evaluate straight linear channels with source-over alpha.\nExtended RGB is not gamut-clipped. Plus instead adds premultiplied RGB and\nclamps the summed alpha to one. Dodge/Burn retain their formula's intrinsic\nendpoints and saturation; other modes extend their piecewise formulas without\ninput clipping. Nonseparable modes use hue/saturation/luminosity replacement.",
           "oneOf": [
             {
               "const": "source_over",
-              "description": "Ordinary alpha compositing.",
+              "description": "Premultiplied source-over; the default.",
               "type": "string"
             },
             {
               "const": "plus",
-              "description": "Additive compositing.",
+              "description": "Unclipped additive RGB with saturated additive alpha.",
               "type": "string"
             },
             {
               "const": "multiply",
-              "description": "Multiply.",
+              "description": "Product of straight source and backdrop channels.",
               "type": "string"
             },
             {
               "const": "screen",
-              "description": "Screen.",
+              "description": "Source plus backdrop minus their product.",
               "type": "string"
             },
             {
               "const": "darken",
-              "description": "Darken.",
+              "description": "Minimum of straight source and backdrop channels.",
               "type": "string"
             },
             {
               "const": "lighten",
-              "description": "Lighten.",
+              "description": "Maximum of straight source and backdrop channels.",
               "type": "string"
             },
             {
               "const": "difference",
-              "description": "Difference.",
+              "description": "Absolute difference of straight channels.",
               "type": "string"
             },
             {
               "const": "exclusion",
-              "description": "Exclusion.",
+              "description": "Source plus backdrop minus twice their product.",
               "type": "string"
             },
             {
               "const": "overlay",
-              "description": "Overlay.",
+              "description": "Multiply or screen, selected by the backdrop channel at one half.",
               "type": "string"
             },
             {
               "const": "hard_light",
-              "description": "Hard light.",
+              "description": "Multiply or screen, selected by the source channel at one half.",
               "type": "string"
             },
             {
               "const": "soft_light",
-              "description": "Soft light.",
+              "description": "Piecewise soft lighting, with the low-backdrop cubic and upper square root.",
               "type": "string"
             },
             {
               "const": "color_dodge",
-              "description": "Color dodge.",
+              "description": "Backdrop divided by one minus source, saturated above at one.\n\nNonpositive backdrop returns zero before source at or above one returns one.",
               "type": "string"
             },
             {
               "const": "color_burn",
-              "description": "Color burn.",
+              "description": "One minus the saturated ratio of one minus backdrop to source.\n\nBackdrop at or above one returns one before nonpositive source returns zero.",
               "type": "string"
             },
             {
               "const": "hue",
-              "description": "Hue.",
+              "description": "Source hue with backdrop saturation and luminosity.",
               "type": "string"
             },
             {
               "const": "saturation",
-              "description": "Saturation.",
+              "description": "Source saturation with backdrop hue and luminosity.",
               "type": "string"
             },
             {
               "const": "color",
-              "description": "Color.",
+              "description": "Source hue/saturation with backdrop luminosity.",
               "type": "string"
             },
             {
               "const": "luminosity",
-              "description": "Luminosity.",
+              "description": "Source luminosity with backdrop hue/saturation.",
               "type": "string"
             },
             {
               "const": "linear_plus",
-              "description": "Linear-light additive compositing.",
+              "description": "Internal linear-only additive capture used by sample accumulation.",
               "type": "string"
             }
           ]
@@ -1405,19 +1405,19 @@
         }
       ]
     },
-    "ClipModeSpec": {
+    "ClipMode": {
       "anyOf": [
         {
-          "description": "Clip application; mirrors [`ClipMode`].",
+          "description": "How a subtree clip combines with its geometric ancestors.",
           "oneOf": [
             {
               "const": "coverage",
-              "description": "Multiply the completed subtree by path coverage.",
+              "description": "Multiply separately rasterized clip coverage, preserving mask semantics.",
               "type": "string"
             },
             {
               "const": "geometric",
-              "description": "Intersect geometry.",
+              "description": "Intersect geometry before coverage quantization.",
               "type": "string"
             }
           ]
@@ -1510,7 +1510,7 @@
                 {
                   "anyOf": [
                     {
-                      "$ref": "#/$defs/ClipModeSpec"
+                      "$ref": "#/$defs/ClipMode"
                     },
                     {
                       "type": "null"
@@ -1701,29 +1701,29 @@
         }
       ]
     },
-    "DirectionSpec": {
+    "Direction": {
       "anyOf": [
         {
-          "description": "Transition travel direction; mirrors [`Direction`].",
+          "description": "A movement vector in layer-local coordinates, not the edge of entry.",
           "oneOf": [
             {
               "const": "left",
-              "description": "Toward decreasing X.",
+              "description": "Move/reveal toward decreasing X; incoming push content enters from the right.",
               "type": "string"
             },
             {
               "const": "right",
-              "description": "Toward increasing X.",
+              "description": "Move/reveal toward increasing X; incoming push content enters from the left.",
               "type": "string"
             },
             {
               "const": "up",
-              "description": "Toward decreasing Y.",
+              "description": "Move/reveal toward decreasing Y; incoming push content enters from below.",
               "type": "string"
             },
             {
               "const": "down",
-              "description": "Toward increasing Y.",
+              "description": "Move/reveal toward increasing Y; incoming push content enters from above.",
               "type": "string"
             }
           ]
@@ -2838,7 +2838,7 @@
                 {
                   "anyOf": [
                     {
-                      "$ref": "#/$defs/BlendModeSpec"
+                      "$ref": "#/$defs/BlendMode"
                     },
                     {
                       "type": "null"
@@ -2988,7 +2988,7 @@
                 {
                   "anyOf": [
                     {
-                      "$ref": "#/$defs/FillRuleSpec"
+                      "$ref": "#/$defs/FillRule"
                     },
                     {
                       "type": "null"
@@ -3967,19 +3967,19 @@
         }
       ]
     },
-    "FillRuleSpec": {
+    "FillRule": {
       "anyOf": [
         {
-          "description": "Interior rule for self-intersecting fills; mirrors [`FillRule`].",
+          "description": "How closed contours determine the filled interior.\n\nRecording retains both rules without silently substituting one for\nthe default NonZero rule.\n\n```\nuse motion_core::prelude::*;\nuse motion_core::{\n    DisplayList, RasterLimits, ResourcePool, ValidatedDisplayList, MAX_PATH_VERBS,\n    MAX_STROKE_VERBS, MAX_SVG_PATH_BYTES, sample_offsets,\n};\nlet path = Path2D::from_rect(Rect::new(0.0, 0.0, 10.0, 20.0))?;\nlet fill = path.fill(Color::WHITE);\nlet native = DrawContext::default().record(&fill, ValidationLimits::default())?;\nassert!(matches!(\n    native[0],\n    DrawCommand::Fill {\n        rule: FillRule::NonZero,\n        ..\n    }\n));\nlet even = DrawContext::default().record(\n    &fill.fill_rule(FillRule::EvenOdd),\n    ValidationLimits::default(),\n)?;\nassert!(matches!(\n    even[0],\n    DrawCommand::Fill {\n        rule: FillRule::EvenOdd,\n        ..\n    }\n));\n# Ok::<(), motion_core::ValidationError>(())\n```",
           "oneOf": [
             {
               "const": "non_zero",
-              "description": "Nonzero winding.",
+              "description": "Nonzero signed winding count; the default.",
               "type": "string"
             },
             {
               "const": "even_odd",
-              "description": "Even-odd parity.",
+              "description": "Odd crossing count.",
               "type": "string"
             }
           ]
@@ -4449,24 +4449,24 @@
         }
       ]
     },
-    "GradientExtendSpec": {
+    "GradientExtend": {
       "anyOf": [
         {
-          "description": "Gradient behavior outside its stops; mirrors [`GradientExtend`].",
+          "description": "Behavior outside a gradient's normalized interval.",
           "oneOf": [
             {
               "const": "pad",
-              "description": "Clamp to the end stops.",
+              "description": "Hold endpoint colors.",
               "type": "string"
             },
             {
               "const": "repeat",
-              "description": "Tile the stops.",
+              "description": "Repeat every unit interval.",
               "type": "string"
             },
             {
               "const": "reflect",
-              "description": "Mirror alternate tiles.",
+              "description": "Reflect every second interval.",
               "type": "string"
             }
           ]
@@ -4487,7 +4487,7 @@
                 {
                   "anyOf": [
                     {
-                      "$ref": "#/$defs/GradientExtendSpec"
+                      "$ref": "#/$defs/GradientExtend"
                     },
                     {
                       "type": "null"
@@ -4505,7 +4505,7 @@
                 {
                   "anyOf": [
                     {
-                      "$ref": "#/$defs/GradientSpaceSpec"
+                      "$ref": "#/$defs/GradientSpace"
                     },
                     {
                       "type": "null"
@@ -4523,7 +4523,7 @@
                 {
                   "anyOf": [
                     {
-                      "$ref": "#/$defs/GradientUnitsSpec"
+                      "$ref": "#/$defs/GradientUnits"
                     },
                     {
                       "type": "null"
@@ -4544,24 +4544,24 @@
         }
       ]
     },
-    "GradientSpaceSpec": {
+    "GradientSpace": {
       "anyOf": [
         {
-          "description": "Gradient interpolation space; mirrors [`GradientSpace`].",
+          "description": "Color interpolation space for gradients.",
           "oneOf": [
             {
               "const": "oklab",
-              "description": "Perceptual Oklab.",
+              "description": "Perceptual Oklab, matching Color interpolation.",
               "type": "string"
             },
             {
               "const": "linear_rgb",
-              "description": "Linear-light RGB.",
+              "description": "Straight linear-light RGB and linear alpha.",
               "type": "string"
             },
             {
               "const": "srgb",
-              "description": "Encoded sRGB.",
+              "description": "Straight encoded sRGB and linear alpha.",
               "type": "string"
             }
           ]
@@ -4684,19 +4684,19 @@
         }
       ]
     },
-    "GradientUnitsSpec": {
+    "GradientUnits": {
       "anyOf": [
         {
-          "description": "Gradient coordinate system; mirrors [`GradientUnits`].",
+          "description": "Coordinates used by gradient geometry.",
           "oneOf": [
             {
               "const": "object_bounding_box",
-              "description": "Fractions of the painted bounds.",
+              "description": "Coordinates are fractions of the original shape's local bounds.",
               "type": "string"
             },
             {
               "const": "user_space",
-              "description": "Local design units.",
+              "description": "Coordinates are local logical drawing units.",
               "type": "string"
             }
           ]
@@ -4750,7 +4750,7 @@
                 {
                   "anyOf": [
                     {
-                      "$ref": "#/$defs/SamplingSpec"
+                      "$ref": "#/$defs/Sampling"
                     },
                     {
                       "type": "null"
@@ -4812,19 +4812,19 @@
         }
       ]
     },
-    "IrisShapeSpec": {
+    "IrisShape": {
       "anyOf": [
         {
-          "description": "Iris reveal geometry; mirrors [`IrisShape`].",
+          "description": "Built-in iris reveal geometry centered in the design viewport.",
           "oneOf": [
             {
               "const": "circle",
-              "description": "Circle reaching every corner at the end.",
+              "description": "Circle reaches every viewport corner at progress one.",
               "type": "string"
             },
             {
               "const": "rectangle",
-              "description": "Proportionally growing rectangle.",
+              "description": "Rectangle grows proportionally in both dimensions.",
               "type": "string"
             }
           ]
@@ -5488,24 +5488,24 @@
         }
       ]
     },
-    "LineCapSpec": {
+    "LineCap": {
       "anyOf": [
         {
-          "description": "Open stroke end shape; mirrors [`LineCap`].",
+          "description": "Shape of the ends of an open stroke.",
           "oneOf": [
             {
               "const": "butt",
-              "description": "Flat end at the endpoint.",
+              "description": "End at the endpoint without an extension.",
               "type": "string"
             },
             {
               "const": "round",
-              "description": "Semicircular end.",
+              "description": "Add a semicircular end with radius half the width.",
               "type": "string"
             },
             {
               "const": "square",
-              "description": "Square end extending half the width.",
+              "description": "Extend the end by half the width.",
               "type": "string"
             }
           ]
@@ -5887,29 +5887,29 @@
         }
       ]
     },
-    "MaskModeSpec": {
+    "MaskMode": {
       "anyOf": [
         {
-          "description": "Mask channel selection; mirrors [`MaskMode`].",
+          "description": "How linear-premultiplied content becomes a layer's mask coverage.\n\nCoverage is computed in the compositing color space and clamped\nto 0..=1 before optional inversion, without altering working colors.\nAlpha-zero pixels have zero ordinary coverage, even with hidden extended\nRGB; inverted modes therefore retain source content at those pixels.",
           "oneOf": [
             {
               "const": "alpha",
-              "description": "Mask alpha.",
+              "description": "Use only the completed mask's alpha.",
               "type": "string"
             },
             {
               "const": "inverted_alpha",
-              "description": "One minus mask alpha.",
+              "description": "One minus the completed mask's alpha, including transparent artwork.",
               "type": "string"
             },
             {
               "const": "luminance",
-              "description": "Mask luminance.",
+              "description": "Use Rec.709 luminance of linear premultiplied RGB, already alpha-weighted.",
               "type": "string"
             },
             {
               "const": "inverted_luminance",
-              "description": "One minus mask luminance.",
+              "description": "One minus clamped linear-premultiplied luminance; alpha is not inverted first.",
               "type": "string"
             }
           ]
@@ -5941,7 +5941,7 @@
                 {
                   "anyOf": [
                     {
-                      "$ref": "#/$defs/MaskModeSpec"
+                      "$ref": "#/$defs/MaskMode"
                     },
                     {
                       "type": "null"
@@ -7245,7 +7245,7 @@
             "waveform": {
               "anyOf": [
                 {
-                  "$ref": "#/$defs/WaveformSpec",
+                  "$ref": "#/$defs/Waveform",
                   "description": "Wave shape; sine by default."
                 },
                 {
@@ -8746,24 +8746,24 @@
         }
       ]
     },
-    "SamplingSpec": {
+    "Sampling": {
       "anyOf": [
         {
-          "description": "Image reconstruction filter; mirrors [`Sampling`].",
+          "description": "Texture reconstruction requested by a drawing command.",
           "oneOf": [
             {
               "const": "nearest",
-              "description": "Nearest texel.",
+              "description": "Nearest base-level texel.",
               "type": "string"
             },
             {
               "const": "bilinear",
-              "description": "Bilinear base level.",
+              "description": "Bilinear base-level reconstruction.",
               "type": "string"
             },
             {
               "const": "trilinear",
-              "description": "Bilinear between mip levels.",
+              "description": "Bilinear reconstruction between adjacent mip levels.",
               "type": "string"
             }
           ]
@@ -8966,7 +8966,7 @@
                 {
                   "anyOf": [
                     {
-                      "$ref": "#/$defs/LineCapSpec"
+                      "$ref": "#/$defs/LineCap"
                     },
                     {
                       "type": "null"
@@ -9294,7 +9294,7 @@
                 {
                   "anyOf": [
                     {
-                      "$ref": "#/$defs/LineCapSpec"
+                      "$ref": "#/$defs/LineCap"
                     },
                     {
                       "type": "null"
@@ -10682,7 +10682,7 @@
                         "direction": {
                           "anyOf": [
                             {
-                              "$ref": "#/$defs/DirectionSpec",
+                              "$ref": "#/$defs/Direction",
                               "description": "Travel direction."
                             },
                             {
@@ -10719,7 +10719,7 @@
                         "direction": {
                           "anyOf": [
                             {
-                              "$ref": "#/$defs/DirectionSpec",
+                              "$ref": "#/$defs/Direction",
                               "description": "Travel direction."
                             },
                             {
@@ -10805,7 +10805,7 @@
                         "shape": {
                           "anyOf": [
                             {
-                              "$ref": "#/$defs/IrisShapeSpec",
+                              "$ref": "#/$defs/IrisShape",
                               "default": "circle",
                               "description": "Reveal geometry."
                             },
@@ -11395,29 +11395,29 @@
         }
       ]
     },
-    "WaveformSpec": {
+    "Waveform": {
       "anyOf": [
         {
-          "description": "Oscillator wave shape; mirrors [`Waveform`].",
+          "description": "Periodic waveform evaluated in turns.",
           "oneOf": [
             {
               "const": "sine",
-              "description": "Sine wave.",
+              "description": "Smooth sine starting at zero.",
               "type": "string"
             },
             {
               "const": "triangle",
-              "description": "Triangle wave.",
+              "description": "Linear ramps starting at zero and rising to one.",
               "type": "string"
             },
             {
               "const": "square",
-              "description": "Square wave.",
+              "description": "Positive during the first half of each cycle, negative during the second.",
               "type": "string"
             },
             {
               "const": "sawtooth",
-              "description": "Rising sawtooth.",
+              "description": "Linear ramp from minus one to one with a discontinuity each cycle.",
               "type": "string"
             }
           ]

@@ -83,6 +83,9 @@ impl<A: Asset> std::fmt::Debug for Handle<A> {
 
 impl<A: Asset> Handle<A> {
     /// Current state without triggering a file read or decode.
+    ///
+    /// This is a non-authoritative snapshot for polling and diagnostics: another thread may change
+    /// it immediately after the call. [`Handle::get`] is the only authoritative result.
     pub fn status(&self) -> AssetStatus {
         match self.entry.result.get() {
             Some(Ok(_)) => AssetStatus::Ready,

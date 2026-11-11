@@ -18,7 +18,7 @@ pub(crate) mod pool;
 mod tests;
 mod walk;
 
-pub use output::{OutputStats, Rgba8Frame};
+pub use output::Rgba8Frame;
 
 #[cfg(test)]
 use crate::prepared::RenderPrepare;
@@ -46,13 +46,17 @@ pub(crate) fn particle_compositor(blend: InstanceBlend) -> InstanceComposite {
     }
 }
 
-/// Logical linear composition totals, independent of preparation work.
+/// Logical peak storage and admitted work of one pipeline stage; not a process memory cap.
+///
+/// Composition counts prepared bytes, captures, pixels and GPU buffers (excluding driver
+/// overhead and reusable device state) against commands, mask records and blended pixels.
+/// Output conversion counts source, output and pixel payload bytes (excluding the shared
+/// sRGB threshold table) against converted pixels.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct LinearRenderStats {
-    /// Peak logical prepared bytes, frame value, captures, pixels and GPU buffers.
-    /// GPU totals exclude driver allocation overhead and reusable device state.
+pub struct WorkStats {
+    /// Peak live logical bytes of the stage.
     pub peak_bytes: u64,
-    /// Commands, mask records, initialized pixels and covered/blended pixels.
+    /// Admitted work units of the stage.
     pub work: u64,
 }
 
@@ -65,7 +69,7 @@ pub struct LinearRenderStats {
 pub struct LinearFrame {
     size: PixelSize,
     pixels: Vec<[f32; 4]>,
-    stats: LinearRenderStats,
+    stats: WorkStats,
 }
 
 impl LinearFrame {
@@ -73,7 +77,7 @@ impl LinearFrame {
         Self {
             size,
             pixels: vec![pixel; size.width as usize * size.height as usize],
-            stats: LinearRenderStats::default(),
+            stats: WorkStats::default(),
         }
     }
 
@@ -82,11 +86,7 @@ impl LinearFrame {
     }
 
     #[cfg(feature = "gpu")]
-    pub(crate) fn from_gpu(
-        size: PixelSize,
-        pixels: Vec<[f32; 4]>,
-        stats: LinearRenderStats,
-    ) -> Self {
+    pub(crate) fn from_gpu(size: PixelSize, pixels: Vec<[f32; 4]>, stats: WorkStats) -> Self {
         Self {
             size,
             pixels,
@@ -113,7 +113,7 @@ impl LinearFrame {
     }
 
     /// Work and peak logical storage, including retained PreparedFrame.
-    pub fn stats(&self) -> LinearRenderStats {
+    pub fn stats(&self) -> WorkStats {
         self.stats
     }
 }
@@ -175,7 +175,7 @@ impl PreparedFrame {
             pool,
             output_bounds,
             bounds,
-            &mut LinearRenderStats {
+            &mut WorkStats {
                 peak_bytes: 0,
                 work: 0,
             },
@@ -188,7 +188,7 @@ impl PreparedFrame {
         pool: &mut pool::SurfacePool,
         output_bounds: PixelRect,
         bounds: PixelRect,
-        stats: &mut LinearRenderStats,
+        stats: &mut WorkStats,
     ) -> Result<LinearFrame, ValidationError> {
         self.render_linear_bounds_mode::<true>(limits, pool, output_bounds, bounds, stats)
     }
@@ -199,7 +199,7 @@ impl PreparedFrame {
         pool: &mut pool::SurfacePool,
         output_bounds: PixelRect,
         bounds: PixelRect,
-        stats: &mut LinearRenderStats,
+        stats: &mut WorkStats,
     ) -> Result<LinearFrame, ValidationError> {
         self.render_linear_selected::<OPTIMIZE_LAYERS>(
             limits,
@@ -217,7 +217,7 @@ impl PreparedFrame {
         pool: &mut pool::SurfacePool,
         output_bounds: PixelRect,
         bounds: PixelRect,
-        stats: &mut LinearRenderStats,
+        stats: &mut WorkStats,
         fills: Option<&[usize]>,
     ) -> Result<LinearFrame, ValidationError> {
         pool.trim(limits.max_bytes / 4);
@@ -325,13 +325,13 @@ impl PreparedFrame {
                     output_bounds.bottom - output_bounds.top,
                 ),
                 pixels,
-                stats: LinearRenderStats {
+                stats: WorkStats {
                     peak_bytes: peak_bytes.max(budget.peak_bytes()),
                     work: budget.work_done(),
                 },
             })
         })();
-        *stats = LinearRenderStats {
+        *stats = WorkStats {
             peak_bytes: budget.peak_bytes(),
             work: budget.work_done(),
         };

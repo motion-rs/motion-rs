@@ -1,5 +1,5 @@
 use super::*;
-use crate::{FrameBuffer, LinearRenderStats, PixelFormat};
+use crate::{FrameBuffer, PixelFormat, WorkStats};
 use motion_core::ValidationErrorKind;
 
 #[test]
@@ -24,19 +24,19 @@ fn yuv_single_pass_matches_scalar_planes() {
         LinearFrame {
             size,
             pixels,
-            stats: LinearRenderStats::default(),
+            stats: WorkStats::default(),
         },
         LinearFrame {
             size,
             pixels: vec![[0.25, 0.5, 0.75, 1.0]; 180],
-            stats: LinearRenderStats::default(),
+            stats: WorkStats::default(),
         },
         LinearFrame {
             size,
             pixels: (0..180)
                 .map(|index| [if index % 3 == 0 { -0.0 } else { 0.0 }, 1.0, 4.0, 1.0])
                 .collect(),
-            stats: LinearRenderStats::default(),
+            stats: WorkStats::default(),
         },
     ];
     let encode = |pixel: [f32; 4]| {
@@ -229,7 +229,7 @@ fn rgba8_thresholds_match_scalar_boundaries_and_alpha_modes() {
         let frame = LinearFrame {
             size: PixelSize::new(width as u32, (count / width) as u32),
             pixels: pixels[..count].to_vec(),
-            stats: LinearRenderStats::default(),
+            stats: WorkStats::default(),
         };
         for premultiplied in [false, true] {
             let actual = frame
@@ -331,7 +331,7 @@ fn opaque_snapshot_packing_preserves_rgb_order_and_has_exact_budgets() {
                 })
                 .collect(),
             premultiplied: false,
-            stats: OutputStats::default(),
+            stats: WorkStats::default(),
         };
         let expected = frame
             .pixels()
@@ -362,7 +362,7 @@ fn opaque_snapshot_packing_preserves_rgb_order_and_has_exact_budgets() {
         size: PixelSize::new(2, 1),
         pixels: vec![[1, 2, 3, 255], [240, 128, 64, 255]],
         premultiplied: false,
-        stats: OutputStats::default(),
+        stats: WorkStats::default(),
     };
     let (snapshot, stats) = frame
         .clone()
@@ -446,7 +446,7 @@ fn gamma_and_alpha_modes_use_straight_linear_channels_first() {
             [0.0; 4],
             [1.0; 4],
         ],
-        stats: LinearRenderStats::default(),
+        stats: WorkStats::default(),
     };
     let straight = source
         .to_srgb_rgba8(false, RasterLimits::default())
@@ -473,7 +473,7 @@ fn ordered_dither_has_fixed_spatial_phase_and_no_channel_or_history_noise() {
             let source = LinearFrame {
                 size: PixelSize::new(width, height),
                 pixels: vec![[linear, linear, linear, 1.0]; (width * height) as usize],
-                stats: LinearRenderStats::default(),
+                stats: WorkStats::default(),
             };
             let first = source
                 .to_srgb_rgba8(false, RasterLimits::default())
@@ -513,7 +513,7 @@ fn hdr_clips_only_at_output_and_zero_quantized_alpha_clears_hidden_rgb() {
             [1.0, -1.0, 0.5, 0.001],
             [1.0, -1.0, 0.5, 0.0],
         ],
-        stats: LinearRenderStats::default(),
+        stats: WorkStats::default(),
     };
     let original = source.clone();
     let straight = source
@@ -550,7 +550,7 @@ fn alpha_rounding_and_premultiplied_bounds_hold_at_all_byte_midpoints() {
     let source = LinearFrame {
         size: PixelSize::new(pixels.len() as u32, 1),
         pixels,
-        stats: LinearRenderStats::default(),
+        stats: WorkStats::default(),
     };
     for mode in [false, true] {
         let output = source.to_srgb_rgba8(mode, RasterLimits::default()).unwrap();
@@ -578,7 +578,7 @@ fn exact_conversion_limits_succeed_and_short_limits_preserve_the_source() {
     let source = LinearFrame {
         size: PixelSize::new(4, 1),
         pixels: vec![[0.25, 0.0, 0.0, 0.5]; 4],
-        stats: LinearRenderStats::default(),
+        stats: WorkStats::default(),
     };
     let original = source.clone();
     let output = source

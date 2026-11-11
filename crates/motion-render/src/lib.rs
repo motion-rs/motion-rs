@@ -17,20 +17,21 @@ pub(crate) mod raster;
 
 pub use backend::{BackendDecision, BackendPreference, Renderer};
 pub use composition::{
-    Composition, FrameAt, FrameClock, FrameRenderer, FrameRequest, FrameStats, RenderSession,
+    Composition, FrameAt, FrameClock, FrameRenderer, FrameReport, FrameRequest, FrameStats,
+    RenderSession,
 };
 pub use context::{GpuBackend, GpuInfo, RenderCapabilities, RenderContext};
 pub use display::{Cdl, DisplayTransform, FilmGrain, OutputTransfer, ToneMap};
 #[cfg(feature = "gpu")]
 pub use gpu::GpuContext;
-pub use look::{GateWeave, Look};
+pub use look::{GateWeave, Look, SceneEffects};
 pub use motion_core::{CachePartition, RenderCache, RenderQuality};
 pub use options::{RenderOptions, composition, render_still};
 pub use output::{FrameBuffer, PixelFormat, PixelPlane, RenderTarget, Snapshot};
 pub use prepared::{
-    ClipRecord, LinearFrame, LinearRenderStats, OutputStats, PaintRecord, PixelRect,
-    PreparationStats, PreparedFilters, PreparedFrame, PreparedItem, PreparedLayer, RasterLimits,
-    RenderPrepare, Rgba8Frame, Span, Strip,
+    ClipRecord, LinearFrame, PaintRecord, PixelRect, PreparationStats, PreparedFilters,
+    PreparedFrame, PreparedItem, PreparedLayer, RasterLimits, RenderPrepare, Rgba8Frame, Span,
+    Strip, WorkStats,
 };
 
 /// Rendering contracts used alongside core authoring values.

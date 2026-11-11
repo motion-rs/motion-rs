@@ -92,9 +92,9 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
     let window = |index: usize| seconds((ACTS[index].1 - ACTS[index].0) * scale);
     let (dust, ember_sim) = embers(parameters.seed, window(3))?;
     let mut look = Look::cinematic();
-    look.shutter = None;
+    look.effects.shutter = None;
     // Bloom and vignette carry the cinematic feel; grade, halation and dispersion cost more than they add.
-    look.filters.retain(|filter| {
+    look.effects.filters.retain(|filter| {
         matches!(
             filter,
             Filter::Bloom { .. } | Filter::Optics(Optics::LensVignette { .. })

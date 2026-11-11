@@ -13,7 +13,7 @@ use crate::{RasterLimits, Snapshot};
 
 use motion_core::{Node, PixelSize, SceneContext, Size, ValidationError};
 
-pub use frame_renderer::{FrameRenderer, FrameStats, FrameTimings};
+pub use frame_renderer::{FrameRenderer, FrameReport, FrameStats, FrameTimings};
 pub use session::{FrameAt, FrameRequest, RenderSession};
 
 /// Frame rate and frame count of a composition; there is no default clock.

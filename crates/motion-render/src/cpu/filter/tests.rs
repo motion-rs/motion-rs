@@ -95,7 +95,7 @@ fn single_fill_layers_match_isolated_rounding_blends_and_budgets() {
                     frame.blend_space = space;
                     let bounds = frame.output_bounds;
                     let run = |optimize, limits| {
-                        let mut stats = LinearRenderStats {
+                        let mut stats = WorkStats {
                             peak_bytes: 0,
                             work: 0,
                         };

@@ -1,6 +1,6 @@
 //! Immutable shared coverage and paint records.
 
-pub use crate::cpu::{LinearFrame, LinearRenderStats, OutputStats, Rgba8Frame};
+pub use crate::cpu::{LinearFrame, Rgba8Frame, WorkStats};
 pub(crate) use crate::raster::coverage_cache::CoverageCache;
 use crate::raster::paint;
 pub use crate::raster::prepare::RenderPrepare;

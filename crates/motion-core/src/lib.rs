@@ -69,7 +69,7 @@ pub use authoring::transition::{
     CrossFade, Iris, IrisShape, Push, Slide, Transition, Wipe, ZoomBlur,
 };
 pub use authoring::{Alignment, Column, Layout, Node, NodeModifiers, Row, Scene, Side};
-pub use budget::RasterLimits;
+pub use budget::{RasterLimits, SceneLimits};
 pub use color::Color;
 pub use color::math::{
     linear_to_srgb, premultiply, rec709_luminance, srgb_to_linear, unpremultiply,
@@ -143,7 +143,8 @@ pub mod prelude {
     };
     pub use crate::{Duration, FrameRate, Random, TICKS_PER_SECOND, Time, TimeLiteral};
     pub use crate::{
-        Error, ErrorKind, SceneStats, ValidationError, ValidationErrorKind, ValidationLimits,
+        Error, ErrorKind, SceneLimits, SceneStats, ValidationError, ValidationErrorKind,
+        ValidationLimits,
     };
     pub use crate::{
         Extrapolate, FollowPath, Noise, Oscillator, PathSample, Waveform, piecewise, remap,

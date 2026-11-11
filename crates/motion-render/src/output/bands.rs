@@ -1,7 +1,7 @@
 //! Banded frame conversion that renders prepared frames in bounded horizontal strips.
 
 use super::*;
-use crate::{LinearRenderStats, OutputStats, PixelRect, PreparedFrame};
+use crate::{PixelRect, PreparedFrame, WorkStats};
 use motion_core::budget::Budget;
 
 #[cfg(test)]
@@ -26,7 +26,7 @@ impl FrameBuffer {
         limits: RasterLimits,
         surfaces: &mut crate::cpu::pool::SurfacePool,
         pool: &OutputPool,
-    ) -> Result<(Self, LinearRenderStats, OutputStats), ValidationError> {
+    ) -> Result<(Self, WorkStats, WorkStats), ValidationError> {
         Self::from_prepared_banded(
             prepared,
             format,
@@ -44,7 +44,7 @@ impl FrameBuffer {
         surfaces: &mut crate::cpu::pool::SurfacePool,
         pool: &OutputPool,
         display: crate::display::DisplaySettings<'_>,
-    ) -> Result<(Self, LinearRenderStats, OutputStats), ValidationError> {
+    ) -> Result<(Self, WorkStats, WorkStats), ValidationError> {
         if display.display.is_none() {
             return Self::from_prepared(prepared, format, limits, surfaces, pool);
         }
@@ -68,7 +68,7 @@ impl FrameBuffer {
         surfaces: &mut crate::cpu::pool::SurfacePool,
         pool: &OutputPool,
         band_height: u32,
-    ) -> Result<(Self, LinearRenderStats, OutputStats), ValidationError> {
+    ) -> Result<(Self, WorkStats, WorkStats), ValidationError> {
         Self::from_prepared_transformed(
             prepared,
             format,
@@ -86,7 +86,7 @@ impl FrameBuffer {
         surfaces: &mut crate::cpu::pool::SurfacePool,
         pool: &OutputPool,
         settings: (u32, crate::display::DisplaySettings<'_>),
-    ) -> Result<(Self, LinearRenderStats, OutputStats), ValidationError> {
+    ) -> Result<(Self, WorkStats, WorkStats), ValidationError> {
         let (mut band_height, display) = settings;
         let size = prepared.size();
         let depth = match format {
@@ -188,7 +188,7 @@ impl FrameBuffer {
                         "Output exhausts the byte allowance",
                     )
                 })?;
-            let mut attempt = LinearRenderStats {
+            let mut attempt = WorkStats {
                 peak_bytes: 0,
                 work: 0,
             };
@@ -274,11 +274,11 @@ impl FrameBuffer {
         }
         Ok((
             output,
-            LinearRenderStats {
+            WorkStats {
                 peak_bytes: peak,
                 work,
             },
-            OutputStats {
+            WorkStats {
                 peak_bytes: peak,
                 work: conversion,
             },

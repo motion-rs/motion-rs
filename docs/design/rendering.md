@@ -323,7 +323,7 @@ session.render(FrameRequest {
 multiple times. A memory target is replaced only on success and its old retained
 payload is charged while rendering; an external texture has no rollback guarantee
 after a GPU failure. Each request installs new diagnostics and clears prior totals.
-last_stats describes successful memory output, not external-texture conversion.
+last_stats describes successful memory output, not external-texture conversion. Each stage reports a `WorkStats { peak_bytes, work }`, and `RenderSession::report()` aggregates stats, timings and the backend decision into one `FrameReport`.
 Request background overrides the options' background. Snapshot output composites over
 `RenderOptions::background` made opaque, or white when it is absent. Query
 backend_decision for the actual backend; `requested_backend()` reports the request.

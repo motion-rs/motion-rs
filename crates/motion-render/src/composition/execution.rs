@@ -4,7 +4,7 @@
 //! CPU and GPU backends use only explicitly supplied fonts; nothing is discovered implicitly.
 
 use super::*;
-use crate::{OutputStats, RasterLimits, RenderContext, Renderer, Snapshot};
+use crate::{RasterLimits, RenderContext, Renderer, Snapshot, WorkStats};
 use motion_core::{Color, Node, Result, SceneContext, Shape, Time, ValidationError};
 
 mod backend;
@@ -159,7 +159,7 @@ impl FrameExecution<'_> {
             if let Some(started) = started {
                 self.timings.as_mut().expect("enabled timings").output += started.elapsed();
             }
-            stats.output = OutputStats {
+            stats.output = WorkStats {
                 work: crate::FrameBuffer::display_conversion_work(
                     rgba.size(),
                     rgba.format(),
@@ -282,7 +282,7 @@ impl FrameExecution<'_> {
                 preparation: prepared.stats(),
                 linear,
                 output,
-                snapshot: OutputStats::default(),
+                snapshot: WorkStats::default(),
             });
             if let Some(started) = started {
                 self.timings.as_mut().expect("enabled timings").output += started.elapsed();
@@ -319,15 +319,15 @@ impl FrameExecution<'_> {
             .map_err(|error| motion_core::Error::from(error).at_frame(u64::from(index)))?;
             self.last_stats = Some(FrameStats {
                 preparation: prepared.stats(),
-                linear: crate::LinearRenderStats {
+                linear: crate::WorkStats {
                     peak_bytes: prepared.stats().retained_bytes + peak,
                     work: pixels,
                 },
-                output: OutputStats {
+                output: WorkStats {
                     peak_bytes: peak,
                     work: crate::FrameBuffer::conversion_work(frame.size(), format),
                 },
-                snapshot: OutputStats::default(),
+                snapshot: WorkStats::default(),
             });
             if let Some(started) = started {
                 self.timings.as_mut().expect("enabled timings").output += started.elapsed();
@@ -381,15 +381,15 @@ impl FrameExecution<'_> {
                 self.record_gpu_timings();
                 self.last_stats = Some(FrameStats {
                     preparation: prepared.stats(),
-                    linear: crate::LinearRenderStats {
+                    linear: crate::WorkStats {
                         peak_bytes: stats.peak_bytes,
                         work: stats.work - output_work,
                     },
-                    output: OutputStats {
+                    output: WorkStats {
                         peak_bytes: stats.peak_bytes,
                         work: output_work,
                     },
-                    snapshot: OutputStats::default(),
+                    snapshot: WorkStats::default(),
                 });
                 return Ok(frame);
             }
@@ -411,7 +411,7 @@ impl FrameExecution<'_> {
             .map_err(|error| motion_core::Error::from(error).at_frame(u64::from(index)));
         linear.recycle(&mut self.cpu_pool);
         let frame = frame?;
-        stats.output = OutputStats {
+        stats.output = WorkStats {
             peak_bytes: linear_bytes
                 + std::mem::size_of::<crate::LinearFrame>() as u64
                 + frame.retained_bytes(),

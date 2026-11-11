@@ -45,7 +45,7 @@ The documentation uses these terms consistently; Rustdoc defines the exact types
 | Backend | The CPU backend or the GPU backend; both consume the same prepared frame |
 | Still | One rendered frame, saved as an image or returned as a bitmap |
 | Film | An exported video file, with or without an audio mix |
-| Look | A reusable grading and optics recipe (`Look`) applied to scenes and render options |
+| Look | A reusable recipe (`Look`) pairing scene-side `SceneEffects` (filters, shutter, gate drift) with an output `DisplayTransform` |
 | Document | A versioned declarative JSON description of a timeline (`motion::declarative::Document`) |
 | Studio | The desktop workbench for previewing one compiled scene (capitalized) |
 

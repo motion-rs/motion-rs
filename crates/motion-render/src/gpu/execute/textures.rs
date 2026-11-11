@@ -22,7 +22,7 @@ pub(super) struct EncodedTexture {
     pub(super) bounds: PixelRect,
     pub(super) deferred: bool,
     pub(super) status: wgpu::Buffer,
-    pub(super) stats: LinearRenderStats,
+    pub(super) stats: WorkStats,
     pub(super) working: WorkingLease,
     pub(super) timestamps: Option<super::super::timing::TimestampRecorder>,
 }
@@ -31,7 +31,7 @@ pub(super) struct EncodedLinear {
     pub(super) encoder: wgpu::CommandEncoder,
     pub(super) output: wgpu::Buffer,
     pub(super) status: wgpu::Buffer,
-    pub(super) stats: LinearRenderStats,
+    pub(super) stats: WorkStats,
     pub(super) working: WorkingLease,
     pub(super) timestamps: Option<super::super::timing::TimestampRecorder>,
 }
@@ -319,7 +319,7 @@ impl Gpu {
             bounds,
             deferred: deferred[plan.output],
             status,
-            stats: LinearRenderStats {
+            stats: WorkStats {
                 peak_bytes: budget.peak_bytes(),
                 work: budget.work_done(),
             },

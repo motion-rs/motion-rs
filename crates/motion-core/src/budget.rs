@@ -1,5 +1,5 @@
 //! Shared logical resource admission for bounded geometry and rendering.
-use crate::{PixelSize, ValidationError};
+use crate::{PixelSize, ValidationError, ValidationLimits};
 use std::mem::size_of;
 
 /// Logical preparation/composition budgets, not a process memory cap.
@@ -42,6 +42,15 @@ impl RasterLimits {
     pub fn validate_size(self, size: PixelSize) -> Result<(), ValidationError> {
         Budget::new(size, self).map(|_| ())
     }
+}
+
+/// Structural and raster allowances for APIs that check both.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SceneLimits {
+    /// Layer count and depth allowances.
+    pub structure: ValidationLimits,
+    /// Pixel, byte and work allowances.
+    pub raster: RasterLimits,
 }
 
 /// Mutable admission counters for one bounded geometry or rendering operation.

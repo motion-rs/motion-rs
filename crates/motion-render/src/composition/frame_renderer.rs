@@ -1,7 +1,7 @@
 //! Explicit CPU/GPU consumption without implicit font discovery.
 
 use super::*;
-use crate::{LinearRenderStats, OutputStats, PreparationStats, Snapshot};
+use crate::{PreparationStats, Snapshot, WorkStats};
 use motion_core::{Color, Node, Result, SceneContext, Time};
 
 /// Opt-in host stage observations and separately identified device timestamps.
@@ -50,11 +50,11 @@ pub struct FrameStats {
     /// Coverage preparation, including filter metadata and scratch.
     pub preparation: PreparationStats,
     /// Linear-light composition, including the retained prepared frame.
-    pub linear: LinearRenderStats,
+    pub linear: WorkStats,
     /// SDR sRGB RGBA8 conversion, including its CPU linear or GPU working resources.
-    pub output: OutputStats,
+    pub output: WorkStats,
     /// Opaque RGB snapshot packing, including the source RGBA8 frame.
-    pub snapshot: OutputStats,
+    pub snapshot: WorkStats,
 }
 
 impl FrameStats {
@@ -75,6 +75,18 @@ impl FrameStats {
             .saturating_add(self.output.work)
             .saturating_add(self.snapshot.work)
     }
+}
+
+/// Everything observed about the latest frame: logical totals, opt-in timings and the
+/// backend that produced it. Each part is `None` until the corresponding data exists.
+#[derive(Clone, Debug, Default)]
+pub struct FrameReport {
+    /// Logical pipeline totals of the latest successful memory-output frame.
+    pub stats: Option<FrameStats>,
+    /// Opt-in stage observations.
+    pub timings: Option<FrameTimings>,
+    /// Backend decision made for this session.
+    pub backend: Option<crate::BackendDecision>,
 }
 
 /// Composition-timed wrapper around a reusable RenderSession.

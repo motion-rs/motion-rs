@@ -3,7 +3,9 @@
 //! This module turns display lists into prepared frames; filter padding lives in `filters`
 //! and rectangle, strip and clip coverage emission in `coverage`.
 
-use motion_core::{DisplayList, DrawCommand, PixelSize, ValidationError, ValidationLimits};
+use motion_core::{
+    DisplayList, DrawCommand, PixelSize, SceneLimits, ValidationError, ValidationLimits,
+};
 
 use super::{CoverageCache, RasterScope, rect_clip};
 use crate::prepared::*;
@@ -27,6 +29,11 @@ pub trait RenderPrepare {
         validation: ValidationLimits,
         limits: RasterLimits,
     ) -> Result<PreparedFrame, ValidationError>;
+
+    /// Prepares coverage with combined structural and raster allowances.
+    fn prepare_within(&self, limits: SceneLimits) -> Result<PreparedFrame, ValidationError> {
+        self.prepare(limits.structure, limits.raster)
+    }
 
     /// Prepares coverage using an explicit positive device-pixel tolerance.
     fn prepare_with_tolerance(

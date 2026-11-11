@@ -3,7 +3,7 @@
 
 use super::{FrameExecution, RenderedFrame};
 use crate::composition::FrameStats;
-use crate::{OutputStats, RasterLimits, Renderer};
+use crate::{RasterLimits, Renderer, WorkStats};
 use motion_core::Result;
 #[cfg(feature = "gpu")]
 use motion_core::{Color, Node, SceneContext, Shape, Time};
@@ -293,15 +293,15 @@ impl FrameExecution<'_> {
                                 RenderedFrame::Packed(frame),
                                 FrameStats {
                                     preparation,
-                                    linear: crate::LinearRenderStats {
+                                    linear: crate::WorkStats {
                                         peak_bytes: packed_stats.peak_bytes,
                                         work: packed_stats.work - output_work,
                                     },
-                                    output: OutputStats {
+                                    output: WorkStats {
                                         peak_bytes: packed_stats.peak_bytes,
                                         work: output_work,
                                     },
-                                    snapshot: OutputStats::default(),
+                                    snapshot: WorkStats::default(),
                                 },
                             ));
                         }
@@ -327,8 +327,8 @@ impl FrameExecution<'_> {
                 FrameStats {
                     preparation,
                     linear: linear_stats,
-                    output: OutputStats::default(),
-                    snapshot: OutputStats::default(),
+                    output: WorkStats::default(),
+                    snapshot: WorkStats::default(),
                 },
             ))
         })()

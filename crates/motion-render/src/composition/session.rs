@@ -324,6 +324,16 @@ impl RenderSession {
         self.timings
     }
 
+    /// Aggregates [`RenderSession::last_stats`], [`RenderSession::timings`] and the backend
+    /// decision into one report.
+    pub fn report(&self) -> FrameReport {
+        FrameReport {
+            stats: self.last_stats,
+            timings: self.timings,
+            backend: self.backend.clone(),
+        }
+    }
+
     /// Resource failures belonging only to the latest request.
     pub fn asset_diagnostics(&self) -> &[std::sync::Arc<motion_core::Error>] {
         &self.asset_diagnostics

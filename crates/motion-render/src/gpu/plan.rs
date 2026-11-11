@@ -372,7 +372,7 @@ impl Plan {
             &texture_blends,
             &mut planner.budget,
         );
-        let stats = LinearRenderStats {
+        let stats = WorkStats {
             peak_bytes: planner.budget.peak_bytes(),
             work: planner.budget.work_done(),
         };
@@ -402,7 +402,7 @@ impl Plan {
         &self,
         size: PixelSize,
         format: crate::PixelFormat,
-    ) -> Result<LinearRenderStats, ValidationError> {
+    ) -> Result<WorkStats, ValidationError> {
         if size.width == 0
             || size.height == 0
             || size.width > self.size.width
@@ -429,7 +429,7 @@ impl Plan {
                     "Packed plan output does not match the requested size/format",
                 ));
             }
-            LinearRenderStats::default()
+            WorkStats::default()
         } else {
             packed_resources(size, format)?
         };
@@ -457,14 +457,14 @@ impl Plan {
                     "Packed output exceeds shared frame work allowance",
                 )
             })?;
-        Ok(LinearRenderStats { peak_bytes, work })
+        Ok(WorkStats { peak_bytes, work })
     }
 }
 
 fn packed_resources(
     size: PixelSize,
     format: crate::PixelFormat,
-) -> Result<LinearRenderStats, ValidationError> {
+) -> Result<WorkStats, ValidationError> {
     if size.width == 0 || size.height == 0 || !Gpu::supports_packed_output(size, format) {
         return Err(ValidationError::invalid(
             "gpu.pack",
@@ -478,7 +478,7 @@ fn packed_resources(
         crate::PixelFormat::Yuv420 { bit_depth: 10 } => count * 3,
         _ => count * 4,
     };
-    Ok(LinearRenderStats {
+    Ok(WorkStats {
         peak_bytes: packed_bytes * PACKED_PAYLOAD_COPIES
             + (size_of::<PendingOutputFrame>()
                 + size_of::<crate::FrameBuffer>()

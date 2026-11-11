@@ -84,7 +84,7 @@ pub struct Plan {
     limits: RasterLimits,
 
     /// Static logical charges; returned linear-frame stats also include dynamic tile charges.
-    pub stats: LinearRenderStats,
+    pub stats: WorkStats,
 }
 
 struct Planner<'a> {
@@ -226,7 +226,7 @@ pub struct PendingLinearFrame {
     memory: ScopedError,
     raster_width: u32,
     output_bounds: PixelRect,
-    stats: LinearRenderStats,
+    stats: WorkStats,
     working: WorkingLease,
     cache_limit: u64,
     timestamps: Option<timing::TimestampRecorder>,
