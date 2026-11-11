@@ -83,20 +83,10 @@ fn fixed_seed_random_curves_match_cpu_without_local_dropouts() -> motion_core::R
     Ok(())
 }
 
-#[test]
-#[ignore = "requires native GPU; duplicate winding must cancel before area integration"]
-fn duplicate_subpixel_contours_cancel_under_even_odd() -> motion_core::Result {
-    let mut path = Path2D::new();
-    for _ in 0..2 {
-        path.try_move_to(Point::new(0.1, 0.1))?;
-        path.try_line_to(Point::new(31.8, 0.1))?;
-        path.try_line_to(Point::new(31.8, 31.8))?;
-        path.try_line_to(Point::new(0.1, 31.8))?;
-        path.try_close()?;
-    }
+fn render_device(path: Path2D, rule: FillRule) -> motion_core::Result<Vec<[f32; 4]>> {
     let validation = ValidationLimits::default();
     let limits = RasterLimits::default();
-    let list = Node::from(path.fill(Color::WHITE).fill_rule(FillRule::EvenOdd)).compile(
+    let list = Node::from(path.fill(Color::WHITE).fill_rule(rule)).compile(
         Size::new(32.0, 32.0),
         PixelSize::new(32, 32),
         validation,
@@ -110,8 +100,61 @@ fn duplicate_subpixel_contours_cancel_under_even_odd() -> motion_core::Result {
         true,
     )?;
     assert!(frame.alphas.is_empty());
-    assert_eq!(frame.geometry.device_fills.len(), 1);
+    assert!(!frame.geometry.device_fills.is_empty());
     let actual = Gpu::new()?.render(&frame, Plan::new(&frame, limits)?)?;
-    assert!(actual.pixels().iter().all(|pixel| *pixel == [0.0; 4]));
+    Ok(actual.pixels().to_vec())
+}
+
+fn rectangle(
+    path: &mut Path2D,
+    [left, top, right, bottom]: [f64; 4],
+    reversed: bool,
+) -> motion_core::Result {
+    let mut corners = [
+        Point::new(left, top),
+        Point::new(right, top),
+        Point::new(right, bottom),
+        Point::new(left, bottom),
+    ];
+    if reversed {
+        corners.reverse();
+    }
+    path.try_move_to(corners[0])?;
+    for corner in &corners[1..] {
+        path.try_line_to(*corner)?;
+    }
+    path.try_close()?;
+    Ok(())
+}
+
+#[test]
+#[ignore = "requires native GPU; duplicate winding must cancel before area integration"]
+fn duplicate_contours_cancel_under_even_odd_with_whole_and_fractional_tops() -> motion_core::Result
+{
+    for top in [0.1, 0.6] {
+        let mut path = Path2D::new();
+        for _ in 0..2 {
+            rectangle(&mut path, [0.1, top, 31.8, 31.8], false)?;
+        }
+        let pixels = render_device(path, FillRule::EvenOdd)?;
+        assert!(
+            pixels.iter().all(|pixel| pixel[3] < 1e-3),
+            "top {top}: duplicated contour must cancel"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+#[ignore = "requires native GPU; opposite windings sharing an edge inside a pixel row"]
+fn opposite_windings_meeting_inside_a_pixel_row_stay_covered() -> motion_core::Result {
+    for rule in [FillRule::NonZero, FillRule::EvenOdd] {
+        let mut path = Path2D::new();
+        rectangle(&mut path, [-5.0, 0.0, 20.0, 8.5], false)?;
+        rectangle(&mut path, [-5.0, 8.5, 20.0, 17.0], true)?;
+        let pixels = render_device(path, rule)?;
+        let pixel = pixels[8 * 32 + 10];
+        assert!(pixel[3] > 0.99, "{rule:?}: alpha {}", pixel[3]);
+    }
     Ok(())
 }

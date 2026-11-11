@@ -249,8 +249,14 @@ fn signed_area(tile: u32, pixel: vec2u) -> vec2f {
         }
         let xa = edge.x + (edge.z - edge.x) * ((y_top - edge.y) / (edge.w - edge.y));
         let xb = edge.x + (edge.z - edge.x) * ((y_bottom - edge.y) / (edge.w - edge.y));
-        if max(xa, xb) > f32(pixel.x % TILE_SIZE) && min(xa, xb) < f32(pixel.x % TILE_SIZE + 1u) {
+        let column = f32(pixel.x % TILE_SIZE);
+        if max(xa, xb) > column && min(xa, xb) < column + 1.0 {
             boundaries += 1.0;
+        }
+        // An edge that starts or ends inside this row, at or left of the pixel, leaves
+        // different windings in the row's upper and lower parts; area alone would blend them.
+        if (edge.y > top || edge.w < top + 1.0) && min(xa, xb) < column + 1.0 {
+            boundaries += 2.0;
         }
         let area = column_area(xa, xb, f32(pixel.x % TILE_SIZE), y_bottom - y_top);
         total += select(-area, area, points.w > points.y);
@@ -271,12 +277,16 @@ fn rule_coverage(total: f32, rule: u32) -> f32 {
 // overlapping contours. Refine those pixels, retaining analytic area for simple boundaries.
 fn refined_coverage(tile: u32, pixel: vec2u, rule: u32, area: vec2f) -> f32 {
     let analytic = rule_coverage(area.x, rule);
-    if area.y <= 1.0 && abs(area.x) <= 1.0 {
+    let carry = (tile * TILE_SIZE + pixel.y % TILE_SIZE) * CARRY_STRIDE;
+    var uniform_carry = true;
+    for (var row = 1u; row < WINDING_SAMPLES; row++) {
+        uniform_carry = uniform_carry && carries[carry + 1u + row] == carries[carry + 1u];
+    }
+    if uniform_carry && area.y <= 1.0 && abs(area.x) <= 1.0 {
         return analytic;
     }
     let first = tiles[tile].offset;
     let last = first + atomicLoad(&tiles[tile].count);
-    let carry = (tile * TILE_SIZE + pixel.y % TILE_SIZE) * CARRY_STRIDE;
     var minimum = 0.0;
     var maximum = 0.0;
     var covered = 0.0;
@@ -284,6 +294,7 @@ fn refined_coverage(tile: u32, pixel: vec2u, rule: u32, area: vec2f) -> f32 {
         let y = f32(pixel.y) + (f32(row) + 0.5) / f32(WINDING_SAMPLES);
         var winding: array<f32, 8>;
         for (var column = 0u; column < WINDING_SAMPLES; column++) {
+            // The carry holds the winding left of this tile for each sub-row, not per column.
             winding[column] = carries[carry + 1u + row];
         }
         for (var item = first; item < last; item++) {
