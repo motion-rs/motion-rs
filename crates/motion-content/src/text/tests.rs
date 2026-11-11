@@ -12,16 +12,17 @@ fn session_layout_cache_reuses_fresh_texts_and_evicts_lru_without_clearing() -> 
     let font = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/fixtures/fonts/NotoSans-Regular.ttf");
     fonts.load_file(&font)?;
-    let cache = Arc::new(motion_core::SceneCache::with_limits(
-        motion_core::CacheLimits {
-            entries: 2,
-            bytes: 1024 * 1024,
-        },
-    ));
+    let render_cache = motion_core::RenderCache::with_limits(motion_core::CacheLimits {
+        entries: 2,
+        bytes: 1024 * 1024,
+    });
+    let cache = render_cache
+        .partition(motion_core::CachePartition::Paragraph)
+        .clone();
     let assets = motion_core::Assets::new(".")?.with_fonts(&fonts);
     let drawing = DrawContext::default()
         .with_assets(&assets)
-        .with_layout_cache(cache.clone());
+        .with_render_cache(render_cache.clone());
     let first = Text::new("first").resolve(&drawing)?;
     let second = Text::new("second").resolve(&drawing)?;
     assert!(Arc::ptr_eq(&first, &Text::new("first").resolve(&drawing)?));
@@ -55,15 +56,16 @@ fn session_layout_cache_converges_concurrent_misses_and_clear_releases_charges()
         std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../tests/fixtures/fonts/NotoSans-Regular.ttf"),
     )?;
-    let cache = Arc::new(motion_core::SceneCache::with_limits(
-        motion_core::CacheLimits {
-            entries: 8,
-            bytes: 1024 * 1024,
-        },
-    ));
+    let render_cache = motion_core::RenderCache::with_limits(motion_core::CacheLimits {
+        entries: 8,
+        bytes: 1024 * 1024,
+    });
+    let cache = render_cache
+        .partition(motion_core::CachePartition::Paragraph)
+        .clone();
     let drawing = DrawContext::default()
         .with_fonts(fonts)
-        .with_layout_cache(cache.clone());
+        .with_render_cache(render_cache.clone());
     let layouts = std::thread::scope(|scope| {
         let requests = (0..8)
             .map(|_| scope.spawn(|| Text::new("Concurrent paragraph").resolve(&drawing).unwrap()))

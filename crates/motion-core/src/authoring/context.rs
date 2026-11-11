@@ -387,14 +387,27 @@ impl<'a> SceneContext<'a> {
         self.bounds().center()
     }
 
-    /// Measures content or declared layout in parent coordinates, independently of time.
+    /// Shared evaluation environment: local time, quality, assets and diagnostics.
+    pub fn evaluation(&self) -> crate::Evaluation {
+        let mut evaluation = crate::Evaluation::new()
+            .with_time(self.time)
+            .with_quality(self.quality);
+        if let Some(diagnostics) = self.diagnostics {
+            evaluation = evaluation.with_diagnostics(diagnostics.clone());
+        }
+        evaluation.with_assets(self.assets())
+    }
+
+    /// Measures content or declared layout in parent coordinates.
     ///
-    /// Uses default structural limits without rendering or f32 pixel conversion.
+    /// Deferred content sees this context's local time, quality, assets and
+    /// diagnostics. Uses default structural limits without rendering or f32 pixel
+    /// conversion.
     /// For explicit budgets use [`Node::measure`]. Leaves supply their own bounds
     /// with the shared explicit font environment. This does not invoke drawing
     /// or infer filter extents; command validation occurs during compilation.
     pub fn measure(&self, node: &Node) -> Result<Rect, crate::ValidationError> {
-        let drawing = crate::DrawContext::default().with_assets(self.assets());
+        let drawing = crate::DrawContext::default().with_evaluation(self.evaluation().shared());
         node.measure_with(&drawing, crate::ValidationLimits::default())
     }
 

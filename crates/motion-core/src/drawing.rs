@@ -5,6 +5,7 @@ mod canvas;
 mod clip;
 mod command;
 mod context;
+mod evaluation;
 pub mod paint;
 mod stroke;
 
@@ -14,6 +15,7 @@ pub use canvas::Canvas;
 pub use clip::{ClipGeometry, ClipMode, IntoShapeClip, PathClip, RectClip, ShapeClip};
 pub use command::DrawCommand;
 pub use context::{DeferredContent, DrawContext, Drawable, RenderQuality};
+pub use evaluation::Evaluation;
 
 pub use paint::{
     GradientExtend, GradientSpace, GradientUnits, ImagePattern, LinearGradient, Paint,

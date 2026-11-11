@@ -290,8 +290,8 @@ pub mod extend {
         InstanceRecord, InstanceUpload, MAX_INSTANCE_COUNT,
     };
     pub use motion_core::{
-        Asset, AudioSource, Canvas, DeferredContent, DrawContext, Drawable, ImagePixels,
-        LoadContext, Transition, ValidationError, ValidationLimits,
+        Asset, AudioSource, Canvas, DeferredContent, DrawContext, Drawable, Evaluation,
+        ImagePixels, LoadContext, Transition, ValidationError, ValidationLimits,
     };
     pub use motion_encode::{Encoder, EncoderCapabilities, ProgressSink};
     pub use motion_render::RenderPrepare;

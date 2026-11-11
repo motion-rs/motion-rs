@@ -16,8 +16,8 @@ decoded on a device unless the author asked for it. The tutorial walkthrough is
 | `Handle<A>` | One shared entry: source, sticky result, charged bytes | Until the last handle/owner drops; dropping releases the pool charge |
 | Decoded `Arc<A>` | Immutable decoded value | Can outlive every owner and handle; it is then no longer pool-accounted |
 | `FontLibrary` | Font database, shaping engine, glyph/layout caches, usage log | Cloned libraries share one frozen snapshot |
-| `RenderCache` | Seven independently bounded cache partitions | Shared by clones, sessions and export workers until `clear` |
-| `SceneCache` | Pure author computations keyed by call site, type and key | Per cache; entries are LRU-evicted |
+| `RenderCache` | Compute cache: seven independently bounded partitions | Shared by clones, sessions and export workers until `clear` |
+| `SceneCache` | Compute cache (LRU) of pure author computations keyed by call site, type and key | Per cache; entries are LRU-evicted |
 
 `ResourcePool` keeps only `Weak` references: it does not keep decoded data alive.
 `Assets::remove` unregisters a source without invalidating existing handles, and

@@ -75,8 +75,8 @@ pub use color::math::{
 pub use display_list::{DisplayList, PixelSize, ValidatedDisplayList};
 pub use drawing::{
     BlendMode, BlendSpace, Canvas, ClipMode, DeferredContent, DrawCommand, DrawContext, Drawable,
-    FillRule, IntoShapeClip, LineCap, LineJoin, MAX_STROKE_VERBS, MaskMode, Paint, PathClip,
-    RectClip, RenderQuality, Shape, ShapeClip, StrokeStyle, Styled,
+    Evaluation, FillRule, IntoShapeClip, LineCap, LineJoin, MAX_STROKE_VERBS, MaskMode, Paint,
+    PathClip, RectClip, RenderQuality, Shape, ShapeClip, StrokeStyle, Styled,
 };
 pub use drawing::{
     GradientExtend, GradientSpace, GradientUnits, ImagePattern, LinearGradient, RadialGradient,

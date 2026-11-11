@@ -105,7 +105,7 @@ exports render every selected frame. GPU contexts share a device and serialize s
 submissions. Device loss aborts the frame rather than silently switching backends.
 
 RequestDiagnostics can be shared explicitly with background resource reads through
-Handle::get_with. DrawContext carries resources, diagnostics, fonts and cache explicitly;
+Handle::get_with. DrawContext holds a shared immutable `Evaluation` (time, quality, resources, fonts, diagnostics and the RenderCache) plus device scale and validation limits; `SceneContext::measure` builds the same `Evaluation` from its local time and quality. `cache_layout` always uses `CachePartition::Paragraph` of that single cache;
 there is no FrameAssets or ambient frame diagnostic bridge. Request-owned Assets
 views and their handles inherit the sink; older handles need get_with at the draw boundary.
 RenderContext carries assets and structural limits; RenderOptions.gpu_context injects

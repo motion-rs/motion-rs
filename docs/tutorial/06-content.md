@@ -129,7 +129,7 @@ Sharing `ResourcePool` is explicit. Separate Assets owners have isolated pools b
 
 `Assets` cloning, snapshots, preloading and removal have distinct contracts. Removing a registration does not forcibly destroy data still held by handles or frames. Logical retained bytes are not RSS.
 
-The scene's `DrawContext` carries diagnostics, fonts, resources and the render cache. Cross-thread or previously captured handles use `get_with` to pass explicit diagnostics; there is no global current-frame context to rely on.
+The scene's `DrawContext` shares an immutable `Evaluation` with time, quality, diagnostics, fonts, resources and the render cache (a single optional `RenderCache`; layout caching uses its paragraph partition). Cross-thread or previously captured handles use `get_with` to pass explicit diagnostics; there is no global current-frame context to rely on.
 
 ## Common Pitfalls
 

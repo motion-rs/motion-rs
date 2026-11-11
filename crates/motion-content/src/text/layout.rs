@@ -186,7 +186,7 @@ impl Text {
                 .fonts()
                 .and_then(|environment| environment.downcast_ref::<FontLibrary>()))
             .ok_or_else(|| invalid("fonts", "paragraphs require an explicit FontLibrary"))?;
-        if context.layout_cache().is_none() {
+        if context.render_cache().is_none() {
             return self.layout(fonts);
         }
         let fonts = context

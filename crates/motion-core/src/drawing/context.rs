@@ -12,39 +12,25 @@ pub enum RenderQuality {
     Final,
 }
 
-/// Time-independent drawing inputs for the frontend.
+/// Drawing inputs for the frontend.
 ///
-/// Device scale and an optional immutable font snapshot are shared by bounds
-/// measurement and recording; neither implicitly discovers resources.
+/// Device scale and structural limits are drawing-specific; time, quality,
+/// assets, fonts, diagnostics and compute caches live in the shared
+/// [`Evaluation`]. Neither implicitly discovers resources.
 #[derive(Clone, Debug)]
 pub struct DrawContext {
-    quality: RenderQuality,
-    time: crate::Time,
     pub(crate) device_scale: f64,
-
-    fonts: Option<crate::asset::environment::FontEnvironment>,
-    assets: crate::Assets,
-
     limits: crate::ValidationLimits,
-    layout_cache: Option<std::sync::Arc<crate::SceneCache>>,
-    render_cache: Option<crate::RenderCache>,
-
-    diagnostics: crate::RequestDiagnostics,
+    evaluation: std::sync::Arc<Evaluation>,
     font_usage: crate::FontUsage,
 }
 
 impl Default for DrawContext {
     fn default() -> Self {
         Self {
-            quality: RenderQuality::Final,
-            time: crate::Time::ZERO,
             device_scale: 1.0,
-            fonts: None,
-            assets: crate::Assets::default(),
             limits: crate::ValidationLimits::default(),
-            layout_cache: None,
-            render_cache: None,
-            diagnostics: crate::RequestDiagnostics::default(),
+            evaluation: std::sync::Arc::default(),
             font_usage: crate::FontUsage::default(),
         }
     }
@@ -61,39 +47,47 @@ impl DrawContext {
             ));
         }
         Ok(Self {
-            quality: RenderQuality::Final,
-            time: crate::Time::ZERO,
             device_scale,
-            fonts: None,
-            assets: crate::Assets::default(),
-            limits: crate::ValidationLimits::default(),
-            layout_cache: None,
-            render_cache: None,
-            diagnostics: crate::RequestDiagnostics::default(),
-            font_usage: crate::FontUsage::default(),
+            ..Self::default()
         })
     }
 
-    /// Selects an explicit approximation policy for deferred content recording.
-    pub fn with_quality(mut self, quality: RenderQuality) -> Self {
-        self.quality = quality;
+    /// Replaces the shared evaluation environment.
+    pub fn with_evaluation(mut self, evaluation: std::sync::Arc<Evaluation>) -> Self {
+        self.evaluation = evaluation;
         self
+    }
+
+    /// Shared time, quality, resources, diagnostics and caches.
+    pub fn evaluation(&self) -> &std::sync::Arc<Evaluation> {
+        &self.evaluation
+    }
+
+    fn edit(mut self, edit: impl FnOnce(Evaluation) -> Evaluation) -> Self {
+        let current = std::sync::Arc::try_unwrap(self.evaluation)
+            .unwrap_or_else(|shared| Evaluation::clone(&shared));
+        self.evaluation = std::sync::Arc::new(edit(current));
+        self
+    }
+
+    /// Selects an explicit approximation policy for deferred content recording.
+    pub fn with_quality(self, quality: RenderQuality) -> Self {
+        self.edit(|evaluation| evaluation.with_quality(quality))
     }
 
     /// Production quality is the default for every standalone drawing context.
     pub fn render_quality(&self) -> RenderQuality {
-        self.quality
+        self.evaluation.quality()
     }
 
     /// Supplies scene-local signed time to deferred content effects.
-    pub fn with_time(mut self, time: crate::Time) -> Self {
-        self.time = time;
-        self
+    pub fn with_time(self, time: crate::Time) -> Self {
+        self.edit(|evaluation| evaluation.with_time(time))
     }
 
     /// Scene-local time; direct static recording defaults to zero.
     pub fn time(&self) -> crate::Time {
-        self.time
+        self.evaluation.time()
     }
 
     /// Device pixels per logical unit; does not implicitly modify local geometry.
@@ -102,31 +96,23 @@ impl DrawContext {
     }
 
     /// Supplies a shared explicit font snapshot to paragraph bounds and drawing.
-    pub fn with_fonts(
-        mut self,
-        fonts: impl Into<crate::asset::environment::FontEnvironment>,
-    ) -> Self {
-        self.fonts = Some(fonts.into());
-        self
+    pub fn with_fonts(self, fonts: impl Into<crate::asset::environment::FontEnvironment>) -> Self {
+        self.edit(|evaluation| evaluation.with_fonts(fonts))
     }
 
     /// Font environment for paragraph text, optional for geometry-only drawing.
     pub fn fonts(&self) -> Option<&crate::asset::environment::FontEnvironment> {
-        self.fonts.as_ref()
+        self.evaluation.fonts()
     }
 
     /// Captures the same lazy/preloaded owner used by the enclosing session.
-    pub fn with_assets(mut self, assets: &crate::Assets) -> Self {
-        self.assets = assets.clone().with_diagnostics(self.diagnostics.clone());
-        if let Some(fonts) = assets.fonts() {
-            self.fonts = Some(fonts.clone());
-        }
-        self
+    pub fn with_assets(self, assets: &crate::Assets) -> Self {
+        self.edit(|evaluation| evaluation.with_assets(assets))
     }
 
     /// Explicit resource owner; an unconfigured context does not resolve relative files.
     pub fn assets(&self) -> &crate::Assets {
-        &self.assets
+        self.evaluation.assets()
     }
 
     /// Records a drawable's local commands without rendering or color quantization.
@@ -178,30 +164,18 @@ impl DrawContext {
         self.limits
     }
 
-    /// Supplies content-layout LRU storage shared by one render session.
-    pub fn with_layout_cache(mut self, cache: std::sync::Arc<crate::SceneCache>) -> Self {
-        self.layout_cache = Some(cache);
-        self
-    }
-
-    /// Optional session layout cache, separate from active-frame budgets.
-    pub fn layout_cache(&self) -> Option<&std::sync::Arc<crate::SceneCache>> {
-        self.layout_cache.as_ref()
-    }
-
-    /// Supplies partitioned pure caches shared by rendering workers.
-    pub fn with_render_cache(mut self, cache: crate::RenderCache) -> Self {
-        self.layout_cache = Some(cache.partition(crate::CachePartition::Paragraph).clone());
-        self.render_cache = Some(cache);
-        self
+    /// Supplies partitioned compute caches shared by rendering workers.
+    pub fn with_render_cache(self, cache: crate::RenderCache) -> Self {
+        self.edit(|evaluation| evaluation.with_cache(cache))
     }
 
     /// Shared cache partitions, absent for standalone uncached drawing.
     pub fn render_cache(&self) -> Option<&crate::RenderCache> {
-        self.render_cache.as_ref()
+        self.evaluation.cache()
     }
 
-    /// Caches immutable layout by full typed key and declared logical payload.
+    /// Caches immutable layout in the paragraph partition by full typed key and
+    /// declared logical payload; without a render cache the value is rebuilt.
     pub fn cache_layout<
         Key: Eq + std::hash::Hash + Send + Sync + 'static,
         Value: Send + Sync + 'static,
@@ -211,8 +185,10 @@ impl DrawContext {
         build: impl FnOnce() -> Value,
         cost: impl FnOnce(&Value) -> usize,
     ) -> std::sync::Arc<Value> {
-        match &self.layout_cache {
-            Some(cache) => cache.get_with_cost(key, build, cost),
+        match self.render_cache() {
+            Some(cache) => cache
+                .partition(crate::CachePartition::Paragraph)
+                .get_with_cost(key, build, cost),
             None => std::sync::Arc::new(build()),
         }
     }
@@ -229,15 +205,13 @@ impl DrawContext {
     }
 
     /// Carries request diagnostics explicitly through deferred content compilation.
-    pub fn with_diagnostics(mut self, diagnostics: crate::RequestDiagnostics) -> Self {
-        self.diagnostics = diagnostics;
-        self.assets = self.assets.with_diagnostics(self.diagnostics.clone());
-        self
+    pub fn with_diagnostics(self, diagnostics: crate::RequestDiagnostics) -> Self {
+        self.edit(|evaluation| evaluation.with_diagnostics(diagnostics))
     }
 
     /// Request-owned sink; cloning this drawing context preserves its identity.
     pub fn diagnostics(&self) -> &crate::RequestDiagnostics {
-        &self.diagnostics
+        self.evaluation.diagnostics()
     }
 }
 
