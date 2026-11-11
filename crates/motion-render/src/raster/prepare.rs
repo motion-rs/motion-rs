@@ -177,7 +177,19 @@ pub(crate) fn prepare_validated_with_cache(
     tolerance: f64,
     cache: Option<&mut CoverageCache>,
 ) -> Result<PreparedFrame, ValidationError> {
-    let ir = FrameIr::build(source, validation, tolerance)?;
+    prepare_validated_device(source, validation, limits, tolerance, cache, false)
+}
+
+/// Prepares a frame; `device` lets eligible fills keep GPU edge records instead of CPU coverage.
+pub(crate) fn prepare_validated_device(
+    source: &motion_core::ValidatedDisplayList,
+    validation: ValidationLimits,
+    limits: RasterLimits,
+    tolerance: f64,
+    cache: Option<&mut CoverageCache>,
+    device: bool,
+) -> Result<PreparedFrame, ValidationError> {
+    let ir = FrameIr::build(source, validation, tolerance)?.with_device_coverage(device);
     prepare_ir(&ir, limits, cache)
 }
 
@@ -280,6 +292,10 @@ fn initialize_frame(
         strips: Vec::new(),
         spans: Vec::new(),
         alphas: Vec::new(),
+        device_fills: Vec::new(),
+        device_edges: Vec::new(),
+        device_totals: [0; 2],
+        device_enabled: ir.device_coverage(),
         paints: Vec::new(),
         paint_sources: Vec::new(),
         clips: Vec::new(),
@@ -515,7 +531,20 @@ fn prepare_fill_path(
         } => Ok({
             let strip_start = frame.strips.len();
             let span_start = frame.spans.len();
-            if let Some(cache) = cache.as_deref_mut() {
+            let device = frame.device_enabled
+                && !matches!(source_paint, motion_core::Paint::Pattern(pattern) if pattern.decal)
+                && !cache.as_deref().is_some_and(|cache| {
+                    cache.contains(geometry, *transform, frame.size, *rule, tolerance)
+                })
+                && frame.device_fill(
+                    geometry,
+                    *transform,
+                    *rule,
+                    tolerance,
+                    &mut RasterScope::new(budget, path),
+                )?;
+            if device {
+            } else if let Some(cache) = cache.as_deref_mut() {
                 cache.polygon(
                     frame,
                     geometry,

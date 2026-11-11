@@ -5,6 +5,7 @@ use motion_core::budget::Budget;
 use std::mem::size_of;
 
 pub(crate) mod coverage_cache;
+pub(crate) mod device;
 pub(crate) mod frame_ir;
 pub(crate) mod paint;
 pub(crate) mod polygon;

@@ -5,7 +5,7 @@ pub use crate::cpu::WorkStats;
 pub(crate) use crate::raster::coverage_cache::CoverageCache;
 use crate::raster::paint;
 pub use crate::raster::prepare::RenderPrepare;
-pub(crate) use crate::raster::prepare::prepare_validated_with_cache;
+pub(crate) use crate::raster::prepare::prepare_validated_device;
 pub use motion_core::RasterLimits;
 use motion_core::{PixelSize, Rect};
 use std::ops::Range;
@@ -166,6 +166,20 @@ pub(crate) enum PreparedItem {
     },
 }
 
+/// A fill whose coverage the GPU computes from flattened edges instead of CPU strips.
+///
+/// The fill owns one dense strip covering its pixel bounds; the strip's `alpha_offset` addresses
+/// a four-byte aligned block after the CPU alphas, which the GPU writes before composition.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct DeviceFill {
+    /// Index of the dense strip in [`PreparedFrame::strips`].
+    pub(crate) strip: usize,
+    /// Range in [`PreparedFrame::device_edges`].
+    pub(crate) edges: Range<usize>,
+    /// Winding rule that maps accumulated signed area to coverage.
+    pub(crate) rule: motion_core::FillRule,
+}
+
 /// Logical preparation totals, excluding allocator capacity and source storage.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct PreparationStats {
@@ -194,6 +208,13 @@ pub struct PreparedFrame {
     pub(crate) strips: Vec<Strip>,
     pub(crate) spans: Vec<Span>,
     pub(crate) alphas: Vec<u8>,
+    pub(crate) device_fills: Vec<DeviceFill>,
+    /// Flattened edges as top x, top y, bottom x, bottom y and winding.
+    pub(crate) device_edges: Vec<[f64; 5]>,
+    /// Pixels and estimated per-pixel edge visits already granted to device fills.
+    pub(crate) device_totals: [u64; 2],
+    /// Whether eligible fills may record GPU edges instead of CPU coverage.
+    pub(crate) device_enabled: bool,
     pub(crate) paints: Vec<PaintRecord>,
     pub(crate) paint_sources: Vec<Option<paint::Source>>,
     pub(crate) clips: Vec<ClipRecord>,
@@ -239,6 +260,11 @@ impl PreparedFrame {
     /// Number of independent path-mask and geometric clip regions.
     pub fn clip_count(&self) -> usize {
         self.clips.len()
+    }
+
+    /// Whether some fill coverage exists only as GPU edge records; CPU rendering rejects such frames.
+    pub(crate) fn has_device_coverage(&self) -> bool {
+        !self.device_fills.is_empty()
     }
 
     /// Number of edge coverage strips shared by all fills and clips.

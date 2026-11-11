@@ -4,11 +4,14 @@ use super::*;
 use motion_core::{PixelSize, ValidationError};
 
 mod coverage;
+mod device;
 mod items;
 mod schedule;
 mod sparse;
 mod steps;
 mod textures;
+
+pub(super) use device::{DeviceCoverage, FILL_WORDS};
 
 /// Packed storage, mapped readback and owned CPU output coexist until completion.
 const PACKED_PAYLOAD_COPIES: u64 = 3;
@@ -268,14 +271,16 @@ impl Plan {
         size: PixelSize,
         limits: RasterLimits,
     ) -> Result<Self, ValidationError> {
-        let coverage = if planner
-            .steps
-            .iter()
-            .any(|step| Planner::uses_direct_coverage(&step.data))
+        let (coverage, device) = if planner.frame.has_device_coverage()
+            || planner
+                .steps
+                .iter()
+                .any(|step| Planner::uses_direct_coverage(&step.data))
         {
-            planner.shared_coverage()?
+            let device = planner.device_coverage()?;
+            (planner.shared_coverage()?, device)
         } else {
-            Vec::new()
+            (Vec::new(), device::DeviceCoverage::default())
         };
         planner.budget.bytes(
             (planner.steps.len() as u64 + 1) * (size_of::<usize>() * 3 + size_of::<u64>()) as u64,
@@ -368,6 +373,7 @@ impl Plan {
             output,
             steps: planner.steps,
             coverage,
+            device,
             last_uses,
             texture_slots,
             texture_sizes,

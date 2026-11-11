@@ -196,6 +196,19 @@ impl CoverageCache {
         result
     }
 
+    /// Whether a prepared coverage entry already exists for the fill.
+    pub(super) fn contains(
+        &self,
+        geometry: &Path2D,
+        transform: Transform,
+        size: PixelSize,
+        rule: FillRule,
+        tolerance: f64,
+    ) -> bool {
+        self.lookup(geometry, transform, size, rule, tolerance)
+            .is_some()
+    }
+
     pub(super) fn lookup(
         &self,
         geometry: &Path2D,

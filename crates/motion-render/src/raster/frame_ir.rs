@@ -17,6 +17,7 @@ pub(crate) struct FrameIr<'a> {
     output_bounds: PixelRect,
     background: Option<PaintRecord>,
     tolerance: f64,
+    device_coverage: bool,
 }
 
 impl<'a> FrameIr<'a> {
@@ -77,7 +78,18 @@ impl<'a> FrameIr<'a> {
                 .map(|color| paint_record(color, "prepared.background"))
                 .transpose()?,
             tolerance,
+            device_coverage: false,
         })
+    }
+
+    /// Lets eligible fills leave coverage to the GPU instead of building CPU strips.
+    pub(crate) fn with_device_coverage(mut self, enabled: bool) -> Self {
+        self.device_coverage = enabled;
+        self
+    }
+
+    pub(crate) fn device_coverage(&self) -> bool {
+        self.device_coverage
     }
 
     pub(crate) fn list(&self) -> &'a DisplayList {

@@ -37,7 +37,15 @@ impl FrameExecution<'_> {
             self.timings.as_mut().expect("enabled timings").compile += started.elapsed();
         }
         let started = self.timings.map(|_| std::time::Instant::now());
-        let prepared = crate::prepared::prepare_validated_with_cache(
+        let device = self.composition.options.blend_space
+            == motion_core::drawing::BlendSpace::LinearRgb
+            && self
+                .backend
+                .as_ref()
+                .map_or(self.composition.options.backend.wants_gpu(), |decision| {
+                    decision.renderer == crate::Renderer::Gpu
+                });
+        let prepared = crate::prepared::prepare_validated_device(
             &list,
             validation,
             self.limits,
@@ -47,6 +55,7 @@ impl FrameExecution<'_> {
                 1.0 / 256.0
             },
             Some(&mut self.coverage_cache),
+            device,
         )?
         .quality(self.composition.options.quality)
         .blend_space(self.composition.options.blend_space);

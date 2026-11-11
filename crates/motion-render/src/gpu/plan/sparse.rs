@@ -35,6 +35,7 @@ impl Planner<'_> {
                     .and_then(|spans| words.checked_add(spans))
             })
             .and_then(|words| words.checked_add(frame.alphas.len().div_ceil(4)))
+            .and_then(|words| words.checked_add(self.device_words()))
             .and_then(|words| words.checked_add(4))
             .and_then(|words| u32::try_from(words).ok())
             .ok_or_else(|| {
@@ -51,6 +52,7 @@ impl Planner<'_> {
             "gpu.frame_coverage",
         )?;
         let alpha_base = 4 + frame.strips.len() * 6 + frame.spans.len() * 4;
+        let device_base = frame.alphas.len().next_multiple_of(4);
         let mut data = Vec::new();
         data.try_reserve_exact(words as usize).map_err(|_| {
             ValidationError::limit(
@@ -74,13 +76,19 @@ impl Planner<'_> {
             checked(frame.alphas.len())?,
             checked(alpha_base)?,
         ]);
-        for strip in &frame.strips {
+        let mut device = frame.device_fills.iter().map(|fill| fill.strip).peekable();
+        for (index, strip) in frame.strips.iter().enumerate() {
+            let shift = if device.next_if_eq(&index).is_some() {
+                device_base
+            } else {
+                0
+            };
             data.extend([
                 strip.x,
                 strip.y,
                 strip.width,
                 strip.height,
-                checked(strip.alpha_offset)?,
+                checked(strip.alpha_offset + shift)?,
                 0,
             ]);
         }
@@ -92,6 +100,7 @@ impl Planner<'_> {
             packed[..bytes.len()].copy_from_slice(bytes);
             data.push(u32::from_le_bytes(packed));
         }
+        data.resize(words as usize, 0);
         Ok(data)
     }
 
@@ -178,7 +187,11 @@ impl Planner<'_> {
             {
                 let offset = strip.alpha_offset
                     + ((row - strip.y) * strip.width + column - strip.x) as usize;
-                return f32::from(self.frame.alphas[offset]) / 255.0;
+                return self
+                    .frame
+                    .alphas
+                    .get(offset)
+                    .map_or(0.0, |alpha| f32::from(*alpha) / 255.0);
             }
         }
         let spans = data[8].to_bits() as usize..data[9].to_bits() as usize;

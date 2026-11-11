@@ -70,6 +70,7 @@ pub(crate) struct Plan {
     output: usize,
     steps: Vec<Step>,
     coverage: Vec<u32>,
+    device: plan::DeviceCoverage,
     last_uses: Vec<usize>,
     texture_slots: Vec<usize>,
     texture_sizes: Vec<PixelSize>,
@@ -125,6 +126,7 @@ pub struct GpuContext {
     present: std::sync::Arc<[std::sync::OnceLock<wgpu::RenderPipeline>; 3]>,
     present_check: std::sync::Arc<std::sync::OnceLock<wgpu::ComputePipeline>>,
     packing: std::sync::Arc<std::sync::OnceLock<wgpu::ComputePipeline>>,
+    device_coverage: std::sync::Arc<std::sync::OnceLock<wgpu::ComputePipeline>>,
     timestamp_marker: std::sync::Arc<std::sync::OnceLock<wgpu::ComputePipeline>>,
     alpha_thresholds: std::sync::Arc<std::sync::OnceLock<wgpu::Buffer>>,
 

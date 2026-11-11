@@ -147,31 +147,34 @@ impl PreparedFrame {
     ) -> Result<(), ValidationError> {
         let (budget, path) = (&mut *scope.budget, scope.path);
         let edges = path_edges(verbs, transform, tolerance, budget, path)?;
-        let mut bounds = Rect::new(
-            f64::INFINITY,
-            f64::INFINITY,
-            f64::NEG_INFINITY,
-            f64::NEG_INFINITY,
-        );
+        self.polygon_edges(&edges, rule, scratch, scope)?;
+        scope
+            .budget
+            .release((edges.len() * size_of::<Edge>()) as u64);
+        Ok(())
+    }
+
+    /// Rasterizes already flattened edges; the caller owns their storage charge.
+    pub(super) fn polygon_edges(
+        &mut self,
+        edges: &[Edge],
+        rule: FillRule,
+        scratch: &mut PolygonScratch,
+        scope: &mut RasterScope<'_>,
+    ) -> Result<(), ValidationError> {
+        let (budget, path) = (&mut *scope.budget, scope.path);
         budget.work(edges.len() as u64, path)?;
-        for edge in &edges {
-            bounds.left = bounds.left.min(edge.top.x).min(edge.bottom.x);
-            bounds.right = bounds.right.max(edge.top.x).max(edge.bottom.x);
-            bounds.top = bounds.top.min(edge.top.y);
-            bounds.bottom = bounds.bottom.max(edge.bottom.y);
-        }
-        let pixels = pixel_bounds(bounds, self.size);
+        let pixels = pixel_bounds(edge_bounds(edges), self.size);
         if !pixels.is_empty() {
             sweep::rasterize_with_scratch(
                 self,
-                &edges,
+                edges,
                 pixels,
                 rule,
                 scratch,
                 &mut RasterScope::new(budget, path),
             )?;
         }
-        budget.release((edges.len() * size_of::<Edge>()) as u64);
         Ok(())
     }
 
@@ -276,6 +279,23 @@ impl PreparedFrame {
         }
         Ok(())
     }
+}
+
+/// Device-space bounds of flattened edges; infinite and inverted when there are none.
+pub(super) fn edge_bounds(edges: &[Edge]) -> Rect {
+    let mut bounds = Rect::new(
+        f64::INFINITY,
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+        f64::NEG_INFINITY,
+    );
+    for edge in edges {
+        bounds.left = bounds.left.min(edge.top.x).min(edge.bottom.x);
+        bounds.right = bounds.right.max(edge.top.x).max(edge.bottom.x);
+        bounds.top = bounds.top.min(edge.top.y);
+        bounds.bottom = bounds.bottom.max(edge.bottom.y);
+    }
+    bounds
 }
 
 fn scratch<Value>(

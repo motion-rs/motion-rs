@@ -342,6 +342,7 @@ impl GpuContext {
                 present_shader: Default::default(),
                 present_check: Default::default(),
                 packing: Default::default(),
+                device_coverage: Default::default(),
                 timestamp_marker: Default::default(),
                 alpha_thresholds: Default::default(),
                 working_pool: Default::default(),
@@ -361,6 +362,7 @@ impl GpuContext {
         let validation_scope = self.device.push_error_scope(wgpu::ErrorFilter::Validation);
         self.alpha_thresholds();
         self.packing_pipeline();
+        self.coverage_pipeline();
         self.present_check_pipeline();
         for format in [
             wgpu::TextureFormat::Rgba16Float,
@@ -561,6 +563,26 @@ impl GpuContext {
                     label: Some("exact alpha quantization thresholds"),
                     contents: bytemuck::cast_slice(&values),
                     usage: wgpu::BufferUsages::STORAGE,
+                })
+        })
+    }
+
+    pub(super) fn coverage_pipeline(&self) -> &wgpu::ComputePipeline {
+        self.device_coverage.get_or_init(|| {
+            let shader = self
+                .device
+                .create_shader_module(wgpu::ShaderModuleDescriptor {
+                    label: Some("GPU fill coverage"),
+                    source: wgpu::ShaderSource::Wgsl(include_str!("shaders/coverage.wgsl").into()),
+                });
+            self.device
+                .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                    label: Some("GPU fill coverage"),
+                    layout: None,
+                    module: &shader,
+                    entry_point: Some("coverage_pass"),
+                    compilation_options: Default::default(),
+                    cache: None,
                 })
         })
     }

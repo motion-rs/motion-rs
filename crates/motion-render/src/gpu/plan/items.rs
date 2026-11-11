@@ -124,7 +124,20 @@ impl<'a> ItemPlanner<'a> {
         );
         let mut parameters = GpuUniforms::new(frame, GpuOp::Fill, layer_bounds);
         // Only drawn quads name their record; a compute pass would scan every record per pixel.
-        let mut data = if !decal && !strips.is_empty() && parameters.operation.blend_space == 0 {
+        let direct = !decal && !strips.is_empty() && parameters.operation.blend_space == 0;
+        if !direct
+            && frame
+                .device_fills
+                .iter()
+                .any(|fill| strips.contains(&fill.strip))
+        {
+            return Err(ValidationError::unsupported(
+                "gpu.device_coverage",
+                "fill",
+                "Device coverage requires direct fill coverage",
+            ));
+        }
+        let mut data = if direct {
             self.planner
                 .direct_coverage(strips.clone(), spans.clone(), layer_bounds)?
         } else {

@@ -251,6 +251,18 @@ impl PreparedFrame {
         stats: &mut WorkStats,
         fills: Option<&[usize]>,
     ) -> Result<LinearFrame, ValidationError> {
+        if self.has_device_coverage() {
+            let mut cpu = self.clone();
+            cpu.materialize_device_coverage(limits)?;
+            return cpu.render_linear_selected::<OPTIMIZE_LAYERS>(
+                limits,
+                pool,
+                output_bounds,
+                bounds,
+                stats,
+                fills,
+            );
+        }
         pool.trim(limits.max_bytes / 4);
         let mut budget = Budget::new(self.size, limits)?;
         let result = (|| {
