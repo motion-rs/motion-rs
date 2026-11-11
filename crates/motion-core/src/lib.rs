@@ -88,6 +88,9 @@ pub use drawing::{
     GradientExtend, GradientSpace, GradientUnits, ImagePattern, LinearGradient, RadialGradient,
     SweepGradient,
 };
+pub use drawing::{
+    MAX_MESH_POINTS_PER_AXIS, MAX_MESH_SUBDIVISIONS, MeshGradient, MeshImage, MeshVertex,
+};
 pub use error::{BoxedError, Error, ErrorKind};
 pub use filter::{Filter, FilterOperation};
 pub use geometry::bounds::{Pivot, Rect, Size};
@@ -163,6 +166,7 @@ pub mod prelude {
         GradientExtend, GradientSpace, GradientUnits, ImagePattern, LinearGradient, RadialGradient,
         SweepGradient,
     };
+    pub use crate::{MeshGradient, MeshImage, MeshVertex};
     pub use crate::{MorphPath, Path2D, PathBooleanOp, PathBooleanOptions, PathVerb};
     pub use crate::{group, scene};
     pub use crate::{linear_to_srgb, premultiply, rec709_luminance, srgb_to_linear, unpremultiply};

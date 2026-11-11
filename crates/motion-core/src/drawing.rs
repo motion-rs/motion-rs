@@ -6,6 +6,7 @@ mod clip;
 mod command;
 mod context;
 mod evaluation;
+pub mod mesh;
 pub mod paint;
 mod stroke;
 
@@ -17,6 +18,9 @@ pub use command::DrawCommand;
 pub use context::{DeferredContent, DrawContext, Drawable, RenderQuality};
 pub use evaluation::Evaluation;
 
+pub use mesh::{
+    MAX_MESH_POINTS_PER_AXIS, MAX_MESH_SUBDIVISIONS, MeshGradient, MeshImage, MeshVertex,
+};
 pub use paint::{
     GradientExtend, GradientSpace, GradientUnits, ImagePattern, LinearGradient, Paint,
     RadialGradient, SweepGradient,

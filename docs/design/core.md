@@ -120,6 +120,11 @@ differ in the combined region and chains them into line-only contours. Backends 
 the resulting path, so CPU and GPU output agree. Edge count, storage and quadratic
 intersection work are admitted through `Budget` first.
 
+`MeshGradient` is a lattice of colored control points. It rasterizes through `Budget` into a
+linear-premultiplied `MeshImage` and reaches renderers as an ordinary `ImagePattern`, so the
+CPU path, GPU plan and WGSL shader need no mesh-specific code and cannot disagree. Colors blend
+in Oklab with smoothstep weights and alpha blends linearly; cells are bilinear patches.
+
 Selected curve, stroke and arc operations use kurbo. Shared coverage remains
 Motion-owned, not a complete third-party raster backend. Arc-length lookup, curve
 splitting and geometric morphing operate before pixel execution; topology,
