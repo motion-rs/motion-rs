@@ -130,7 +130,7 @@ pub struct GpuContext {
     present: std::sync::Arc<[std::sync::OnceLock<wgpu::RenderPipeline>; 3]>,
     present_check: std::sync::Arc<std::sync::OnceLock<wgpu::ComputePipeline>>,
     packing: std::sync::Arc<std::sync::OnceLock<wgpu::ComputePipeline>>,
-    device_coverage: std::sync::Arc<std::sync::OnceLock<wgpu::ComputePipeline>>,
+    device_coverage: std::sync::Arc<std::sync::OnceLock<CoveragePipelines>>,
     timestamp_marker: std::sync::Arc<std::sync::OnceLock<wgpu::ComputePipeline>>,
     alpha_thresholds: std::sync::Arc<std::sync::OnceLock<wgpu::Buffer>>,
 
@@ -189,6 +189,11 @@ struct TexturePipelines {
 }
 
 type ScopedError = std::pin::Pin<Box<dyn std::future::Future<Output = Option<wgpu::Error>>>>;
+
+struct CoveragePipelines {
+    layout: wgpu::BindGroupLayout,
+    passes: [wgpu::ComputePipeline; 5],
+}
 
 /// Submitted same-device texture rendering. Finish checks status and scoped errors
 /// before publication; resources stay leased until its own submission completes.

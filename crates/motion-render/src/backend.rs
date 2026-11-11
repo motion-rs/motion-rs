@@ -175,6 +175,9 @@ mod tests {
             .frame_renderer(motion_core::Size::new(16.0, 16.0))?;
         let tiny = build(1e-50)?;
         automatic.render_frame(0, |_| tiny.clone())?;
+        let attempted = automatic.report().gpu_preparation.unwrap();
+        assert!(attempted.segment_count > 0);
+        assert_eq!(attempted.fallback_paths.total(), 0);
         assert!(automatic.gpu_info().is_none());
         assert!(automatic.cached_coverage_bytes() > 0);
         assert_eq!(
@@ -187,6 +190,7 @@ mod tests {
             automatic.render_frame(1, |_| opaque.clone())?.bytes(),
             cpu.render_frame(1, |_| opaque.clone())?.bytes()
         );
+        assert!(automatic.report().gpu_preparation.is_none());
         Ok(())
     }
 

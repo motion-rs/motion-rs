@@ -71,6 +71,7 @@ impl FrameExecution<'_> {
         let end = self.duration;
         if time < Time::ZERO || time >= end {
             self.last_stats = None;
+            self.gpu_preparation = None;
             self.asset_diagnostics.clear();
             return Err(ValidationError::invalid(
                 "_frame",

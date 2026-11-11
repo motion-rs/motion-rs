@@ -169,7 +169,7 @@ fn assert_matches_cpu(crossing: bool) -> motion_core::Result {
     Ok(())
 }
 
-fn assert_visually_equivalent(actual: &[[u8; 4]], expected: &[[u8; 4]]) {
+pub(super) fn assert_visually_equivalent(actual: &[[u8; 4]], expected: &[[u8; 4]]) {
     assert_eq!(actual.len(), expected.len());
     let mut squared = 0.0;
     let mut samples = 0;
@@ -226,7 +226,7 @@ fn device_float_coverage_layout_and_admission() -> motion_core::Result {
     let limits = RasterLimits::default();
     let plan = Plan::new(&frame, limits)?;
     assert_eq!(plan.device.samples, 2);
-    let base = plan.device.fills[4] as usize;
+    let base = plan.device.fills[0].coverage as usize;
     assert_eq!(plan.coverage.len(), base + 2);
     for (index, fill) in frame.geometry.device_fills.iter().enumerate() {
         let strip = 4 + fill.strip * 6;

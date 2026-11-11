@@ -80,6 +80,9 @@ pub struct FrameReport {
     pub timings: Option<FrameTimings>,
     /// Backend decision made for this session.
     pub backend: Option<crate::BackendDecision>,
+    /// Latest completed GPU preparation attempt, even if Automatic later chose CPU.
+    /// Available for memory, texture and preparation-only requests; cleared on the next request.
+    pub gpu_preparation: Option<crate::GpuPreparationStats>,
 }
 
 /// Composition-timed wrapper around a reusable RenderSession.
@@ -136,6 +139,7 @@ impl FrameRenderer {
     ) -> Result<FrameBuffer> {
         if self.composition.shutter().is_some() {
             self.last_stats = None;
+            self.gpu_preparation = None;
             self.asset_diagnostics.clear();
             return Err(motion_core::Error::from(ValidationError::unsupported(
                 "_frame",
@@ -168,6 +172,7 @@ impl FrameRenderer {
         build: impl FnMut(&SceneContext<'_>) -> Node,
     ) -> Result<FrameBuffer> {
         self.last_stats = None;
+        self.gpu_preparation = None;
         self.asset_diagnostics.clear();
         self.composition
             .validate_frame_index(index)
@@ -278,6 +283,7 @@ impl FrameRenderer {
         build: impl FnMut(&SceneContext<'_>) -> Node,
     ) -> Result<()> {
         self.last_stats = None;
+        self.gpu_preparation = None;
         self.asset_diagnostics.clear();
         self.composition.validate_frame_index(index)?;
         let rate = self.composition.clock.rate;
@@ -309,6 +315,7 @@ impl FrameRenderer {
         build: impl FnMut(&SceneContext<'_>) -> Node,
     ) -> Result<crate::gpu::PendingTextureFrame> {
         self.last_stats = None;
+        self.gpu_preparation = None;
         self.asset_diagnostics.clear();
         self.composition.validate_frame_index(index)?;
         self.execution()

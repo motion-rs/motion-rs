@@ -31,6 +31,11 @@ impl PreparedGpuFrame {
         self.frame.stats()
     }
 
+    /// Admitted geometry, tile capacity, geometry uploads and per-path CPU reasons.
+    pub fn gpu_stats(&self) -> crate::GpuPreparationStats {
+        self.frame.geometry.stats(self.frame.stats())
+    }
+
     /// Plans packed GPU output under the remaining frame allowance.
     pub fn plan(
         &self,

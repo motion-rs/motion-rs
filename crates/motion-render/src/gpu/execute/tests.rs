@@ -3,6 +3,7 @@ use motion_core::{NodeModifiers, Shape, ValidationLimits};
 
 mod device_coverage_tests;
 mod noise_tests;
+mod tile_coverage_tests;
 
 fn assert_packed_output_matches(actual: &crate::FrameBuffer, expected: &crate::FrameBuffer) {
     assert_eq!(actual.size(), expected.size());

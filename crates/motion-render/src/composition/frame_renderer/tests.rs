@@ -781,14 +781,27 @@ fn gpu_output_preparation_is_independent_and_device_free() -> Result {
     assert!(!gpu.gpu_view().items.is_empty());
     assert!(gpu.gpu_view().alphas.is_empty());
     assert_eq!(gpu.size(), PixelSize::new(8, 4));
+    let stats = gpu.gpu_stats();
+    assert_eq!(stats.preparation, gpu.stats());
+    assert!(stats.segment_count > 0);
+    assert_eq!(stats.tile_count, 1);
+    assert_eq!(stats.fallback_paths.total(), 0);
+    assert_eq!(renderer.report().gpu_preparation, Some(stats));
     let plan = gpu.plan(limits, crate::PixelFormat::Yuv420 { bit_depth: 8 })?;
     assert!(plan.peak_bytes()? >= gpu.stats().retained_bytes);
     assert!(renderer.gpu_info().is_none());
     let (cpu, _) = renderer.prepare_output_at(Time::ZERO, None, build)?;
+    assert!(renderer.report().gpu_preparation.is_none());
     assert!(!cpu.alphas.is_empty());
     assert!(renderer.cached_coverage_bytes() > 0);
     assert!(renderer.gpu_info().is_none());
     assert!(gpu.gpu_view().alphas.is_empty());
+    assert!(
+        renderer
+            .prepare_gpu_output_at(Time::from_ticks(-1), None, build)
+            .is_err()
+    );
+    assert!(renderer.report().gpu_preparation.is_none());
     Ok(())
 }
 

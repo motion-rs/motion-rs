@@ -342,9 +342,18 @@ pub(crate) fn prepare_scene(
                 let span_start = frame.spans.len();
                 let mut scope = RasterScope::new(&mut budget, &path);
                 let device_fill = if let Some(device) = device.as_deref_mut() {
-                    !matches!(paint.source, motion_core::Paint::Pattern(pattern) if pattern.decal)
-                        && matches!(geometry.source, GeometrySource::Path(_))
-                        && device.device_fill(&mut frame, geometry, ir.tolerance(), &mut scope)?
+                    if !matches!(geometry.source, GeometrySource::Path(_)) {
+                        false
+                    } else if !device.coverage_enabled {
+                        device.fallback_paths.coverage_disabled += 1;
+                        false
+                    } else if matches!(paint.source, motion_core::Paint::Pattern(pattern) if pattern.decal)
+                    {
+                        device.fallback_paths.unsupported_paint += 1;
+                        false
+                    } else {
+                        device.device_fill(&mut frame, geometry, ir.tolerance(), &mut scope)?
+                    }
                 } else {
                     false
                 };

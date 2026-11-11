@@ -31,6 +31,7 @@ pub struct RenderSession {
     pub(super) limits: RasterLimits,
 
     pub(super) last_stats: Option<FrameStats>,
+    pub(super) gpu_preparation: Option<crate::GpuPreparationStats>,
     pub(super) timings: Option<FrameTimings>,
     pub(super) asset_diagnostics: Vec<std::sync::Arc<motion_core::Error>>,
     pub(super) diagnostics: motion_core::RequestDiagnostics,
@@ -111,6 +112,7 @@ impl RenderSession {
             output_pool: crate::output::OutputPool::default(),
             limits,
             last_stats: None,
+            gpu_preparation: None,
             timings: None,
             asset_diagnostics: Vec::new(),
             diagnostics: motion_core::RequestDiagnostics::default(),
@@ -128,6 +130,7 @@ impl RenderSession {
         build: impl FnMut(&SceneContext<'_>) -> Node,
     ) -> Result<()> {
         self.last_stats = None;
+        self.gpu_preparation = None;
         self.asset_diagnostics.clear();
         self.diagnostics = motion_core::RequestDiagnostics::default();
         let time = match request.at {
@@ -338,6 +341,7 @@ impl RenderSession {
             stats: self.last_stats,
             timings: self.timings,
             backend: self.backend.clone(),
+            gpu_preparation: self.gpu_preparation,
         }
     }
 

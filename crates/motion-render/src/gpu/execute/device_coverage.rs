@@ -1,10 +1,10 @@
-//! Encodes the compute pass that writes device fill coverage into the shared frame buffer.
+//! GPU count, prefix, scatter, row-carry and tile coverage dispatch.
 
 use super::*;
+use crate::gpu::abi::CoverageParams;
 use crate::gpu::plan::DeviceCoverage;
 
 impl Gpu {
-    /// Writes every device fill's alphas; later composition passes read them as ordinary strips.
     pub(super) fn encode_device_coverage(
         &self,
         encoder: &mut wgpu::CommandEncoder,
@@ -12,14 +12,16 @@ impl Gpu {
         coverage: &wgpu::Buffer,
         working: &mut WorkingLease,
     ) {
-        let pipeline = self.coverage_pipeline();
-        let parameters = [
-            (device.fills.len() / crate::gpu::plan::FILL_WORDS) as u32,
-            device.samples,
-        ];
+        let pipelines = self.coverage_pipelines();
+        let params = CoverageParams {
+            fills: device.fills.len() as u32,
+            edges: device.edges.len() as u32,
+            tiles: device.tiles,
+            rows: device.rows,
+        };
         let uniforms = self.upload_buffer(
             "Device coverage counts",
-            bytemuck::cast_slice(&[parameters[0], parameters[1], 0, 0]),
+            bytemuck::bytes_of(&params),
             wgpu::BufferUsages::UNIFORM,
         );
         let fills = self.upload_buffer(
@@ -32,12 +34,27 @@ impl Gpu {
             bytemuck::cast_slice(&device.edges),
             wgpu::BufferUsages::STORAGE,
         );
-        let rows = self.upload_buffer(
-            "Device coverage rows",
-            bytemuck::cast_slice(&device.rows),
+        let sizes = device.buffer_sizes();
+        let tiles = self.working_buffer(
+            "Device coverage tiles",
+            sizes[2],
+            wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+        );
+        // Pooled buffers contain the preceding frame's atomics; clear before counting.
+        encoder.clear_buffer(&tiles, 0, None);
+        let indices = self.working_buffer(
+            "Device coverage indices",
+            sizes[3],
             wgpu::BufferUsages::STORAGE,
         );
-        let buffers = [&uniforms, &fills, &edges, &rows, coverage];
+        let carries = self.working_buffer(
+            "Device coverage carries",
+            sizes[4],
+            wgpu::BufferUsages::STORAGE,
+        );
+        let buffers = [
+            &uniforms, &fills, &edges, &tiles, &indices, &carries, coverage,
+        ];
         let entries = buffers
             .iter()
             .enumerate()
@@ -48,19 +65,26 @@ impl Gpu {
             .collect::<Vec<_>>();
         let group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Device coverage bindings"),
-            layout: &pipeline.get_bind_group_layout(0),
+            layout: &pipelines.layout,
             entries: &entries,
         });
-        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-            label: Some("Compute device fill coverage"),
-            timestamp_writes: None,
-        });
-        pass.set_pipeline(pipeline);
-        pass.set_bind_group(0, &group, &[]);
-        let groups = device.samples.div_ceil(256);
-        let groups_x = groups.min(self.device.limits().max_compute_workgroups_per_dimension);
-        pass.dispatch_workgroups(groups_x, groups.div_ceil(groups_x), 1);
-        drop(pass);
-        working.extend([uniforms, fills, edges, rows]);
+        let counts = [
+            params.edges.div_ceil(64),
+            params.fills.div_ceil(64),
+            params.edges.div_ceil(64),
+            params.rows.div_ceil(64),
+            params.tiles,
+        ];
+        for (pipeline, groups) in pipelines.passes.iter().zip(counts) {
+            let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("Device coverage tiles"),
+                timestamp_writes: None,
+            });
+            pass.set_pipeline(pipeline);
+            pass.set_bind_group(0, &group, &[]);
+            let groups_x = groups.min(self.device.limits().max_compute_workgroups_per_dimension);
+            pass.dispatch_workgroups(groups_x, groups.div_ceil(groups_x), 1);
+        }
+        working.extend([uniforms, fills, edges, tiles, indices, carries]);
     }
 }

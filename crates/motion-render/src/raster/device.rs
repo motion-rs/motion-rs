@@ -4,13 +4,23 @@
 use super::polygon::scratch::PolygonScratch;
 use super::polygon::{Edge, edge_bounds, path_edges};
 use super::{RasterScope, pixel_bounds};
+#[cfg(feature = "gpu")]
+use crate::prepared::GpuPreparationStats;
 #[cfg(test)]
 use crate::prepared::PreparedItem;
-use crate::prepared::{DeviceFill, PixelRect, PreparedScene, Strip};
+use crate::prepared::{DeviceFill, GpuFallbackCounts, PreparedScene, Strip};
 #[cfg(test)]
 use motion_core::{Point, RasterLimits};
 use motion_core::{Transform, ValidationError};
 use std::mem::size_of;
+
+mod tiles;
+
+pub(crate) use tiles::TileLayout;
+#[cfg(feature = "gpu")]
+pub(crate) use tiles::{
+    COVERAGE_EDGE_BYTES, COVERAGE_FILL_BYTES, COVERAGE_PARAMS_BYTES, COVERAGE_TILE_SIZE,
+};
 
 /// Largest local coordinate magnitude that f32 edge records resolve to a small fraction of a byte.
 const DEVICE_COORDINATE_LIMIT: f64 = 8192.0;
@@ -21,17 +31,19 @@ const DEVICE_MAX_FILLS: usize = 1 << 15;
 /// Most bounding-box pixels one frame may leave to the GPU, bounding the dispatch size.
 const DEVICE_MAX_PIXELS: u64 = 1 << 24;
 
-/// Most per-pixel edge visits a single fill may cost, estimated as row crossings times width.
+/// Most conservatively admitted tile coverage work units in one fill.
 const DEVICE_MAX_FILL_VISITS: u64 = 1 << 26;
 
-/// Most per-pixel edge visits all device fills of a frame may cost.
+/// Most conservatively admitted tile coverage work units in one frame.
 const DEVICE_MAX_FRAME_VISITS: u64 = 1 << 28;
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct DeviceGeometry {
+    pub(crate) coverage_enabled: bool,
     pub(crate) device_fills: Vec<DeviceFill>,
     pub(crate) device_edges: Vec<[f64; 5]>,
     pub(crate) device_totals: [u64; 2],
+    pub(crate) fallback_paths: GpuFallbackCounts,
 }
 
 impl DeviceGeometry {
@@ -63,20 +75,31 @@ impl DeviceGeometry {
             return Ok(true);
         }
         let area = pixels.pixels();
-        let visits = Self::device_visits(&edges, pixels);
         let within = |value: f64| value.abs() <= DEVICE_COORDINATE_LIMIT;
         let [used_pixels, used_visits] = self.device_totals;
-        let eligible = self.device_fills.len() < DEVICE_MAX_FILLS
-            && used_pixels + area <= DEVICE_MAX_PIXELS
-            && visits <= DEVICE_MAX_FILL_VISITS
-            && used_visits + visits <= DEVICE_MAX_FRAME_VISITS
-            && edges.iter().all(|edge| {
-                within(edge.top.x - f64::from(pixels.left))
-                    && within(edge.bottom.x - f64::from(pixels.left))
-                    && within(edge.top.y - f64::from(pixels.top))
-                    && within(edge.bottom.y - f64::from(pixels.top))
-            });
-        if !eligible {
+        if !edges.iter().all(|edge| {
+            within(edge.top.x - f64::from(pixels.left))
+                && within(edge.bottom.x - f64::from(pixels.left))
+                && within(edge.top.y - f64::from(pixels.top))
+                && within(edge.bottom.y - f64::from(pixels.top))
+        }) {
+            self.fallback_paths.coordinate_range += 1;
+            budget.release(charged);
+            return Ok(false);
+        }
+        if self.device_fills.len() >= DEVICE_MAX_FILLS || used_pixels + area > DEVICE_MAX_PIXELS {
+            self.fallback_paths.frame_limit += 1;
+            budget.release(charged);
+            return Ok(false);
+        }
+        let Some(tiles) = TileLayout::admit(&edges, pixels, budget, path)? else {
+            self.fallback_paths.tile_capacity += 1;
+            budget.release(charged);
+            return Ok(false);
+        };
+        let visits = tiles.work;
+        if visits > DEVICE_MAX_FILL_VISITS || used_visits + visits > DEVICE_MAX_FRAME_VISITS {
+            self.fallback_paths.work_limit += 1;
             budget.release(charged);
             return Ok(false);
         }
@@ -113,6 +136,7 @@ impl DeviceGeometry {
                 strip: scene.strips.len(),
                 edges: first..self.device_edges.len(),
                 rule: geometry.rule,
+                tiles,
             },
             path,
         )?;
@@ -126,19 +150,30 @@ impl DeviceGeometry {
         strip.alpha_offset + (strip.width * strip.height) as usize
     }
 
-    /// Estimates how many edge visits the GPU makes: row crossings times the pixels per row.
-    fn device_visits(edges: &[Edge], pixels: PixelRect) -> u64 {
-        let top = f64::from(pixels.top);
-        let bottom = f64::from(pixels.bottom);
-        let rows = edges
-            .iter()
-            .map(|edge| {
-                let first = edge.top.y.max(top).floor();
-                let last = edge.bottom.y.min(bottom).ceil();
-                (last - first).max(0.0) as u64
-            })
-            .sum::<u64>();
-        rows.saturating_mul(u64::from(pixels.width()))
+    #[cfg(feature = "gpu")]
+    pub(crate) fn stats(&self, preparation: crate::PreparationStats) -> GpuPreparationStats {
+        GpuPreparationStats {
+            preparation,
+            segment_count: self.device_edges.len() as u64,
+            tile_count: self
+                .device_fills
+                .iter()
+                .map(|fill| fill.tiles.tile_count())
+                .sum(),
+            tile_index_capacity: self
+                .device_fills
+                .iter()
+                .map(|fill| u64::from(fill.tiles.indices))
+                .sum(),
+            geometry_upload_bytes: if self.device_fills.is_empty() {
+                0
+            } else {
+                self.device_fills.len() as u64 * COVERAGE_FILL_BYTES
+                    + self.device_edges.len() as u64 * COVERAGE_EDGE_BYTES
+                    + COVERAGE_PARAMS_BYTES
+            },
+            fallback_paths: self.fallback_paths,
+        }
     }
 
     /// Replaces every device fill with CPU strips, spans and alphas for CPU rendering.

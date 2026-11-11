@@ -32,8 +32,8 @@ GPU planning rejects unsupported precision or budgets before initialization. Ord
 draw/compute operations use finite linear-premultiplied pixels in RGBA32F working
 textures. Particle states and ordered tile metadata remain storage buffers, as do
 coverage/paint uploads and the final output boundary. These payloads are charged
-explicitly. CPU preparation flattens paths. Eligible fills keep their f64 flattened edges
-and the GPU computes f32 coverage in a compute pass before composition, without an
+explicitly. GPU preparation flattens device curves on the CPU. Eligible fills keep their f64 flattened edges
+and the GPU computes f32 coverage before composition, without an
 intermediate u8 quantization. All other coverage is still generated on the CPU and uploaded.
 Where contours cross inside a pixel the GPU sums signed areas rather than reproducing
 the exact CPU sweep, allowing localized antialiasing differences. CPU rendering
@@ -42,7 +42,47 @@ rejection prepares CPU coverage independently from the validated source before
 rendering; both preparation attempts count toward the request's work allowance.
 An already selected GPU never changes backends after a frame failure.
 
-Each dispatch uses a 256-byte `#[repr(C)]`/Pod `GpuUniforms` rather than a raw
+### Coverage tiles and preparation diagnostics
+
+Coverage uses 16-by-16 pixel tiles. GPU passes count intersecting edges, prefix
+the counts within each fill's disjoint index reservation, scatter edge indices,
+prefix signed row heights and evaluate tile-local trapezoid areas. An edge enters
+each tile intersected by its tile-band-clipped x range. Signed heights propagate
+only after the edge's last tile; empty interior tiles therefore retain winding,
+including holes and offscreen-left contours. Nonzero and even-odd fill rules use
+the same unquantized f32 samples as composition. Edge uploads are relative to the
+fill origin; area evaluation subtracts the tile origin for local arithmetic.
+
+Before selecting GPU coverage, host preparation admits conservative tile counts,
+index capacity and work from the actual f32 endpoints. One extra tile on each
+horizontal side covers interpolation rounding at seams. Each tile admits at most
+4096 edge references. A fill admits at most 2^26 tile work units and the frame at
+most 2^28, 2^24 bounding-box pixels and 32768 fills. Coordinates outside the local
+8192-pixel precision range, excessive tile density or these work/frame ceilings
+choose CPU coverage for that path before submission. Exhausting the caller's
+byte/work allowance remains a validation error, not an uncharged retry.
+
+Planning reserves host/upload/device descriptors, tile counters and offsets,
+the full conservative index capacity and 16 row carries per tile. The count,
+prefix and scatter passes never request growth or a readback. Device buffer and
+two-dimensional dispatch limits are checked before encoding. Per-fill/frame work
+ceilings bound each coverage dispatch. Pooled counters are explicitly cleared
+before every count pass; each row carry and output sample has one writer.
+
+`PreparedGpuFrame::gpu_stats` exposes `GpuPreparationStats`: logical preparation
+totals, retained GPU segments, admitted tiles/index capacity, geometry-upload
+bytes and `GpuFallbackCounts`. Upload bytes count only binning uniforms and
+fill/edge descriptors, not CPU coverage, paints, textures or zeroed scratch.
+Fallback counts distinguish coordinate range, tile capacity, work/frame ceilings,
+decal paint and disabled device coverage (including encoded-sRGB blending).
+Analytic rectangles and CPU clip coverage are not fallback paths.
+`RenderSession::report().gpu_preparation` exposes the same completed preparation
+attempt for memory, texture and preparation-only requests, including partial
+execution failure and Automatic startup rejection. A new request clears it.
+The report's separate backend decision identifies an actual whole-frame CPU
+selection; per-path counts do not imply a backend switch.
+
+Each composition dispatch uses a 256-byte `#[repr(C)]`/Pod `GpuUniforms` rather than a raw
 word array. Frame, bounds, operation, value rows, source rectangles and flags
 start at byte offsets 0, 16, 32, 64, 192 and 240 respectively. The WGSL Settings
 struct has the same aligned layout; ABI tests check size, offsets and Naga
@@ -67,11 +107,12 @@ clips use dense packed coverage, whose lookup does not grow with the record coun
 1080p transition with a few hundred clip records would otherwise exceed the work
 budget. Fully opaque and span-only payloads
 retain compact constants or sparse/packed records. Decals retain CPU f64 rejection
-and compact local payloads. Decals and coverage-cache hits keep CPU coverage.
+and compact local payloads. Decals keep CPU coverage; eligible GPU fills bypass
+the CPU coverage cache.
 Each six-word strip record includes a storage discriminator: CPU records address
 packed u8 alpha bytes, while device records address absolute f32 words in the same
-buffer. GPU coverage writes one sample per invocation; large frames use two-dimensional
-dispatch. Coverage storage and estimated pixel/edge visits are admitted before submission.
+buffer. GPU coverage writes one sample per tile invocation; large frames use two-dimensional
+dispatch. Coverage storage and conservative tile/edge work are admitted before submission.
 CPU alpha decoding retains the original f32 values; device coverage stays f32 through
 composition. Geometric clip ratios
 retain their original f32 operation order. Conditional clips retain an eight-word

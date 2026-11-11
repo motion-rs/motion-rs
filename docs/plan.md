@@ -88,14 +88,15 @@ The v3 backend split has normalized FrameIr semantics and separate CPU/GPU prepa
 results. FrameIr retains admitted f64 device curves, Wang segment bounds, ordered
 scopes, paints, clips and filter domains without coverage. GPU fills use CPU-flattened
 device edges and GPU-generated f32 coverage, not a CPU PreparedFrame.
+GPU coverage uses bounded 16-by-16 tile binning with signed row carries.
+Preparation reports expose segment/tile counts, geometry-upload bytes and classified
+per-path CPU coverage reasons.
+Automatic's independent-coverage startup self-check remains separate work.
 Remaining steps, accepted by visual equivalence with fixture-specific tolerances:
 
 1. Evaluate mesh and generated atmosphere paints independently on CPU/GPU instead
    of baking them during shared preparation; retain the explicit baking APIs.
-2. Replace per-row edge lists with bounded tile binning and relative coordinates,
-   expose per-path fallback statistics, and exercise GPU preparation in Automatic's
-   startup self-check.
-3. Validate complex text, SVG, clipping and filtered scenes at larger resolutions
+2. Validate complex text, SVG, clipping and filtered scenes at larger resolutions
    before claiming performance gains. GPU flattening follows that acceptance.
 
 ### Additional capabilities

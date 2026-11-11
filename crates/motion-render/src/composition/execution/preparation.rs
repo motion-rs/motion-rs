@@ -110,6 +110,10 @@ impl FrameExecution<'_> {
         if let Some(started) = started {
             self.timings.as_mut().expect("enabled timings").coverage += started.elapsed();
         }
+        #[cfg(feature = "gpu")]
+        if let PreparedOutput::Gpu { frame, .. } = &prepared {
+            self.gpu_preparation = Some(frame.geometry.stats(frame.stats()));
+        }
         let limits = remaining(self.limits, prepared.stats().work)?;
         Ok((prepared, limits))
     }
@@ -162,6 +166,7 @@ impl FrameExecution<'_> {
         build: impl FnOnce(&SceneContext<'_>) -> Node,
     ) -> Result<(PreparedOutput, RasterLimits)> {
         self.last_stats = None;
+        self.gpu_preparation = None;
         if self.timings.is_some() {
             self.timings = Some(FrameTimings::default());
         }

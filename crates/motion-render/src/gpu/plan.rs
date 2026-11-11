@@ -11,7 +11,7 @@ mod sparse;
 mod steps;
 mod textures;
 
-pub(super) use device::{DeviceCoverage, FILL_WORDS};
+pub(super) use device::DeviceCoverage;
 
 /// Packed storage, mapped readback and owned CPU output coexist until completion.
 const PACKED_PAYLOAD_COPIES: u64 = 3;

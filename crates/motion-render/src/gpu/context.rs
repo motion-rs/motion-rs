@@ -2,9 +2,10 @@
 
 use super::*;
 use motion_core::sync::MutexExt;
-use motion_core::{PixelSize, Shape, ValidationError};
+use motion_core::{PixelSize, ValidationError};
 
 mod batch;
+mod self_check;
 pub(in crate::gpu) mod textures;
 
 /// Timestamps are written as the start of tiny marker passes, which only needs
@@ -17,6 +18,29 @@ pub(super) fn timestamp_features(available: wgpu::Features) -> wgpu::Features {
 
 impl Plan {
     pub(super) fn validate_device(&self, limits: &wgpu::Limits) -> Result<(), ValidationError> {
+        if self.device.samples != 0 {
+            if self.device.buffer_sizes().iter().any(|bytes| {
+                *bytes > limits.max_storage_buffer_binding_size || *bytes > limits.max_buffer_size
+            }) {
+                return Err(device_error(
+                    "buffer_size",
+                    "Coverage tile buffers exceed device limits",
+                ));
+            }
+            let maximum_groups = u64::from(limits.max_compute_workgroups_per_dimension).pow(2);
+            let groups = [
+                (self.device.edges.len() as u64).div_ceil(64),
+                (self.device.fills.len() as u64).div_ceil(64),
+                u64::from(self.device.rows).div_ceil(64),
+                u64::from(self.device.tiles),
+            ];
+            if groups.iter().any(|count| *count > maximum_groups) {
+                return Err(device_error(
+                    "dispatch",
+                    "Coverage tile dispatch exceeds device limits",
+                ));
+            }
+        }
         let coverage_bytes = self.coverage.len() as u64 * 4;
         if coverage_bytes > limits.max_storage_buffer_binding_size
             || coverage_bytes > limits.max_buffer_size
@@ -362,7 +386,7 @@ impl GpuContext {
         let validation_scope = self.device.push_error_scope(wgpu::ErrorFilter::Validation);
         self.alpha_thresholds();
         self.packing_pipeline();
-        self.coverage_pipeline();
+        self.coverage_pipelines();
         self.present_check_pipeline();
         for format in [
             wgpu::TextureFormat::Rgba16Float,
@@ -567,7 +591,7 @@ impl GpuContext {
         })
     }
 
-    pub(super) fn coverage_pipeline(&self) -> &wgpu::ComputePipeline {
+    pub(super) fn coverage_pipelines(&self) -> &CoveragePipelines {
         self.device_coverage.get_or_init(|| {
             let shader = self
                 .device
@@ -575,15 +599,56 @@ impl GpuContext {
                     label: Some("GPU fill coverage"),
                     source: wgpu::ShaderSource::Wgsl(include_str!("shaders/coverage.wgsl").into()),
                 });
-            self.device
-                .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                    label: Some("GPU fill coverage"),
-                    layout: None,
-                    module: &shader,
-                    entry_point: Some("coverage_pass"),
-                    compilation_options: Default::default(),
-                    cache: None,
+            let entries = (0..7)
+                .map(|binding| wgpu::BindGroupLayoutEntry {
+                    binding,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: if binding == 0 {
+                            wgpu::BufferBindingType::Uniform
+                        } else {
+                            wgpu::BufferBindingType::Storage {
+                                read_only: binding <= 2,
+                            }
+                        },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
                 })
+                .collect::<Vec<_>>();
+            let layout = self
+                .device
+                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    label: Some("GPU coverage tiles"),
+                    entries: &entries,
+                });
+            let pipeline_layout =
+                self.device
+                    .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                        label: Some("GPU coverage tiles"),
+                        bind_group_layouts: &[Some(&layout)],
+                        immediate_size: 0,
+                    });
+            let passes = [
+                "count_tiles",
+                "prefix_tiles",
+                "fill_tiles",
+                "carry_rows",
+                "coverage_pass",
+            ]
+            .map(|entry| {
+                self.device
+                    .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                        label: Some(entry),
+                        layout: Some(&pipeline_layout),
+                        module: &shader,
+                        entry_point: Some(entry),
+                        compilation_options: Default::default(),
+                        cache: None,
+                    })
+            });
+            CoveragePipelines { layout, passes }
         })
     }
 
@@ -696,84 +761,5 @@ impl GpuContext {
     /// Idle reusable working-buffer payload retained by this shared context.
     pub fn pooled_working_bytes(&self) -> u64 {
         self.working_pool.lock_unpoisoned().bytes
-    }
-
-    /// Runs a shared once-only native/CPU parity scene, including alpha, geometry,
-    /// spatial paints and group blending. Failure is sticky for this context.
-    pub fn self_check(&self) -> motion_core::Result<()> {
-        self.loss.check()?;
-        let result = self.self_check_result.get_or_init(|| {
-            use motion_core::NodeModifiers;
-            let limits = RasterLimits::default();
-            let node = motion_core::Node::group([
-                motion_core::Node::from(
-                    motion_core::Rect::new(0.25, 0.5, 12.75, 9.25).fill(
-                        motion_core::LinearGradient::new(
-                            motion_core::Point::ORIGIN,
-                            motion_core::Point::new(1.0, 1.0),
-                        )
-                        .stop(0.0, motion_core::Color::rgb(235, 30, 75))
-                        .stop(1.0, motion_core::Color::rgb(20, 190, 230)),
-                    ),
-                )
-                .opacity(0.7),
-                motion_core::Node::from(
-                    motion_core::Rect::new(4.5, 3.25, 15.0, 12.0).fill(motion_core::Color::WHITE),
-                )
-                .opacity(0.4)
-                .blend_mode(motion_core::BlendMode::Multiply),
-            ])
-            .opacity(0.8);
-            let frame = node
-                .compile(
-                    motion_core::Size::new(16.0, 12.0),
-                    PixelSize::new(16, 12),
-                    motion_core::ValidationLimits::default(),
-                )
-                .and_then(|list| list.prepare(motion_core::ValidationLimits::default(), limits))
-                .map_err(|error| error.to_string())?;
-            let expected = frame
-                .compose_linear(limits)
-                .and_then(|frame| crate::FrameBuffer::from_linear_rgba8(&frame, limits))
-                .map_err(|error| error.to_string())?;
-            let actual = Gpu::from_context(self.clone())
-                .render(
-                    &frame,
-                    Plan::new(&frame, limits).map_err(|error| error.to_string())?,
-                )
-                .and_then(|frame| {
-                    crate::FrameBuffer::from_linear_rgba8(&frame, limits).map_err(Into::into)
-                })
-                .map_err(|error| error.to_string())?;
-            let differences = expected
-                .bytes()
-                .as_chunks::<4>()
-                .0
-                .iter()
-                .zip(actual.bytes().as_chunks::<4>().0)
-                .map(|(expected, actual)| {
-                    expected
-                        .iter()
-                        .zip(actual)
-                        .map(|(a, b)| a.abs_diff(*b))
-                        .max()
-                        .unwrap_or(0)
-                })
-                .collect::<Vec<_>>();
-            if differences.iter().any(|difference| *difference > 2)
-                || differences
-                    .iter()
-                    .filter(|difference| **difference > 1)
-                    .count()
-                    * 1000
-                    >= differences.len()
-            {
-                return Err("Native GPU self-check exceeded CPU parity tolerance".into());
-            }
-            Ok(())
-        });
-        result.clone().map_err(|message| {
-            motion_core::Error::GpuUnavailable(Box::new(std::io::Error::other(message)))
-        })
     }
 }

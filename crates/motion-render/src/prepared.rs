@@ -12,6 +12,10 @@ pub use motion_core::RasterLimits;
 use motion_core::{PixelSize, Rect};
 use std::ops::Range;
 
+mod gpu_stats;
+
+pub use gpu_stats::{GpuFallbackCounts, GpuPreparationStats};
+
 /// Half-open device pixel bounds, clipped to the internal raster by preparation.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct PixelRect {
@@ -180,6 +184,8 @@ pub(crate) struct DeviceFill {
     pub(crate) edges: Range<usize>,
     /// Winding rule that maps accumulated signed area to coverage.
     pub(crate) rule: motion_core::FillRule,
+    /// Conservative GPU tile storage and work admission.
+    pub(crate) tiles: crate::raster::device::TileLayout,
 }
 
 /// Logical preparation totals, excluding allocator capacity and source storage.
