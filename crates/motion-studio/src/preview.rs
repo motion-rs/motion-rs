@@ -240,7 +240,12 @@ impl PreviewRenderer {
         let mut frame_renderer = scene
             .composition
             .clone()
-            .configure(|options| options.backend(renderer.into()).allow_missing_assets(true))
+            .configure(|options| {
+                options
+                    .backend(renderer.into())
+                    .allow_missing_assets(true)
+                    .mark_invalid_geometry(true)
+            })
             .frame_renderer(scene.definition.design_size)?;
         frame_renderer.enable_timings(true);
         Ok(Self {
@@ -391,6 +396,7 @@ impl PreviewRenderer {
                             options
                                 .backend(motion_render::BackendPreference::Cpu)
                                 .allow_missing_assets(true)
+                                .mark_invalid_geometry(true)
                         });
                     self.renderer = cpu.frame_renderer(scene.definition.design_size)?;
                     self.admission_fallback = Some(error.to_string());

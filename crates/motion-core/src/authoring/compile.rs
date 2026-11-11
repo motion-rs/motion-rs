@@ -213,10 +213,16 @@ fn plan(
             (Content::Children(vec![subject]), bounds, has_commands)
         }
         NodeKind::Leaf(drawable) => {
-            let bounds = drawable.bounds(context)?;
-            crate::drawing::validate_rect(bounds, &path, "bounds")?;
-            let commands =
-                Canvas::new(state, &path, depth + 1).record(drawable.as_ref(), context)?;
+            let leaf = record_leaf(drawable.as_ref(), &path, depth, context, state);
+            let (bounds, commands) = match leaf {
+                Err(error)
+                    if context.marks_invalid_geometry()
+                        && error.kind == crate::ValidationErrorKind::InvalidValue =>
+                {
+                    invalid_geometry_marker(&path, depth, state)?
+                }
+                leaf => leaf?,
+            };
             let has_commands = !commands.is_empty();
             (Content::Leaf(commands), Bounds::Known(bounds), has_commands)
         }
@@ -299,6 +305,31 @@ fn plan(
         has_commands,
         accumulate: matches!(node.data.kind, NodeKind::Accumulate(_)),
     })
+}
+
+fn record_leaf(
+    drawable: &dyn crate::Drawable,
+    path: &str,
+    depth: usize,
+    context: &DrawContext,
+    state: &mut ValidationState,
+) -> Result<(crate::Rect, Vec<DrawCommand>), ValidationError> {
+    let bounds = drawable.bounds(context)?;
+    crate::drawing::validate_rect(bounds, path, "bounds")?;
+    let commands = Canvas::new(state, path, depth + 1).record(drawable, context)?;
+    Ok((bounds, commands))
+}
+
+/// Magenta square at the leaf's local origin standing in for geometry that failed validation.
+fn invalid_geometry_marker(
+    path: &str,
+    depth: usize,
+    state: &mut ValidationState,
+) -> Result<(crate::Rect, Vec<DrawCommand>), ValidationError> {
+    let bounds = crate::Rect::new(0.0, 0.0, 24.0, 24.0);
+    let mut canvas = Canvas::new(state, path, depth + 1);
+    canvas.fill_rect(bounds, crate::Color::from_rgb_float(1.0, 0.0, 1.0))?;
+    Ok((bounds, canvas.finish()?))
 }
 
 impl Plan {

@@ -1120,7 +1120,17 @@ fn preview_worker_seeks_and_recovers_with_session_cache() -> motion_core::Result
             .any(|pixel| *pixel != Color32::BLACK)
     );
     assert_eq!(builds.load(Ordering::SeqCst), 1);
-    for frame in [8, 2, 3] {
+    worker.request(key(2));
+    let marked = wait_for_preview(&worker, &updates, key(2))
+        .image
+        .map_err(io::Error::other)?;
+    assert!(
+        marked
+            .pixels
+            .iter()
+            .any(|pixel| pixel.r() > 100 && pixel.g() < pixel.r())
+    );
+    for frame in [8, 3] {
         worker.request(key(frame));
         let error = wait_for_preview(&worker, &updates, key(frame))
             .image

@@ -147,6 +147,10 @@ pass across threads; there is no ambient per-frame context. Production
 rendering returns the first resource diagnostic as an error tagged with the frame
 unless `RenderOptions::allow_missing_assets(true)` is set (Studio's preview does
 this); `Image` then draws a magenta placeholder and records the diagnostic.
+`RenderOptions::mark_invalid_geometry(true)` is the matching policy for geometry:
+a leaf whose geometry fails validation is drawn as a magenta square at its local
+origin instead of failing the frame. Studio's preview enables it; stills, export
+and the CLI keep the strict default.
 `ExportReport.fonts` lists the faces actually selected, with non-cryptographic
 source hashes, ordered independently of worker completion.
 

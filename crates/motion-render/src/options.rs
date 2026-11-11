@@ -23,6 +23,9 @@ pub struct RenderOptions {
     pub display: crate::DisplayTransform,
     /// Allows diagnostic resource placeholders instead of failing a frame.
     pub allow_missing_assets: bool,
+    /// Draws invalid leaf geometry as a visible error marker; intended for preview.
+    /// The default keeps export strict and fails the frame.
+    pub mark_invalid_geometry: bool,
 
     /// Explicit backend; CPU is the default. GPU requests carry their own software adapter policy.
     pub backend: BackendPreference,
@@ -56,6 +59,7 @@ impl Default for RenderOptions {
             blend_space: motion_core::BlendSpace::LinearRgb,
             display: crate::DisplayTransform::default(),
             allow_missing_assets: false,
+            mark_invalid_geometry: false,
             backend: BackendPreference::Cpu,
             #[cfg(feature = "gpu")]
             gpu_context: None,
@@ -120,6 +124,12 @@ impl RenderOptions {
     /// Allows diagnostic placeholders for missing resources.
     pub fn allow_missing_assets(mut self, allow: bool) -> Self {
         self.allow_missing_assets = allow;
+        self
+    }
+
+    /// Draws invalid leaf geometry as a magenta error marker instead of failing the frame.
+    pub fn mark_invalid_geometry(mut self, mark: bool) -> Self {
+        self.mark_invalid_geometry = mark;
         self
     }
 
@@ -321,11 +331,13 @@ mod tests {
             .background(Color::WHITE)
             .quality(motion_core::RenderQuality::Draft)
             .backend(BackendPreference::Cpu)
-            .allow_missing_assets(true);
+            .allow_missing_assets(true)
+            .mark_invalid_geometry(true);
         assert_eq!(options.size, Some(size));
         assert_eq!(options.background, Some(Color::WHITE));
         assert_eq!(options.quality, motion_core::RenderQuality::Draft);
         assert!(options.allow_missing_assets);
+        assert!(options.mark_invalid_geometry);
         assert_eq!(options.transparent().background, None);
     }
 

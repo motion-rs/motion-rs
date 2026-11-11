@@ -23,6 +23,7 @@ pub struct DrawContext {
     limits: crate::ValidationLimits,
     evaluation: std::sync::Arc<Evaluation>,
     font_usage: crate::FontUsage,
+    mark_invalid_geometry: bool,
 }
 
 impl Default for DrawContext {
@@ -32,6 +33,7 @@ impl Default for DrawContext {
             limits: crate::ValidationLimits::default(),
             evaluation: std::sync::Arc::default(),
             font_usage: crate::FontUsage::default(),
+            mark_invalid_geometry: false,
         }
     }
 }
@@ -202,6 +204,18 @@ impl DrawContext {
     /// Font sources actually painted through this context.
     pub fn font_usage(&self) -> &crate::FontUsage {
         &self.font_usage
+    }
+
+    /// Draws leaves with invalid geometry as a visible error marker instead of failing
+    /// compilation. Intended for preview; export keeps the strict default.
+    pub fn with_invalid_geometry_marker(mut self, mark: bool) -> Self {
+        self.mark_invalid_geometry = mark;
+        self
+    }
+
+    /// Whether invalid leaf geometry is drawn as an error marker.
+    pub fn marks_invalid_geometry(&self) -> bool {
+        self.mark_invalid_geometry
     }
 
     /// Carries request diagnostics explicitly through deferred content compilation.

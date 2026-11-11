@@ -335,3 +335,27 @@ fn transparent_commands_still_validate_actual_global_geometry_and_repeats() {
         assert_eq!(compile(&node).unwrap(), first);
     }
 }
+
+#[test]
+fn invalid_leaf_geometry_fails_unless_marker_policy_is_enabled() {
+    let node = Node::group([
+        tile(10.0, 10.0),
+        Rect::new(0.0, 0.0, f64::NAN, 1.0).fill(Color::WHITE).into(),
+    ]);
+    let compile = |context: &DrawContext| {
+        node.compile_with_context(
+            Size::new(100.0, 100.0),
+            PixelSize::new(100, 100),
+            ValidationLimits::default(),
+            context,
+        )
+    };
+    let error = compile(&DrawContext::default()).unwrap_err();
+    assert_eq!(error.kind, ValidationErrorKind::InvalidValue);
+    let list = compile(&DrawContext::default().with_invalid_geometry_marker(true)).unwrap();
+    let marker = Paint::Solid(Color::from_rgb_float(1.0, 0.0, 1.0));
+    assert!(list.commands.iter().any(|command| matches!(
+        command,
+        DrawCommand::FillRect { paint, .. } if *paint == marker
+    )));
+}

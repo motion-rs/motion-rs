@@ -139,6 +139,7 @@ The scene's `DrawContext` shares an immutable `Evaluation` with time, quality, d
 - Do not mix working-directory paths with asset-root paths. Define the root instead of relying on where the program happens to launch.
 - Reuse owners, handles and prepared content rather than decoding assets or rebuilding compiler environments per frame.
 - `allow_missing_assets` is not a normal production strategy. Placeholders and diagnostics do not mean assets loaded successfully.
+- `mark_invalid_geometry` is the preview-only counterpart for invalid shapes: they draw as a magenta marker. Export and the CLI stay strict.
 
 ## Next Steps
 

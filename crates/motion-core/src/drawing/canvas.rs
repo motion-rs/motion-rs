@@ -241,7 +241,7 @@ impl<'a> Canvas<'a> {
         Ok(commands)
     }
 
-    fn finish(self) -> Result<Vec<DrawCommand>, ValidationError> {
+    pub(crate) fn finish(self) -> Result<Vec<DrawCommand>, ValidationError> {
         self.error.map_or(Ok(self.commands), Err)
     }
 }

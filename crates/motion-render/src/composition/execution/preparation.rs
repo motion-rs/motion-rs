@@ -24,7 +24,8 @@ impl FrameExecution<'_> {
             .with_render_cache(self.options.cache.clone())
             .with_font_usage(self.options.font_usage.clone())
             .with_diagnostics(self.diagnostics.clone())
-            .with_assets(assets);
+            .with_assets(assets)
+            .with_invalid_geometry_marker(self.composition.options.mark_invalid_geometry);
         if let Some(fonts) = assets.fonts() {
             drawing = drawing.with_fonts(fonts);
         }
