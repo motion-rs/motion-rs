@@ -15,7 +15,7 @@ pub(super) fn command_filter_bytes(command: &DrawCommand) -> u64 {
     }
 }
 
-pub(super) fn filter_padding(commands: &[DrawCommand]) -> Result<u32, ValidationError> {
+pub(in crate::raster) fn filter_padding(commands: &[DrawCommand]) -> Result<u32, ValidationError> {
     let mut padding = 0.0_f64;
     let mut chain = 0.0_f64;
     let mut stack = Vec::new();

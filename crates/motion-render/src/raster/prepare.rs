@@ -3,19 +3,20 @@
 //! This module turns display lists into prepared frames; filter padding lives in `filters`
 //! and rectangle, strip and clip coverage emission in `coverage`.
 
-use motion_core::{
-    DisplayList, DrawCommand, PixelSize, SceneLimits, ValidationError, ValidationLimits,
-};
+use motion_core::{DisplayList, DrawCommand, SceneLimits, ValidationError, ValidationLimits};
 
+use super::frame_ir::FrameIr;
 use super::{CoverageCache, RasterScope, rect_clip};
 use crate::prepared::*;
-use filters::{command_filter_bytes, copy_filters, filter_padding, filter_support, shift_command};
+use filters::{command_filter_bytes, copy_filters, filter_support, shift_command};
 use motion_core::budget::Budget;
 use std::fmt::Write;
 use std::mem::size_of;
 
 mod coverage;
 mod filters;
+
+pub(super) use filters::filter_padding;
 
 pub(crate) use coverage::{paint_record, pixel_bounds};
 
@@ -174,11 +175,22 @@ pub(crate) fn prepare_validated_with_cache(
     validation: ValidationLimits,
     limits: RasterLimits,
     tolerance: f64,
+    cache: Option<&mut CoverageCache>,
+) -> Result<PreparedFrame, ValidationError> {
+    let ir = FrameIr::build(source, validation, tolerance)?;
+    prepare_ir(&ir, limits, cache)
+}
+
+/// CPU preparation: turns a backend-neutral frame description into strips, spans and alphas.
+pub(crate) fn prepare_ir(
+    ir: &FrameIr<'_>,
+    limits: RasterLimits,
     mut cache: Option<&mut CoverageCache>,
 ) -> Result<PreparedFrame, ValidationError> {
-    source.preflight(validation)?;
-    let source = source.display_list();
-    let (mut frame, mut budget, padding) = initialize_frame(source, limits, tolerance)?;
+    let source = ir.list();
+    let tolerance = ir.tolerance();
+    let padding = ir.padding();
+    let (mut frame, mut budget) = initialize_frame(ir, limits)?;
     let mut filter_chain = 0_u32;
     let mut filter_stack = Vec::new();
     let mut has_plus_layers = false;
@@ -251,52 +263,19 @@ pub(crate) fn prepare_validated_with_cache(
 }
 
 fn initialize_frame(
-    source: &DisplayList,
+    ir: &FrameIr<'_>,
     limits: RasterLimits,
-    tolerance: f64,
-) -> Result<(PreparedFrame, Budget, u32), ValidationError> {
-    if !tolerance.is_finite() || tolerance <= 0.0 {
-        return Err(ValidationError::invalid(
-            "prepared",
-            "tolerance",
-            "Curve tolerance must be finite and positive",
-        ));
-    }
-    let padding = filter_padding(&source.commands)?;
-    let dimension = |value: u32| value.checked_add(padding.checked_mul(2)?);
-    let size = PixelSize::new(
-        dimension(source.output_size.width).ok_or_else(|| {
-            ValidationError::limit(
-                "prepared.filters",
-                "max_pixels",
-                "Filter raster width overflow",
-            )
-        })?,
-        dimension(source.output_size.height).ok_or_else(|| {
-            ValidationError::limit(
-                "prepared.filters",
-                "max_pixels",
-                "Filter raster height overflow",
-            )
-        })?,
-    );
+) -> Result<(PreparedFrame, Budget), ValidationError> {
+    let size = ir.size();
     let mut budget = Budget::new(size, limits)?;
     budget.bytes(size_of::<PreparedFrame>() as u64, "prepared")?;
     let frame = PreparedFrame {
         quality: motion_core::RenderQuality::Final,
         blend_space: motion_core::drawing::BlendSpace::LinearRgb,
         size,
-        output_bounds: PixelRect {
-            left: padding,
-            top: padding,
-            right: padding + source.output_size.width,
-            bottom: padding + source.output_size.height,
-        },
+        output_bounds: ir.output_bounds(),
         filter_halo: 0,
-        background: source
-            .background
-            .map(|color| paint_record(color, "prepared.background"))
-            .transpose()?,
+        background: ir.background(),
         items: Vec::new(),
         strips: Vec::new(),
         spans: Vec::new(),
@@ -307,7 +286,7 @@ fn initialize_frame(
         stats: PreparationStats::default(),
     };
 
-    Ok((frame, budget, padding))
+    Ok((frame, budget))
 }
 
 fn prepare_command(
