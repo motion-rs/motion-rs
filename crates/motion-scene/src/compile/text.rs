@@ -220,17 +220,17 @@ impl PartProps {
             let time = part.time();
             let mut style = motion_content::PartStyle::new();
             if let Some(offset) = &props.offset {
-                let [horizontal, vertical] = offset.at(time.since_origin());
+                let [horizontal, vertical] = offset.at(time);
                 style = style.offset(horizontal, vertical);
             }
             if let Some(scale) = &props.scale {
-                style = style.scale(scale.at(time.since_origin()));
+                style = style.scale(scale.at(time));
             }
             if let Some(rotate) = &props.rotate {
-                style = style.rotate(rotate.at(time.since_origin()).to_radians());
+                style = style.rotate(rotate.at(time).to_radians());
             }
             if let Some(opacity) = &props.opacity {
-                style = style.opacity(opacity.at(time.since_origin()));
+                style = style.opacity(opacity.at(time));
             }
             style
         })

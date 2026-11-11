@@ -220,7 +220,7 @@ fn validate_checks_documents_without_rendering() -> motion::Result {
 
     let project = Project::new("p")
         .timeline("code", || {
-            Timeline::new(Size::new(4.0, 4.0), 2)
+            Timeline::new(Size::new(4.0, 4.0), motion::fps!(2))
                 .track(|track| track.scene(1.seconds(), |_| Node::empty()))
         })
         .build()?;
@@ -280,7 +280,7 @@ fn studio_scenes_for_documents_are_reloadable() -> motion::Result {
     assert!(scene.supports_video_export() && scene.is_reloadable());
     let code = Project::new("p")
         .timeline("code", || {
-            Timeline::new(Size::new(4.0, 4.0), 2)
+            Timeline::new(Size::new(4.0, 4.0), motion::fps!(2))
                 .track(|track| track.scene(1.seconds(), |_| Node::empty()))
         })
         .build()?;

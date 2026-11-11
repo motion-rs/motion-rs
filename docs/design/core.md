@@ -18,18 +18,22 @@ normalized. Rotation uses radians; degree and turn literals convert to radians.
 The root uniformly contains design dimensions in the output viewport. Stroke and
 effect distances follow that mapping; flattening tolerance is in device pixels.
 
-Time (a point on a timeline) and Duration (a span) are distinct types over signed ticks
-at 705600000 ticks per second: `Time - Time` is a Duration, `Time ± Duration` is a
-Time, and `Time + Time` does not compile. Literals such as `2.seconds()` are
-Durations; `Duration::after_origin` and `Time::since_origin` convert explicitly.
-FrameRate is rational; convert each frame boundary
+Time (a signed point on a timeline), Duration (a nonnegative span) and TimeOffset (a signed
+displacement) are distinct types over integer ticks at 705600000 ticks per second:
+`Time - Time` is a TimeOffset, `Time ± Duration` and `Time ± TimeOffset` are Times, and
+`Time + Time` does not compile. A negative Duration cannot be constructed, so spans need no
+sign checks; clip shifts and other places that really move earlier use TimeOffset. Literals
+such as `2.seconds()` are Durations; `Duration::after_origin`, `Duration::offset` and
+`Time::since_origin` convert explicitly. FrameRate is a pair of nonzero integers, built with
+`fps!(30)`, `FrameRate::new(NonZeroU32, NonZeroU32)` or the fallible `FrameRate::try_new`;
+convert each frame boundary
 independently. Interval tests use ticks, not accumulated floating seconds. Seconds
 are a view for animation mathematics, not mutable playback state. Frame indices,
 sample indices and time points are distinct inputs even when conversion is exact.
 
 ## Stateless Animation
 
-`Signal` samples a value at an explicit elapsed Duration and has no end. `FiniteAnimation`
+`Signal` samples a value at an explicit local Time and has no end. `FiniteAnimation`
 extends it with a nonnegative `duration()`; only finite animations offer `delay`, `then`,
 `repeat` and `ping_pong`, so composition cannot invent an end time for an unbounded
 signal. `Interval { start, duration }` is the single definition of clamped progress and

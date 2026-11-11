@@ -563,7 +563,7 @@ mod tests {
         let resources = Assets::new(".")?.with_fonts(fonts);
         let scene = (move |context: &SceneContext<'_>| chart.node(context).expect("valid chart"))
             .with_duration(1.seconds());
-        let timeline = Timeline::try_new(Size::new(640.0, 360.0), 30)?
+        let timeline = Timeline::try_new(Size::new(640.0, 360.0), motion_core::fps!(30))?
             .try_track(|track| track.try_push(scene))?
             .build()?;
         let options = RenderOptions {

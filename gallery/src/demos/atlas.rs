@@ -63,7 +63,7 @@ pub(super) fn builder(
     pages: &'static [Page],
     draw: impl Fn(usize, f64, &SceneContext<'_>) -> motion::Result<Node> + Send + Sync + 'static,
 ) -> TimelineBuilder {
-    Timeline::new(Size::new(960.0, 540.0), 30)
+    Timeline::new(Size::new(960.0, 540.0), motion::fps!(30))
         .background(Color::from_hex(PAPER))
         .track(|track| {
             track.scene(parameters.seconds.seconds(), move |context| {

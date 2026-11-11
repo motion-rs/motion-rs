@@ -239,9 +239,9 @@ pub(super) fn timeline(parameters: DemoParameters) -> Result<Timeline, motion::E
     let mut studies = Vec::new();
     let mut clips = Vec::new();
     for page in 0..PAGES.len() {
-        let start = Duration::from_ticks(duration.ticks() * page as i64 / PAGES.len() as i64);
-        let end = Duration::from_ticks(duration.ticks() * (page + 1) as i64 / PAGES.len() as i64);
-        let study = prepare(page, (end - start).after_origin().since_origin(), seed)?;
+        let start = Duration::from_ticks(duration.ticks() * page as u64 / PAGES.len() as u64);
+        let end = Duration::from_ticks(duration.ticks() * (page + 1) as u64 / PAGES.len() as u64);
+        let study = prepare(page, end - start, seed)?;
         clips.push(
             AudioClip::source(study.processed.clone())
                 .start(start.after_origin())
@@ -304,7 +304,7 @@ fn prepare(page: usize, duration: Duration, seed: u32) -> motion::Result<Study> 
             .volume(0.5);
     }
     if page == 11 || page == 12 {
-        dry = dry.volume_envelope(move |time: Duration| {
+        dry = dry.volume_envelope(move |time: Time| {
             0.05 + 0.95 * (0.5 + 0.5 * math::sin(time.as_seconds() / length * 18.0)).powi(2)
         });
     }
@@ -369,7 +369,7 @@ fn prepare(page: usize, duration: Duration, seed: u32) -> motion::Result<Study> 
             })
         }
         17 => {
-            processed = processed.pan_animation(move |time: Duration| {
+            processed = processed.pan_animation(move |time: Time| {
                 math::sin(
                     time.as_seconds() / length * std::f64::consts::TAU
                         - std::f64::consts::FRAC_PI_2,
@@ -380,7 +380,7 @@ fn prepare(page: usize, duration: Duration, seed: u32) -> motion::Result<Study> 
         19 => processed = processed.volume(8.0),
         _ => {}
     }
-    let blank = || Timeline::new(Size::new(960.0, 540.0), 30).duration(duration);
+    let blank = || Timeline::new(Size::new(960.0, 540.0), motion::fps!(30)).duration(duration);
     let mut dry_timeline = blank().audio(dry);
     let mut processed_timeline = blank().audio(processed);
     if page == 16 {
@@ -406,9 +406,9 @@ fn prepare(page: usize, duration: Duration, seed: u32) -> motion::Result<Study> 
     } else if page == 20 {
         processed_timeline = blank();
         for (index, sound) in SOUNDS.into_iter().enumerate() {
-            let start = Duration::from_ticks(duration.ticks() * index as i64 / SOUNDS.len() as i64);
+            let start = Duration::from_ticks(duration.ticks() * index as u64 / SOUNDS.len() as u64);
             let end =
-                Duration::from_ticks(duration.ticks() * (index + 1) as i64 / SOUNDS.len() as i64);
+                Duration::from_ticks(duration.ticks() * (index + 1) as u64 / SOUNDS.len() as u64);
             processed_timeline = processed_timeline.audio(
                 AudioClip::source(Synth::sound(
                     sound,
@@ -582,7 +582,7 @@ mod tests {
     #[test]
     fn audible_studies_are_finite_replayable_and_use_real_dsp() -> motion::Result {
         for page in 0..PAGES.len() {
-            let study = prepare(page, 0.6.seconds().after_origin().since_origin(), 17)?;
+            let study = prepare(page, 0.6.seconds(), 17)?;
             let mut first = vec![0.0; 28_800 * 2];
             let mut replay = first.clone();
             let mut dry = first.clone();

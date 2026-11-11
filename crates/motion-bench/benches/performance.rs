@@ -130,7 +130,7 @@ fn main() -> motion::Result {
         let composition = Composition::new(
             size.width as usize,
             size.height as usize,
-            motion::render::FrameClock::new(30, 90),
+            motion::render::FrameClock::new(motion::fps!(30), 90),
         )
         .with_options(
             motion::render::RenderOptions::default()
@@ -289,16 +289,20 @@ mod _case_tests {
         let mut fonts = FontLibrary::new();
         fonts.load_file(font)?;
         let resources = Assets::new(".")?.with_fonts(fonts);
-        let composition = Composition::new(160, 90, motion::render::FrameClock::new(30, 90))
-            .with_options(
-                motion::render::RenderOptions::default()
-                    .resources(resources)
-                    .limits(RasterLimits {
-                        max_bytes: 1024 * 1024 * 1024,
-                        max_work: 400_000_000,
-                        ..RasterLimits::default()
-                    }),
-            )?;
+        let composition = Composition::new(
+            160,
+            90,
+            motion::render::FrameClock::new(motion::fps!(30), 90),
+        )
+        .with_options(
+            motion::render::RenderOptions::default()
+                .resources(resources)
+                .limits(RasterLimits {
+                    max_bytes: 1024 * 1024 * 1024,
+                    max_work: 400_000_000,
+                    ..RasterLimits::default()
+                }),
+        )?;
         let mut renderer = composition.frame_renderer(Size::new(640.0, 360.0))?;
         for case in CASES {
             let first = renderer.render_frame(45, |context| artwork(case, context))?;

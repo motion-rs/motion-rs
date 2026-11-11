@@ -116,7 +116,7 @@ pub(super) fn timeline(parameters: DemoParameters) -> Result<Timeline, motion::E
         .iter()
         .map(|page| (page.build)(dense))
         .collect::<motion::Result<Vec<_>>>()?;
-    Timeline::new(Size::new(960.0, 540.0), 30)
+    Timeline::new(Size::new(960.0, 540.0), motion::fps!(30))
         .background(Color::from_hex(super::atlas::PAPER))
         .track(|track| {
             track.scene(parameters.seconds.seconds(), move |context| {
@@ -287,7 +287,7 @@ mod tests {
                 Ok(study)
             })
             .collect::<motion::Result<Vec<_>>>()?;
-        let background = Timeline::new(Size::new(960.0, 540.0), 30)
+        let background = Timeline::new(Size::new(960.0, 540.0), motion::fps!(30))
             .background(Color::from_hex(super::super::atlas::PAPER))
             .track(|track| track.scene(60.seconds(), move |context| frame(context, &empty_studies)))
             .build()?;

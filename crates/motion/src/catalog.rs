@@ -199,7 +199,7 @@ mod tests {
         SceneDescriptor::new(
             "study.v1",
             "Study",
-            Composition::new(16, 8, crate::render::FrameClock::new(30, 7)),
+            Composition::new(16, 8, crate::render::FrameClock::new(crate::fps!(30), 7)),
             |_: &SceneContext<'_>| Node::empty(),
         )
         .visual_check(VisualCheckPolicy::new(

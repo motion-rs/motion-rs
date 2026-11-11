@@ -150,7 +150,7 @@ fn dump_workbench_png() -> motion_core::Result<()> {
     ] {
         let context = egui::Context::default();
         let creation = eframe::CreationContext::_new_kittest(context.clone());
-        let timeline = motion_core::Timeline::new(Size::new(960.0, 540.0), 30)
+        let timeline = motion_core::Timeline::new(Size::new(960.0, 540.0), motion_core::fps!(30))
             .track(|track| {
                 track
                     .scene(3.seconds(), |scene| {
@@ -177,7 +177,11 @@ fn dump_workbench_png() -> motion_core::Result<()> {
             .build()?;
         let scene = StudioScene::timeline(
             "Demo",
-            Composition::new(960, 540, motion_render::FrameClock::new(30, 150)),
+            Composition::new(
+                960,
+                540,
+                motion_render::FrameClock::new(motion_core::fps!(30), 150),
+            ),
             timeline,
         )?;
         let clock = StudioClock::new(&scene.composition)?;

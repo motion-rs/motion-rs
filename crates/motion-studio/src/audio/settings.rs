@@ -8,7 +8,7 @@ use eframe::egui;
 use egui_phosphor::regular as icons;
 
 use crate::app::tool;
-use motion_core::{AudioClip, Time};
+use motion_core::AudioClip;
 
 #[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -57,7 +57,7 @@ impl ClipSettings {
             }
             let duration = Duration::try_from_secs_f64(value)
                 .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
-            Ok(Time::from_seconds(duration.as_secs_f64()))
+            Ok(motion_core::Duration::from_seconds(duration.as_secs_f64()))
         };
         let path = self.path.canonicalize()?;
         if !path.is_file() {
@@ -68,21 +68,19 @@ impl ClipSettings {
         }
         let offset = time(self.source_in)?;
         let end = time(self.source_out)?;
-        if motion_core::audio::frames(offset.since_origin(), 48_000).map_err(io::Error::other)?
-            >= motion_core::audio::frames(end.since_origin(), 48_000).map_err(io::Error::other)?
-        {
+        if motion_core::audio::frames(offset, 48_000) >= motion_core::audio::frames(end, 48_000) {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "Audio interval must contain at least one sample",
             ));
         }
         Ok(AudioClip::file(path)
-            .offset(offset.since_origin())
+            .offset(offset)
             .duration(end - offset)
-            .start(time(self.start)?)
+            .start(time(self.start)?.after_origin())
             .volume(f64::from(self.volume))
-            .fade_in((time(self.fade_in)?).since_origin())
-            .fade_out((time(self.fade_out)?).since_origin()))
+            .fade_in(time(self.fade_in)?)
+            .fade_out(time(self.fade_out)?))
     }
 }
 

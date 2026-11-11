@@ -20,7 +20,7 @@
 //!     .corner_radius(1.0)
 //!     .sampling(Sampling::Trilinear);
 //! let frame =
-//!     Composition::new(8, 4, motion_render::FrameClock::new(30, 150)).render_frame(0, Size::new(8.0, 4.0), |_| picture.clone().into())?;
+//!     Composition::new(8, 4, motion_render::FrameClock::new(fps!(30), 150)).render_frame(0, Size::new(8.0, 4.0), |_| picture.clone().into())?;
 //! assert_eq!(frame.size().width, 8);
 //! # Ok::<(), motion_core::Error>(())
 //! ```

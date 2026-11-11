@@ -25,11 +25,8 @@ pub struct FrameClock {
 
 impl FrameClock {
     /// Creates a clock of `count` frames at `rate`; `count` is frames, not seconds.
-    pub fn new(rate: impl Into<motion_core::FrameRate>, count: u64) -> Self {
-        Self {
-            rate: rate.into(),
-            count,
-        }
+    pub fn new(rate: motion_core::FrameRate, count: u64) -> Self {
+        Self { rate, count }
     }
 
     /// Exact rational frame rate.
@@ -64,7 +61,7 @@ impl FrameClock {
 /// };
 /// use motion_render::{Composition, RenderPrepare, RenderOptions, Renderer, render_still};
 /// # fn main() -> motion_core::Result {
-/// let composition = Composition::new(640, 360, motion_render::FrameClock::new(30, 90));
+/// let composition = Composition::new(640, 360, motion_render::FrameClock::new(fps!(30), 90));
 /// composition.render_frame(45, Size::new(640.0, 360.0), |context| {
 ///     assert_eq!(context.seconds(), 1.5);
 ///     Node::empty()
@@ -366,7 +363,7 @@ impl Composition {
     ///     MAX_STROKE_VERBS, MAX_SVG_PATH_BYTES, sample_offsets,
     /// };
     /// use motion_render::{Composition, RenderPrepare, RenderOptions, Renderer, render_still};
-    /// let composition = Composition::new(8, 4, motion_render::FrameClock::new(30, 150)).with_options(motion_render::RenderOptions::default().background(Color::BLACK))?;
+    /// let composition = Composition::new(8, 4, motion_render::FrameClock::new(fps!(30), 150)).with_options(motion_render::RenderOptions::default().background(Color::BLACK))?;
     /// let mut renderer = composition.frame_renderer(Size::new(8.0, 4.0))?;
     /// let snapshot = renderer.render_frame(0, |context| {
     ///     Node::from(
@@ -440,7 +437,7 @@ mod _contract_tests {
 
     #[test]
     fn cpu_consumer_bypasses_fonts_and_composites_in_linear_light() -> motion_core::Result {
-        let frame = Composition::new(8, 4, crate::FrameClock::new(30, 150))
+        let frame = Composition::new(8, 4, crate::FrameClock::new(motion_core::fps!(30), 150))
             .with_options(crate::RenderOptions::default().background(Color::BLACK))?
             .render_frame(0, Size::new(8.0, 4.0), |_| {
                 Node::from(Rect::new(0.0, 0.0, 8.0, 4.0).fill(Color::WHITE)).opacity(0.5)
@@ -452,7 +449,7 @@ mod _contract_tests {
     #[test]
     fn local_ticks_keep_sequence_boundaries_samples_and_seek_order() {
         let cache = SceneCache::new(0);
-        let rate = FrameRate::from(30);
+        let rate = motion_core::fps!(30);
         let context = |index: i64| {
             SceneContext::new(
                 Time::from_frame(index, rate),
@@ -466,12 +463,12 @@ mod _contract_tests {
         let track = Keyframes::new(0.0).to(1.seconds(), 100.0, Easing::QuadraticOut);
         for (index, expected) in [(25, 100.0), (10, 0.0), (15, 75.0), (25, 100.0)] {
             let local = SceneContext::new(
-                Time::from_frame(index, FrameRate::from(10)),
-                FrameRate::from(10),
+                Time::from_frame(index, motion_core::fps!(10)),
+                motion_core::fps!(10),
                 Size::new(640.0, 360.0),
                 &cache,
             )
-            .shifted(1.seconds());
+            .shifted(1.seconds().offset());
             assert_eq!(local.sample(&track), expected);
         }
         let calls = std::cell::Cell::new(0);
@@ -492,11 +489,11 @@ mod _contract_tests {
         }
         assert_eq!(context(45).time(), 1.5.seconds().after_origin());
         assert_eq!(
-            context(45).shifted(1.seconds()).time(),
+            context(45).shifted(1.seconds().offset()).time(),
             500.milliseconds().after_origin()
         );
         assert_eq!(
-            Time::from_frame(11, FrameRate::from(11)),
+            Time::from_frame(11, motion_core::fps!(11)),
             1.seconds().after_origin()
         );
     }
@@ -521,7 +518,7 @@ mod _contract_tests {
                 .is_err()
         );
         assert!(
-            Composition::new(8, 4, crate::FrameClock::new(30, 0))
+            Composition::new(8, 4, crate::FrameClock::new(motion_core::fps!(30), 0))
                 .frame_renderer(Size::new(8.0, 4.0))
                 .is_err()
         );
@@ -530,8 +527,9 @@ mod _contract_tests {
 
     #[test]
     fn cached_renderers_produce_independent_frames_in_any_order() -> motion_core::Result {
-        let composition = Composition::new(64, 64, crate::FrameClock::new(30, 150))
-            .with_options(crate::RenderOptions::default().background(Color::WHITE))?;
+        let composition =
+            Composition::new(64, 64, crate::FrameClock::new(motion_core::fps!(30), 150))
+                .with_options(crate::RenderOptions::default().background(Color::WHITE))?;
         let mut renderer = composition.frame_renderer(Size::new(64.0, 64.0))?;
         let mut previous = None;
         for index in [2, 0, 2] {

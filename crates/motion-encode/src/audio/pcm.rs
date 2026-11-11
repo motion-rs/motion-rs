@@ -10,7 +10,7 @@
 //! use motion_render::{Composition, RenderPrepare, RenderOptions, Renderer, render_still};
 //! let source = PcmBuffer::new(48_000, 1, vec![0.25; 4800])?;
 //! let clip = AudioClip::source(source).start(50.milliseconds().after_origin()).pan(-1.0);
-//! let timeline = Timeline::new(Size::new(8.0, 4.0), 30).audio(clip).build()?;
+//! let timeline = Timeline::new(Size::new(8.0, 4.0), fps!(30)).audio(clip).build()?;
 //! let mixed = MixedAudio::new(&timeline, MixOptions::new(48_000))?;
 //! let mut pcm = [0.0; 2];
 //! assert_eq!(mixed.read(2400, &mut pcm), 1);
@@ -289,7 +289,7 @@ impl AudioSource for PcmBuffer {
     fn duration(&self) -> Option<Duration> {
         Some(Duration::from_ticks(
             ((u128::from(self.frames()) * motion_core::TICKS_PER_SECOND as u128)
-                .div_ceil(u128::from(self.rate))) as i64,
+                .div_ceil(u128::from(self.rate))) as u64,
         ))
     }
 }

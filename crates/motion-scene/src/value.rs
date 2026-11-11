@@ -539,9 +539,11 @@ impl EasingSpec {
     }
 }
 
-impl From<EasingSpec> for Easing {
-    fn from(easing: EasingSpec) -> Self {
-        match easing {
+impl TryFrom<EasingSpec> for Easing {
+    type Error = motion_core::ValidationError;
+
+    fn try_from(easing: EasingSpec) -> Result<Self, Self::Error> {
+        Ok(match easing {
             EasingSpec::Linear => Self::Linear,
             EasingSpec::SineIn => Self::SineIn,
             EasingSpec::SineOut => Self::SineOut,
@@ -558,14 +560,14 @@ impl From<EasingSpec> for Easing {
             EasingSpec::ExponentialIn => Self::ExponentialIn,
             EasingSpec::ExponentialOut => Self::ExponentialOut,
             EasingSpec::ExponentialInOut => Self::ExponentialInOut,
-            EasingSpec::BackIn { overshoot } => Self::BackIn { overshoot },
-            EasingSpec::BackOut { overshoot } => Self::BackOut { overshoot },
-            EasingSpec::BackInOut { overshoot } => Self::BackInOut { overshoot },
-            EasingSpec::ElasticOut { amplitude, period } => Self::ElasticOut { amplitude, period },
+            EasingSpec::BackIn { overshoot } => Self::back_in(overshoot)?,
+            EasingSpec::BackOut { overshoot } => Self::back_out(overshoot)?,
+            EasingSpec::BackInOut { overshoot } => Self::back_in_out(overshoot)?,
+            EasingSpec::ElasticOut { amplitude, period } => Self::elastic_out(amplitude, period)?,
             EasingSpec::BounceOut => Self::BounceOut,
-            EasingSpec::Steps(count) => Self::Steps(count),
-            EasingSpec::CubicBezier { x1, y1, x2, y2 } => Self::CubicBezier { x1, y1, x2, y2 },
-        }
+            EasingSpec::Steps(count) => Self::steps(count)?,
+            EasingSpec::CubicBezier { x1, y1, x2, y2 } => Self::cubic_bezier(x1, y1, x2, y2)?,
+        })
     }
 }
 

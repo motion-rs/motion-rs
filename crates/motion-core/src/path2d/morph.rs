@@ -27,7 +27,7 @@ const MAX_ALIGNMENT_WORK: usize = 16_777_216;
 ///     Star::new(Point::new(8.0, 8.0), 5, 6.0, 2.5)?.path()?,
 /// )?;
 /// let animation = Tween::new(from, to, 1.seconds());
-/// let middle = animation.sample(500.milliseconds());
+/// let middle = animation.sample(500.milliseconds().after_origin());
 /// assert!(middle.bounding_box()?.is_finite());
 /// # Ok::<(), motion_core::Error>(())
 /// ```
@@ -672,12 +672,12 @@ mod tests {
 
     #[test]
     fn prepared_morphs_support_tweens_reverse_queries_and_checked_failures() {
-        use crate::{Duration, Signal, Tween};
+        use crate::{Duration, Signal, Time, Tween};
         let source = Path2D::parse_svg("M1 1H5V5H1Z").unwrap();
         let target = Path2D::parse_svg("M3 3H9V9H3Z").unwrap();
         let (first, second) = MorphPath::pair(source.clone(), target.clone()).unwrap();
         let animation = Tween::new(first.clone(), second.clone(), Duration::from_ticks(100));
-        let expected = animation.sample(Duration::from_ticks(50));
+        let expected = animation.sample(Time::from_ticks(50));
         assert_eq!(
             MorphPath::new(source.clone())
                 .unwrap()
@@ -694,9 +694,9 @@ mod tests {
             }
         });
         for ticks in [100, 25, 0, 75, 50] {
-            let _result = animation.sample(Duration::from_ticks(ticks));
+            let _result = animation.sample(Time::from_ticks(ticks));
         }
-        assert_eq!(animation.sample(Duration::from_ticks(50)), expected);
+        assert_eq!(animation.sample(Time::from_ticks(50)), expected);
         assert_eq!(
             first.interpolate(&second, 0.25),
             second.interpolate(&first, 0.75)

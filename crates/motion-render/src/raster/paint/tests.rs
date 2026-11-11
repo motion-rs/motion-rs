@@ -207,10 +207,10 @@ fn paints_validate_hidden_commands_budget_failures_and_composition_blend_space()
         .is_err()
     );
     let scene = || Node::from(Rect::new(0.0, 0.0, 2.0, 2.0).fill(Color::WHITE.with_alpha(0.5)));
-    let linear = Composition::new(2, 2, crate::FrameClock::new(30, 150))
+    let linear = Composition::new(2, 2, crate::FrameClock::new(motion_core::fps!(30), 150))
         .with_options(crate::RenderOptions::default().background(Color::BLACK))?
         .render_frame(0, Size::new(2.0, 2.0), |_| scene())?;
-    let encoded = Composition::new(2, 2, crate::FrameClock::new(30, 150))
+    let encoded = Composition::new(2, 2, crate::FrameClock::new(motion_core::fps!(30), 150))
         .with_options(
             crate::RenderOptions::default()
                 .background(Color::BLACK)
@@ -220,7 +220,7 @@ fn paints_validate_hidden_commands_budget_failures_and_composition_blend_space()
     assert_ne!(linear.packed_rgb(), encoded.packed_rgb());
     assert!((127..=129).contains(&((encoded.packed_rgb()[0] >> 16) & 255)));
     assert!(
-        Composition::new(2, 2, crate::FrameClock::new(30, 150))
+        Composition::new(2, 2, crate::FrameClock::new(motion_core::fps!(30), 150))
             .with_options(crate::RenderOptions::default().blend_space(BlendSpace::Srgb))?
             .frame_renderer(Size::new(2.0, 2.0))
             .is_ok()

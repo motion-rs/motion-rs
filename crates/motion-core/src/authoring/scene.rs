@@ -110,7 +110,7 @@ macro_rules! group {
 /// let cache = SceneCache::new(0);
 /// let context = SceneContext::new(
 ///     2.seconds().after_origin(),
-///     FrameRate::from(30),
+///     fps!(30),
 ///     Size::new(640.0, 360.0),
 ///     &cache,
 /// );
@@ -138,37 +138,13 @@ pub trait Scene: Send + Sync {
         None
     }
 
-    /// Like [`with_duration`](Self::with_duration), reporting a negative duration as an error.
-    fn try_with_duration(self, duration: Duration) -> Result<WithDuration<Self>, ValidationError>
-    where
-        Self: Sized,
-    {
-        if duration < Duration::ZERO {
-            return Err(ValidationError::invalid(
-                "scene",
-                "duration",
-                "Scene duration must be nonnegative",
-            ));
-        }
-        Ok(WithDuration {
-            scene: self,
-            duration,
-        })
-    }
-
     /// Overrides clip metadata without retiming or clamping the callback.
     ///
-    /// Panics for negative duration; prefer [`try_with_duration`](Self::try_with_duration) or a
-    /// duration given at placement (`TrackBuilder::push_for`). Zero duration has an empty
-    /// active interval.
+    /// Zero duration has an empty active interval.
     fn with_duration(self, duration: Duration) -> WithDuration<Self>
     where
         Self: Sized,
     {
-        assert!(
-            duration >= Duration::ZERO,
-            "scene duration must be nonnegative"
-        );
         WithDuration {
             scene: self,
             duration,

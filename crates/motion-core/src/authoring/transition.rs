@@ -11,7 +11,7 @@
 //!     .with_duration(1.seconds());
 //! let next = (|context: &SceneContext<'_>| Node::from(context.bounds().fill(Color::BLACK)))
 //!     .with_duration(1.seconds());
-//! let timeline = Timeline::new(Size::new(8.0, 4.0), 30).track(|track| {
+//! let timeline = Timeline::new(Size::new(8.0, 4.0), fps!(30)).track(|track| {
 //!     track
 //!         .push(first)
 //!         .transition(CrossFade, 500.milliseconds())

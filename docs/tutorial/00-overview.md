@@ -16,7 +16,7 @@ use motion::vector::{Morph};
 use motion::particles::{Particle};
 
 fn main() -> motion::Result {
-    let timeline = Timeline::new(Size::new(320.0, 180.0), 30).track(|track| {
+    let timeline = Timeline::new(Size::new(320.0, 180.0), fps!(30)).track(|track| {
         track.scene(1.seconds(), |_| -> motion::Result<_> {
             Ok(Circle::new(Point::new(160.0, 90.0), 24.0)?
                 .fill(Color::rgb(20, 150, 125)))

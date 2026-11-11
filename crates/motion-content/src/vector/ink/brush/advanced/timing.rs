@@ -141,7 +141,6 @@ impl BrushStroke {
         if time < Time::ZERO
             || timing.duration <= Duration::ZERO
             || timing.duration.as_seconds() > 86400.0
-            || timing.lift_pause < Duration::ZERO
             || timing.lift_pause.as_seconds() > 86400.0
             || !(2..=512).contains(&timing.curve.len())
             || timing.curve.first() != Some(&(0.0, 0.0))

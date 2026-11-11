@@ -198,9 +198,6 @@ impl TimelineBuilder {
 
     /// Overrides total duration on the nearest frame grid; zero is intentionally empty.
     pub fn try_duration(mut self, duration: Duration) -> crate::Result<Self> {
-        if duration < Duration::ZERO {
-            return Err(invalid("Timeline duration must be nonnegative"));
-        }
         let (aligned, frame) = align(duration.after_origin(), self.rate)?;
         if duration > Duration::ZERO && aligned == Time::ZERO {
             return Err(invalid(
@@ -209,7 +206,7 @@ impl TimelineBuilder {
         }
         let adjustments = Arc::make_mut(&mut self.adjustments);
         adjustments.retain(|adjustment| adjustment.edge != BoundaryEdge::Duration);
-        if duration != aligned.since_origin() {
+        if duration != aligned.since_origin().magnitude() {
             if adjustments.len() >= MAX_ADJUSTMENTS {
                 return Err(invalid("Timeline exceeds adjustment allowance"));
             }
@@ -222,7 +219,7 @@ impl TimelineBuilder {
                 frame,
             });
         }
-        self.duration = Some(aligned.since_origin());
+        self.duration = Some(aligned.since_origin().magnitude());
         Ok(self)
     }
 

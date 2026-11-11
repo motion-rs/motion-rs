@@ -125,7 +125,7 @@ pub(super) fn timeline(parameters: DemoParameters) -> Result<Timeline, motion::E
     let bar_scale = Scale::linear((0.0, 9.0), (BAR_PLOT.bottom, BAR_PLOT.top))?;
     let bar_ticks = [0.0, 2.0, 4.0, 6.0, 8.0];
 
-    Timeline::new(Size::new(960.0, 540.0), 30)
+    Timeline::new(Size::new(960.0, 540.0), motion::fps!(30))
         .track(|track_builder| {
             track_builder.scene(
                 parameters.seconds.seconds(),
@@ -154,9 +154,9 @@ pub(super) fn timeline(parameters: DemoParameters) -> Result<Timeline, motion::E
                     nodes.push(line_chart(context, progress, horizontal, vertical)?);
 
                     let cards = window(progress, 0.10, 0.10);
-                    let riders = riders.sample(time.since_origin());
-                    let growth = growth.sample(time.since_origin());
-                    let saved = saved.sample(time.since_origin());
+                    let riders = riders.sample(time);
+                    let growth = growth.sample(time);
+                    let saved = saved.sample(time);
                     let stat = |value: String, caption: &str, hex: u32| {
                         // The invisible strut fixes the column width so ticking digits
                         // never shift neighbouring cards inside the measured row.

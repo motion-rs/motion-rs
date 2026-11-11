@@ -66,10 +66,10 @@ pub(super) fn timeline(parameters: DemoParameters) -> Result<Timeline, motion::E
     let lockup_scale = Keyframes::new(1.0)
         .to(at(0.5), 1.0, Easing::Linear)
         .to(at(0.53), 1.1, Easing::QuadraticOut)
-        .to(at(0.62), 0.7, Easing::BackOut { overshoot: 1.4 });
+        .to(at(0.62), 0.7, Easing::back_out(1.4)?);
     let lockup_y = Keyframes::new(250.0)
         .to(at(0.53), 250.0, Easing::Linear)
-        .to(at(0.62), 196.0, Easing::BackOut { overshoot: 1.4 });
+        .to(at(0.62), 196.0, Easing::back_out(1.4)?);
 
     base.to_builder()
         .track(|track| {
@@ -79,15 +79,15 @@ pub(super) fn timeline(parameters: DemoParameters) -> Result<Timeline, motion::E
                     let time = context.time();
                     let progress = context.progress();
                     let design = context.seconds() / k;
-                    let scale = lockup_scale.sample(time.since_origin());
-                    let centre = Point::new(480.0, lockup_y.sample(time.since_origin()));
+                    let scale = lockup_scale.sample(time);
+                    let centre = Point::new(480.0, lockup_y.sample(time));
                     let window = |start: f64, end: f64, easing: Easing| {
                         easing.apply(((progress - start) / (end - start)).clamp(0.0, 1.0))
                     };
 
                     let shape = if progress < 0.25 {
-                        let pops =
-                            [0.24, 0.5, 0.76].map(|start| pop.sample((design - start).seconds()));
+                        let pops = [0.24, 0.5, 0.76]
+                            .map(|start| pop.sample(Time::from_seconds(design - start)));
                         primitives.node_mapped(&|address, node| {
                             node.scale(
                                 pops.get(address.first().copied().unwrap_or(0))

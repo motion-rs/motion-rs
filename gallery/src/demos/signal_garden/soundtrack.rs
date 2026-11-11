@@ -63,7 +63,7 @@ fn bass_bus(duration: Duration, ducked: Option<&AudioClip>) -> AudioBus {
     let mut bus = AudioBus::new("bass");
     bus.effects.push(Arc::new(AnimatedEq::new(
         EqKind::LowPass,
-        move |time: Duration| 420.0 + 1100.0 * math::smoothstep(0.0, length, time.as_seconds()),
+        move |time: Time| 420.0 + 1100.0 * math::smoothstep(0.0, length, time.as_seconds()),
         0.8,
         0.0,
     )));
@@ -157,7 +157,7 @@ pub(super) fn soundtrack(
         AudioClip::source(Synth::drum_machine(BPM, hats, duration, seed + 1)?)
             .bus("hats")
             .volume(0.3)
-            .pan_animation(|time: Duration| 0.6 * math::sin(TAU * time.as_seconds() / 2.0))
+            .pan_animation(|time: Time| 0.6 * math::sin(TAU * time.as_seconds() / 2.0))
             .fade_out(100.milliseconds()),
     ];
     clips.extend(bass_clips(duration, seed)?);
@@ -191,7 +191,7 @@ pub(super) fn soundtrack(
         AudioClip::source(Synth::new(Wave::Sine, 1320.0, RATE, seed)?.gain_db(-30.0)?)
             .duration(duration)
             .bus("lead")
-            .pan_animation(|time: Duration| 0.8 * math::sin(TAU * time.as_seconds() / 6.0))
+            .pan_animation(|time: Time| 0.8 * math::sin(TAU * time.as_seconds() / 6.0))
             .stereo_width(1.4)
             .fade_in(300.milliseconds())
             .fade_out(100.milliseconds()),
@@ -200,7 +200,7 @@ pub(super) fn soundtrack(
 }
 
 pub(super) fn audio_timeline(track: &Soundtrack, duration: Duration) -> TimelineBuilder {
-    let mut timeline = Timeline::new(Size::new(960.0, 540.0), 30);
+    let mut timeline = Timeline::new(Size::new(960.0, 540.0), motion::fps!(30));
     for bus in &track.buses {
         timeline = timeline.audio_bus(bus.clone());
     }

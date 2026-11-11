@@ -76,8 +76,8 @@ impl Master {
         Self {
             limiter: Some(Limiter {
                 ceiling_db: -1.0,
-                lookahead: Duration::from_ticks(crate::TICKS_PER_SECOND / 200),
-                release: Duration::from_ticks(crate::TICKS_PER_SECOND / 10),
+                lookahead: Duration::from_ticks(crate::TICKS_PER_SECOND as u64 / 200),
+                release: Duration::from_ticks(crate::TICKS_PER_SECOND as u64 / 10),
             }),
             ..Self::default()
         }
@@ -91,7 +91,6 @@ impl Master {
         if self.limiter.is_some_and(|limit| {
             !limit.ceiling_db.is_finite()
                 || !(-24.0..=0.0).contains(&limit.ceiling_db)
-                || limit.lookahead < Duration::ZERO
                 || limit.lookahead.as_seconds() > 0.02
                 || limit.release <= Duration::ZERO
                 || limit.release.as_seconds() > 2.0
@@ -137,9 +136,9 @@ impl Default for Duck {
             threshold_db: -45.0,
             depth_db: 12.0,
             ratio: 100.0,
-            attack: Duration::from_ticks(crate::TICKS_PER_SECOND / 1000 * 80),
-            release: Duration::from_ticks(crate::TICKS_PER_SECOND / 1000 * 400),
-            lookahead: Duration::from_ticks(crate::TICKS_PER_SECOND / 100),
+            attack: Duration::from_ticks(crate::TICKS_PER_SECOND as u64 / 1000 * 80),
+            release: Duration::from_ticks(crate::TICKS_PER_SECOND as u64 / 1000 * 400),
+            lookahead: Duration::from_ticks(crate::TICKS_PER_SECOND as u64 / 100),
         }
     }
 }
@@ -175,9 +174,8 @@ impl Duck {
 
     /// Checks finite bounded parameters.
     pub fn validate(self) -> Result<(), ValidationError> {
-        let seconds = |time: Duration, max: f64| {
-            time >= Duration::ZERO && time.as_seconds().is_finite() && time.as_seconds() <= max
-        };
+        let seconds =
+            |time: Duration, max: f64| time.as_seconds().is_finite() && time.as_seconds() <= max;
         if !self.threshold_db.is_finite()
             || !(-96.0..=0.0).contains(&self.threshold_db)
             || !self.depth_db.is_finite()
@@ -309,24 +307,15 @@ impl<Source: AudioSource + ?Sized> AudioSource for Arc<Source> {
     }
 }
 
-/// Converts nonnegative ticks to the nearest audio frame, with half ties upward.
-/// Negative times fail; a zero sampling rate produces zero frames.
-pub fn frames(time: Duration, rate: u32) -> Result<u64, ValidationError> {
-    if time < Duration::ZERO {
-        return Err(invalid("time", "Audio time must be nonnegative"));
-    }
-    Ok(
-        ((u128::from(time.ticks() as u64) * u128::from(rate) + crate::TICKS_PER_SECOND as u128 / 2)
-            / crate::TICKS_PER_SECOND as u128) as u64,
-    )
+/// Converts ticks to the nearest audio frame, with half ties upward.
+/// A zero sampling rate produces zero frames.
+pub fn frames(time: Duration, rate: u32) -> u64 {
+    ((u128::from(time.ticks()) * u128::from(rate) + crate::TICKS_PER_SECOND as u128 / 2)
+        / crate::TICKS_PER_SECOND as u128) as u64
 }
 
-/// Converts a nonnegative duration to the smallest covering number of audio frames.
-/// Negative durations fail; integer arithmetic avoids floating-point endpoint drift.
-pub fn ceil_frames(time: Duration, rate: u32) -> Result<u64, ValidationError> {
-    if time < Duration::ZERO {
-        return Err(invalid("duration", "Audio duration must be nonnegative"));
-    }
-    Ok((u128::from(time.ticks() as u64) * u128::from(rate))
-        .div_ceil(crate::TICKS_PER_SECOND as u128) as u64)
+/// Converts a duration to the smallest covering number of audio frames.
+/// Integer arithmetic avoids floating-point endpoint drift.
+pub fn ceil_frames(time: Duration, rate: u32) -> u64 {
+    (u128::from(time.ticks()) * u128::from(rate)).div_ceil(crate::TICKS_PER_SECOND as u128) as u64
 }

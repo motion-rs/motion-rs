@@ -47,7 +47,7 @@ pub(super) fn composition(
     Composition::new(
         size.width as usize,
         size.height as usize,
-        motion::render::FrameClock::new(30, 90),
+        motion::render::FrameClock::new(motion::fps!(30), 90),
     )
     .with_options(
         motion::render::RenderOptions::default()

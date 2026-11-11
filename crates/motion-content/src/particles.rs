@@ -12,7 +12,7 @@
 //! let cache = SceneCache::new(16);
 //! let context = SceneContext::new(
 //!     50.milliseconds().after_origin(),
-//!     FrameRate::from(30),
+//!     fps!(30),
 //!     Size::new(16.0, 16.0),
 //!     &cache,
 //! )

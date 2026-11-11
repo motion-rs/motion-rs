@@ -18,7 +18,7 @@ fn main() -> motion::Result {
         .to(500.milliseconds(), 1.0, Easing::Linear)
         .hold(3.seconds())
         .to(4.seconds(), 0.0, Easing::Linear);
-    let timeline = Timeline::new(Size::new(480.0, 270.0), 30).track(|track| {
+    let timeline = Timeline::new(Size::new(480.0, 270.0), fps!(30)).track(|track| {
         track.scene(4.seconds(), move |context| -> motion::Result<_> {
             Ok(Circle::new(Point::new(context.sample(&movement), 135.0), 24.0)?
                 .fill(Color::rgb(20, 150, 125))
@@ -34,7 +34,7 @@ Request times in any order: the animation samples the same time function. `ping_
 
 ## Animation and Interpolate
 
-`Signal<Value>` returns a value for an explicit elapsed `Duration` and has no end. `FiniteAnimation<Value>` is a `Signal` with a nonnegative `duration()`; `Tween`, `Keyframes`, `FollowPath` and the combinators below are finite. `Spring`, `Oscillator`, `Noise`, `Constant` and plain closures are signals only.
+`Signal<Value>` returns a value for an explicit local `Time` and has no end. `FiniteAnimation<Value>` is a `Signal` with a nonnegative `duration()`; `Tween`, `Keyframes`, `FollowPath` and the combinators below are finite. `Spring`, `Oscillator`, `Noise`, `Constant` and plain closures are signals only.
 `Interval { start, duration }` maps a `Time` to clamped progress (`progress`) or eased progress (`ease`); `Tween`, `SceneContext::progress_in` and `ease_in` share it.
 `Interpolate` defines how two values interpolate using f64 progress. It does not automatically clamp every progress value to `[0, 1]`; springs and easing may intentionally overshoot.
 
@@ -69,7 +69,7 @@ panic.
 | --- | --- |
 | `map` | Map sampled values to another value type (on any `Signal`) |
 | `zip` | Sample two signals together; finite only if both are |
-| `delay` | Add a leading delay; negative delays are invalid |
+| `delay` | Add a leading delay |
 | `speed` | Change speed with a valid factor |
 | `then` | Sequence finite animations |
 | `reverse` | Sample a finite animation backward |
@@ -79,11 +79,14 @@ panic.
 
 `delay`, `speed`, `then`, `reverse`, `repeat` and `ping_pong` exist only on `FiniteAnimation`, so applying them to an infinite signal does not compile. A zero-duration Tween still has explicit endpoint semantics before and after its boundary; it is not a deleted animation.
 
-Repeat counts total plays; zero holds the initial value. Negative delays, invalid
-speed factors and duration overflow are rejected. For dynamic input, use the checked
-forms (`try_delay`, `try_speed`, `Keyframes::try_to` and `try_hold`, `Tween::try_new`,
-`Easing::try_validate` and `try_apply`, `Duration::try_div`) rather than the
-convenience methods, which panic with a `# Panics` contract.
+Repeat counts total plays; zero holds the initial value. Invalid speed factors and
+duration overflow are rejected. For dynamic input, use the checked forms (`try_delay`,
+`try_speed`, `Keyframes::try_to` and `try_hold`, `Easing::try_apply`,
+`Duration::try_div`) rather than the convenience methods, which panic with a `# Panics`
+contract. Durations are nonnegative by type, so there is no negative-duration check.
+Parameterized easing curves are built with validated constructors
+(`Easing::back_in(overshoot)?`, `elastic_out`, `steps`, `cubic_bezier`); `apply` never
+rechecks parameters.
 
 `remap` and `piecewise` support Clamp, Extend and Wrap. Input knots must be finite
 and strictly increasing; malformed mappings are rejected by `try_remap` and
@@ -108,7 +111,7 @@ fn main() -> Result<(), ValidationError> {
         .offset(0.75)
         .build()?;
     let drift = Noise::builder(42).frequency(0.5).octaves(3).build()?;
-    let time = 500.milliseconds();
+    let time = 500.milliseconds().after_origin();
     let _ = (spring.sample(time), pulse.sample(time), drift.sample(time));
     Ok(())
 }
@@ -119,7 +122,7 @@ fn main() -> Result<(), ValidationError> {
 The conservative duration is rounded to ticks; it is not inferred from a previous
 frame's displacement.
 
-Use an `Oscillator` or a closure for undamped perpetual oscillation rather than asking a Spring to have no end time. To delay a spring, sample it at a shifted time: `|time: Duration| spring.sample(time - delay)`.
+Use an `Oscillator` or a closure for undamped perpetual oscillation rather than asking a Spring to have no end time. To delay a spring, sample it at a shifted time: `|time: Time| spring.sample(time - delay)`.
 
 ## Where Morph Belongs
 

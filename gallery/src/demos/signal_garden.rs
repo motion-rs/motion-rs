@@ -91,18 +91,10 @@ impl Rig {
 pub(super) fn timeline(parameters: DemoParameters) -> Result<Timeline, motion::ErrorReport> {
     let duration = i64::from(parameters.seconds).seconds();
     let seed = parameters.seed as u32;
-    let output = audio_timeline(
-        &soundtrack(duration.after_origin().since_origin(), true, seed)?,
-        duration.after_origin().since_origin(),
-    )
-    .build()?;
+    let output = audio_timeline(&soundtrack(duration, true, seed)?, duration).build()?;
     let mix = MixedAudio::new(&output, MixOptions::new(RATE))?;
     let dry = MixedAudio::new(
-        &audio_timeline(
-            &soundtrack(duration.after_origin().since_origin(), false, seed)?,
-            duration.after_origin().since_origin(),
-        )
-        .build()?,
+        &audio_timeline(&soundtrack(duration, false, seed)?, duration).build()?,
         MixOptions::new(RATE),
     )?;
     let analysis = AudioAnalysis::from_source(&mix, duration)?;

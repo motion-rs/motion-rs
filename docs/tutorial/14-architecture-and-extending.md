@@ -29,7 +29,7 @@ impl Drawable for Badge {
 }
 
 fn main() -> motion::Result {
-    let timeline = Timeline::new(Size::new(320.0, 180.0), 30).track(|track| {
+    let timeline = Timeline::new(Size::new(320.0, 180.0), fps!(30)).track(|track| {
         track.scene(1.seconds(), |_| Node::from(Badge))
     }).build()?;
     render_still(&timeline, Time::ZERO, &RenderOptions::default())?

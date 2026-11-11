@@ -17,7 +17,7 @@ GPU support, content, native FFmpeg and Studio. Geometry-only headless builds us
 ```rust,no_run
 use motion::prelude::*;
 
-let timeline = Timeline::new(Size::new(640.0, 360.0), 30)
+let timeline = Timeline::new(Size::new(640.0, 360.0), fps!(30))
     .track(|track| track.push(scene(|context| {
     let horizontal = context.sample(&Tween::new(32.0, 480.0, 3.seconds()));
     Node::from(Rect::new(horizontal, 64.0, horizontal + 96.0, 88.0)
@@ -29,7 +29,7 @@ bitmap.save_png("frame.png")?;
 ```
 
 `Rect::new` takes opposite corners, not origin/width/height. Geometry and
-animation progress use f64; time uses signed ticks and rational `FrameRate`.
+animation progress use f64; time uses integer ticks (`Time` signed, `Duration` nonnegative) and rational `FrameRate`.
 Colors retain finite extended sRGB channels; rendering uses linear-premultiplied
 working storage. Straight RGBA8 `FrameBuffer` preserves transparency. `Composition` and its opaque
 frame output remain explicit low-level rendering APIs, outside the authoring prelude.

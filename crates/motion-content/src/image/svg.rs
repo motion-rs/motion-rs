@@ -32,7 +32,7 @@ mod tests {
         let frame = motion_render::Composition::new(
             width as usize,
             height as usize,
-            motion_render::FrameClock::new(30, 150),
+            motion_render::FrameClock::new(motion_core::fps!(30), 150),
         )
         .with_options(
             motion_render::RenderOptions::default().blend_space(motion_core::BlendSpace::Srgb),
@@ -221,35 +221,47 @@ mod tests {
             <defs><linearGradient id="fill"><stop stop-color="red"/><stop offset="1" stop-color="teal"/></linearGradient></defs>
             <rect x="1" y="1" width="22" height="10" rx="3" fill="url(#fill)" opacity="0.7"/>
         </svg>"##)?;
-        let raster = Composition::new(48, 24, motion_render::FrameClock::new(30, 150))
-            .with_options(motion_render::RenderOptions::default().blend_space(BlendSpace::Srgb))?
-            .frame_renderer(vector.size())?
-            .render_output_at(
-                Time::ZERO,
-                None,
-                PixelFormat::SrgbRgba8 {
-                    premultiplied: false,
-                },
-                |_| vector.tree.node(),
-            )?;
+        let raster = Composition::new(
+            48,
+            24,
+            motion_render::FrameClock::new(motion_core::fps!(30), 150),
+        )
+        .with_options(motion_render::RenderOptions::default().blend_space(BlendSpace::Srgb))?
+        .frame_renderer(vector.size())?
+        .render_output_at(
+            Time::ZERO,
+            None,
+            PixelFormat::SrgbRgba8 {
+                premultiplied: false,
+            },
+            |_| vector.tree.node(),
+        )?;
         let asset = std::sync::Arc::new(ImageAsset::from_rgba8(
             48,
             24,
             raster.planes()[0].bytes().to_vec(),
         )?);
         for fit in [Fit::Contain, Fit::Cover, Fit::Fill] {
-            let mut cpu = Composition::new(48, 36, motion_render::FrameClock::new(30, 150))
-                .with_options(
-                    motion_render::RenderOptions::default().background(Color::from_hex(0x23272c)),
-                )?
-                .frame_renderer(Size::new(48.0, 36.0))?;
-            let mut gpu = Composition::new(48, 36, motion_render::FrameClock::new(30, 150))
-                .with_options(
-                    motion_render::RenderOptions::default()
-                        .background(Color::from_hex(0x23272c))
-                        .backend(Renderer::Gpu.into()),
-                )?
-                .frame_renderer(Size::new(48.0, 36.0))?;
+            let mut cpu = Composition::new(
+                48,
+                36,
+                motion_render::FrameClock::new(motion_core::fps!(30), 150),
+            )
+            .with_options(
+                motion_render::RenderOptions::default().background(Color::from_hex(0x23272c)),
+            )?
+            .frame_renderer(Size::new(48.0, 36.0))?;
+            let mut gpu = Composition::new(
+                48,
+                36,
+                motion_render::FrameClock::new(motion_core::fps!(30), 150),
+            )
+            .with_options(
+                motion_render::RenderOptions::default()
+                    .background(Color::from_hex(0x23272c))
+                    .backend(Renderer::Gpu.into()),
+            )?
+            .frame_renderer(Size::new(48.0, 36.0))?;
             let build = |context: &SceneContext<'_>| {
                 Node::group([Node::from(
                     Image::from_asset(asset.clone()).size(32.0, 26.0).fit(fit),

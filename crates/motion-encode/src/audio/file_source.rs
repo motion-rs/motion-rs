@@ -100,7 +100,7 @@ impl AudioSource for FileSource {
     fn duration(&self) -> Option<Duration> {
         self.frames
             .and_then(|frames| {
-                i64::try_from(
+                u64::try_from(
                     (u128::from(frames) * motion_core::TICKS_PER_SECOND as u128)
                         .div_ceil(u128::from(self.rate)),
                 )
@@ -223,7 +223,9 @@ mod tests {
         let directory = tempfile::tempdir()?;
         let path = directory.path().join("tone.wav");
         let clip = AudioClip::file(path.clone()).fade_in(100.milliseconds());
-        let timeline = Timeline::new(Size::new(8.0, 4.0), 30).audio(clip).build()?;
+        let timeline = Timeline::new(Size::new(8.0, 4.0), motion_core::fps!(30))
+            .audio(clip)
+            .build()?;
         assert!(super::super::prepare_timeline(&timeline).is_err());
         let count = 8000_u32;
         let mut wav = std::fs::File::create(&path)?;
@@ -246,7 +248,7 @@ mod tests {
         let resolved = super::super::prepare_timeline(&timeline)?;
         assert_eq!(
             resolved.duration(),
-            motion_core::Duration::from_frame(30, motion_core::FrameRate::from(30))
+            motion_core::Duration::from_frame(30, motion_core::fps!(30))
         );
         let original = std::fs::read(&path)?;
         let mut options = crate::ExportOptions::new(&path).overwrite(true);

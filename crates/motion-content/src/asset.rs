@@ -74,11 +74,15 @@ mod tests {
             data: Arc::from(&br##"<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"><rect width="2" height="2" fill="#00ff00"/></svg>"##[..]),
         }).get()?;
         assets.preload("diagram.svg", svg)?;
-        let composition = Composition::new(8, 4, motion_render::FrameClock::new(30, 150))
-            .with_options(
-                motion_render::RenderOptions::default()
-                    .context(RenderContext::new().with_assets(assets.clone())),
-            )?;
+        let composition = Composition::new(
+            8,
+            4,
+            motion_render::FrameClock::new(motion_core::fps!(30), 150),
+        )
+        .with_options(
+            motion_render::RenderOptions::default()
+                .context(RenderContext::new().with_assets(assets.clone())),
+        )?;
         let frame = composition.render_frame(0, Size::new(8.0, 4.0), |context| {
             assert!(context.assets().store().same_store(assets.store()));
             for node in [
@@ -118,8 +122,12 @@ mod tests {
         use motion_render::Composition;
         let directory = tempfile::tempdir()?;
         let assets = Assets::new(directory.path())?;
-        let composition = Composition::new(2, 2, motion_render::FrameClock::new(30, 150))
-            .with_options(motion_render::RenderOptions::default().resources(assets))?;
+        let composition = Composition::new(
+            2,
+            2,
+            motion_render::FrameClock::new(motion_core::fps!(30), 150),
+        )
+        .with_options(motion_render::RenderOptions::default().resources(assets))?;
         let build = |_: &motion_core::SceneContext<'_>| {
             crate::Image::open("absent.png").size(2.0, 2.0).into()
         };

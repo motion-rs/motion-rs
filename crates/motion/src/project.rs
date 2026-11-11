@@ -467,7 +467,7 @@ mod tests {
         let project = Project::new("cli-fixture")
             .timeline("main", move || {
                 observed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                Timeline::new(Size::new(3.0, 3.0), 4).track(|track| {
+                Timeline::new(Size::new(3.0, 3.0), crate::fps!(4)).track(|track| {
                     track.push(crate::scene(|_| Node::empty()).with_duration(1.seconds()))
                 })
             })
@@ -483,8 +483,8 @@ mod tests {
         assert_eq!(project.options().backend, crate::BackendPreference::Cpu);
         assert_eq!(parse_time("500ms")?, 500.milliseconds().after_origin());
         assert_eq!(parse_time("2s")?, 2.seconds().after_origin());
-        assert!(parse_codec("h264", None, true, FrameRate::from(30)).is_err());
-        assert!(parse_codec("vp9", Some(64), true, FrameRate::from(30)).is_err());
+        assert!(parse_codec("h264", None, true, crate::fps!(30)).is_err());
+        assert!(parse_codec("vp9", Some(64), true, crate::fps!(30)).is_err());
         let directory = tempfile::tempdir()?;
         let destination = directory.path().join("frames");
         let arguments = [
@@ -538,7 +538,9 @@ mod tests {
     fn fluent_registration_collects_errors_without_invoking_factories() {
         use super::*;
         let error = Project::new("deferred")
-            .timeline("main", || Timeline::new(Size::new(8.0, 4.0), 30))
+            .timeline("main", || {
+                Timeline::new(Size::new(8.0, 4.0), crate::fps!(30))
+            })
             .timeline("main", || panic!("duplicate factory must stay lazy"))
             .timeline("", || panic!("invalid factory must stay lazy"))
             .build()
@@ -547,7 +549,7 @@ mod tests {
         assert_eq!(error.len(), 2);
         let project = Project::new("valid")
             .timeline("main", || {
-                Timeline::new(Size::new(8.0, 4.0), 30).track(|track| {
+                Timeline::new(Size::new(8.0, 4.0), crate::fps!(30)).track(|track| {
                     track.push(crate::scene(|_| Node::empty()).with_duration(1.seconds()))
                 })
             })
@@ -583,7 +585,7 @@ mod tests {
                 if parameters.seconds == 0 || parameters.seconds > 4 {
                     return Err(invalid("seconds must be 1..=4"));
                 }
-                Timeline::try_new(Size::new(4.0, 2.0), 10)?
+                Timeline::try_new(Size::new(4.0, 2.0), crate::fps!(10))?
                     .try_track(|track| {
                         track.try_push(
                             (|_: &crate::SceneContext<'_>| crate::Node::empty())

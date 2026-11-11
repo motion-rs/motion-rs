@@ -224,7 +224,7 @@ mod tests {
     #[test]
     fn lazy_formula_output_errors_keep_formula_kind_node_name_and_frame() {
         use motion_core::{Scene, SceneContext, Time, TimeLiteral, Timeline};
-        let timeline = Timeline::new(Size::new(160.0, 64.0), 30)
+        let timeline = Timeline::new(Size::new(160.0, 64.0), motion_core::fps!(30))
             .track(|track| {
                 track.push(
                     (|_: &SceneContext<'_>| Node::from(Formula::typst("")).named("invalid-math"))

@@ -1,6 +1,6 @@
 //! Headless audio readout model for meters and the pre-export loudness report.
 
-use motion_core::Time;
+use motion_core::Duration;
 use motion_encode::MixedAudio;
 
 /// Bus level at one instant, in dBFS (silence is -96).
@@ -35,7 +35,7 @@ fn decibels(linear: f64) -> f64 {
 
 impl AudioReadout {
     /// Measures `mix` and samples its bus meters at `time`.
-    pub fn from_mix(mix: &MixedAudio, time: Time) -> motion_core::Result<Self> {
+    pub fn from_mix(mix: &MixedAudio, time: Duration) -> motion_core::Result<Self> {
         let report = mix.loudness_report()?;
         Ok(Self {
             integrated_lufs: report.integrated_lufs,
@@ -46,7 +46,7 @@ impl AudioReadout {
                 .bus_meters()
                 .iter()
                 .map(|meter| {
-                    let [rms_db, peak_db] = meter.level(time.since_origin());
+                    let [rms_db, peak_db] = meter.level(time);
                     BusReadout {
                         name: meter.name.clone(),
                         rms_db,
@@ -77,19 +77,19 @@ mod tests {
                 [value, value]
             })
             .collect();
-        let timeline = Timeline::new(Size::new(8.0, 8.0), 30)
+        let timeline = Timeline::new(Size::new(8.0, 8.0), motion_core::fps!(30))
             .audio(AudioClip::source(PcmBuffer::new(48_000, 2, samples)?).bus("music"))
             .audio_bus(AudioBus::new("music"))
             .build()?;
         let mix = MixedAudio::new(&timeline, MixOptions::new(48_000))?;
-        let readout = AudioReadout::from_mix(&mix, Time::ZERO)?;
+        let readout = AudioReadout::from_mix(&mix, Duration::ZERO)?;
         assert!(readout.integrated_lufs.is_some());
         assert!((readout.sample_peak_db + 6.02).abs() < 0.1);
         assert!(readout.exceeds(-7.0) && !readout.exceeds(-1.0));
         assert_eq!(readout.buses.len(), 1);
         assert_eq!(readout.buses[0].name, "music");
         assert!(readout.buses[0].peak_db > -7.0);
-        assert!(AudioReadout::from_mix(&mix, 5.seconds().after_origin()).is_ok());
+        assert!(AudioReadout::from_mix(&mix, 5.seconds()).is_ok());
         Ok(())
     }
 }

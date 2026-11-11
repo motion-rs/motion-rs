@@ -117,7 +117,8 @@ impl Track {
                 if clip.offset == Duration::ZERO {
                     clip.scene.render(local)
                 } else {
-                    clip.scene.render(&local.shifted(-clip.offset))
+                    clip.scene
+                        .render(&local.shifted((Time::ZERO - clip.offset).since_origin()))
                 }
             })
         };
@@ -130,7 +131,8 @@ impl Track {
             let incoming = render(clip);
             let animation = crate::Tween::new(0.0f64, 1.0, transition.duration)
                 .easing(transition.effect.easing());
-            let progress = crate::Signal::sample(&animation, context.time() - clip.start);
+            let progress =
+                crate::Signal::sample(&animation, context.time() - clip.start.since_origin());
             if progress.is_finite() {
                 let local = context
                     .shifted(clip.start.since_origin())
@@ -310,7 +312,7 @@ impl TrackBuilder {
                 soundtrack.clips().to_vec()
             };
         for source in sources {
-            if let Some(source) = source.relocated(start.since_origin(), duration)? {
+            if let Some(source) = source.relocated(start.since_origin().magnitude(), duration)? {
                 self.audio.push(source);
             }
         }
@@ -386,9 +388,7 @@ impl TrackBuilder {
         }
         let start = self
             .cursor
-            .ticks()
-            .checked_sub(duration.ticks())
-            .map(Time::from_ticks)
+            .checked_sub(duration)
             .filter(|time| *time >= Time::ZERO)
             .ok_or_else(|| on_track(self.index, "Transition exceeds the preceding clip"))?;
         let aligned = align(start, self.rate)?.0;
@@ -424,9 +424,6 @@ impl TrackBuilder {
         }
         if start < Time::ZERO {
             return Err(on_track(self.index, "Clip start must be nonnegative"));
-        }
-        if offset < Duration::ZERO {
-            return Err(on_track(self.index, "Clip offset must be nonnegative"));
         }
         let duration = duration.or_else(|| scene.duration()).ok_or_else(|| {
             on_track(
@@ -484,7 +481,7 @@ impl TrackBuilder {
             }
             Some(TransitionIn {
                 effect: effect.clone(),
-                duration: previous.end() - aligned_start,
+                duration: (previous.end() - aligned_start).magnitude(),
             })
         } else {
             None
@@ -522,7 +519,7 @@ impl TrackBuilder {
             Clip {
                 id,
                 start: aligned_start,
-                duration: aligned_end - aligned_start,
+                duration: (aligned_end - aligned_start).magnitude(),
                 offset,
                 scene: Arc::new(scene),
                 transition_in,
@@ -540,9 +537,6 @@ impl TrackBuilder {
                 self.index,
                 "A pending transition must be followed by a clip, not a gap",
             ));
-        }
-        if duration < Duration::ZERO {
-            return Err(on_track(self.index, "Gap must be nonnegative"));
         }
         self.cursor =
             add_time(self.cursor, duration).map_err(|error| on_track(self.index, error))?;
@@ -578,7 +572,7 @@ impl TrackBuilder {
         Ok((
             Track {
                 clips: self.clips.into(),
-                duration: end.since_origin(),
+                duration: end.since_origin().magnitude(),
             },
             self.adjustments,
             self.audio,

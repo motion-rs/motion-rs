@@ -2736,8 +2736,7 @@ fn hundreds_of_layers_complete_and_match_cpu() -> motion_core::Result {
 #[ignore = "requires native GPU; depth-of-field capture CPU/GPU parity, no performance measurements"]
 fn depth_of_field_capture_cpu_gpu_parity() -> motion_core::Result {
     use motion_core::{
-        Camera, Color, DepthOfField, DepthPlane, FrameRate, Rect, SceneCache, SceneContext, Size,
-        Time,
+        Camera, Color, DepthOfField, DepthPlane, Rect, SceneCache, SceneContext, Size, Time,
     };
     let mut gpu = Gpu::new()?;
     let limits = RasterLimits::default();
@@ -2751,7 +2750,7 @@ fn depth_of_field_capture_cpu_gpu_parity() -> motion_core::Result {
     let cache = SceneCache::new(0);
     let context = SceneContext::new(
         Time::ZERO,
-        FrameRate::from(30),
+        motion_core::fps!(30),
         Size::new(32.0, 32.0),
         &cache,
     );

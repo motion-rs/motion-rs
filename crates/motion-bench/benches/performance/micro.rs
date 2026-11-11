@@ -13,12 +13,7 @@ pub(super) fn microbenchmarks(
 ) -> motion::Result {
     use serde_json::json;
     let mut index = 0_i64;
-    let easing = Easing::CubicBezier {
-        x1: 0.2,
-        y1: 0.0,
-        x2: 0.8,
-        y2: 1.0,
-    };
+    let easing = Easing::cubic_bezier(0.2, 0.0, 0.8, 1.0)?;
     let bezier = Tween::new(0.0_f64, 1.0, 1.seconds()).easing(easing);
     let spring = Spring::default();
     let tracks: [(&str, &dyn Signal<f64>); 2] =
@@ -27,7 +22,9 @@ pub(super) fn microbenchmarks(
         let measurement = support::measure(
             || {
                 index += 1;
-                Ok(track.sample((index % 1000).milliseconds()).to_bits())
+                Ok(track
+                    .sample((index % 1000).milliseconds().after_origin())
+                    .to_bits())
             },
             settings,
             20_000,
@@ -55,16 +52,22 @@ pub(super) fn microbenchmarks(
     let measured = support::measure(
         || {
             index += 1;
-            Ok(track.sample((index % 630).milliseconds()).to_bits())
+            Ok(track
+                .sample((index % 630).milliseconds().after_origin())
+                .to_bits())
         },
         settings,
         20_000,
     )?;
     report.record("animation/keyframes64", measured, json!({}))?;
-    let snapshot = Composition::new(640, 360, motion::render::FrameClock::new(30, 150))
-        .render_frame(0, Size::new(640.0, 360.0), |context| {
-            artwork("shapes", context)
-        })?;
+    let snapshot = Composition::new(
+        640,
+        360,
+        motion::render::FrameClock::new(motion::fps!(30), 150),
+    )
+    .render_frame(0, Size::new(640.0, 360.0), |context| {
+        artwork("shapes", context)
+    })?;
     report.reference("io-reference.ppm", &ppm(&snapshot))?;
     let output = report.directory.join("io-snapshot.ppm");
     let measured = support::measure(

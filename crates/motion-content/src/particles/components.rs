@@ -386,7 +386,7 @@ impl EmitterSettings {
             }
             EmitterSource::Path(path) => {
                 let progress = if let Some(animation) = &self.path_progress {
-                    animation.sample(time.since_origin())
+                    animation.sample(time)
                 } else {
                     random.next_float()
                 };
@@ -464,7 +464,7 @@ impl EmitterSettings {
     ) -> Result<(), ValidationError> {
         let rate = match &self.rate {
             EmissionRate::Constant(rate) => *rate,
-            EmissionRate::Animated(animation) => animation.sample(time.since_origin()),
+            EmissionRate::Animated(animation) => animation.sample(time),
         };
         if !rate.is_finite() || !(0.0..=1_000_000.0).contains(&rate) {
             return Err(invalid(

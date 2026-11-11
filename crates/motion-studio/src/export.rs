@@ -97,7 +97,7 @@ impl ExportJob {
                         let build = scene.definition.build_scene;
                         let source = motion_core::authoring::Scene::with_duration(
                             move |context: &motion_core::SceneContext<'_>| build(context),
-                            duration.since_origin(),
+                            duration.since_origin().magnitude(),
                         );
                         Arc::new(
                             motion_core::Timeline::try_new(scene.definition.design_size, rate)?
@@ -317,7 +317,7 @@ impl ExportFormat {
             Self::Sequence => motion_encode::Codec::PngSequence,
             Self::Gif => motion_encode::Codec::Gif {
                 frame_rate: if u64::from(rate.numerator()) > 100 * u64::from(rate.denominator()) {
-                    motion_core::FrameRate::from(30)
+                    motion_core::fps!(30)
                 } else {
                     rate
                 },

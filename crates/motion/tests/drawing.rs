@@ -333,8 +333,12 @@ mod drawing {
             use motion::Color;
             use motion::render::Composition;
             use motion::render::Renderer;
-            let composition = Composition::new(16, 16, motion::render::FrameClock::new(30, 12))
-                .with_options(motion::render::RenderOptions::default().background(Color::BLACK))?;
+            let composition = Composition::new(
+                16,
+                16,
+                motion::render::FrameClock::new(motion::fps!(30), 12),
+            )
+            .with_options(motion::render::RenderOptions::default().background(Color::BLACK))?;
             let mut cpu = composition.frame_renderer(Size::new(8.0, 8.0))?;
             let mut gpu = composition
                 .configure(|options| options.backend(Renderer::Gpu.into()))
@@ -514,7 +518,7 @@ mod drawing {
             let composition = Composition::new(
                 16,
                 16,
-                motion::render::FrameClock::new(30, cases.len() as u64),
+                motion::render::FrameClock::new(motion::fps!(30), cases.len() as u64),
             )
             .with_options(motion::render::RenderOptions::default().background(Color::BLACK))?;
             let mut cpu = composition.frame_renderer(Size::new(8.0, 8.0))?;

@@ -301,7 +301,7 @@ impl CaptionLayout {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use motion_core::{FrameRate, PixelSize, TimeLiteral, ValidationLimits};
+    use motion_core::{PixelSize, TimeLiteral, ValidationLimits};
     use std::time::Duration;
 
     #[test]
@@ -337,7 +337,7 @@ mod tests {
             .keyword("Moon", Color::from_hex(0x118677));
         let layout = style.layout(&track, Size::new(640.0, 360.0), &fonts)?;
         for (index, count) in [(0, 1), (29, 1), (30, 2), (59, 2), (60, 1), (89, 1), (90, 0)] {
-            let time = Time::from_frame(index, FrameRate::from(30));
+            let time = Time::from_frame(index, motion_core::fps!(30));
             assert_eq!(layout.active(time).count(), count);
             assert_eq!(track.active_at_time(time).count(), count);
             layout.node(time).compile(

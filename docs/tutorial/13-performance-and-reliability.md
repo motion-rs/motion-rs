@@ -12,7 +12,7 @@ use motion::prelude::*;
 use motion::render::RasterLimits;
 
 fn main() -> motion::Result {
-    let timeline = Timeline::new(Size::new(320.0, 180.0), 30).track(|track| {
+    let timeline = Timeline::new(Size::new(320.0, 180.0), fps!(30)).track(|track| {
         track.scene(1.seconds(), |context| {
             context.bounds().fill(Color::rgb(20, 150, 125))
         })

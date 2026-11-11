@@ -36,7 +36,7 @@ pub(super) const METADATA: DemoMetadata = DemoMetadata::new(
 );
 
 pub(super) fn timeline(parameters: DemoParameters) -> Result<Timeline, motion::ErrorReport> {
-    Timeline::new(Size::new(960.0, 540.0), 30)
+    Timeline::new(Size::new(960.0, 540.0), motion::fps!(30))
         .track(|track| {
             track.scene(parameters.seconds.seconds(), move |context| {
                 frame(context, parameters)
@@ -371,7 +371,7 @@ mod tests {
         let options = crate::render_options(Some(&font))?.size(PixelSize::new(192, 108));
         let parameters = DemoParameters::default();
         let optimized = timeline(parameters)?;
-        let reference = Timeline::new(Size::new(960.0, 540.0), 30)
+        let reference = Timeline::new(Size::new(960.0, 540.0), motion::fps!(30))
             .track(|track| {
                 track.push(
                     motion::scene(move |context: &SceneContext<'_>| {

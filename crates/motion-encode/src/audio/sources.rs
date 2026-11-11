@@ -6,7 +6,7 @@ use motion_core::{AudioClip, AudioSource, Duration};
 fn duration(frames: u64, rate: u32) -> Duration {
     Duration::from_ticks(
         (u128::from(frames) * motion_core::TICKS_PER_SECOND as u128).div_ceil(u128::from(rate))
-            as i64,
+            as u64,
     )
 }
 
@@ -20,11 +20,11 @@ fn freeze(
     if !(1..=2).contains(&channels) || !(1..=192000).contains(&rate) {
         return Err(invalid("source_format", "Require bounded mono/stereo source").into());
     }
-    let count = motion_core::audio::ceil_frames(length, rate)?;
+    let count = motion_core::audio::ceil_frames(length, rate);
     if count == 0 || count > (MAX_SAMPLES / channels) as u64 {
         return Err(invalid("source_bytes", "Transform snapshot exceeds 128 MiB").into());
     }
-    let offset = motion_core::audio::frames(offset, rate)?;
+    let offset = motion_core::audio::frames(offset, rate);
     let mut values = vec![0.0; count as usize * channels];
     let mut start = 0;
     while start < count as usize {
@@ -161,8 +161,8 @@ impl LoopSource {
             return Err(invalid("loop", "Invalid source region, seam or output length").into());
         }
         let pcm = freeze(source, region.start, region.end - region.start)?;
-        let frames = motion_core::audio::ceil_frames(length, pcm.sample_rate())?;
-        let crossfade = motion_core::audio::frames(crossfade, pcm.sample_rate())? as usize;
+        let frames = motion_core::audio::ceil_frames(length, pcm.sample_rate());
+        let crossfade = motion_core::audio::frames(crossfade, pcm.sample_rate()) as usize;
         Ok(Self {
             pcm,
             frames,
@@ -286,9 +286,9 @@ impl AudioClipExt for AudioClip {
         let length = source.duration().unwrap_or(Duration::ZERO);
         let parameters = self.parameters();
         let fade_in =
-            Duration::from_ticks((parameters.fade_in.ticks() as f64 / factor).round() as i64);
+            Duration::from_ticks((parameters.fade_in.ticks() as f64 / factor).round() as u64);
         let fade_out =
-            Duration::from_ticks((parameters.fade_out.ticks() as f64 / factor).round() as i64);
+            Duration::from_ticks((parameters.fade_out.ticks() as f64 / factor).round() as u64);
         Ok(self
             .with_resolved_source(std::sync::Arc::new(source))
             .offset(Duration::ZERO)
@@ -502,7 +502,9 @@ mod tests {
         let analysis =
             super::super::analysis::AudioAnalysis::from_pcm(std::sync::Arc::new(shifted.clone()));
         assert!(
-            (motion_core::Signal::sample(&analysis.pitch()?, 500.milliseconds()) - 800.0).abs()
+            (motion_core::Signal::sample(&analysis.pitch()?, 500.milliseconds().after_origin())
+                - 800.0)
+                .abs()
                 < 25.0
         );
         assert_eq!(pcm.time_stretch(2.0)?.frames(), 16000);

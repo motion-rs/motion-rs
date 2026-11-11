@@ -21,7 +21,7 @@ use crate::ValidationError;
 /// assert_eq!(ACCENT.to_rgba8(), [79, 140, 255, 255]);
 /// let movement = Tween::new(Color::BLACK, Color::WHITE, 1.seconds());
 /// assert_eq!(
-///     movement.sample(500.milliseconds()).to_rgba8(),
+///     movement.sample(500.milliseconds().after_origin()).to_rgba8(),
 ///     [99, 99, 99, 255]
 /// );
 /// assert_eq!(

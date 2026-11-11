@@ -88,7 +88,7 @@ impl FrameExecution<'_> {
             self.design_size,
             &self.scene_cache,
         )
-        .with_clip_duration(self.duration.since_origin())
+        .with_clip_duration(self.duration.since_origin().magnitude())
         .with_assets(&assets)
         .with_diagnostics(&diagnostics)
         .with_quality(self.composition.options.quality);

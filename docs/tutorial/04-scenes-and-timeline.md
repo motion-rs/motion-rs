@@ -24,7 +24,7 @@ fn main() -> motion::Result {
     let second = scene(|context| -> motion::Result<_> {
         Ok(Circle::new(context.center(), 40.0)?.fill(Color::rgb(210, 80, 105)))
     });
-    let timeline = Timeline::new(Size::new(480.0, 270.0), 30).track(|track| {
+    let timeline = Timeline::new(Size::new(480.0, 270.0), fps!(30)).track(|track| {
         track
             .push(first.with_duration(2.seconds()))
             .push(second.with_duration(1.seconds()))

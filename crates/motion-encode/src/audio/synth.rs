@@ -1,7 +1,7 @@
 //! Random-access synthesis and seeded sound effects, without binary assets.
 
 use super::{effects::amplitude, pcm::invalid};
-use motion_core::{AudioSource, Duration, FiniteAnimation, Signal};
+use motion_core::{AudioSource, Duration, FiniteAnimation, Signal, Time};
 
 /// Segments in the oscillator sine table. Linear interpolation keeps the error below `3e-7`
 /// (about -130 dB), under 24-bit quantization.
@@ -68,8 +68,11 @@ impl Adsr {
 }
 
 impl Signal<f64> for Adsr {
-    fn sample(&self, time: Duration) -> f64 {
-        if time < Duration::ZERO || time >= self.duration {
+    fn sample(&self, time: Time) -> f64 {
+        let Some(time) = time.duration_since(Time::ZERO) else {
+            return 0.0;
+        };
+        if time >= self.duration {
             return 0.0;
         }
         let seconds = time.as_seconds();
@@ -412,7 +415,6 @@ impl AudioSource for Synth {
             .duration
             .map_or(output.len(), |duration| {
                 motion_core::audio::ceil_frames(duration, self.rate)
-                    .unwrap_or(0)
                     .saturating_sub(start)
                     .min(output.len() as u64) as usize
             })
@@ -485,9 +487,9 @@ mod tests {
             20.milliseconds(),
             100.milliseconds(),
         )?;
-        assert_eq!(envelope.sample(Duration::ZERO), 0.0);
-        assert_eq!(envelope.sample(10.milliseconds()), 1.0);
-        assert_eq!(envelope.sample(100.milliseconds()), 0.0);
+        assert_eq!(envelope.sample(Time::ZERO), 0.0);
+        assert_eq!(envelope.sample(10.milliseconds().after_origin()), 1.0);
+        assert_eq!(envelope.sample(100.milliseconds().after_origin()), 0.0);
         Ok(())
     }
 

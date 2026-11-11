@@ -8,8 +8,9 @@ mod tests;
 /// A normalized double-precision easing curve, independent of clip duration.
 ///
 /// Finite input is clamped to the unit interval with exact zero/one endpoints.
-/// Output may overshoot. Parameters are checked when sampled; invalid parameters,
-/// nonfinite progress and nonfinite custom output panic rather than being hidden.
+/// Output may overshoot. Parameterized curves are built with the validated
+/// constructors such as [`Self::back_in`] and [`Self::cubic_bezier`], so sampling
+/// never rechecks parameters; [`Self::try_apply`] reports nonfinite progress and output.
 ///
 /// ```
 /// use motion_core::prelude::*;
@@ -18,7 +19,7 @@ mod tests;
 ///     MAX_STROKE_VERBS, MAX_SVG_PATH_BYTES, sample_offsets,
 /// };
 /// let movement = Tween::new(0.0_f64, 100.0, 2.seconds()).easing(Easing::CubicOut);
-/// assert_eq!(movement.sample(1.seconds()), 87.5);
+/// assert_eq!(movement.sample(1.seconds().after_origin()), 87.5);
 /// ```
 #[derive(Clone)]
 pub enum Easing {
@@ -54,22 +55,27 @@ pub enum Easing {
     ExponentialOut,
     /// Symmetric exponential movement.
     ExponentialInOut,
-    /// Initial backward movement before acceleration.
+    /// Initial backward movement before acceleration; built by [`Easing::back_in`].
+    #[non_exhaustive]
     BackIn {
         /// Finite, nonnegative backward coefficient.
         overshoot: f64,
     },
-    /// Overshoots the target before settling.
+    /// Overshoots the target before settling; built by [`Easing::back_out`].
+    #[non_exhaustive]
     BackOut {
         /// Finite, nonnegative overshoot coefficient.
         overshoot: f64,
     },
-    /// Mirrored BackIn, using the coefficient directly without an extra multiplier.
+    /// Mirrored BackIn, using the coefficient directly without an extra multiplier;
+    /// built by [`Easing::back_in_out`].
+    #[non_exhaustive]
     BackInOut {
         /// Finite, nonnegative coefficient for each half.
         overshoot: f64,
     },
-    /// Exponentially damped oscillation, pinned at both endpoints.
+    /// Exponentially damped oscillation, pinned at both endpoints; built by [`Easing::elastic_out`].
+    #[non_exhaustive]
     ElasticOut {
         /// Finite amplitude, at least one.
         amplitude: f64,
@@ -78,9 +84,11 @@ pub enum Easing {
     },
     /// A piecewise quadratic outward bounce.
     BounceOut,
-    /// Right-continuous equal steps; the count must be nonzero.
+    /// Right-continuous equal steps; built by [`Easing::steps`], which requires a nonzero count.
+    #[non_exhaustive]
     Steps(u32),
-    /// Unit-endpoint cubic Bezier, solving X before evaluating Y.
+    /// Unit-endpoint cubic Bezier, solving X before evaluating Y; built by [`Easing::cubic_bezier`].
+    #[non_exhaustive]
     CubicBezier {
         /// First X control, finite and in 0..=1.
         x1: f64,
@@ -97,31 +105,74 @@ pub enum Easing {
 }
 
 impl Easing {
+    /// Builds [`Self::BackIn`], rejecting a nonfinite or negative overshoot.
+    pub fn back_in(overshoot: f64) -> Result<Self, crate::ValidationError> {
+        check_overshoot(overshoot).map(|overshoot| Self::BackIn { overshoot })
+    }
+
+    /// Builds [`Self::BackOut`], rejecting a nonfinite or negative overshoot.
+    pub fn back_out(overshoot: f64) -> Result<Self, crate::ValidationError> {
+        check_overshoot(overshoot).map(|overshoot| Self::BackOut { overshoot })
+    }
+
+    /// Builds [`Self::BackInOut`], rejecting a nonfinite or negative overshoot.
+    pub fn back_in_out(overshoot: f64) -> Result<Self, crate::ValidationError> {
+        check_overshoot(overshoot).map(|overshoot| Self::BackInOut { overshoot })
+    }
+
+    /// Builds [`Self::ElasticOut`], rejecting an amplitude below one or a nonpositive period.
+    pub fn elastic_out(amplitude: f64, period: f64) -> Result<Self, crate::ValidationError> {
+        if !amplitude.is_finite() || amplitude < 1.0 || !period.is_finite() || period <= 0.0 {
+            return Err(easing_error(
+                "elastic",
+                "elastic amplitude must be finite and at least one; period must be finite and positive",
+            ));
+        }
+        Ok(Self::ElasticOut { amplitude, period })
+    }
+
+    /// Builds [`Self::Steps`], rejecting a zero count.
+    pub fn steps(count: u32) -> Result<Self, crate::ValidationError> {
+        if count == 0 {
+            return Err(easing_error("steps", "easing steps must be nonzero"));
+        }
+        Ok(Self::Steps(count))
+    }
+
+    /// Builds [`Self::CubicBezier`], rejecting nonfinite controls and X controls outside `0..=1`.
+    pub fn cubic_bezier(
+        x1: f64,
+        y1: f64,
+        x2: f64,
+        y2: f64,
+    ) -> Result<Self, crate::ValidationError> {
+        if ![x1, y1, x2, y2].iter().all(|value| value.is_finite())
+            || !(0.0..=1.0).contains(&x1)
+            || !(0.0..=1.0).contains(&x2)
+        {
+            return Err(easing_error(
+                "controls",
+                "Bezier controls must be finite with X in 0..=1",
+            ));
+        }
+        Ok(Self::CubicBezier { x1, y1, x2, y2 })
+    }
+
     /// Evaluates normalized progress with double-precision math.
     /// Built-in transcendental operations use libm, not platform math routines.
     ///
-    /// # Panics
-    /// Panics for invalid curve parameters, nonfinite progress or nonfinite output.
+    /// Infinite progress clamps to the endpoints and NaN produces NaN; a custom
+    /// callback's output is returned as given. Use [`Self::try_apply`] to
+    /// reject nonfinite values.
     pub fn apply(&self, progress: f64) -> f64 {
-        self.try_apply(progress)
-            .unwrap_or_else(|error| panic!("{}", error.message))
-    }
-
-    /// Evaluates progress with recoverable parameter/output diagnostics.
-    /// Panics raised inside a user callback still propagate unchanged.
-    pub fn try_apply(&self, progress: f64) -> Result<f64, crate::ValidationError> {
-        self.try_validate()?;
-        if !progress.is_finite() {
-            return Err(easing_error("progress", "easing progress must be finite"));
-        }
         let progress = progress.clamp(0.0, 1.0);
         if progress == 0.0 && !matches!(self, Self::Custom(_)) {
-            return Ok(0.0);
+            return 0.0;
         }
         if progress == 1.0 && !matches!(self, Self::Custom(_)) {
-            return Ok(1.0);
+            return 1.0;
         }
-        let value = match self {
+        match self {
             Self::Linear => progress,
             Self::SineIn => {
                 let sine = libm::sin(progress * std::f64::consts::FRAC_PI_4);
@@ -130,7 +181,7 @@ impl Easing {
             Self::SineOut => libm::sin(progress * std::f64::consts::FRAC_PI_2),
             Self::SineInOut => {
                 if progress == 0.5 {
-                    return Ok(0.5);
+                    return 0.5;
                 }
                 let sine = libm::sin(progress * std::f64::consts::FRAC_PI_2);
                 sine * sine
@@ -161,7 +212,16 @@ impl Easing {
             Self::Steps(count) => libm::floor(progress * f64::from(*count)) / f64::from(*count),
             Self::CubicBezier { x1, y1, x2, y2 } => cubic_bezier(progress, *x1, *y1, *x2, *y2),
             Self::Custom(function) => function(progress),
-        };
+        }
+    }
+
+    /// Evaluates progress, reporting nonfinite progress or output.
+    /// Panics raised inside a user callback still propagate unchanged.
+    pub fn try_apply(&self, progress: f64) -> Result<f64, crate::ValidationError> {
+        if !progress.is_finite() {
+            return Err(easing_error("progress", "easing progress must be finite"));
+        }
+        let value = self.apply(progress);
         if !value.is_finite() {
             return Err(easing_error("output", "easing output must be finite"));
         }
@@ -169,70 +229,15 @@ impl Easing {
     }
 
     /// Converts an inward curve to its outward counterpart: `1 - f(1 - t)`.
-    /// Invalid built-in parameters panic before the wrapper is constructed.
     pub fn reversed(self) -> Self {
-        self.validate();
         Self::Custom(Arc::new(move |progress| 1.0 - self.apply(1.0 - progress)))
     }
 
     /// Uses the curve for acceleration and its reversal for deceleration.
-    /// Invalid built-in parameters panic before the wrapper is constructed.
     pub fn mirrored(self) -> Self {
-        self.validate();
         Self::Custom(Arc::new(move |progress| {
             mirrored(progress, |value| self.apply(value))
         }))
-    }
-
-    fn validate(&self) {
-        self.try_validate()
-            .unwrap_or_else(|error| panic!("{}", error.message));
-    }
-
-    /// Checks built-in parameters without evaluating a custom callback.
-    pub fn try_validate(&self) -> Result<(), crate::ValidationError> {
-        match self {
-            Self::BackIn { overshoot }
-            | Self::BackOut { overshoot }
-            | Self::BackInOut { overshoot } => {
-                if !overshoot.is_finite() || *overshoot < 0.0 {
-                    return Err(easing_error(
-                        "overshoot",
-                        "back overshoot must be finite and nonnegative",
-                    ));
-                }
-            }
-            Self::ElasticOut { amplitude, period } => {
-                if !amplitude.is_finite()
-                    || *amplitude < 1.0
-                    || !period.is_finite()
-                    || *period <= 0.0
-                {
-                    return Err(easing_error(
-                        "elastic",
-                        "elastic amplitude must be finite and at least one; period must be finite and positive",
-                    ));
-                }
-            }
-            Self::Steps(0) => return Err(easing_error("steps", "easing steps must be nonzero")),
-            Self::CubicBezier { x1, y1, x2, y2 }
-                if (![x1, y1, x2, y2].iter().all(|value| value.is_finite())
-                    || !(0.0..=1.0).contains(x1)
-                    || !(0.0..=1.0).contains(x2)) =>
-            {
-                return Err(easing_error(
-                    "controls",
-                    "Bezier controls must be finite with X in 0..=1",
-                ));
-            }
-            _ => {}
-        }
-        Ok(())
-    }
-
-    pub(super) fn validated(self) -> Self {
-        self.validate();
-        self
     }
 }
 
@@ -283,6 +288,17 @@ impl fmt::Debug for Easing {
                 .finish(),
             Self::Custom(_) => formatter.write_str("Custom(..)"),
         }
+    }
+}
+
+fn check_overshoot(overshoot: f64) -> Result<f64, crate::ValidationError> {
+    if overshoot.is_finite() && overshoot >= 0.0 {
+        Ok(overshoot)
+    } else {
+        Err(easing_error(
+            "overshoot",
+            "back overshoot must be finite and nonnegative",
+        ))
     }
 }
 

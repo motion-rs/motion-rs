@@ -13,9 +13,6 @@ impl Text {
         delay: motion_core::Duration,
         style: impl Fn(&TextPart) -> PartStyle,
     ) -> Result<Node, ValidationError> {
-        if delay < motion_core::Duration::ZERO {
-            return Err(invalid("delay", "Text part delay must be nonnegative"));
-        }
         let fonts = self
             .paragraph
             .fonts
@@ -44,9 +41,6 @@ impl Text {
         delay: motion_core::Duration,
         style: &dyn Fn(&TextPart) -> PartStyle,
     ) -> Result<Node, ValidationError> {
-        if delay < motion_core::Duration::ZERO {
-            return Err(invalid("delay", "Text part delay must be nonnegative"));
-        }
         let layout = self.resolve(context)?;
         let parts = layout.parts(self.split);
         let mut nodes = Vec::new();
@@ -131,7 +125,7 @@ impl TextPart {
 
     /// Samples any typed animation at the delayed signed time.
     pub fn sample<Value>(&self, animation: &impl motion_core::Signal<Value>) -> Value {
-        animation.sample(self.time.since_origin())
+        animation.sample(self.time)
     }
 
     pub(super) fn owns(&self, glyph: &TextGlyph) -> bool {

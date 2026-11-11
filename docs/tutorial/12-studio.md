@@ -21,7 +21,7 @@ fn main() -> motion::Result {
     }).build()?;
     motion::studio::run(motion::studio::StudioScene::timeline(
         "tutorial",
-        Composition::new(640, 360, motion::render::FrameClock::new(30, 150)),
+        Composition::new(640, 360, motion::render::FrameClock::new(fps!(30), 150)),
         timeline,
     )?)
 }

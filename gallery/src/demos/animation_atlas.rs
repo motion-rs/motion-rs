@@ -220,7 +220,7 @@ const fn page(title: &'static str, lines: [&'static str; 3]) -> Page {
 }
 
 pub(super) fn timeline(parameters: DemoParameters) -> Result<Timeline, motion::ErrorReport> {
-    let curves = easing_curves();
+    let curves = easing_curves()?;
     let signals = signal_studies(parameters.seed)?;
     let compositions = composition_studies();
     let path = flight_path()?;
@@ -241,7 +241,7 @@ pub(super) fn timeline(parameters: DemoParameters) -> Result<Timeline, motion::E
                 animation_plot(study.as_ref(), progress, page >= 27)?
             }
             32 => path_board(&path, &flight, progress)?,
-            33 => transform_board(progress),
+            33 => transform_board(progress)?,
             _ => {
                 let study = &compositions[page - 34];
                 animation_plot(study.as_ref(), progress, false)?
@@ -250,8 +250,8 @@ pub(super) fn timeline(parameters: DemoParameters) -> Result<Timeline, motion::E
     })
 }
 
-fn easing_curves() -> Vec<(&'static str, Easing)> {
-    vec![
+fn easing_curves() -> motion::Result<Vec<(&'static str, Easing)>> {
+    Ok(vec![
         ("Linear", Easing::Linear),
         ("Sine In", Easing::SineIn),
         ("Sine Out", Easing::SineOut),
@@ -268,34 +268,20 @@ fn easing_curves() -> Vec<(&'static str, Easing)> {
         ("Exponential In", Easing::ExponentialIn),
         ("Exponential Out", Easing::ExponentialOut),
         ("Exponential In Out", Easing::ExponentialInOut),
-        ("Back In", Easing::BackIn { overshoot: 1.7 }),
-        ("Back Out", Easing::BackOut { overshoot: 1.7 }),
-        ("Back In Out", Easing::BackInOut { overshoot: 1.7 }),
-        (
-            "Elastic Out",
-            Easing::ElasticOut {
-                amplitude: 1.0,
-                period: 0.3,
-            },
-        ),
+        ("Back In", Easing::back_in(1.7)?),
+        ("Back Out", Easing::back_out(1.7)?),
+        ("Back In Out", Easing::back_in_out(1.7)?),
+        ("Elastic Out", Easing::elastic_out(1.0, 0.3)?),
         ("Bounce Out", Easing::BounceOut),
-        ("Steps", Easing::Steps(6)),
-        (
-            "Cubic Bezier",
-            Easing::CubicBezier {
-                x1: 0.76,
-                y1: 0.0,
-                x2: 0.24,
-                y2: 1.0,
-            },
-        ),
+        ("Steps", Easing::steps(6)?),
+        ("Cubic Bezier", Easing::cubic_bezier(0.76, 0.0, 0.24, 1.0)?),
         (
             "Custom",
             Easing::Custom(Arc::new(|progress| {
                 progress * progress * (3.0 - 2.0 * progress)
             })),
         ),
-    ]
+    ])
 }
 
 fn signal_studies(seed: u64) -> motion::Result<Vec<Arc<dyn Signal<f64>>>> {
@@ -305,7 +291,7 @@ fn signal_studies(seed: u64) -> motion::Result<Vec<Arc<dyn Signal<f64>>>> {
             .stiffness(121.0)
             .damping(damping)
             .build()?;
-        studies.push((move |time: Duration| spring.sample(time - 0.2.seconds())).boxed());
+        studies.push((move |time: Time| spring.sample(time - 0.2.seconds())).boxed());
     }
     for waveform in [
         Waveform::Sine,
@@ -330,13 +316,13 @@ fn animation_plot(
     progress: f64,
     signed: bool,
 ) -> motion::Result<Node> {
-    let time = (progress * 3.2).seconds();
+    let time = Time::from_seconds(progress * 3.2);
     let (lower, upper) = if signed { (-1.2, 1.2) } else { (-0.3, 1.4) };
     let vertical = |value: f64| 190.0 - (value - lower) / (upper - lower) * 142.0;
     let mut trace = Path2D::new();
     for index in 0..=160 {
         let fraction = index as f64 / 160.0;
-        let value = animation.sample((fraction * 3.2).seconds());
+        let value = animation.sample(Time::from_seconds(fraction * 3.2));
         let position = Point::new(56.0 + 400.0 * fraction, vertical(value));
         if index == 0 {
             trace.try_move_to(position)?;
@@ -431,7 +417,7 @@ fn path_board(
     flight: &impl Signal<PathSample>,
     progress: f64,
 ) -> motion::Result<Node> {
-    let time = (progress * 3.2).seconds();
+    let time = Time::from_seconds(progress * 3.2);
     let sample = flight.sample(time);
     let arrow = Path2D::builder()
         .move_to(Point::new(14.0, 0.0))
@@ -451,8 +437,8 @@ fn path_board(
     ]))
 }
 
-fn transform_board(progress: f64) -> Node {
-    let time = (progress * 3.2).seconds();
+fn transform_board(progress: f64) -> motion::Result<Node> {
+    let time = Time::from_seconds(progress * 3.2);
     let mut nodes = Vec::new();
     let color = Tween::new(
         Color::from_hex(ACCENTS[0]),
@@ -462,7 +448,7 @@ fn transform_board(progress: f64) -> Node {
     .easing(Easing::SineInOut)
     .ping_pong();
     let transform = Tween::new(0.0, 1.0, 1.1.seconds())
-        .easing(Easing::BackOut { overshoot: 1.4 })
+        .easing(Easing::back_out(1.4)?)
         .ping_pong();
     for index in 0..6 {
         let local = time - (0.15 + index as f64 * 0.12).seconds();
@@ -480,7 +466,7 @@ fn transform_board(progress: f64) -> Node {
                 .opacity((0.3 + amount * 0.7).clamp(0.0, 1.0)),
         );
     }
-    Node::group(nodes)
+    Ok(Node::group(nodes))
 }
 
 #[cfg(test)]
@@ -491,8 +477,8 @@ mod tests {
     const PAGE_COUNT: usize = PAGES.len();
 
     #[test]
-    fn pages_cover_all_easings_and_hold_the_final_page() {
-        let curves = easing_curves();
+    fn pages_cover_all_easings_and_hold_the_final_page() -> motion::Result {
+        let curves = easing_curves()?;
         assert_eq!(PAGE_COUNT, 43);
         for (page, (name, _)) in PAGES.iter().zip(&curves) {
             assert_eq!(page.title, *name);
@@ -506,11 +492,12 @@ mod tests {
         }
         assert_eq!(atlas::page_at(0.0, PAGE_COUNT), (0, 0.0));
         assert_eq!(atlas::page_at(1.0, PAGE_COUNT), (PAGE_COUNT - 1, 1.0));
+        Ok(())
     }
 
     #[test]
-    fn easing_studies_cover_all_variants_and_retain_overshoot() {
-        let curves = easing_curves();
+    fn easing_studies_cover_all_variants_and_retain_overshoot() -> motion::Result {
+        let curves = easing_curves()?;
         assert_eq!(curves.len(), 24);
         assert_eq!(
             curves
@@ -528,6 +515,7 @@ mod tests {
             }
         }
         assert!(curves[17].1.apply(0.6) > 1.0);
+        Ok(())
     }
 
     #[test]
@@ -537,21 +525,26 @@ mod tests {
         assert_eq!(signals.len(), 8);
         assert_eq!(compositions.len(), 9);
         for study in signals.iter().chain(&compositions) {
-            let expected = study.sample(0.6.seconds());
-            for time in [3.seconds(), (-1).seconds(), 0.6.seconds(), Duration::ZERO] {
+            let expected = study.sample(0.6.seconds().after_origin());
+            for time in [
+                3.seconds().after_origin(),
+                Time::ZERO - 1.seconds(),
+                0.6.seconds().after_origin(),
+                Time::ZERO,
+            ] {
                 assert!(study.sample(time).is_finite());
             }
-            assert_eq!(study.sample(0.6.seconds()), expected);
+            assert_eq!(study.sample(0.6.seconds().after_origin()), expected);
         }
-        assert_eq!(compositions[0].sample(0.3.seconds()), 0.0);
-        assert_eq!(compositions[1].sample(Duration::ZERO), 1.0);
-        assert_eq!(compositions[3].sample(2.4.seconds()), 0.0);
-        assert_eq!(compositions[8].sample(0.5.seconds()), 0.75);
-        assert_eq!(compositions[8].sample(0.8.seconds()), 0.75);
-        assert_eq!(compositions[8].sample(3.seconds()), 1.0);
+        assert_eq!(compositions[0].sample(0.3.seconds().after_origin()), 0.0);
+        assert_eq!(compositions[1].sample(Time::ZERO), 1.0);
+        assert_eq!(compositions[3].sample(2.4.seconds().after_origin()), 0.0);
+        assert_eq!(compositions[8].sample(0.5.seconds().after_origin()), 0.75);
+        assert_eq!(compositions[8].sample(0.8.seconds().after_origin()), 0.75);
+        assert_eq!(compositions[8].sample(3.seconds().after_origin()), 1.0);
         assert_ne!(
-            signals[7].sample(1.seconds()),
-            signal_studies(18)?[7].sample(1.seconds())
+            signals[7].sample(1.seconds().after_origin()),
+            signal_studies(18)?[7].sample(1.seconds().after_origin())
         );
         Ok(())
     }
@@ -559,14 +552,11 @@ mod tests {
     #[test]
     fn flight_uses_the_authored_path_endpoints() {
         let flight = FollowPath::new(flight_path().unwrap(), 2.5.seconds());
-        assert_eq!(
-            flight.sample(Duration::ZERO).position,
-            Point::new(70.0, 285.0)
-        );
-        let endpoint = flight.sample(3.seconds()).position;
+        assert_eq!(flight.sample(Time::ZERO).position, Point::new(70.0, 285.0));
+        let endpoint = flight.sample(3.seconds().after_origin()).position;
         assert!((endpoint.x - 425.0).abs() <= 1e-9);
         assert!((endpoint.y - 210.0).abs() <= 1e-9);
-        assert!(flight.sample(1.seconds()).angle.is_finite());
+        assert!(flight.sample(1.seconds().after_origin()).angle.is_finite());
     }
 
     #[test]

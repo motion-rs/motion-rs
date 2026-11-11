@@ -23,7 +23,7 @@ fn fresh_texts_reuse_actual_session_layouts_across_out_of_order_frames() -> moti
         session.render(
             FrameRequest {
                 at: FrameAt::Index(index),
-                frame_rate: FrameRate::from(30),
+                frame_rate: motion::fps!(30),
                 duration: 1.seconds(),
                 background: None,
                 target: RenderTarget::Memory(&mut target),
@@ -221,12 +221,13 @@ fn authoring_example_8() -> Result<(), Box<dyn std::error::Error>> {
     use motion::prelude::*;
     use motion::render::*;
 
-    let composition = Composition::new(8, 4, motion::render::FrameClock::new(30, 3)).with_options(
-        motion::render::RenderOptions::default().motion_blur(MotionBlur {
-            shutter_angle: 180.0,
-            samples: 4,
-        }),
-    )?;
+    let composition = Composition::new(8, 4, motion::render::FrameClock::new(motion::fps!(30), 3))
+        .with_options(
+            motion::render::RenderOptions::default().motion_blur(MotionBlur {
+                shutter_angle: 180.0,
+                samples: 4,
+            }),
+        )?;
     let frame = composition.render_frame_sampled(1, Size::new(8.0, 4.0), |context| {
         Node::from(
             Rect::new(context.seconds() * 4.0, 0.0, 4.0, 4.0).fill(Color::from_hex(0x24a49b)),
@@ -263,7 +264,7 @@ fn authoring_example_9() -> Result<(), Box<dyn std::error::Error>> {
     let cache = SceneCache::new(0);
     let context = SceneContext::new(
         2.seconds().after_origin(),
-        FrameRate::from(30),
+        motion::fps!(30),
         Size::new(640.0, 360.0),
         &cache,
     );
@@ -291,7 +292,7 @@ fn authoring_example_10() -> Result<(), Box<dyn std::error::Error>> {
     let tile =
         (|_: &SceneContext<'_>| Node::from(Rect::new(0.0, 0.0, 8.0, 4.0).fill(Color::WHITE)))
             .with_duration(1.seconds());
-    let timeline = Timeline::try_new(Size::new(8.0, 4.0), 30)?
+    let timeline = Timeline::try_new(Size::new(8.0, 4.0), motion::fps!(30))?
         .try_track(|track| track.try_push(tile)?.try_gap(500.milliseconds()))?
         .build()?;
     assert_eq!(timeline.frame_count(), 45);
@@ -316,7 +317,7 @@ fn authoring_example_11() -> Result<(), Box<dyn std::error::Error>> {
         .with_duration(1.seconds());
     let next = (|context: &SceneContext<'_>| Node::from(context.bounds().fill(Color::BLACK)))
         .with_duration(1.seconds());
-    let timeline = Timeline::try_new(Size::new(8.0, 4.0), 30)?
+    let timeline = Timeline::try_new(Size::new(8.0, 4.0), motion::fps!(30))?
         .try_track(|track| {
             track
                 .try_push(first)?
@@ -325,7 +326,7 @@ fn authoring_example_11() -> Result<(), Box<dyn std::error::Error>> {
         })?
         .build()?;
     assert_eq!(timeline.frame_count(), 45);
-    Composition::new(8, 4, motion::render::FrameClock::new(30, 45)).render_frame(
+    Composition::new(8, 4, motion::render::FrameClock::new(motion::fps!(30), 45)).render_frame(
         20,
         timeline.size(),
         |context| timeline.render(context),
@@ -368,7 +369,7 @@ fn authoring_example_13() -> Result<(), Box<dyn std::error::Error>> {
         .stop(0.0, Color::from_hex(0x1080c0))
         .stop(1.0, Color::WHITE)
         .space(GradientSpace::Oklab);
-    let image = Composition::new(8, 8, motion::render::FrameClock::new(30, 150))
+    let image = Composition::new(8, 8, motion::render::FrameClock::new(motion::fps!(30), 150))
         .with_options(motion::render::RenderOptions::default().blend_space(BlendSpace::Srgb))?
         .render_frame(0, Size::new(8.0, 8.0), |_| {
             Node::from(Rect::new(0.0, 0.0, 8.0, 8.0).fill(brush.clone()))
@@ -434,7 +435,7 @@ fn authoring_example_16() -> Result<(), Box<dyn std::error::Error>> {
     .stroke(0.5, Color::WHITE)
     .trim(0.0, 0.8)
     .dash(&[1.0, 0.5], -0.2);
-    let frame = Composition::new(8, 8, motion::render::FrameClock::new(30, 150))
+    let frame = Composition::new(8, 8, motion::render::FrameClock::new(motion::fps!(30), 150))
         .with_options(motion::render::RenderOptions::default().background(Color::BLACK))?
         .render_frame(0, Size::new(8.0, 8.0), |_| Node::from(curve.clone()))?;
     assert_eq!(frame.size().width as usize, 8);
@@ -453,7 +454,7 @@ fn authoring_example_17() -> Result<(), Box<dyn std::error::Error>> {
     .stroke(0.5, Color::WHITE)
     .trim(0.0, 0.8)
     .dash(&[1.0, 0.5], -0.2);
-    let frame = Composition::new(8, 8, motion::render::FrameClock::new(30, 150))
+    let frame = Composition::new(8, 8, motion::render::FrameClock::new(motion::fps!(30), 150))
         .with_options(motion::render::RenderOptions::default().background(Color::BLACK))?
         .render_frame(0, Size::new(8.0, 8.0), |_| Node::from(curve.clone()))?;
     assert_eq!(frame.size().width as usize, 8);

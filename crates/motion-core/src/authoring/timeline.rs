@@ -12,7 +12,7 @@
 //! let tile =
 //!     (|_: &SceneContext<'_>| Node::from(Rect::new(0.0, 0.0, 8.0, 4.0).fill(Color::WHITE)))
 //!         .with_duration(1.seconds());
-//! let timeline = Timeline::new(Size::new(8.0, 4.0), 30)
+//! let timeline = Timeline::new(Size::new(8.0, 4.0), fps!(30))
 //!     .track(|track| track.push(tile).gap(500.milliseconds()))
 //!     .build()?;
 //! assert_eq!(timeline.frame_count(), 45);
@@ -66,9 +66,7 @@ fn on_track(track: usize, message: impl fmt::Display) -> Error {
 
 fn add_time(first: Time, second: Duration) -> crate::Result<Time> {
     first
-        .ticks()
-        .checked_add(second.ticks())
-        .map(Time::from_ticks)
+        .checked_add(second)
         .ok_or_else(|| invalid("Scheduled time exceeds signed ticks"))
 }
 
@@ -117,8 +115,7 @@ pub struct Timeline {
 impl Timeline {
     /// Starts a timeline; invalid dimensions or rates are reported by `build`.
     #[allow(clippy::new_ret_no_self)]
-    pub fn new(size: Size, rate: impl Into<FrameRate>) -> TimelineBuilder {
-        let rate = rate.into();
+    pub fn new(size: Size, rate: FrameRate) -> TimelineBuilder {
         match TimelineBuilder::checked(size, rate) {
             Ok(builder) => builder,
             Err(error) => TimelineBuilder::empty(Size::new(1.0, 1.0), rate).failed(error),
@@ -127,8 +124,8 @@ impl Timeline {
 
     /// Starts a timeline without discovering fonts, devices or encoders.
     /// Rates above one frame per tick cannot define a distinct frame grid.
-    pub fn try_new(size: Size, rate: impl Into<FrameRate>) -> crate::Result<TimelineBuilder> {
-        TimelineBuilder::checked(size, rate.into())
+    pub fn try_new(size: Size, rate: FrameRate) -> crate::Result<TimelineBuilder> {
+        TimelineBuilder::checked(size, rate)
     }
 
     /// Reopens this timeline for further edits. Audio resolved by
@@ -160,7 +157,7 @@ impl Timeline {
 
     /// Exact output frame count. Existing Composition needs checked u32 conversion.
     pub fn frame_count(&self) -> u64 {
-        self.duration.to_frame(self.rate) as u64
+        self.duration.to_frame(self.rate)
     }
 
     /// Immutable tracks in bottom-to-top paint order.
@@ -215,7 +212,7 @@ impl Timeline {
     /// Like [`render`](Self::render) but keeps drawing until `end`, for exports whose
     /// resolved audio outlasts the picture.
     pub fn render_until(&self, context: &SceneContext<'_>, end: Duration) -> Node {
-        if context.time() < Time::ZERO || context.time().since_origin() >= end {
+        if context.time() < Time::ZERO || context.time() >= end.after_origin() {
             return Node::empty();
         }
         let parent_size = context.size();

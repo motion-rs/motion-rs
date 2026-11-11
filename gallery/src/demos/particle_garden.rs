@@ -111,7 +111,7 @@ pub(super) fn timeline(parameters: DemoParameters) -> Result<Timeline, motion::E
         look,
     });
     let duration = i64::from(parameters.seconds).seconds();
-    Timeline::new(Size::new(WIDTH, HEIGHT), 30)
+    Timeline::new(Size::new(WIDTH, HEIGHT), motion::fps!(30))
         .track(|track| track.scene(duration, move |context| frame(context, &rig)))
         .build()
 }

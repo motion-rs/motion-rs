@@ -291,9 +291,10 @@ mod scene_output_tests {
 
     #[test]
     fn opt_in_timings_preserve_output_work_and_reset_attempts() {
-        let mut renderer = Composition::new(8, 8, crate::FrameClock::new(30, 150))
-            .frame_renderer(Size::new(8.0, 8.0))
-            .unwrap();
+        let mut renderer =
+            Composition::new(8, 8, crate::FrameClock::new(motion_core::fps!(30), 150))
+                .frame_renderer(Size::new(8.0, 8.0))
+                .unwrap();
         let build = |_: &SceneContext<'_>| {
             Node::from(motion_core::Rect::new(0.0, 0.0, 4.0, 8.0).fill(Color::WHITE))
         };
@@ -323,7 +324,7 @@ mod scene_output_tests {
     #[cfg(feature = "gpu")]
     #[ignore = "requires native GPU; verifies frame-stage observations without latency assertions"]
     fn native_frame_stage_timings_preserve_output_and_logical_stats() -> motion_core::Result {
-        let mut renderer = Composition::new(8, 8, crate::FrameClock::new(30, 2))
+        let mut renderer = Composition::new(8, 8, crate::FrameClock::new(motion_core::fps!(30), 2))
             .with_options(crate::RenderOptions::default().backend(Renderer::Gpu.into()))?
             .frame_renderer(Size::new(8.0, 8.0))?;
         let build = |_: &SceneContext<'_>| {
@@ -363,7 +364,7 @@ mod scene_output_tests {
     #[test]
     fn memoized_hidden_scene_failures_retain_original_errors_on_later_frames() {
         use motion_core::NodeModifiers;
-        let composition = Composition::new(8, 8, crate::FrameClock::new(30, 4))
+        let composition = Composition::new(8, 8, crate::FrameClock::new(motion_core::fps!(30), 4))
             .with_options(crate::RenderOptions::default().allow_missing_assets(true))
             .unwrap();
         let mut renderer = composition.frame_renderer(Size::new(8.0, 8.0)).unwrap();
@@ -392,7 +393,7 @@ mod scene_output_tests {
 
     #[test]
     fn recoverable_scene_errors_retain_frames_and_do_not_poison_session_retries() {
-        let composition = Composition::new(8, 8, crate::FrameClock::new(30, 4))
+        let composition = Composition::new(8, 8, crate::FrameClock::new(motion_core::fps!(30), 4))
             .with_options(crate::RenderOptions::default().allow_missing_assets(true))
             .unwrap();
         let mut renderer = composition.frame_renderer(Size::new(8.0, 8.0)).unwrap();

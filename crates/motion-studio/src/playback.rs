@@ -273,7 +273,7 @@ mod tests {
     #[test]
     fn range_clock_holds_exclusive_end_and_loops_inside_in_out() {
         let now = Instant::now();
-        let rate = motion_core::FrameRate::from(30);
+        let rate = motion_core::fps!(30);
         let mut transport = Transport {
             frame: 20,
             anchor: Some((now, 20)),

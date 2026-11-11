@@ -6,8 +6,8 @@ use super::style::{Style, point};
 use super::value::Lift;
 use crate::content::{Content, ImageSpec, SvgSpec};
 use motion_core::{
-    ArcShape, Arrow, Circle, Duration, Ellipse, Line, Node, Polygon, Polyline, Rect,
-    RegularPolygon, Ring, RoundedRect, Spline, Star, Vector2,
+    ArcShape, Arrow, Circle, Ellipse, Line, Node, Polygon, Polyline, Rect, RegularPolygon, Ring,
+    RoundedRect, Spline, Star, Time, Vector2,
 };
 use std::sync::Arc;
 
@@ -370,7 +370,7 @@ impl Compiler<'_> {
 fn shape(
     style: Arc<Style>,
     varying: bool,
-    build: impl Fn(&Style, Duration) -> Node + Send + Sync + 'static,
+    build: impl Fn(&Style, Time) -> Node + Send + Sync + 'static,
 ) -> Option<Built> {
     let varying = varying || style.varying();
     Some(Built::new(varying, move |time| build(&style, time)))

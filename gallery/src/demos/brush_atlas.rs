@@ -376,7 +376,7 @@ mod tests {
                 atlas::PAPER
             };
             let render = |node: Node| {
-                let timeline = Timeline::new(Size::new(128.0, 96.0), 30)
+                let timeline = Timeline::new(Size::new(128.0, 96.0), motion::fps!(30))
                     .background(Color::from_hex(background))
                     .track(|track| track.scene(1.seconds(), move |_| node.clone()))
                     .build()?;

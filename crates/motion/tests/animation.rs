@@ -30,7 +30,7 @@ mod values {
             );
             let expected = (Point::new(16_777_221.125, 2.0), Vector2::new(2.0, 4.0));
             for milliseconds in [500, 0, 1_000, 500] {
-                let value = track.sample(milliseconds.milliseconds());
+                let value = track.sample(milliseconds.milliseconds().after_origin());
                 if milliseconds == 500 {
                     assert_eq!(value, expected);
                 }
@@ -59,7 +59,7 @@ mod values {
         #[test]
         fn frames_sample_typed_values_using_sequence_local_ticks() -> motion::Result {
             let cache = motion::render::SceneCache::new(0);
-            let rate = motion::FrameRate::from(60);
+            let rate = motion::fps!(60);
             let context = |index: i32| {
                 motion::SceneContext::new(
                     Time::from_frame(i64::from(index), rate),
@@ -68,7 +68,7 @@ mod values {
                     &cache,
                 )
             };
-            let local = context(61).shifted(Duration::from_frame(60, rate));
+            let local = context(61).shifted(Duration::from_frame(60, rate).offset());
             let movement = Tween::new(0.0_f64, 1.0, 1.seconds());
             let expected = 1.0 / 60.0;
             assert_eq!(local.sample(&movement), expected);
@@ -89,7 +89,7 @@ mod values {
         fn curves_integrate_with_tweens_tracks_frames_and_parameter_validation() -> motion::Result {
             use motion::{Easing, Keyframes, Signal, TimeLiteral, Tween};
             let movement = Tween::new(0.0_f64, 100.0, 2.seconds()).easing(Easing::CubicOut);
-            assert_eq!(movement.sample(1.seconds()), 87.5);
+            assert_eq!(movement.sample(1.seconds().after_origin()), 87.5);
             let track = Keyframes::new(0.0_f64)
                 .to(1.seconds(), 100.0, Easing::QuadraticIn)
                 .hold(500.milliseconds())
@@ -97,47 +97,26 @@ mod values {
             let cache = motion::render::SceneCache::new(0);
             let frame = motion::SceneContext::new(
                 500.milliseconds().after_origin(),
-                motion::FrameRate::from(60),
+                motion::fps!(60),
                 motion::Size::new(64.0, 64.0),
                 &cache,
             );
             assert_eq!(frame.sample(&track), 25.0);
-            assert_eq!(track.sample(1250.milliseconds()), 100.0);
-            assert_eq!(track.sample(2.seconds()), 187.5);
+            assert_eq!(track.sample(1250.milliseconds().after_origin()), 100.0);
+            assert_eq!(track.sample(2.seconds().after_origin()), 187.5);
             let control = 0.500_000_000_1;
-            let curve = Easing::CubicBezier {
-                x1: 0.0,
-                y1: control,
-                x2: 1.0,
-                y2: control,
-            };
+            let curve = Easing::cubic_bezier(0.0, control, 1.0, control)?;
             let tween = Tween::new(0.0_f64, 1.0, 1.seconds()).easing(curve.clone());
             let track = Keyframes::new(0.0_f64).to(1.seconds(), 1.0, curve);
-            assert_eq!(tween.sample(500.milliseconds()), 0.75 * control + 0.125);
             assert_eq!(
-                track.sample(500.milliseconds()),
-                tween.sample(500.milliseconds())
+                tween.sample(500.milliseconds().after_origin()),
+                0.75 * control + 0.125
             );
-            assert!(
-                std::panic::catch_unwind(
-                    || Tween::new(0.0_f64, 1.0, motion::Duration::ZERO).easing(Easing::Steps(0))
-                )
-                .is_err()
+            assert_eq!(
+                track.sample(500.milliseconds().after_origin()),
+                tween.sample(500.milliseconds().after_origin())
             );
-            assert!(
-                std::panic::catch_unwind(|| Keyframes::new(0.0_f64).to(
-                    1.seconds(),
-                    1.0,
-                    Easing::Steps(0)
-                ))
-                .is_err()
-            );
-            assert!(
-                std::panic::catch_unwind(
-                    || Tween::new(0.0_f64, 1.0, 1.seconds()).easing(Easing::Steps(0))
-                )
-                .is_err()
-            );
+            assert!(Easing::steps(0).is_err());
             Ok(())
         }
     }
@@ -160,17 +139,17 @@ mod values {
             let cache = motion::render::SceneCache::new(0);
             let frame = motion::SceneContext::new(
                 1250.milliseconds().after_origin(),
-                motion::FrameRate::from(60),
+                motion::fps!(60),
                 motion::Size::new(64.0, 64.0),
                 &cache,
             )
-            .shifted(1.seconds());
+            .shifted(1.seconds().offset());
             let progress = frame.sample(&scalar);
             let point = frame.sample(&movement);
             close(point.x, progress * 100.0);
             close(point.y, progress * 40.0);
             let end = movement.settle_duration();
-            assert_eq!(movement.sample(end), Point::new(100.0, 40.0));
+            assert_eq!(movement.sample(end.after_origin()), Point::new(100.0, 40.0));
             let transforms =
                 Spring::builder([Transform::IDENTITY], [Transform::translate(100.0, 40.0)])
                     .damping(20.0)
@@ -179,7 +158,7 @@ mod values {
             let boxed = movement.map(|point| point.x).boxed();
             close(frame.sample(boxed.as_ref()), point.x);
             close(
-                std::thread::spawn(move || boxed.sample(250.milliseconds()))
+                std::thread::spawn(move || boxed.sample(250.milliseconds().after_origin()))
                     .join()
                     .unwrap(),
                 point.x,
@@ -220,7 +199,7 @@ mod values {
                 scalar.to_bits()
             );
             let animation = Tween::new(scalar, 1.0_f64, Duration::from_ticks(3));
-            assert_eq!(animation.sample(Duration::ZERO).to_bits(), scalar.to_bits());
+            assert_eq!(animation.sample(Time::ZERO).to_bits(), scalar.to_bits());
             let _node = Node::empty()
                 .translate(scalar, -scalar)
                 .rotate(scalar)
@@ -240,11 +219,11 @@ mod values {
             let cache = motion::render::SceneCache::new(0);
             let context = motion::SceneContext::new(
                 1250.milliseconds().after_origin(),
-                motion::FrameRate::from(60),
+                motion::fps!(60),
                 Size::new(64.0, 64.0),
                 &cache,
             )
-            .shifted(1.seconds());
+            .shifted(1.seconds().offset());
             let movement = Tween::new([from], [to], 1.seconds());
             let sampled = context.sample(&movement)[0];
             assert_eq!(sampled, Rect::new(12.5, 22.5, 50.0, 35.0));
@@ -253,12 +232,15 @@ mod values {
                 .to(1.seconds(), to, Easing::Linear)
                 .hold(1.seconds());
             assert_eq!(context.sample(&track), sampled);
-            assert_eq!(track.sample(1500.milliseconds()), to);
+            assert_eq!(track.sample(1500.milliseconds().after_origin()), to);
             let spring = Spring::new(Size::new(10.0, 20.0), Size::default());
-            let overshoot = spring.sample(500.milliseconds());
+            let overshoot = spring.sample(500.milliseconds().after_origin());
             assert!(overshoot.width < 0.0 && overshoot.height < 0.0);
             assert_eq!(overshoot.to_rect().size(), overshoot);
-            assert_eq!(spring.sample(spring.settle_duration()), Size::default());
+            assert_eq!(
+                spring.sample(spring.settle_duration().after_origin()),
+                Size::default()
+            );
             Ok(())
         }
     }
@@ -272,11 +254,11 @@ mod values {
             let cache = motion::render::SceneCache::new(0);
             let frame = motion::SceneContext::new(
                 1250.milliseconds().after_origin(),
-                motion::FrameRate::from(60),
+                motion::fps!(60),
                 motion::Size::new(64.0, 64.0),
                 &cache,
             )
-            .shifted(1.seconds());
+            .shifted(1.seconds().offset());
             let movement = Tween::new([Color::BLACK], [Color::WHITE], 1.seconds());
             let sampled = frame.sample(&movement)[0];
             assert_eq!(sampled, Color::BLACK.interpolate(&Color::WHITE, 0.25));
@@ -284,14 +266,25 @@ mod values {
                 .to(1.seconds(), Color::WHITE, Easing::Linear)
                 .hold(1.seconds());
             assert_eq!(frame.sample(&track), sampled);
-            assert_eq!(track.sample(1500.milliseconds()), Color::WHITE);
+            assert_eq!(
+                track.sample(1500.milliseconds().after_origin()),
+                Color::WHITE
+            );
             let spring = Spring::new(Color::BLACK, Color::WHITE);
-            assert!(spring.sample(500.milliseconds()).to_rgba_float()[0] > 1.0);
-            assert_eq!(spring.sample(Duration::ZERO), Color::BLACK);
-            assert_eq!(spring.sample(spring.settle_duration()), Color::WHITE);
+            assert!(
+                spring
+                    .sample(500.milliseconds().after_origin())
+                    .to_rgba_float()[0]
+                    > 1.0
+            );
+            assert_eq!(spring.sample(Time::ZERO), Color::BLACK);
+            assert_eq!(
+                spring.sample(spring.settle_duration().after_origin()),
+                Color::WHITE
+            );
             let boxed = movement.map(|colors| colors[0]).boxed();
             assert_eq!(
-                std::thread::spawn(move || boxed.sample(250.milliseconds()))
+                std::thread::spawn(move || boxed.sample(250.milliseconds().after_origin()))
                     .join()
                     .unwrap(),
                 sampled

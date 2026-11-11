@@ -160,11 +160,17 @@ mod tests {
             (motion_core::FrameRate::NTSC, 3, 4805),
             (motion_core::FrameRate::NTSC, 30_000, 48_048_000),
             (motion_core::FrameRate::NTSC_DOUBLE, 1, 801),
-            (motion_core::FrameRate::from(11), 1, 4364),
+            (motion_core::fps!(11), 1, 4364),
         ] {
             assert_eq!(video_samples(frames, rate)?, expected);
         }
-        assert!(video_samples(u32::MAX, motion_core::FrameRate::new(1, u32::MAX)).is_err());
+        assert!(
+            video_samples(
+                u32::MAX,
+                motion_core::FrameRate::try_new(1, u32::MAX).unwrap()
+            )
+            .is_err()
+        );
         Ok(())
     }
 }

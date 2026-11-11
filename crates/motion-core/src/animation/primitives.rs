@@ -1,7 +1,7 @@
 //! Clock-free analytic oscillators, seeded noise, path motion and mappings.
 
 use super::{Easing, FiniteAnimation, Interpolate, Signal};
-use crate::{Duration, Path2D, Point, ValidationError, Vector2};
+use crate::{Duration, Path2D, Point, Time, ValidationError, Vector2};
 use std::sync::Arc;
 
 /// Upper bound for oscillator frequency and phase so cycle counts stay finite.
@@ -116,7 +116,7 @@ impl OscillatorBuilder {
 }
 
 impl Signal<f64> for Oscillator {
-    fn sample(&self, time: Duration) -> f64 {
+    fn sample(&self, time: Time) -> f64 {
         let cycles = time.as_seconds() * self.frequency + self.phase;
         debug_assert!(
             cycles.is_finite(),
@@ -280,7 +280,7 @@ impl NoiseBuilder {
 }
 
 impl Signal<f64> for Noise {
-    fn sample(&self, time: Duration) -> f64 {
+    fn sample(&self, time: Time) -> f64 {
         let mut position = time.as_seconds() * self.frequency;
         let mut amplitude = 1.0;
         let mut value = 0.0;
@@ -317,9 +317,8 @@ pub struct FollowPath {
 }
 
 impl FollowPath {
-    /// Creates path motion with a nonnegative duration; zero jumps to the end.
+    /// Creates path motion; a zero duration jumps to the end.
     pub fn new(path: impl Into<Arc<Path2D>>, duration: Duration) -> Self {
-        assert!(duration >= Duration::ZERO);
         Self {
             path: path.into(),
             duration,
@@ -329,18 +328,17 @@ impl FollowPath {
 
     /// Sets the normalized distance easing.
     pub fn easing(mut self, easing: Easing) -> Self {
-        easing.try_validate().expect("Valid path easing");
         self.easing = easing;
         self
     }
 }
 
 impl Signal<PathSample> for FollowPath {
-    fn sample(&self, time: Duration) -> PathSample {
+    fn sample(&self, time: Time) -> PathSample {
         let progress = if self.duration == Duration::ZERO {
-            if time < Duration::ZERO { 0.0 } else { 1.0 }
+            if time < Time::ZERO { 0.0 } else { 1.0 }
         } else {
-            (time / self.duration).clamp(0.0, 1.0)
+            (time.ticks() as f64 / self.duration.ticks() as f64).clamp(0.0, 1.0)
         };
         let (position, tangent) = self
             .path
@@ -505,19 +503,19 @@ mod tests {
                 .build()
                 .unwrap();
             assert_eq!(
-                value.sample(125.milliseconds()),
-                value.sample(625.milliseconds())
+                value.sample(125.milliseconds().after_origin()),
+                value.sample(625.milliseconds().after_origin())
             );
             assert_eq!(
-                value.sample((-375).milliseconds()),
-                value.sample(125.milliseconds())
+                value.sample(Time::ZERO - 375.milliseconds()),
+                value.sample(125.milliseconds().after_origin())
             );
         }
         assert_eq!(
             Oscillator::builder(Waveform::Triangle, 1.0)
                 .build()
                 .unwrap()
-                .sample(250.milliseconds()),
+                .sample(250.milliseconds().after_origin()),
             1.0
         );
     }
@@ -526,10 +524,10 @@ mod tests {
     fn noise_and_vector_replay_share_the_particle_noise_primitive() {
         let noise = Noise::new(17);
         for time in [
-            500.milliseconds(),
-            (-200).milliseconds(),
-            3.seconds(),
-            500.milliseconds(),
+            500.milliseconds().after_origin(),
+            Time::ZERO - 200.milliseconds(),
+            3.seconds().after_origin(),
+            500.milliseconds().after_origin(),
         ] {
             assert_eq!(noise.sample(time), value_noise(time.as_seconds(), 17).0);
             assert!(
@@ -538,12 +536,12 @@ mod tests {
         }
         let vector = noise.vector();
         assert_eq!(
-            vector.sample(500.milliseconds()),
-            vector.sample(500.milliseconds())
+            vector.sample(500.milliseconds().after_origin()),
+            vector.sample(500.milliseconds().after_origin())
         );
         assert_ne!(
-            vector.sample(500.milliseconds()).x,
-            vector.sample(500.milliseconds()).y
+            vector.sample(500.milliseconds().after_origin()).x,
+            vector.sample(500.milliseconds().after_origin()).y
         );
     }
 
@@ -555,10 +553,19 @@ mod tests {
             .unwrap();
         let motion = FollowPath::new(path, 2.seconds());
         assert_eq!(motion.duration(), 2.seconds());
-        assert_eq!(motion.sample(1.seconds()).position, Point::new(5.0, 0.0));
-        assert_eq!(motion.sample((-1).seconds()).position, Point::ORIGIN);
-        assert_eq!(motion.sample(3.seconds()).position, Point::new(10.0, 0.0));
-        assert_eq!(motion.sample(1.seconds()).angle, 0.0);
+        assert_eq!(
+            motion.sample(1.seconds().after_origin()).position,
+            Point::new(5.0, 0.0)
+        );
+        assert_eq!(
+            motion.sample(Time::ZERO - 1.seconds()).position,
+            Point::ORIGIN
+        );
+        assert_eq!(
+            motion.sample(3.seconds().after_origin()).position,
+            Point::new(10.0, 0.0)
+        );
+        assert_eq!(motion.sample(1.seconds().after_origin()).angle, 0.0);
     }
 
     #[test]
@@ -626,7 +633,7 @@ mod tests {
                 .is_err()
         );
         let extreme = oscillator(1.0e290).build().unwrap();
-        assert!(extreme.sample(Duration::from_ticks(i64::MAX)).is_finite());
+        assert!(extreme.sample(Time::from_ticks(i64::MAX)).is_finite());
         let noise = Noise::builder(1);
         assert!(noise.clone().frequency(-1.0).build().is_err());
         assert!(noise.clone().octaves(0).build().is_err());

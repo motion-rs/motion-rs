@@ -24,7 +24,7 @@ fn public_yuv10_output_uses_packing_and_preserves_unaligned_fallback() -> Result
                 ),
             )
         };
-        let base = Composition::new(width, 6, crate::FrameClock::new(24, 2));
+        let base = Composition::new(width, 6, crate::FrameClock::new(motion_core::fps!(24), 2));
         let mut cpu = base
             .clone()
             .configure(|options| options.backend(Renderer::Cpu.into()))
@@ -104,7 +104,7 @@ fn explicit_requests_preserve_exact_time_project_diagnostics_and_atomic_targets(
         FrameRequest {
             at: FrameAt::Time(1.milliseconds().after_origin()),
             frame_rate: motion_core::FrameRate::NTSC,
-            duration: 1.seconds().after_origin().since_origin(),
+            duration: 1.seconds(),
             background: None,
             target: crate::RenderTarget::Memory(target),
             format: crate::PixelFormat::SrgbRgba8 {
@@ -137,7 +137,7 @@ fn explicit_requests_preserve_exact_time_project_diagnostics_and_atomic_targets(
     assert!(session.diagnostics().errors().is_empty());
     assert!(target.planes()[0].bytes().iter().all(|byte| *byte == 0));
     let duration =
-        motion_core::Duration::from_frame(i64::from(u32::MAX), motion_core::FrameRate::NTSC);
+        motion_core::Duration::from_frame(u64::from(u32::MAX), motion_core::FrameRate::NTSC);
     session.render(
         FrameRequest {
             duration,
@@ -159,11 +159,12 @@ fn global_shutter_averages_complete_frames_and_preserves_old_once_contract() -> 
         motion_core::BlendSpace::LinearRgb,
         motion_core::BlendSpace::Srgb,
     ] {
-        let base = Composition::new(4, 2, crate::FrameClock::new(1, 3)).with_options(
-            crate::RenderOptions::default()
-                .background(motion_core::Color::BLACK)
-                .blend_space(space),
-        )?;
+        let base = Composition::new(4, 2, crate::FrameClock::new(motion_core::fps!(1), 3))
+            .with_options(
+                crate::RenderOptions::default()
+                    .background(motion_core::Color::BLACK)
+                    .blend_space(space),
+            )?;
         let configured = base.clone().configure(|options| {
             options.motion_blur(motion_core::MotionBlur {
                 shutter_angle: 360.0,
@@ -241,7 +242,7 @@ fn global_shutter_averages_complete_frames_and_preserves_old_once_contract() -> 
 }
 
 fn composition() -> Composition {
-    Composition::new(8, 4, crate::FrameClock::new(24, 12))
+    Composition::new(8, 4, crate::FrameClock::new(motion_core::fps!(24), 12))
         .with_options(crate::RenderOptions::default().background(Color::rgb(20, 40, 60)))
         .unwrap()
 }
@@ -264,8 +265,8 @@ fn rational_clock_is_exact_for_fractional_rates() -> Result {
         motion_core::FrameRate::NTSC_FILM,
         motion_core::FrameRate::NTSC,
         motion_core::FrameRate::NTSC_DOUBLE,
-        motion_core::FrameRate::new(11, 1),
-        motion_core::FrameRate::new(123_457, 1_001),
+        motion_core::FrameRate::try_new(11, 1).unwrap(),
+        motion_core::FrameRate::try_new(123_457, 1_001).unwrap(),
     ] {
         let composition = composition().with_clock(crate::FrameClock::new(rate, 1001));
         assert_eq!(composition.frame_rate(), rate);
@@ -288,12 +289,16 @@ fn rational_clock_is_exact_for_fractional_rates() -> Result {
             })?;
         }
     }
-    let composition = composition().with_clock(crate::FrameClock::new(24, 150));
-    assert_eq!(composition.frame_rate(), motion_core::FrameRate::from(24));
+    let composition = composition().with_clock(crate::FrameClock::new(motion_core::fps!(24), 150));
+    assert_eq!(composition.frame_rate(), motion_core::fps!(24));
     for (rate, frames, field) in [
-        (motion_core::FrameRate::new(u32::MAX, 1), 1, "frame_rate"),
         (
-            motion_core::FrameRate::new(1, u32::MAX),
+            motion_core::FrameRate::try_new(u32::MAX, 1).unwrap(),
+            1,
+            "frame_rate",
+        ),
+        (
+            motion_core::FrameRate::try_new(1, u32::MAX).unwrap(),
             u32::MAX,
             "frame_count",
         ),
@@ -314,11 +319,12 @@ fn rational_clock_is_exact_for_fractional_rates() -> Result {
 #[test]
 fn composition_frame_counts_are_u64_and_duration_is_checked() -> Result {
     let count = u64::from(u32::MAX) + 1;
-    let composition = composition().with_clock(crate::FrameClock::new(30, count));
+    let composition =
+        composition().with_clock(crate::FrameClock::new(motion_core::fps!(30), count));
     assert_eq!(composition.frame_count(), count);
     composition.preflight()?;
     let error = composition
-        .with_clock(crate::FrameClock::new(30, u64::MAX))
+        .with_clock(crate::FrameClock::new(motion_core::fps!(30), u64::MAX))
         .preflight()
         .unwrap_err();
     assert_eq!(error.field, "frame_count");
@@ -392,7 +398,7 @@ fn composition_raster_policy_is_inherited_and_overrides_are_local() -> Result {
         );
     }
     assert!(
-        Composition::new(0, 4, crate::FrameClock::new(30, 150))
+        Composition::new(0, 4, crate::FrameClock::new(motion_core::fps!(30), 150))
             .with_options(crate::RenderOptions::default().limits(configured_limits))
             .is_err()
     );
@@ -408,7 +414,7 @@ fn composition_raster_policy_is_inherited_and_overrides_are_local() -> Result {
 
 #[test]
 fn cpu_design_mapping_and_background_ignore_background_alpha() -> Result {
-    let composition = Composition::new(8, 4, crate::FrameClock::new(30, 150))
+    let composition = Composition::new(8, 4, crate::FrameClock::new(motion_core::fps!(30), 150))
         .with_options(crate::RenderOptions::default().background(Color::rgba(0, 0, 0, 0)))?;
     let snapshot = composition.render_frame(0, Size::new(4.0, 4.0), |context| {
         assert_eq!(context.size(), Size::new(4.0, 4.0));
@@ -472,7 +478,7 @@ fn cpu_repeated_and_out_of_order_frames_are_cache_independent() -> Result {
             evaluations.set(evaluations.get() + 1);
             assert_eq!(
                 context.time(),
-                Time::from_frame(i64::from(index), motion_core::FrameRate::from(24))
+                Time::from_frame(i64::from(index), motion_core::fps!(24))
             );
             assert_eq!(context.global_time(), context.time());
             let offset = context.cache("offset", || {
@@ -669,8 +675,8 @@ fn cpu_context_policy_and_failed_limit_updates_do_not_fall_back() -> Result {
 #[test]
 fn cpu_invalid_configuration_and_index_fail_before_evaluation() -> Result {
     for composition in [
-        Composition::new(0, 4, crate::FrameClock::new(30, 150)),
-        Composition::new(8, 4, crate::FrameClock::new(30, 0)),
+        Composition::new(0, 4, crate::FrameClock::new(motion_core::fps!(30), 150)),
+        Composition::new(8, 4, crate::FrameClock::new(motion_core::fps!(30), 0)),
     ] {
         assert!(
             composition
@@ -761,10 +767,14 @@ fn gpu_selection_is_explicit_and_lazy_without_a_device() -> Result {
 #[ignore = "requires separate authorization to initialize native GPU devices"]
 fn gpu_device_session_seek_budget_and_recovery_match_cpu() -> Result {
     for (width, height) in [(8, 4), (65, 37), (127, 73)] {
-        let composition = Composition::new(width, height, crate::FrameClock::new(24, 12))
-            .with_options(
-                crate::RenderOptions::default().background(motion_core::Color::rgb(20, 40, 60)),
-            )?;
+        let composition = Composition::new(
+            width,
+            height,
+            crate::FrameClock::new(motion_core::fps!(24), 12),
+        )
+        .with_options(
+            crate::RenderOptions::default().background(motion_core::Color::rgb(20, 40, 60)),
+        )?;
         let mut cpu = composition.frame_renderer(Size::new(8.0, 4.0))?;
         let mut gpu = composition
             .configure(|options| options.backend(Renderer::Gpu.into()))
@@ -776,7 +786,7 @@ fn gpu_device_session_seek_budget_and_recovery_match_cpu() -> Result {
             let build = |context: &SceneContext<'_>| {
                 assert_eq!(
                     context.time(),
-                    Time::from_frame(i64::from(index), motion_core::FrameRate::from(24))
+                    Time::from_frame(i64::from(index), motion_core::fps!(24))
                 );
                 Node::group([
                     tile().translate(f64::from(index % 3) * 0.25, 0.0),

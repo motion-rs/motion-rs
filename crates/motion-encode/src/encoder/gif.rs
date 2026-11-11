@@ -225,7 +225,7 @@ mod tests {
     #[test]
     fn gif_resamples_at_its_requested_rate_and_preserves_transparency() -> Result {
         let directory = tempfile::tempdir()?;
-        let timeline = Timeline::new(Size::new(3.0, 3.0), 30)
+        let timeline = Timeline::new(Size::new(3.0, 3.0), motion_core::fps!(30))
             .track(|track| {
                 track.push(motion_core::Scene::with_duration(
                     |_: &motion_core::SceneContext<'_>| Node::empty(),
@@ -234,7 +234,7 @@ mod tests {
             })
             .build()?;
         let options = ExportOptions::new(directory.path().join("output.gif")).codec(Codec::Gif {
-            frame_rate: FrameRate::from(10),
+            frame_rate: motion_core::fps!(10),
             colors: 16,
         });
         let report = crate::export(&timeline, &options, &crate::NoProgress)?;

@@ -324,7 +324,7 @@ pub fn export_audio(
             .range(range.clone())
             .resampler(options.resampler),
     )?;
-    let frames = ceil_frames(range.end - range.start, options.sample_rate)?;
+    let frames = ceil_frames(range.end - range.start, options.sample_rate);
     let channels = options.channels.count();
     let (header, rf64) = wav_header(
         options.format,
@@ -417,7 +417,7 @@ mod tests {
             (0..4800).flat_map(|_| [level, -level / 2.0]).collect(),
         )
         .unwrap();
-        Timeline::new(Size::new(8.0, 4.0), 30)
+        Timeline::new(Size::new(8.0, 4.0), motion_core::fps!(30))
             .audio(AudioClip::source(pcm))
             .build()
             .unwrap()
@@ -510,7 +510,7 @@ mod tests {
         );
         assert!(
             export_audio(
-                &Timeline::new(Size::new(8.0, 4.0), 30).build()?,
+                &Timeline::new(Size::new(8.0, 4.0), motion_core::fps!(30)).build()?,
                 &AudioExportOptions::new(&bad)
             )
             .is_err()

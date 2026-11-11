@@ -101,7 +101,7 @@ pub use shape::{
     Arc as ArcShape, Arrow, ArrowHead, Circle, Ellipse, FunctionGraph, Line, Polygon, Polyline,
     RegularPolygon, Ring, RoundedRect, Spline, Star,
 };
-pub use time::{Duration, FrameRate, TICKS_PER_SECOND, Time, TimeLiteral};
+pub use time::{Duration, FrameRate, TICKS_PER_SECOND, Time, TimeLiteral, TimeOffset};
 pub use validation::{SceneStats, ValidationError, ValidationErrorKind, ValidationLimits};
 
 /// A classified failure retaining its original source.
@@ -145,7 +145,9 @@ pub mod prelude {
     pub use crate::{
         CrossFade, Iris, IrisShape, MotionBlur, Push, Slide, Transition, Wipe, ZoomBlur,
     };
-    pub use crate::{Duration, FrameRate, Random, TICKS_PER_SECOND, Time, TimeLiteral};
+    pub use crate::{
+        Duration, FrameRate, Random, TICKS_PER_SECOND, Time, TimeLiteral, TimeOffset, fps,
+    };
     pub use crate::{
         Error, ErrorKind, ErrorReport, SceneLimits, SceneStats, ValidationError,
         ValidationErrorKind, ValidationLimits,

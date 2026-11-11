@@ -6,11 +6,11 @@ use motion_core::TimeLiteral;
 #[test]
 fn nested_audio_preparation_depth_fails_without_poisoning_following_mixes() -> motion_core::Result {
     use motion_core::{Size, Timeline};
-    let mut timeline = Timeline::new(Size::new(8.0, 8.0), 30)
+    let mut timeline = Timeline::new(Size::new(8.0, 8.0), motion_core::fps!(30))
         .audio(AudioClip::source(PcmBuffer::new(8000, 1, vec![0.1; 8])?))
         .build()?;
     for _ in 0..17 {
-        timeline = Timeline::new(Size::new(8.0, 8.0), 30)
+        timeline = Timeline::new(Size::new(8.0, 8.0), motion_core::fps!(30))
             .audio(AudioClip::composition(timeline).duration(1.milliseconds()))
             .build()?;
     }
@@ -47,13 +47,13 @@ fn bus_tails_meter_windows_and_spatial_controls_are_preserved() -> motion_core::
             wet: 0.5,
             tail: 200.milliseconds(),
         }));
-    let timeline = Timeline::new(Size::new(8.0, 8.0), 30)
+    let timeline = Timeline::new(Size::new(8.0, 8.0), motion_core::fps!(30))
         .audio(clip.clone())
         .audio_bus(bus.clone())
         .build()?;
     assert_eq!(timeline.duration(), 1200.milliseconds());
     assert_eq!(
-        Timeline::new(Size::new(8.0, 8.0), 30)
+        Timeline::new(Size::new(8.0, 8.0), motion_core::fps!(30))
             .audio_bus(bus)
             .audio(clip)
             .build()?
@@ -159,7 +159,7 @@ fn buses_nested_master_and_local_sound_declarations_are_preserved() -> motion_co
     let pcm = PcmBuffer::new(8000, 2, vec![0.1; 16000])?;
     let mut bus = AudioBus::new("voice");
     bus.gain_db = -6.0;
-    let child = Timeline::new(Size::new(8.0, 8.0), 30)
+    let child = Timeline::new(Size::new(8.0, 8.0), motion_core::fps!(30))
         .audio(AudioClip::source(pcm.clone()).bus("voice"))
         .audio_bus(bus)
         .master(Master {
@@ -167,7 +167,7 @@ fn buses_nested_master_and_local_sound_declarations_are_preserved() -> motion_co
             ..Default::default()
         })
         .build()?;
-    let parent = Timeline::new(Size::new(8.0, 8.0), 30)
+    let parent = Timeline::new(Size::new(8.0, 8.0), motion_core::fps!(30))
         .track(|track| track.nest(child.clone()))
         .master(Master {
             gain_db: -6.0,
@@ -186,12 +186,12 @@ fn buses_nested_master_and_local_sound_declarations_are_preserved() -> motion_co
     let mut seek = [0.0; 2];
     window.read(0, &mut seek);
     assert_eq!(samples, seek);
-    let child = Timeline::new(Size::new(8.0, 8.0), 30)
+    let child = Timeline::new(Size::new(8.0, 8.0), motion_core::fps!(30))
         .track(|track| track.scene(1.seconds(), |_| Node::empty()))
         .audio(AudioClip::source(pcm.clone()).start(100.milliseconds().after_origin()))
         .build()?;
     assert_eq!(child.soundtrack().clips().len(), 1);
-    let timeline = Timeline::new(Size::new(8.0, 8.0), 30)
+    let timeline = Timeline::new(Size::new(8.0, 8.0), motion_core::fps!(30))
         .track(|track| track.gap(1.seconds()).nest(child))
         .build()?;
     assert_eq!(timeline.soundtrack().clips().len(), 1);
@@ -208,7 +208,7 @@ fn buses_nested_master_and_local_sound_declarations_are_preserved() -> motion_co
 #[test]
 fn envelope_ticks_round_trip_at_fractional_sample_boundaries_and_hard_pan_is_exact()
 -> motion_core::Result {
-    let boundary = Duration::from_frame(1, motion_core::FrameRate::from(8192));
+    let boundary = Duration::from_frame(1, motion_core::fps!(8192));
     let envelope = motion_core::Tween::new(0.0, 1.0, boundary);
     let clip = AudioClip::source(PcmBuffer::new(8192, 1, vec![1.0; 8])?)
         .pan(1.0)
@@ -634,7 +634,7 @@ fn clip_ducking_lowers_music_under_the_trigger_and_recovers() -> motion_core::Re
     let duck = Duck::new(-40.0, 12.0)
         .timing(20.milliseconds(), 100.milliseconds())
         .lookahead(10.milliseconds());
-    let timeline = Timeline::new(Size::new(8.0, 8.0), 30)
+    let timeline = Timeline::new(Size::new(8.0, 8.0), motion_core::fps!(30))
         .audio(music.ducked_by(&voice, duck))
         .audio(voice.clone())
         .build()?;
@@ -643,7 +643,7 @@ fn clip_ducking_lowers_music_under_the_trigger_and_recovers() -> motion_core::Re
     let mid = f64::from(peak(&mix, 1.3, 1.6));
     let voice_only = f64::from(peak(
         &MixedAudio::new(
-            &Timeline::new(Size::new(8.0, 8.0), 30)
+            &Timeline::new(Size::new(8.0, 8.0), motion_core::fps!(30))
                 .audio(voice.clone())
                 .build()?,
             MixOptions::new(8000),
@@ -670,7 +670,7 @@ fn bus_ducking_uses_earlier_buses_and_rejects_forward_or_unknown_triggers() -> m
     let (voice, music) = ducking_fixture()?;
     let duck = Duck::new(-40.0, 20.0).timing(0.milliseconds(), 50.milliseconds());
     let build = |trigger: &str| {
-        Timeline::new(Size::new(8.0, 8.0), 30)
+        Timeline::new(Size::new(8.0, 8.0), motion_core::fps!(30))
             .audio(voice.clone().bus("voice"))
             .audio(music.clone().bus("music"))
             .audio_bus(AudioBus::new("voice"))
@@ -687,7 +687,7 @@ fn bus_ducking_uses_earlier_buses_and_rejects_forward_or_unknown_triggers() -> m
     let invalid_duck = Duck::new(5.0, 1.0);
     assert!(invalid_duck.validate().is_err());
     assert!(
-        Timeline::new(Size::new(8.0, 8.0), 30)
+        Timeline::new(Size::new(8.0, 8.0), motion_core::fps!(30))
             .audio(music.clone().ducked_by(&voice, invalid_duck))
             .build()
             .is_err()
@@ -712,9 +712,10 @@ fn ducking_triggers_follow_relocation_and_sinc_mixing_is_selectable() -> motion_
         .expect("placed");
     assert!(cropped.parameters().ducking.is_empty());
     let source = PcmBuffer::new(44_100, 1, vec![0.25; 4410])?;
-    let timeline = motion_core::Timeline::new(motion_core::Size::new(8.0, 8.0), 30)
-        .audio(AudioClip::source(source))
-        .build()?;
+    let timeline =
+        motion_core::Timeline::new(motion_core::Size::new(8.0, 8.0), motion_core::fps!(30))
+            .audio(AudioClip::source(source))
+            .build()?;
     let sinc = MixedAudio::new(
         &timeline,
         MixOptions::new(48_000).resampler(ResampleQuality::Sinc),

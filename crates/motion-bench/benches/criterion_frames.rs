@@ -20,16 +20,20 @@ fn measure_frame(
             ..ValidationLimits::default()
         })
         .expect("bounded benchmark structure");
-    let mut session = Composition::new(size.0, size.1, motion::render::FrameClock::new(30, 150))
-        .with_options(
-            motion::render::RenderOptions::default()
-                .context(context)
-                .resources(resources.clone())
-                .limits(limits),
-        )
-        .expect("bounded benchmark raster policy")
-        .frame_renderer(Size::new(size.0 as f64, size.1 as f64))
-        .expect("valid CPU benchmark session");
+    let mut session = Composition::new(
+        size.0,
+        size.1,
+        motion::render::FrameClock::new(motion::fps!(30), 150),
+    )
+    .with_options(
+        motion::render::RenderOptions::default()
+            .context(context)
+            .resources(resources.clone())
+            .limits(limits),
+    )
+    .expect("bounded benchmark raster policy")
+    .frame_renderer(Size::new(size.0 as f64, size.1 as f64))
+    .expect("valid CPU benchmark session");
     let expected = session
         .render_frame(30, &build)
         .expect("benchmark admission");

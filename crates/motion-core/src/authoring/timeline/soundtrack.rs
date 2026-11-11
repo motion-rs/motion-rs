@@ -62,7 +62,7 @@ impl Soundtrack {
     /// Frame-aligned end of `clip` including bus effect tails. Add-time checks
     /// and the final duration share this one definition.
     pub(super) fn clip_end(&self, clip: &AudioClip, rate: FrameRate) -> crate::Result<Duration> {
-        let mut end = clip.end()?.since_origin();
+        let mut end = clip.end()?.since_origin().magnitude();
         if let Some(bus) = self
             .buses
             .iter()
@@ -70,7 +70,7 @@ impl Soundtrack {
         {
             for effect in &bus.effects {
                 let tail = effect.tail();
-                if tail < Duration::ZERO || tail.as_seconds() > 30.0 {
+                if tail.as_seconds() > 30.0 {
                     return Err(invalid("Bus effect tail requires 0..=30 seconds"));
                 }
                 end = Duration::from_ticks(

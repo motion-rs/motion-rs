@@ -113,7 +113,7 @@ type TextureRegistrar = dyn Fn(&wgpu::Texture) -> egui::TextureId;
 /// # fn main() -> motion_core::Result {
 /// studio::run(StudioScene::new(
 ///     "Study",
-///     Composition::new(640, 360, motion_render::FrameClock::new(30, 90)),
+///     Composition::new(640, 360, motion_render::FrameClock::new(fps!(30), 90)),
 ///     Size::new(640.0, 360.0),
 ///     |context| {
 ///         Node::from(

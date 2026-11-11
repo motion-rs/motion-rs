@@ -273,7 +273,7 @@ pub(crate) fn render(
                 let states = sample(
                     context.time() - *length
                         + Duration::from_ticks(
-                            length.ticks() * i64::from(index) / i64::from(count),
+                            length.ticks() * u64::from(index) / u64::from(count),
                         ),
                 )?;
                 retained = retained

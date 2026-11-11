@@ -7,8 +7,8 @@ use super::value::Prop;
 use crate::effects::{ClipShapeSpec, FilterSpec, MaskSpec};
 use crate::element::Element;
 use motion_core::{
-    BlendMode, Cdl, Circle, ClipMode, Color, Duration, Filter, FrameRate, MaskMode, Node,
-    NodeModifiers, Path2D, Pivot, Rect, SceneCache, SceneContext, Size, Vector2,
+    BlendMode, Cdl, Circle, ClipMode, Color, Filter, MaskMode, Node, NodeModifiers, Path2D, Pivot,
+    Rect, SceneCache, SceneContext, Size, Time, Vector2,
 };
 use std::sync::Arc;
 
@@ -24,11 +24,8 @@ pub(crate) enum Built {
 
 impl Built {
     /// Builds from scene-local time alone, evaluating once when nothing varies.
-    pub(crate) fn new(
-        varying: bool,
-        build: impl Fn(Duration) -> Node + Send + Sync + 'static,
-    ) -> Self {
-        Self::with_context(varying, move |context| build(context.elapsed()))
+    pub(crate) fn new(varying: bool, build: impl Fn(Time) -> Node + Send + Sync + 'static) -> Self {
+        Self::with_context(varying, move |context| build(context.time()))
     }
 
     /// Builds from the full scene context, evaluating once when nothing varies.
@@ -45,7 +42,7 @@ impl Built {
         let cache = SceneCache::default();
         let placeholder = SceneContext::new(
             motion_core::Time::ZERO,
-            FrameRate::from(1),
+            motion_core::fps!(1),
             Size::new(1.0, 1.0),
             &cache,
         );
@@ -287,7 +284,7 @@ impl Modifiers {
     }
 
     fn apply(&self, node: Node, context: &SceneContext<'_>) -> Node {
-        let time = context.elapsed();
+        let time = context.time();
         let mut node = node;
         if let Some(pivot) = self.pivot {
             node = node.pivot(pivot);
@@ -357,7 +354,7 @@ impl FilterProp {
         }
     }
 
-    fn at(&self, time: Duration) -> Filter {
+    fn at(&self, time: Time) -> Filter {
         match self {
             Self::Blur(sigma) => Filter::Blur {
                 sigma: sigma.at(time),
@@ -401,7 +398,7 @@ impl ClipProp {
         }
     }
 
-    fn apply(&self, node: Node, mode: ClipMode, time: Duration) -> Node {
+    fn apply(&self, node: Node, mode: ClipMode, time: Time) -> Node {
         match self {
             Self::Rect(bounds) => {
                 let [left, top, right, bottom] = bounds.at(time);

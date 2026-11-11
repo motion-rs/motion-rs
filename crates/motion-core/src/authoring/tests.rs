@@ -413,7 +413,7 @@ fn validation_counts_original_structure_and_checks_zero_opacity_content() {
 
 #[test]
 fn scene_closures_duration_wrappers_and_dynamic_sharing_use_explicit_context() {
-    use crate::{FrameRate, SceneCache, Size, TimeLiteral};
+    use crate::{SceneCache, Size, TimeLiteral};
     let callback = |context: &SceneContext<'_>| leaf(context.seconds());
     assert_eq!(callback.duration(), None);
     let scene = callback.with_duration(2.seconds());
@@ -422,7 +422,7 @@ fn scene_closures_duration_wrappers_and_dynamic_sharing_use_explicit_context() {
     let cache = SceneCache::new(0);
     let context = SceneContext::new(
         1.seconds().after_origin(),
-        FrameRate::from(30),
+        crate::fps!(30),
         Size::new(16.0, 16.0),
         &cache,
     );
@@ -447,7 +447,6 @@ fn scene_closures_duration_wrappers_and_dynamic_sharing_use_explicit_context() {
         shared.clone().with_duration(Duration::ZERO).duration(),
         Some(Duration::ZERO)
     );
-    assert!(std::panic::catch_unwind(|| callback.with_duration(Duration::from_ticks(-1))).is_err());
 }
 
 #[test]

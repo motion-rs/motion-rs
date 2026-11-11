@@ -20,8 +20,8 @@ pub(super) fn cpu_stages(
     use serde_json::json;
     let cache = SceneCache::default();
     let context = SceneContext::new(
-        Time::from_frame(45, FrameRate::from(30)),
-        FrameRate::from(30),
+        Time::from_frame(45, motion::fps!(30)),
+        motion::fps!(30),
         Size::new(640.0, 360.0),
         &cache,
     )

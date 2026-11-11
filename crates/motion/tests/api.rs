@@ -93,7 +93,7 @@ mod canonical_api_tests {
 
     #[test]
     fn author_prelude_supports_result_tuples_memo_math_and_track_scene() -> motion::Result {
-        let timeline = Timeline::new(Size::new(8.0, 4.0), 30)
+        let timeline = Timeline::new(Size::new(8.0, 4.0), motion::fps!(30))
             .track(|track| {
                 track.scene(1_u32.seconds(), |context| -> motion::Result<_> {
                     let title = context.memo(key::F64(2.0), || {
@@ -124,7 +124,10 @@ mod canonical_api_tests {
                 let sampled: motion_core::Time = context.time();
                 assert_eq!(sampled, time);
                 assert_eq!(context.frame_rate(), rate);
-                assert_eq!(context.sample(&movement), time.since_origin() / duration);
+                assert_eq!(
+                    context.sample(&movement),
+                    time.since_origin().magnitude() / duration
+                );
                 Node::empty()
             })?;
         assert_eq!(
@@ -148,7 +151,7 @@ mod canonical_api_tests {
         fn scene_contract(_: &dyn Scene) {}
 
         fn animation_contract(value: &dyn Signal<f64>) -> f64 {
-            value.sample(500.milliseconds())
+            value.sample(500.milliseconds().after_origin())
         }
         let callback = |context: &SceneContext<'_>| {
             Node::from(context.bounds().fill(Color::rgb(20, 150, 125)))
@@ -162,8 +165,9 @@ mod canonical_api_tests {
         let timeline = Timeline::try_new(Size::new(8.0, 4.0), FrameRate::NTSC)?
             .try_track(|track| track.try_push(callback.with_duration(1.seconds())))?
             .build()?;
-        let _: FrameRenderer = Composition::new(8, 4, motion::render::FrameClock::new(30, 150))
-            .frame_renderer(timeline.size())?;
+        let _: FrameRenderer =
+            Composition::new(8, 4, motion::render::FrameClock::new(motion::fps!(30), 150))
+                .frame_renderer(timeline.size())?;
         let _span = TextSpan::new("canonical").size(14.0);
         assert_eq!(std::mem::size_of::<Particle>(), 72);
         assert!(Node::empty().measure(ValidationLimits::default()).is_ok());

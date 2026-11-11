@@ -40,7 +40,7 @@ mod tests {
     use super::*;
     use crate::asset::AssetsExt;
     use motion_core::NodeModifiers;
-    use motion_core::{FrameRate, Node, Size};
+    use motion_core::{Node, Size};
     #[cfg(feature = "svg")]
     use motion_render::RenderPrepare;
     use motion_render::{Composition, Renderer};
@@ -157,33 +157,27 @@ mod tests {
         assert_eq!(sequence.size(), motion_core::PixelSize::new(1, 1));
         assert_eq!(sequence.frames().len(), 4);
         for index in [3, 0, 2, 1, 19, 3] {
-            let selected = sequence
-                .frame_at(
-                    motion_core::Duration::from_frame(index, rate),
-                    ImageLoopMode::Once,
-                )
-                .unwrap();
+            let selected = sequence.frame_at(
+                motion_core::Duration::from_frame(index, rate),
+                ImageLoopMode::Once,
+            );
             assert!(Arc::ptr_eq(selected, &images[index.min(3) as usize]));
         }
         let reversed =
             AnimatedImageAsset::from_sequence(images[1..4].iter().rev().cloned().collect(), rate)?;
         for (index, expected) in [(0, 3), (1, 3), (2, 2), (4, 1), (19, 1), (0, 3)] {
-            let selected = reversed
-                .frame_at(
-                    motion_core::Duration::from_frame(index, rate) / 2.0,
-                    ImageLoopMode::Once,
-                )
-                .unwrap();
+            let selected = reversed.frame_at(
+                motion_core::Duration::from_frame(index, rate) / 2.0,
+                ImageLoopMode::Once,
+            );
             assert!(Arc::ptr_eq(selected, &images[expected]));
         }
         let freeze = AnimatedImageAsset::from_sequence(vec![images[2].clone()], rate)?;
         assert!(Arc::ptr_eq(
-            freeze
-                .frame_at(
-                    motion_core::Duration::from_frame(19, rate),
-                    ImageLoopMode::Loop
-                )
-                .unwrap(),
+            freeze.frame_at(
+                motion_core::Duration::from_frame(19, rate),
+                ImageLoopMode::Loop
+            ),
             &images[2]
         ));
         let joined = std::thread::spawn(move || clone).join().unwrap();
@@ -213,7 +207,7 @@ mod tests {
         let assets = motion_core::Assets::new(directory.path())?;
         let sequence = AnimatedImageAsset::from_sequence(
             vec![assets.image("99.dat").get()?, assets.image("01.dat").get()?],
-            motion_core::FrameRate::from(30),
+            motion_core::fps!(30),
         )?;
         assert!(assets.image("missing").get().is_err());
         directory.close()?;
@@ -230,9 +224,9 @@ mod tests {
     #[test]
     fn sequences_preserve_original_trim_rate_and_boundary_tables() -> motion_core::Result {
         use motion_core::{
-            Easing, FrameRate, Keyframes, SceneCache, SceneContext, Signal, Size, Time, TimeLiteral,
+            Easing, Keyframes, SceneCache, SceneContext, Signal, Size, Time, TimeLiteral,
         };
-        let rate = FrameRate::from(24);
+        let rate = motion_core::fps!(24);
         let images = (0..120)
             .map(|index| ImageAsset::from_rgba8(1, 1, vec![index, 0, 0, 255]).map(Arc::new))
             .collect::<motion_core::Result<Vec<_>>>()?;
@@ -256,12 +250,10 @@ mod tests {
             let asset = sequence(indices)?;
             for index in [6, 0, 5, 1, 4, 2, 3, 0] {
                 assert!(Arc::ptr_eq(
-                    asset
-                        .frame_at(
-                            motion_core::Duration::from_frame(index, rate) * speed,
-                            ImageLoopMode::Once
-                        )
-                        .unwrap(),
+                    asset.frame_at(
+                        motion_core::Duration::from_frame(index, rate) * speed,
+                        ImageLoopMode::Once
+                    ),
                     &images[expected[index as usize]]
                 ));
             }
@@ -319,9 +311,7 @@ mod tests {
             let asset = sequence(indices)?;
             for index in [8, 0, 7, 1, 6, 2, 5, 3, 4, 0] {
                 assert!(Arc::ptr_eq(
-                    asset
-                        .frame_at(motion_core::Duration::from_frame(index, rate) * speed, mode)
-                        .unwrap(),
+                    asset.frame_at(motion_core::Duration::from_frame(index, rate) * speed, mode),
                     &images[expected[index as usize]]
                 ));
             }
@@ -339,7 +329,7 @@ mod tests {
         assert_eq!(source.time().as_seconds(), 1.0);
         assert_eq!(
             source
-                .shifted(motion_core::Duration::from_frame(20, rate))
+                .shifted(motion_core::Duration::from_frame(20, rate).offset())
                 .time()
                 .to_frame(rate),
             4
@@ -347,24 +337,20 @@ mod tests {
         assert_eq!(source.size(), Size::new(123.0, 456.0));
         assert_eq!(source.frame_rate(), rate);
         assert_eq!(source.clip_duration(), Some(5.seconds()));
-        assert_eq!(track.sample(source.time().since_origin()), 24.0);
+        assert_eq!(track.sample(source.time()), 24.0);
         Ok(())
     }
 
     #[test]
     fn sequence_rejects_empty_mixed_and_excessive_assets_without_large_allocations()
     -> motion_core::Result {
-        let rate = motion_core::FrameRate::from(30);
+        let rate = motion_core::fps!(30);
         assert!(AnimatedImageAsset::from_sequence(Vec::new(), rate).is_err());
         let small = Arc::new(ImageAsset::from_rgba8(1, 1, vec![0; 4])?);
         let wide = Arc::new(ImageAsset::from_rgba8(2, 1, vec![0; 8])?);
         assert!(AnimatedImageAsset::from_sequence(vec![small.clone(), wide], rate).is_err());
         assert!(AnimatedImageAsset::from_sequence(vec![small.clone(); 4096], rate).is_ok());
         assert!(AnimatedImageAsset::from_sequence(vec![small.clone(); 4097], rate).is_err());
-        assert!(
-            AnimatedImageAsset::from_frames(vec![(small, motion_core::Duration::from_ticks(-1))])
-                .is_err()
-        );
         Ok(())
     }
 
@@ -379,15 +365,19 @@ mod tests {
             .collect::<motion_core::Result<Vec<_>>>()?;
         let sequence = std::sync::Arc::new(AnimatedImageAsset::from_sequence(
             images[1..4].iter().rev().cloned().collect(),
-            FrameRate::from(30),
+            motion_core::fps!(30),
         )?);
         for backend in [
             Renderer::Cpu,
             #[cfg(feature = "gpu")]
             Renderer::Gpu,
         ] {
-            let composition = Composition::new(8, 8, motion_render::FrameClock::new(30, 20))
-                .with_options(motion_render::RenderOptions::default().backend(backend.into()))?;
+            let composition = Composition::new(
+                8,
+                8,
+                motion_render::FrameClock::new(motion_core::fps!(30), 20),
+            )
+            .with_options(motion_render::RenderOptions::default().backend(backend.into()))?;
             let mut actual = composition.frame_renderer(Size::new(8.0, 8.0))?;
             let mut manual = composition.frame_renderer(Size::new(8.0, 8.0))?;
             for (mode, expected) in [

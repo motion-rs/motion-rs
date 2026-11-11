@@ -2,8 +2,8 @@
 
 use motion_core::Shape;
 use motion_core::{
-    Color, DepthOfField, DepthPlane, FrameRate, Node, PixelSize, RasterLimits, Rect, SceneCache,
-    SceneContext, Size, Time, ValidationLimits,
+    Color, DepthOfField, DepthPlane, Node, PixelSize, RasterLimits, Rect, SceneCache, SceneContext,
+    Size, Time, ValidationLimits,
 };
 use motion_render::{FrameBuffer, RenderPrepare};
 
@@ -49,7 +49,7 @@ fn captured(lens: DepthOfField, planes: Vec<DepthPlane>) -> Node {
     let cache = SceneCache::new(0);
     let context = SceneContext::new(
         Time::ZERO,
-        FrameRate::from(30),
+        motion_core::fps!(30),
         Size::new(32.0, 32.0),
         &cache,
     );

@@ -25,7 +25,7 @@ fn main() -> motion::Result {
     let selected = formula
         .select_symbol("c")?
         .apply(|node| node.translate(0.0, -8.0));
-    let timeline = Timeline::try_new(Size::new(480.0, 180.0), 30)?
+    let timeline = Timeline::try_new(Size::new(480.0, 180.0), motion::fps!(30))?
         .try_track(|track| {
             track.try_push(
                 (move |_: &SceneContext<'_>| selected.clone().translate(40.0, 55.0))

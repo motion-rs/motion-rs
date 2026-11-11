@@ -107,7 +107,7 @@ impl StudioApp {
                         .max(0.0);
                     let snapped =
                         grid.offset + motion_core::Duration::from_seconds(index * 60.0 / grid.bpm);
-                    frame = (snapped.to_frame(self.clock.rate).max(0) as u32).min(total - 1);
+                    frame = (snapped.to_frame(self.clock.rate) as u32).min(total - 1);
                 }
             }
             self.seek(frame);
@@ -305,7 +305,7 @@ impl StudioApp {
                     }
                     let mut last_x = f32::NEG_INFINITY;
                     for time in &overview.markers {
-                        let x = position(time.to_frame(self.clock.rate).max(0) as u32);
+                        let x = position(time.to_frame(self.clock.rate) as u32);
                         if x - last_x >= 2.0 && x <= lane.right() {
                             painter.line_segment(
                                 [egui::pos2(x, lane.top()), egui::pos2(x, lane.top() + 7.0)],

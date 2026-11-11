@@ -3,7 +3,9 @@
 use std::hash::Hash;
 use std::sync::Arc;
 
-use crate::{Duration, FrameRate, Interval, Node, Point, Random, Rect, Signal, Size, Time};
+use crate::{
+    Duration, FrameRate, Interval, Node, Point, Random, Rect, Signal, Size, Time, TimeOffset,
+};
 
 mod cache;
 mod partition;
@@ -30,14 +32,14 @@ pub use partition::{CacheLimits, CachePartition, RenderCache};
 /// let cache = SceneCache::new(32);
 /// let tween = Tween::new(0.0, 100.0, 1.seconds());
 /// let evaluate = |time| {
-///     let context = SceneContext::new(time, FrameRate::from(30), Size::new(640.0, 360.0), &cache)
+///     let context = SceneContext::new(time, fps!(30), Size::new(640.0, 360.0), &cache)
 ///         .with_clip_duration(2.seconds());
 ///     let positions = context.cache(("dots", 8_u32), || {
 ///         (0..8_u32)
 ///             .map(|index| Point::new(context.random(("x", index)) * 640.0, 180.0))
 ///             .collect::<Vec<_>>()
 ///     });
-///     let local = context.shifted(500.milliseconds());
+///     let local = context.shifted(500.milliseconds().offset());
 ///     assert_eq!(local.global_time(), time);
 ///     (local.sample(&tween), positions)
 /// };
@@ -140,30 +142,10 @@ impl<'a> SceneContext<'a> {
 
     /// Sets finite clip metadata; zero denotes an instantaneous clip.
     ///
-    /// Panics for negative duration. Sampling time is not clamped to the clip.
+    /// Sampling time is not clamped to the clip.
     pub fn with_clip_duration(mut self, duration: Duration) -> Self {
-        assert!(
-            duration >= Duration::ZERO,
-            "clip duration must be nonnegative"
-        );
         self.clip_duration = Some(duration);
         self
-    }
-
-    /// Sets clip metadata with a recoverable negative-duration diagnostic.
-    pub fn try_with_clip_duration(
-        mut self,
-        duration: Duration,
-    ) -> Result<Self, crate::ValidationError> {
-        if duration < Duration::ZERO {
-            return Err(crate::ValidationError::invalid(
-                "scene_context",
-                "clip_duration",
-                "clip duration must be nonnegative",
-            ));
-        }
-        self.clip_duration = Some(duration);
-        Ok(self)
     }
 
     /// Signed clip-local time.
@@ -186,9 +168,11 @@ impl<'a> SceneContext<'a> {
         self.clip_duration
     }
 
-    /// Clip-local time as a duration since the clip start.
+    /// Clip-local time as a duration since the clip start; zero before the start.
     pub fn elapsed(&self) -> Duration {
-        self.time.since_origin()
+        self.time
+            .duration_since(Time::ZERO)
+            .unwrap_or(Duration::ZERO)
     }
 
     /// Clamped local progress; unconstrained scenes return zero.
@@ -201,15 +185,15 @@ impl<'a> SceneContext<'a> {
 
     /// Clamped progress in a local interval, using integer boundary comparisons.
     ///
-    /// Zero duration jumps at start. Panics for negative duration. Wide integer
+    /// Zero duration jumps at start. Wide integer
     /// differences allow queries across opposite signed tick extremes.
     pub fn progress_in(&self, start: Time, duration: Duration) -> f64 {
-        interval(start, duration).progress(self.time)
+        Interval::new(start, duration).progress(self.time)
     }
 
     /// Eased local interval progress, with the same clamping as progress_in.
     pub fn ease_in(&self, start: Time, duration: Duration, easing: crate::Easing) -> f64 {
-        interval(start, duration).ease(self.time, easing)
+        Interval::new(start, duration).ease(self.time, easing)
     }
 
     /// Exact rational authoring frame rate shared by still, preview and export clocks.
@@ -230,20 +214,20 @@ impl<'a> SceneContext<'a> {
         self.nested_scene
     }
 
-    /// Converts a signed frame count directly to ticks without cumulative rounding.
-    pub fn frames(&self, count: i64) -> Duration {
+    /// Converts a frame count directly to ticks without cumulative rounding.
+    pub fn frames(&self, count: u64) -> Duration {
         Duration::from_frame(count, self.frame_rate)
     }
 
     /// Samples an animation using local, not global, time.
     pub fn sample<Value>(&self, animation: &(impl Signal<Value> + ?Sized)) -> Value {
-        animation.sample(self.time.since_origin())
+        animation.sample(self.time)
     }
 
     /// Subtracts an offset from local time, preserving global time and clip metadata.
     ///
     /// Offsets can be negative. Panics if the resulting local ticks overflow.
-    pub fn shifted(&self, offset: Duration) -> Self {
+    pub fn shifted(&self, offset: TimeOffset) -> Self {
         Self {
             time: self.time - offset,
             ..*self
@@ -251,7 +235,7 @@ impl<'a> SceneContext<'a> {
     }
 
     /// Subtracts a local offset without panicking on tick overflow.
-    pub fn try_shifted(&self, offset: Duration) -> Result<Self, crate::ValidationError> {
+    pub fn try_shifted(&self, offset: TimeOffset) -> Result<Self, crate::ValidationError> {
         let ticks = self
             .time
             .ticks()
@@ -269,7 +253,7 @@ impl<'a> SceneContext<'a> {
         })
     }
 
-    pub(crate) fn resampled(&self, offset: Duration) -> Result<Self, crate::ValidationError> {
+    pub(crate) fn resampled(&self, offset: TimeOffset) -> Result<Self, crate::ValidationError> {
         let shift = |time: Time| {
             time.ticks()
                 .checked_add(offset.ticks())
@@ -316,14 +300,14 @@ impl<'a> SceneContext<'a> {
     ///
     /// Outside the interval, including zero duration, returns an empty node and
     /// does not call build. Global time stays unchanged. Integer differences avoid
-    /// overflowing the endpoint sum. Panics for negative duration.
+    /// overflowing the endpoint sum.
     pub fn during(
         &self,
         start: Time,
         duration: Duration,
         build: impl FnOnce(&SceneContext<'a>) -> Node,
     ) -> Node {
-        let interval = interval(start, duration);
+        let interval = Interval::new(start, duration);
         if !interval.contains(self.time) {
             Node::empty()
         } else {
@@ -344,7 +328,7 @@ impl<'a> SceneContext<'a> {
     /// Finite children use their half-open duration. Infinite children are active
     /// from offset onward and clear inherited clip-duration metadata. The parent
     /// context itself is never clamped; its caller controls the parent interval.
-    /// Panics for invalid child duration or unrepresentable shifted local ticks.
+    /// Panics for unrepresentable shifted local ticks.
     /// Timeline children clip and contain their own design viewport;
     /// changing the child frame grid never quantizes the elapsed parent ticks.
     pub fn embed(&self, scene: &dyn crate::authoring::Scene, offset: Time) -> Node {
@@ -421,7 +405,7 @@ impl<'a> SceneContext<'a> {
     /// let cache = SceneCache::new(0);
     /// let context = SceneContext::new(
     ///     Time::ZERO,
-    ///     FrameRate::from(30),
+    ///     fps!(30),
     ///     Size::new(200.0, 100.0),
     ///     &cache,
     /// );
@@ -566,8 +550,4 @@ impl<'a> SceneContext<'a> {
     ) -> Arc<Value> {
         self.cache.get_with_cost(key, build, cost)
     }
-}
-
-fn interval(start: Time, duration: Duration) -> Interval {
-    Interval::new(start, duration).unwrap_or_else(|error| panic!("{}", error.message))
 }

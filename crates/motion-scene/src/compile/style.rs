@@ -6,8 +6,8 @@ use crate::element::Element;
 use crate::options::LineJoinSpec;
 use crate::paint::{GradientOptions, GradientSpec, PaintSpec, StrokeSpec};
 use motion_core::{
-    Color, Duration, FillRule, LineCap, LineJoin, LinearGradient, Node, Paint, Point,
-    RadialGradient, Shape, StrokeStyle, SweepGradient, ValidationError,
+    Color, FillRule, LineCap, LineJoin, LinearGradient, Node, Paint, Point, RadialGradient, Shape,
+    StrokeStyle, SweepGradient, Time, ValidationError,
 };
 use std::sync::Arc;
 
@@ -42,7 +42,7 @@ pub(crate) enum PaintProp {
 }
 
 impl PaintProp {
-    fn at(&self, time: Duration) -> Paint {
+    fn at(&self, time: Time) -> Paint {
         match self {
             Self::Solid(color) => Paint::Solid(color.at(time)),
             Self::Fixed(paint) => paint.clone(),
@@ -77,7 +77,7 @@ impl Style {
     pub(crate) fn shape<Geometry: Shape + 'static>(
         &self,
         geometry: Result<Geometry, ValidationError>,
-        time: Duration,
+        time: Time,
     ) -> Node {
         let geometry = match geometry {
             Ok(geometry) => geometry,
@@ -113,7 +113,7 @@ impl Style {
 
     /// Applies fill and stroke paint to text.
     #[cfg(feature = "text")]
-    pub(crate) fn text(&self, text: motion_content::Text, time: Duration) -> motion_content::Text {
+    pub(crate) fn text(&self, text: motion_content::Text, time: Time) -> motion_content::Text {
         let mut text = text;
         if let Some(fill) = &self.fill {
             text = text.fill(fill.at(time));

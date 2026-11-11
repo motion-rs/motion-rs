@@ -83,8 +83,11 @@ fn svg_lazy_selection_writing_images_and_security_keep_original_resources()
 -> motion_core::Result<()> {
     let missing = motion_core::Assets::new(".")?;
     let captured = Svg::new(missing.svg("missing-native-svg-diagnostic.svg")).translate(1.0, 1.0);
-    let composition =
-        motion_render::Composition::new(8, 8, motion_render::FrameClock::new(30, 150));
+    let composition = motion_render::Composition::new(
+        8,
+        8,
+        motion_render::FrameClock::new(motion_core::fps!(30), 150),
+    );
     let error = composition
         .render_frame(0, Size::new(8.0, 8.0), |_| captured.clone())
         .expect_err("strict SVG resource failure");

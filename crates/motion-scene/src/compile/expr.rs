@@ -1,6 +1,6 @@
 //! Arithmetic expression parsing and evaluation over scene-local time.
 
-use motion_core::{Duration, Signal};
+use motion_core::{Signal, Time};
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -89,7 +89,7 @@ impl ExprAnimation {
 }
 
 impl Signal<f64> for ExprAnimation {
-    fn sample(&self, time: Duration) -> f64 {
+    fn sample(&self, time: Time) -> f64 {
         let values: Vec<f64> = self
             .references
             .iter()

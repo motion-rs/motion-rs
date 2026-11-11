@@ -12,7 +12,7 @@ use std::sync::Arc;
 fn native_main10_export_renders_display() -> motion_core::Result {
     use motion_core::{LinearGradient, Node, Point, Size, TimeLiteral};
     let directory = tempfile::tempdir()?;
-    let timeline = motion_core::Timeline::new(Size::new(512.0, 16.0), 24)
+    let timeline = motion_core::Timeline::new(Size::new(512.0, 16.0), motion_core::fps!(24))
         .track(|track| {
             track.scene(1.seconds(), |_| {
                 Node::from(
@@ -40,7 +40,7 @@ fn native_main10_export_renders_display() -> motion_core::Result {
                 params: Some("lossless=1:log-level=error:pools=none:frame-threads=1".into()),
             })
             .backend(backend)
-            .range(motion_core::Time::ZERO..motion_core::Time::from_frame(2, 24.into()))
+            .range(motion_core::Time::ZERO..motion_core::Time::from_frame(2, motion_core::fps!(24)))
             .render(|options| {
                 options.display(motion_render::DisplayTransform {
                     tone_map: motion_render::ToneMap::AgX,
@@ -91,7 +91,7 @@ fn parallel_worker_selection_respects_frames_memory_and_backend() {
     assert_eq!(render_workers(&options, 100, 1024, None), 1);
     assert_eq!(render_workers(&options, 100, 1024, Some(&cpu)), 8);
     assert_eq!(render_workers(&options, 100, 1024, Some(&gpu)), 1);
-    let timeline = Timeline::new(Size::new(8.0, 4.0), 30)
+    let timeline = Timeline::new(Size::new(8.0, 4.0), motion_core::fps!(30))
         .track(|track| track.gap(1.seconds()))
         .build()
         .unwrap();
@@ -365,7 +365,7 @@ fn encoder_capabilities_validate_without_opening_resources() {
 #[test]
 fn still_and_custom_encoder_share_transparent_pixels_absolute_ticks_and_cancellation() -> Result<()>
 {
-    let timeline = Timeline::try_new(Size::new(4.0, 2.0), 10)?
+    let timeline = Timeline::try_new(Size::new(4.0, 2.0), motion_core::fps!(10))?
         .try_track(|track| {
             track.try_push(
                 (|context: &motion_core::SceneContext<'_>| {
@@ -479,7 +479,7 @@ fn output_permissions_follow_umask_for_stills_sequences_gif_and_video() -> Resul
     let file_mode = 0o666 & !mask;
     let directory_mode = 0o777 & !mask;
     let directory = tempfile::tempdir()?;
-    let timeline = Timeline::new(Size::new(8.0, 4.0), 1)
+    let timeline = Timeline::new(Size::new(8.0, 4.0), motion_core::fps!(1))
         .track(|track| {
             track.push(motion_core::Scene::with_duration(
                 |_: &motion_core::SceneContext<'_>| Node::empty(),
@@ -500,7 +500,7 @@ fn output_permissions_follow_umask_for_stills_sequences_gif_and_video() -> Resul
             (
                 "animation.gif",
                 Codec::Gif {
-                    frame_rate: FrameRate::from(1),
+                    frame_rate: motion_core::fps!(1),
                     colors: 16,
                 },
             ),
@@ -638,7 +638,7 @@ fn encoder_streams_yuv_crops_fractional_audio_and_preserves_destinations() -> Re
     let directory = tempfile::tempdir()?;
     let path = directory.path().join("range.mp4");
     let rate = FrameRate::NTSC;
-    let duration = Time::from_frame(7, rate);
+    let duration = motion_core::Duration::from_frame(7, rate);
     let pcm = crate::PcmBuffer::new(
         48_000,
         1,
@@ -653,7 +653,7 @@ fn encoder_streams_yuv_crops_fractional_audio_and_preserves_destinations() -> Re
                     Node::from(Rect::new(0.0, 0.0, 8.0, 4.0).fill(Color::rgb(255, 0, 0)))
                         .opacity(0.5)
                 })
-                .with_duration(duration.since_origin()),
+                .with_duration(duration),
             )
         })?
         .try_audio(motion_core::AudioClip::source(pcm))?
@@ -675,7 +675,7 @@ fn encoder_streams_yuv_crops_fractional_audio_and_preserves_destinations() -> Re
     assert_eq!(
         decoded.duration(),
         Some(motion_core::Duration::from_ticks(
-            4805 * motion_core::TICKS_PER_SECOND / 48000
+            4805 * motion_core::TICKS_PER_SECOND as u64 / 48000
         ))
     );
     let mut samples = vec![0.0; 4805 * 2];

@@ -282,7 +282,7 @@ fn advance(
     work: &mut u64,
 ) -> Result<(), ValidationError> {
     snapshot.state.step += 1;
-    let time = Time::from_ticks(snapshot.state.step as i64 * config.step.ticks());
+    let time = Time::from_ticks(snapshot.state.step as i64 * config.step.ticks() as i64);
     let mut events = Vec::new();
     for live in &mut snapshot.state.live {
         let old_age = live.particle.age;
@@ -456,7 +456,6 @@ pub(super) fn prepare(
     let limits = config.limits;
     if duration <= Duration::ZERO
         || duration.as_seconds() > 3600.0
-        || config.prewarm < Duration::ZERO
         || config.prewarm.as_seconds() > 3600.0
         || config.step <= Duration::ZERO
         || config.step > duration
@@ -502,7 +501,7 @@ pub(super) fn prepare(
     if horizon.as_seconds() > 3600.0 {
         return Err(limit("Preparation including prewarm exceeds one hour"));
     }
-    let steps = horizon.ticks() as u64 / config.step.ticks() as u64;
+    let steps = horizon.ticks() / config.step.ticks();
     if steps > limits.max_steps || steps > 1_000_000 {
         return Err(limit("Enhanced fixed-step allowance exhausted"));
     }
@@ -566,7 +565,7 @@ impl PreparedReplay {
         }
         let mut source = Time::from_ticks(ticks as i64);
         if let Some(period) = config.loop_period {
-            source = Time::from_ticks(source.ticks().rem_euclid(period.ticks()));
+            source = Time::from_ticks(source.ticks().rem_euclid(period.ticks() as i64));
         }
         if source < Time::ZERO {
             return Ok(None);
@@ -588,7 +587,7 @@ impl PreparedReplay {
         time: Time,
         work: &mut u64,
     ) -> Result<&'cursor Snapshot, ValidationError> {
-        let target = time.ticks() as u64 / config.step.ticks() as u64;
+        let target = time.ticks() as u64 / config.step.ticks();
         let index = self
             .snapshots
             .partition_point(|snapshot| snapshot.state.step <= target)
@@ -622,9 +621,9 @@ impl PreparedReplay {
         let mut work = 0;
         if let Some(period) = config.loop_period {
             let phase = source - config.prewarm;
-            let other =
-                Time::from_ticks((phase.ticks() + period.ticks() / 2).rem_euclid(period.ticks()))
-                    + config.prewarm;
+            let other = Time::from_ticks(
+                (phase.ticks() + period.ticks() as i64 / 2).rem_euclid(period.ticks() as i64),
+            ) + config.prewarm;
             let amount = ((1.0
                 - libm::cos(std::f64::consts::TAU * phase.as_seconds() / period.as_seconds()))
                 * 0.5) as f32;

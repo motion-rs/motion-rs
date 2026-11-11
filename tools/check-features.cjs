@@ -103,7 +103,7 @@ function check(combination, offline) {
     }
 
     pub fn author_scene() -> Result<Timeline, motion::ErrorReport> {
-      Timeline::new(Size::new(8.0, 4.0), 30).track(|track| {
+      Timeline::new(Size::new(8.0, 4.0), motion::fps!(30)).track(|track| {
         track.scene(1_u32.seconds(), |context| -> motion::Result<_> {
           let path = Path2D::parse_svg("M0 0L2 0L2 2z")?;
           let cached = context.memo(key::F64(2.0), || path.fill(Color::WHITE));

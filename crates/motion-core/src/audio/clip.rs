@@ -276,8 +276,9 @@ impl AudioClip {
     }
 
     /// Selects a positive source-time interval; natural duration is not required.
+    /// An `end` not after `start` yields an empty duration, rejected when resolved.
     pub fn trim(self, start: Duration, end: Duration) -> Self {
-        self.offset(start).duration(end - start)
+        self.offset(start).duration(end.saturating_sub(start))
     }
 
     /// Validated natural/overridden duration, before destination placement.
@@ -285,12 +286,9 @@ impl AudioClip {
         let mut duration = self
             .duration
             .or_else(|| {
-                self.source.duration().and_then(|duration| {
-                    duration
-                        .ticks()
-                        .checked_sub(self.offset.ticks())
-                        .map(Duration::from_ticks)
-                })
+                self.source
+                    .duration()
+                    .map(|duration| duration.saturating_sub(self.offset))
             })
             .ok_or_else(|| invalid("duration", "Unbounded audio requires an explicit duration"))?;
         if duration <= Duration::ZERO {
@@ -320,7 +318,7 @@ impl AudioClip {
         for effect in self.effects.iter() {
             effect.validate(self.source.sample_rate())?;
             let tail = effect.tail();
-            if tail < Duration::ZERO || tail.as_seconds() > 30.0 {
+            if tail.as_seconds() > 30.0 {
                 return Err(invalid("tail", "Effect tail must be in 0..=30 seconds"));
             }
             duration = Duration::from_ticks(
@@ -331,14 +329,12 @@ impl AudioClip {
             );
         }
         if self.start < Time::ZERO
-            || self.offset < Duration::ZERO
             || duration <= Duration::ZERO
             || duration.as_seconds() > 86400.0
             || self
                 .start
-                .ticks()
-                .checked_add(duration.ticks())
-                .is_none_or(|end| end > 86400 * crate::TICKS_PER_SECOND)
+                .checked_add(duration)
+                .is_none_or(|end| end.ticks() > 86400 * crate::TICKS_PER_SECOND)
             || !self.volume.is_finite()
             || !(0.0..=16.0).contains(&self.volume)
             || !self.pan.is_finite()
@@ -349,8 +345,6 @@ impl AudioClip {
                 .bus
                 .as_ref()
                 .is_some_and(|name| name.is_empty() || name.len() > 128)
-            || self.fade_in < Duration::ZERO
-            || self.fade_out < Duration::ZERO
             || self.fade_in > duration
             || self.fade_out > duration
             || !(1..=192_000).contains(&self.source.sample_rate())
@@ -380,7 +374,11 @@ impl AudioClip {
         if !self.unresolved_file() {
             self.resolved_duration()?;
         }
-        if self.start.since_origin() >= window {
+        let start = self
+            .start
+            .duration_since(Time::ZERO)
+            .ok_or_else(|| invalid("clip", "Audio start must be nonnegative"))?;
+        if start >= window {
             return Ok(None);
         }
         let mut clip = self.clone();
@@ -396,14 +394,12 @@ impl AudioClip {
             }
         }
         clip.ducking = Arc::new(ducking);
-        let remaining = window - clip.start.since_origin();
+        let remaining = window - start;
         clip.limit = Some(clip.limit.map_or(remaining, |limit| limit.min(remaining)));
-        clip.start = Time::from_ticks(
-            offset
-                .ticks()
-                .checked_add(clip.start.ticks())
-                .ok_or_else(|| invalid("nested_audio", "Nested audio placement overflow"))?,
-        );
+        clip.start = Time::ZERO
+            .checked_add(offset)
+            .and_then(|time| time.checked_add(start))
+            .ok_or_else(|| invalid("nested_audio", "Nested audio placement overflow"))?;
         if !clip.unresolved_file() {
             clip.resolved_duration()?;
         }
@@ -420,7 +416,7 @@ struct SpatialPan {
 }
 
 impl crate::Signal<f64> for SpatialPan {
-    fn sample(&self, time: Duration) -> f64 {
+    fn sample(&self, time: Time) -> f64 {
         let point = self.position.sample(time);
         if !point.x.is_finite() || !point.y.is_finite() {
             return f64::NAN;
@@ -438,7 +434,7 @@ struct SpatialGain {
 }
 
 impl crate::Signal<f64> for SpatialGain {
-    fn sample(&self, time: Duration) -> f64 {
+    fn sample(&self, time: Time) -> f64 {
         let point = self.position.sample(time);
         if !point.x.is_finite() || !point.y.is_finite() {
             return f64::NAN;

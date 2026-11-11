@@ -8,25 +8,29 @@ fn frame(
     height: usize,
     background: motion_core::Color,
 ) -> motion_render::FrameBuffer {
-    motion_render::Composition::new(width, height, motion_render::FrameClock::new(30, 150))
-        .frame_renderer(motion_core::Size::new(width as f64, height as f64))
-        .unwrap()
-        .render_output_at(
-            motion_core::Time::ZERO,
-            Some(background),
-            motion_render::PixelFormat::Yuv420 { bit_depth: 8 },
-            |_| motion_core::Node::empty(),
-        )
-        .unwrap()
+    motion_render::Composition::new(
+        width,
+        height,
+        motion_render::FrameClock::new(motion_core::fps!(30), 150),
+    )
+    .frame_renderer(motion_core::Size::new(width as f64, height as f64))
+    .unwrap()
+    .render_output_at(
+        motion_core::Time::ZERO,
+        Some(background),
+        motion_render::PixelFormat::Yuv420 { bit_depth: 8 },
+        |_| motion_core::Node::empty(),
+    )
+    .unwrap()
 }
 
 #[test]
 fn fractional_frame_rate_validation_preserves_audio_duration() -> Result {
-    let duration = motion_core::Time::from_seconds(1.0);
+    let duration = motion_core::Duration::from_seconds(1.0);
     let clip = motion_core::AudioClip::source(crate::PcmBuffer::new(48_000, 1, vec![0.0])?)
-        .duration(duration.since_origin());
+        .duration(duration);
     let options = NativeOptions::default().audio_mix(crate::MixedAudio::new(
-        crate::MixSource::clips(&[clip], duration.since_origin()),
+        crate::MixSource::clips(&[clip], duration),
         crate::MixOptions::new(48_000),
     )?)?;
     let rate = motion_core::FrameRate::NTSC;
@@ -37,7 +41,7 @@ fn fractional_frame_rate_validation_preserves_audio_duration() -> Result {
     assert!(
         validate_at_rate(
             (2, 2),
-            motion_core::FrameRate::new(1, u32::MAX),
+            motion_core::FrameRate::try_new(1, u32::MAX).unwrap(),
             1,
             &NativeOptions::default()
         )
@@ -417,7 +421,7 @@ fn pcm_delivery_rates_and_container_metadata_round_trip() -> Result {
         assert_eq!(metadata.chapters.len(), 1);
         assert_eq!(metadata.chapters[0].title, "Opening");
         assert_eq!(metadata.chapters[0].start, 0);
-        assert_eq!(metadata.chapters[0].end, 1.seconds().ticks());
+        assert_eq!(metadata.chapters[0].end, 1.seconds().ticks() as i64);
     }
     Ok(())
 }

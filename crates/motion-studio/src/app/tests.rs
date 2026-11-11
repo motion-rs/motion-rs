@@ -13,7 +13,7 @@ fn loop_shortcut_preserves_transport_and_respects_keyboard_focus() -> motion_cor
         Composition::new(
             16,
             8,
-            motion_render::FrameClock::new(motion_core::FrameRate::from(30), 90),
+            motion_render::FrameClock::new(motion_core::fps!(30), 90),
         ),
         Size::new(16.0, 8.0),
         |_| Node::empty(),
@@ -76,7 +76,11 @@ fn scene_status_and_sidebar_use_window_edges_without_preview_heading() -> motion
         let creation = eframe::CreationContext::_new_kittest(context.clone());
         let scene = StudioScene::new(
             "scene",
-            Composition::new(16, 8, motion_render::FrameClock::new(30, 1800)),
+            Composition::new(
+                16,
+                8,
+                motion_render::FrameClock::new(motion_core::fps!(30), 1800),
+            ),
             Size::new(16.0, 8.0),
             |_| Node::empty(),
         );
@@ -149,7 +153,7 @@ fn timeline_boundary_warnings_are_visible_without_rendering_or_devices() -> moti
 {
     let context = egui::Context::default();
     let creation = eframe::CreationContext::_new_kittest(context);
-    let timeline = motion_core::Timeline::new(Size::new(16.0, 8.0), 30)
+    let timeline = motion_core::Timeline::new(Size::new(16.0, 8.0), motion_core::fps!(30))
         .track(|track| {
             track.scene(motion_core::Duration::from_seconds(0.05), |_| {
                 Node::from(
@@ -161,7 +165,11 @@ fn timeline_boundary_warnings_are_visible_without_rendering_or_devices() -> moti
     assert!(!timeline.diagnostics().is_empty());
     let scene = StudioScene::timeline(
         "Alignment",
-        Composition::new(16, 8, motion_render::FrameClock::new(30, 150)),
+        Composition::new(
+            16,
+            8,
+            motion_render::FrameClock::new(motion_core::fps!(30), 150),
+        ),
         timeline,
     )?;
     let clock = StudioClock::new(&scene.composition)?;
@@ -186,7 +194,11 @@ fn single_scene_workbench_layout_and_queue_are_bounded_without_devices() -> moti
         let creation = eframe::CreationContext::_new_kittest(context.clone());
         let scene = StudioScene::new(
             "Single scene with a long descriptive title",
-            Composition::new(16, 8, motion_render::FrameClock::new(30, 90)),
+            Composition::new(
+                16,
+                8,
+                motion_render::FrameClock::new(motion_core::fps!(30), 90),
+            ),
             Size::new(16.0, 8.0),
             |_| {
                 Node::from(
@@ -302,7 +314,7 @@ fn studio_session_round_trips_atomically_and_rejects_bad_or_large_files() -> io:
 #[test]
 fn rational_transport_uses_wall_time_without_integer_fps_rounding() -> motion_core::Result<()> {
     let now = Instant::now();
-    let rate = motion_core::FrameRate::new(30_000, 1001);
+    let rate = motion_core::FrameRate::try_new(30_000, 1001).unwrap();
     let mut transport = Transport {
         anchor: Some((now, 0)),
         ..Default::default()
@@ -320,7 +332,11 @@ fn invalid_design_dimensions_fail_before_window_or_evaluation() {
     for size in [Size::new(0.0, 8.0), Size::new(f64::NAN, 8.0)] {
         let scene = StudioScene::preview_only(
             "Invalid geometry",
-            Composition::new(16, 8, motion_render::FrameClock::new(30, 150)),
+            Composition::new(
+                16,
+                8,
+                motion_render::FrameClock::new(motion_core::fps!(30), 150),
+            ),
             size,
             |_| panic!("invalid configuration must not evaluate"),
         );
@@ -338,32 +354,16 @@ fn playback_uses_elapsed_time_stops_or_loops_and_seeking_pauses() {
     let now = Instant::now();
     let mut transport = Transport::default();
     transport.toggle(now, 90);
-    transport.advance_rate(
-        now + Duration::from_millis(500),
-        motion_core::FrameRate::from(30),
-        90,
-    );
+    transport.advance_rate(now + Duration::from_millis(500), motion_core::fps!(30), 90);
     assert_eq!(transport.frame, 15);
-    transport.advance_rate(
-        now + Duration::from_millis(1500),
-        motion_core::FrameRate::from(30),
-        90,
-    );
+    transport.advance_rate(now + Duration::from_millis(1500), motion_core::fps!(30), 90);
     assert_eq!(transport.frame, 45);
-    transport.advance_rate(
-        now + Duration::from_secs(5),
-        motion_core::FrameRate::from(30),
-        90,
-    );
+    transport.advance_rate(now + Duration::from_secs(5), motion_core::fps!(30), 90);
     assert_eq!(transport.frame, 89);
     assert!(transport.anchor.is_none());
     transport.looping = true;
     transport.toggle(now, 90);
-    transport.advance_rate(
-        now + Duration::from_secs(4),
-        motion_core::FrameRate::from(30),
-        90,
-    );
+    transport.advance_rate(now + Duration::from_secs(4), motion_core::fps!(30), 90);
     assert_eq!(transport.frame, 30);
     transport.seek(900, 90);
     assert_eq!(transport.frame, 89);
@@ -389,7 +389,7 @@ fn play_holds_the_clock_until_its_first_frame_is_answered() -> motion_core::Resu
         Composition::new(
             16,
             8,
-            motion_render::FrameClock::new(motion_core::FrameRate::from(30), 90),
+            motion_render::FrameClock::new(motion_core::fps!(30), 90),
         ),
         Size::new(16.0, 8.0),
         |_| Node::empty(),
@@ -446,7 +446,11 @@ fn reloadable(path: &std::path::Path) -> StudioScene {
         })?;
         Ok(StudioScene::new(
             "Reloadable",
-            Composition::new(16, 8, motion_render::FrameClock::new(30, frames)),
+            Composition::new(
+                16,
+                8,
+                motion_render::FrameClock::new(motion_core::fps!(30), frames),
+            ),
             Size::new(16.0, 8.0),
             |_| Node::empty(),
         ))
@@ -557,7 +561,11 @@ fn scenes_without_a_reload_source_are_never_watched() -> motion_core::Result<()>
     let creation = eframe::CreationContext::_new_kittest(context.clone());
     let scene = StudioScene::new(
         "Static",
-        Composition::new(16, 8, motion_render::FrameClock::new(30, 3)),
+        Composition::new(
+            16,
+            8,
+            motion_render::FrameClock::new(motion_core::fps!(30), 3),
+        ),
         Size::new(16.0, 8.0),
         |_| Node::empty(),
     );

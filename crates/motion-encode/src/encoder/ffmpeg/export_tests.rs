@@ -49,7 +49,7 @@ fn builder(
     build: impl Fn(&SceneContext<'_>) -> Node + Send + Sync + 'static,
 ) -> TimelineBuilder {
     Timeline::new(size, rate).track(|track| {
-        track.push(build.with_duration(motion_core::Duration::from_frame(i64::from(frames), rate)))
+        track.push(build.with_duration(motion_core::Duration::from_frame(u64::from(frames), rate)))
     })
 }
 
@@ -67,7 +67,7 @@ fn pre_cancelled_export_does_not_evaluate_or_create_output() -> Result {
     let directory = tempfile::tempdir()?;
     let progress = Progress::default();
     progress.cancelled.store(true, Ordering::Relaxed);
-    let scene = timeline(Size::new(64.0, 64.0), FrameRate::from(30), 3, |_| {
+    let scene = timeline(Size::new(64.0, 64.0), motion_core::fps!(30), 3, |_| {
         panic!("cancelled builder")
     });
     let error = export(
@@ -87,7 +87,7 @@ fn pre_cancelled_export_does_not_evaluate_or_create_output() -> Result {
 fn video_cancellation_and_no_clobber_precede_building() -> Result {
     let directory = tempfile::tempdir()?;
     let destination = directory.path().join("out.mp4");
-    let scene = timeline(Size::new(8.0, 4.0), FrameRate::from(24), 12, |_| {
+    let scene = timeline(Size::new(8.0, 4.0), motion_core::fps!(24), 12, |_| {
         panic!("rejected export builder")
     });
     let progress = Progress {
@@ -125,7 +125,7 @@ fn audio_preparation_failure_preserves_destination_without_evaluating_scene() ->
     std::fs::write(&destination, b"existing")?;
     let source = directory.path().join("corrupt.wav");
     std::fs::write(&source, b"not an audio stream")?;
-    let scene = builder(Size::new(64.0, 64.0), FrameRate::from(24), 24, |_| {
+    let scene = builder(Size::new(64.0, 64.0), motion_core::fps!(24), 24, |_| {
         panic!("audio preparation failure must precede scene evaluation")
     })
     .audio(AudioClip::file(&source))
@@ -154,16 +154,20 @@ fn explicit_font_video_commit_cancel_and_failure() -> Result {
     let text = Text::from_font("AV", &font, 16.0, Color::WHITE)?;
     let store = Assets::new(".")?;
     store.preload("title", Arc::new(font))?;
-    let snapshot = Composition::new(64, 32, motion_render::FrameClock::new(30, 150))
-        .with_options(motion_render::RenderOptions::default().background(Color::BLACK))?
-        .render_frame(0, Size::new(64.0, 32.0), |_| Node::from(text.clone()))?;
+    let snapshot = Composition::new(
+        64,
+        32,
+        motion_render::FrameClock::new(motion_core::fps!(30), 150),
+    )
+    .with_options(motion_render::RenderOptions::default().background(Color::BLACK))?
+    .render_frame(0, Size::new(64.0, 32.0), |_| Node::from(text.clone()))?;
     assert!(snapshot.packed_rgb().iter().any(|pixel| *pixel != 0));
     assert!(snapshot.packed_rgb().contains(&0));
     let directory = tempfile::tempdir()?;
     let destination = directory.path().join("text.mp4");
     let order = Arc::new(Mutex::new(Vec::new()));
     let observed = order.clone();
-    let rate = FrameRate::from(24);
+    let rate = motion_core::fps!(24);
     let painted = text.clone();
     let scene = timeline(Size::new(64.0, 32.0), rate, 3, move |context| {
         assert!(context.assets().font("title").state().is_ready());
@@ -229,7 +233,7 @@ fn cancelled_export_preserves_destination_and_removes_temporary_output() -> Resu
     let directory = tempfile::tempdir()?;
     let destination = directory.path().join("existing.mp4");
     std::fs::write(&destination, b"original video")?;
-    let scene = timeline(Size::new(64.0, 64.0), FrameRate::from(30), 3, |_| {
+    let scene = timeline(Size::new(64.0, 64.0), motion_core::fps!(30), 3, |_| {
         Node::empty()
     });
     for finalizing in [false, true] {
@@ -262,7 +266,7 @@ fn global_shutter_video_encodes_sampled_frames_and_preserves_failed_destination(
     let path = directory.path().join("shutter.mp4");
     let calls = Arc::new(AtomicUsize::new(0));
     let observed = calls.clone();
-    let rate = FrameRate::from(24);
+    let rate = motion_core::fps!(24);
     let scene = timeline(Size::new(8.0, 4.0), rate, 3, move |context| {
         observed.fetch_add(1, Ordering::Relaxed);
         assert!(context.time() >= Time::ZERO);
@@ -377,7 +381,7 @@ fn audio_source_cannot_be_replaced_by_destination_even_with_overwrite() -> Resul
     let source = directory.path().join("source.wav");
     crate::encoder::ffmpeg::native::tests::write_tone(&source, 440.0, 0.25)?;
     let original = std::fs::read(&source)?;
-    let scene = builder(Size::new(64.0, 64.0), FrameRate::from(24), 24, |_| {
+    let scene = builder(Size::new(64.0, 64.0), motion_core::fps!(24), 24, |_| {
         panic!("audio source destination builder")
     })
     .audio(AudioClip::file(&source))
@@ -401,7 +405,7 @@ fn audio_source_cannot_be_replaced_by_destination_even_with_overwrite() -> Resul
 #[test]
 fn video_missing_feature_does_not_evaluate_or_create_output() -> Result {
     let directory = tempfile::tempdir()?;
-    let scene = timeline(Size::new(8.0, 4.0), FrameRate::from(24), 12, |_| {
+    let scene = timeline(Size::new(8.0, 4.0), motion_core::fps!(24), 12, |_| {
         panic!("disabled encoder builder")
     });
     let error = export(

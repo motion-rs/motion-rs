@@ -4,8 +4,8 @@
 //! use motion_core::prelude::*;
 //! let cache = SceneCache::default();
 //! let context = SceneContext::new(
-//!     Time::from_frame(1, FrameRate::from(30)),
-//!     FrameRate::from(30),
+//!     Time::from_frame(1, fps!(30)),
+//!     fps!(30),
 //!     Size::new(8.0, 4.0),
 //!     &cache,
 //! );
@@ -20,7 +20,7 @@
 //! # Ok::<(), motion_core::Error>(())
 //! ```
 
-use crate::{Duration, FrameRate, Node, SceneContext, ValidationError};
+use crate::{Duration, FrameRate, Node, SceneContext, TimeOffset, ValidationError};
 
 /// Global shutter configuration; with exact centered tick offsets.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -74,9 +74,10 @@ impl MotionBlur {
             return Ok(Duration::ZERO);
         };
         let ticks = (numerator + denominator / 2) / denominator;
-        Ok(Duration::from_ticks(i64::try_from(ticks).map_err(
-            |_| invalid("shutter", "Exposure exceeds signed ticks"),
-        )?))
+        Ok(Duration::from_ticks(
+            i64::try_from(ticks).map_err(|_| invalid("shutter", "Exposure exceeds signed ticks"))?
+                as u64,
+        ))
     }
 }
 
@@ -123,8 +124,9 @@ impl ShutterSampling {
             return Ok(build(context));
         }
         let count = if self.adaptive && shutter > Duration::ZERO {
-            let left = context.resampled(Duration::from_ticks(-shutter.ticks() / 2))?;
-            let right = context.resampled(Duration::from_ticks(shutter.ticks() / 2))?;
+            let half = TimeOffset::from_ticks((shutter.ticks() / 2) as i64);
+            let left = context.resampled(-half)?;
+            let right = context.resampled(half)?;
             let drawing = crate::DrawContext::default().with_assets(context.assets());
             let first = build(&left).compile_with_context(
                 context.size(),
@@ -148,7 +150,8 @@ impl ShutterSampling {
             for (index, offset) in offsets.iter_mut().enumerate() {
                 let random = shutter_random(seed ^ frame.rotate_left(17) ^ index as u64);
                 let numerator = (index as f64 + random) / f64::from(count) - 0.5;
-                *offset = Duration::from_ticks((numerator * shutter.ticks() as f64).round() as i64);
+                *offset =
+                    TimeOffset::from_ticks((numerator * shutter.ticks() as f64).round() as i64);
             }
         }
         let weights = (0..count)
@@ -231,19 +234,16 @@ fn displacement_samples(first: &crate::DisplayList, last: &crate::DisplayList) -
 }
 
 /// Centered integer midpoint offsets, nearest-tick ties away from zero.
-pub fn sample_offsets(shutter: Duration, samples: u32) -> Result<Vec<Duration>, ValidationError> {
-    if shutter < Duration::ZERO || !(1..=64).contains(&samples) {
-        return Err(invalid(
-            "samples",
-            "Require nonnegative shutter and 1..=64 samples",
-        ));
+pub fn sample_offsets(shutter: Duration, samples: u32) -> Result<Vec<TimeOffset>, ValidationError> {
+    if !(1..=64).contains(&samples) {
+        return Err(invalid("samples", "Require 1..=64 samples"));
     }
     let denominator = i128::from(samples) * 2;
     Ok((0..samples)
         .map(|index| {
             let numerator =
                 (i128::from(index) * 2 + 1 - i128::from(samples)) * i128::from(shutter.ticks());
-            Duration::from_ticks(
+            TimeOffset::from_ticks(
                 (((numerator.abs() + denominator / 2) / denominator) * numerator.signum()) as i64,
             )
         })
@@ -278,8 +278,8 @@ mod tests {
         use crate::NodeModifiers;
         let cache = crate::SceneCache::default();
         let context = SceneContext::new(
-            Duration::from_frame(5, 24.into()).after_origin(),
-            24.into(),
+            Duration::from_frame(5, crate::fps!(24)).after_origin(),
+            crate::fps!(24),
             crate::Size::new(8.0, 8.0),
             &cache,
         );
@@ -352,7 +352,7 @@ mod tests {
         let cache = crate::SceneCache::default();
         let context = SceneContext::new(
             Time::from_ticks(0),
-            30.into(),
+            crate::fps!(30),
             crate::Size::new(8.0, 4.0),
             &cache,
         );

@@ -453,17 +453,15 @@ impl PreviewMix {
                     self.window_start = position;
                     self.window_end = (position + CAPACITY as u64).min(self.total);
                     let time = |sample: u64| {
-                        motion_core::Time::from_ticks(
-                            (sample as i64 * motion_core::TICKS_PER_SECOND)
-                                / audio::SAMPLE_RATE as i64,
+                        motion_core::Duration::from_ticks(
+                            (sample * motion_core::TICKS_PER_SECOND as u64) / audio::SAMPLE_RATE,
                         )
                     };
                     self.native = Some(
                         motion_encode::MixedAudio::new(
                             timeline,
-                            motion_encode::MixOptions::new(audio::SAMPLE_RATE as u32).range(
-                                time(position).since_origin()..time(self.window_end).since_origin(),
-                            ),
+                            motion_encode::MixOptions::new(audio::SAMPLE_RATE as u32)
+                                .range(time(position)..time(self.window_end)),
                         )
                         .map_err(io::Error::other)?,
                     );

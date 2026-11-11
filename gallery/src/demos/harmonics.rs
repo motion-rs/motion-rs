@@ -28,7 +28,7 @@ pub(super) fn timeline(parameters: DemoParameters) -> Result<Timeline, motion::E
     let first = compiler.compile("f(t) = sin(2 pi t)", &options)?;
     let second = compiler.compile("f(t) = sin(4 pi t)", &options)?;
     let morph = first.morph_to(&second)?;
-    Timeline::new(Size::new(960.0, 540.0), 30)
+    Timeline::new(Size::new(960.0, 540.0), motion::fps!(30))
         .track(|track| {
             track.scene(
                 parameters.seconds.seconds(),

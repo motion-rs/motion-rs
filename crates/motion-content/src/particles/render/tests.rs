@@ -48,7 +48,7 @@ fn bokeh_focus_and_history_capacity_are_explicit() -> motion_core::Result {
     let cache = motion_core::SceneCache::new(0);
     let context = SceneContext::new(
         250.milliseconds().after_origin(),
-        motion_core::FrameRate::from(30),
+        motion_core::fps!(30),
         Size::new(32.0, 24.0),
         &cache,
     );
@@ -140,7 +140,7 @@ fn configured_eight_segment_trails_match_plain_trail_upload_bytes() -> motion_co
     let cache = motion_core::SceneCache::new(0);
     let context = SceneContext::new(
         500.milliseconds().after_origin(),
-        motion_core::FrameRate::from(30),
+        motion_core::fps!(30),
         Size::new(32.0, 24.0),
         &cache,
     )
@@ -563,7 +563,7 @@ fn instance_styles_are_not_paths_and_respect_budget_and_custom_callbacks() -> mo
     let cache = motion_core::SceneCache::new(0);
     let context = SceneContext::new(
         500.milliseconds().after_origin(),
-        motion_core::FrameRate::from(30),
+        motion_core::fps!(30),
         Size::new(32.0, 24.0),
         &cache,
     )
@@ -693,7 +693,7 @@ mod gpu {
         let mut gpu = motion_render::gpu::Gpu::new()?;
         let context = SceneContext::new(
             250.milliseconds().after_origin(),
-            motion_core::FrameRate::from(30),
+            motion_core::fps!(30),
             Size::new(32.0, 24.0),
             &cache,
         )
@@ -972,7 +972,7 @@ mod gpu {
         let cache = motion_core::SceneCache::new(0);
         let context = SceneContext::new(
             500.milliseconds().after_origin(),
-            motion_core::FrameRate::from(30),
+            motion_core::fps!(30),
             design,
             &cache,
         )
@@ -1043,7 +1043,7 @@ mod gpu {
         let cache = motion_core::SceneCache::new(0);
         let context = SceneContext::new(
             Time::ZERO,
-            motion_core::FrameRate::from(30),
+            motion_core::fps!(30),
             Size::new(4.0, 4.0),
             &cache,
         );
@@ -1198,7 +1198,7 @@ mod gpu {
                 for milliseconds in [250, 0, 500, 250] {
                     let context = SceneContext::new(
                         milliseconds.milliseconds().after_origin(),
-                        motion_core::FrameRate::from(30),
+                        motion_core::fps!(30),
                         Size::new(32.0, 24.0),
                         &cache,
                     )
@@ -1266,7 +1266,7 @@ mod gpu {
             ] {
                 let context = SceneContext::new(
                     500.milliseconds().after_origin(),
-                    motion_core::FrameRate::from(30),
+                    motion_core::fps!(30),
                     Size::new(32.0, 24.0),
                     &cache,
                 )

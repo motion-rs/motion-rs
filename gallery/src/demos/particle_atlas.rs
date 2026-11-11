@@ -41,7 +41,7 @@ pub(super) fn timeline(parameters: DemoParameters) -> Result<Timeline, motion::E
             preset.simulation(options)?.build()
         })
         .collect::<Result<Vec<_>, _>>()?;
-    Timeline::new(Size::new(960.0, 540.0), 30)
+    Timeline::new(Size::new(960.0, 540.0), motion::fps!(30))
         .background(Color::from_hex(super::atlas::PAPER))
         .track(|track| {
             track.scene(parameters.seconds.seconds(), move |context| {
@@ -323,7 +323,7 @@ mod tests {
                 .build()?;
             Preset::ALL.len()
         ];
-        let background = Timeline::new(Size::new(960.0, 540.0), 30)
+        let background = Timeline::new(Size::new(960.0, 540.0), motion::fps!(30))
             .background(Color::from_hex(super::super::atlas::PAPER))
             .track(|track| {
                 track.scene(52.seconds(), move |context| {

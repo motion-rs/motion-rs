@@ -9,7 +9,7 @@
 //! };
 //! use motion_render::{Composition, RenderPrepare, RenderOptions, Renderer, render_still};
 //! use motion_core::Scene as _;
-//! let timeline = Timeline::new(Size::new(4.0, 2.0), 30).track(|track| {
+//! let timeline = Timeline::new(Size::new(4.0, 2.0), fps!(30)).track(|track| {
 //!     track.push((|_: &SceneContext<'_>| Node::empty()).with_duration(1.seconds()))
 //! }).build()?;
 //! let bitmap = render_still(&timeline, 250.milliseconds().after_origin(), &RenderOptions::default())?;
@@ -107,7 +107,7 @@ fn export_through(
         Some(crate::MixedAudio::new(
             crate::audio::MixSource::resolved(timeline, &resolved),
             crate::audio::MixOptions::new(options.audio_sample_rate)
-                .range(range.start.since_origin()..range.end.since_origin())
+                .range(range.start.since_origin().magnitude()..range.end.since_origin().magnitude())
                 .resampler(options.audio_resampler),
         )?)
     };

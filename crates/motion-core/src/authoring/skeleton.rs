@@ -310,13 +310,13 @@ mod tests {
         let mut end = start.clone();
         end.bones[0].rotation = std::f64::consts::TAU;
         let track = Keyframes::new(start.clone()).to(1.seconds(), end.clone(), Easing::Linear);
-        let time = 250.milliseconds();
+        let time = 250.milliseconds().after_origin();
         let first = rig.solve(&track.sample(time))?;
         close(first[1].position(), (0.0, 10.0));
-        let _later = rig.solve(&track.sample(900.milliseconds()))?;
+        let _later = rig.solve(&track.sample(900.milliseconds().after_origin()))?;
         assert_eq!(first, rig.solve(&track.sample(time))?);
-        assert_eq!(track.sample(crate::Duration::ZERO), start);
-        assert_eq!(track.sample(1.seconds()), end);
+        assert_eq!(track.sample(crate::Time::ZERO), start);
+        assert_eq!(track.sample(1.seconds().after_origin()), end);
         assert_eq!(
             start.interpolate(&end, 1.5).bones[0].rotation,
             std::f64::consts::TAU * 1.5

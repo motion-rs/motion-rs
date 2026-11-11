@@ -102,7 +102,7 @@ pub(super) fn record_memory_frame(
     let format = motion::render::PixelFormat::SrgbRgba8 {
         premultiplied: false,
     };
-    let time = Time::from_frame(45, FrameRate::from(30));
+    let time = Time::from_frame(45, motion::fps!(30));
     let render = |session: &mut motion::render::FrameRenderer| {
         session.render_output_at(time, Some(Color::WHITE), format, |context| {
             artwork(case, context)
@@ -211,7 +211,7 @@ pub(super) fn cpu_stages(
 ) -> motion::Result {
     use serde_json::json;
     let cache = SceneCache::default();
-    let rate = FrameRate::from(30);
+    let rate = motion::fps!(30);
     let context =
         SceneContext::new(Time::from_frame(45, rate), rate, DESIGN, &cache).with_assets(resources);
     let validation = ValidationLimits {

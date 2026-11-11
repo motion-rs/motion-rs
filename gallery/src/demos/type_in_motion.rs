@@ -46,28 +46,28 @@ pub(super) const METADATA: DemoMetadata = DemoMetadata::new(
 
 pub(super) fn timeline(parameters: DemoParameters) -> Result<Timeline, motion::ErrorReport> {
     let duration = parameters.seconds.seconds();
-    let shot = Time::from_ticks(duration.ticks() * 2 / 5);
-    let turn = Time::from_ticks(duration.ticks() / 10);
-    Timeline::new(Size::new(960.0, 540.0), 30)
+    let shot = Duration::from_ticks(duration.ticks() * 2 / 5);
+    let turn = Duration::from_ticks(duration.ticks() / 10);
+    Timeline::new(Size::new(960.0, 540.0), motion::fps!(30))
         .track(|track| {
             track
-                .scene(shot.since_origin(), cover)
+                .scene(shot, cover)
                 .transition(
                     Wipe {
                         angle: 0.0,
                         feather: 36.0,
                     },
-                    turn.since_origin(),
+                    turn,
                 )
-                .scene(shot.since_origin(), spread)
+                .scene(shot, spread)
                 .transition(
                     Wipe {
                         angle: FRAC_PI_2,
                         feather: 0.0,
                     },
-                    turn.since_origin(),
+                    turn,
                 )
-                .scene(shot.since_origin(), closing)
+                .scene(shot, closing)
         })
         .duration(duration)
         .build()
@@ -103,7 +103,7 @@ fn rising(text: Text, spring: &std::sync::Arc<Spring<f64>>, delay: Duration, lif
     text.split(TextSplit::Characters)
         .animate_parts(65.milliseconds(), move |part| {
             let local = part.time() - delay;
-            let amount = spring.sample(local.since_origin());
+            let amount = spring.sample(local);
             PartStyle::new()
                 .offset(0.0, (1.0 - amount) * lift)
                 .rotate((1.0 - amount) * -0.1)
@@ -146,7 +146,7 @@ fn cover(context: &SceneContext<'_>) -> motion::Result<Node> {
             .damping(22.0)
             .build()
     })?;
-    let settle = spring.sample(context.seconds().seconds() - 250.milliseconds());
+    let settle = spring.sample(context.time() - 250.milliseconds());
     let masthead = rising(
         label("ROOM", DISPLAY, 176.0, 0.0, FontWeight::BOLD, color(INK)),
         &spring,

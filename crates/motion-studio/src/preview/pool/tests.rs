@@ -20,7 +20,11 @@ fn seek_discards_inflight_thumbnail_before_new_thumbnail_completes() -> motion_c
     let gate = Mutex::new(gate);
     let scene = StudioScene::preview_only(
         "thumbnail seek",
-        motion_render::Composition::new(16, 8, motion_render::FrameClock::new(30, 12)),
+        motion_render::Composition::new(
+            16,
+            8,
+            motion_render::FrameClock::new(motion_core::fps!(30), 12),
+        ),
         motion_core::Size::new(16.0, 8.0),
         move |context| {
             if context.time().to_frame(context.frame_rate()) == 6 {
@@ -61,11 +65,15 @@ fn resource_failure_thumbnail_is_not_retained_as_healthy_artwork() -> motion_cor
     let (entered, waiting) = std::sync::mpsc::channel();
     let scene = StudioScene::preview_only(
         "thumbnail resource",
-        motion_render::Composition::new(16, 8, motion_render::FrameClock::new(30, 12))
-            .with_options(
-                motion_render::RenderOptions::default()
-                    .resources(motion_core::Assets::new(directory.path())?),
-            )?,
+        motion_render::Composition::new(
+            16,
+            8,
+            motion_render::FrameClock::new(motion_core::fps!(30), 12),
+        )
+        .with_options(
+            motion_render::RenderOptions::default()
+                .resources(motion_core::Assets::new(directory.path())?),
+        )?,
         motion_core::Size::new(16.0, 8.0),
         move |context| {
             let frame = context.time().to_frame(context.frame_rate());
@@ -109,7 +117,11 @@ fn idle_prefetch_is_serial_and_thumbnails_never_replace_main_reply() -> motion_c
     let maximum = peak.clone();
     let scene = StudioScene::preview_only(
         "idle",
-        motion_render::Composition::new(16, 8, motion_render::FrameClock::new(30, 12)),
+        motion_render::Composition::new(
+            16,
+            8,
+            motion_render::FrameClock::new(motion_core::fps!(30), 12),
+        ),
         motion_core::Size::new(16.0, 8.0),
         move |context| {
             maximum.fetch_max(

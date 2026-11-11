@@ -222,20 +222,19 @@ pub fn render_still(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use motion_core::{
-        Circle, FrameRate, Node, Point, Scene, SceneContext, Shape, Size, TimeLiteral,
-    };
+    use motion_core::{Circle, Node, Point, Scene, SceneContext, Shape, Size, TimeLiteral};
 
     #[test]
     fn draft_disables_global_shutter_and_final_remains_exact() -> Result<()> {
         let options = RenderOptions::default();
         assert_eq!(options.quality, motion_core::RenderQuality::Final);
-        let base = Composition::new(16, 16, crate::FrameClock::new(30, 150)).with_options(
-            crate::RenderOptions::default().motion_blur(motion_core::MotionBlur {
-                samples: 4,
-                shutter_angle: 180.0,
-            }),
-        )?;
+        let base = Composition::new(16, 16, crate::FrameClock::new(motion_core::fps!(30), 150))
+            .with_options(
+                crate::RenderOptions::default().motion_blur(motion_core::MotionBlur {
+                    samples: 4,
+                    shutter_angle: 180.0,
+                }),
+            )?;
         let build = |context: &SceneContext<'_>| {
             Node::from(
                 Circle::new(Point::new(8.0 + context.seconds(), 8.0), 4.0)
@@ -248,7 +247,7 @@ mod tests {
         };
         let mut original = base.clone().frame_renderer(Size::new(16.0, 16.0))?;
         let expected = original.render_output_at(
-            Time::from_frame(2, FrameRate::from(30)),
+            Time::from_frame(2, motion_core::fps!(30)),
             None,
             format,
             build,
@@ -259,7 +258,7 @@ mod tests {
             .frame_renderer(Size::new(16.0, 16.0))?;
         assert_eq!(
             final_renderer.render_output_at(
-                Time::from_frame(2, FrameRate::from(30)),
+                Time::from_frame(2, motion_core::fps!(30)),
                 None,
                 format,
                 build
@@ -271,7 +270,7 @@ mod tests {
             .configure(|options| options.quality(motion_core::RenderQuality::Draft))
             .frame_renderer(Size::new(16.0, 16.0))?;
         draft.render_output_at(
-            Time::from_frame(2, FrameRate::from(30)),
+            Time::from_frame(2, motion_core::fps!(30)),
             None,
             format,
             |context| {
@@ -286,8 +285,9 @@ mod tests {
     #[test]
     fn cloned_compositions_share_coverage_between_worker_sessions() -> Result<()> {
         let options = RenderOptions::default();
-        let composition = Composition::new(8, 8, crate::FrameClock::new(30, 150))
-            .with_options(options.clone())?;
+        let composition =
+            Composition::new(8, 8, crate::FrameClock::new(motion_core::fps!(30), 150))
+                .with_options(options.clone())?;
         let mut first = composition.frame_renderer(Size::new(8.0, 8.0))?;
         first.render_frame(0, |_| {
             Node::from(
@@ -333,7 +333,7 @@ mod tests {
     fn deferred_timeline_errors_fail_before_frame_callbacks() {
         let called = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let observed = called.clone();
-        let error = Timeline::new(Size::new(8.0, 4.0), 30)
+        let error = Timeline::new(Size::new(8.0, 4.0), motion_core::fps!(30))
             .track(|track| {
                 track
                     .push(
@@ -343,7 +343,10 @@ mod tests {
                         })
                         .with_duration(1.seconds()),
                     )
-                    .gap((-1).seconds())
+                    .place(
+                        motion_core::Time::ZERO - 1.seconds(),
+                        (|_: &SceneContext<'_>| Node::empty()).with_duration(1.seconds()),
+                    )
             })
             .build()
             .unwrap_err();
@@ -357,9 +360,10 @@ mod tests {
             size: Some(PixelSize::new(8, 4)),
             ..RenderOptions::default()
         };
-        let composition = Composition::new(16, 8, crate::FrameClock::new(30, 150))
-            .with_options(options.clone())
-            .unwrap();
+        let composition =
+            Composition::new(16, 8, crate::FrameClock::new(motion_core::fps!(30), 150))
+                .with_options(options.clone())
+                .unwrap();
         assert_eq!(composition.output_size(), PixelSize::new(8, 4));
         assert_eq!(composition.frame_count(), 150);
         assert_eq!(composition.snapshot_background(), Color::WHITE);

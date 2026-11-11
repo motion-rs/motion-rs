@@ -25,11 +25,7 @@ impl AudioSignal {
 
     /// Smooths the complete trace offline, preserving seek-independent output.
     pub fn attack_release(&self, attack: Duration, release: Duration) -> motion_core::Result<Self> {
-        if attack < Duration::ZERO
-            || release < Duration::ZERO
-            || attack.as_seconds() > 30.0
-            || release.as_seconds() > 30.0
-        {
+        if attack.as_seconds() > 30.0 || release.as_seconds() > 30.0 {
             return Err(invalid(
                 "signal_smoothing",
                 "Require smoothing times in 0..=30 seconds",
@@ -127,9 +123,7 @@ impl AudioMarkers {
     /// Creates ordered markers; duplicate, negative and beyond-24h times are rejected.
     pub fn new(times: Vec<Duration>) -> motion_core::Result<Self> {
         if times.len() > 1_000_000
-            || times
-                .iter()
-                .any(|time| *time < Duration::ZERO || time.as_seconds() > 86400.0)
+            || times.iter().any(|time| time.as_seconds() > 86400.0)
             || times.windows(2).any(|pair| pair[0] >= pair[1])
         {
             return Err(invalid(
@@ -173,7 +167,7 @@ impl AudioMarkers {
             .iter()
             .map(|value| {
                 value
-                    .as_i64()
+                    .as_u64()
                     .map(Duration::from_ticks)
                     .ok_or_else(|| invalid("markers_json", "Require integer ticks"))
             })
@@ -196,8 +190,8 @@ pub struct BeatGrid {
 impl BeatGrid {
     /// Creates an explicit grid; automatic estimates may be replaced by this.
     pub fn new(bpm: f64, offset: Duration) -> motion_core::Result<Self> {
-        if !bpm.is_finite() || !(20.0..=400.0).contains(&bpm) || offset < Duration::ZERO {
-            return Err(invalid("beat_grid", "Invalid BPM or nonnegative offset").into());
+        if !bpm.is_finite() || !(20.0..=400.0).contains(&bpm) {
+            return Err(invalid("beat_grid", "Invalid BPM").into());
         }
         Ok(Self {
             bpm,
@@ -209,11 +203,11 @@ impl BeatGrid {
     /// Returns bounded beat markers through a positive duration.
     pub fn markers(&self, duration: Duration) -> motion_core::Result<AudioMarkers> {
         Self::new(self.bpm, self.offset)?;
-        if duration < Duration::ZERO || duration.as_seconds() > 86400.0 {
+        if duration.as_seconds() > 86400.0 {
             return Err(invalid("beat_duration", "Require duration in 0..=24h").into());
         }
         let count =
-            ((duration - self.offset).as_seconds().max(0.0) * self.bpm / 60.0).ceil() as usize;
+            (duration.saturating_sub(self.offset).as_seconds() * self.bpm / 60.0).ceil() as usize;
         if count > 1_000_000 {
             return Err(invalid("beat_count", "Too many beat markers").into());
         }
@@ -224,7 +218,7 @@ impl BeatGrid {
                         self.offset.ticks()
                             + (index as f64 * 60.0 / self.bpm
                                 * motion_core::TICKS_PER_SECOND as f64)
-                                .round() as i64,
+                                .round() as u64,
                     )
                 })
                 .filter(|time| *time < duration)
@@ -503,12 +497,12 @@ impl AudioAnalysis {
             {
                 let time = Duration::from_ticks(
                     (((index * hop + hop * 2) as u128 * motion_core::TICKS_PER_SECOND as u128)
-                        / u128::from(self.pcm.sample_rate())) as i64,
+                        / u128::from(self.pcm.sample_rate())) as u64,
                 );
                 if time < flux.0.duration
                     && times
                         .last()
-                        .is_none_or(|previous: &Duration| (time - *previous).as_seconds() >= 0.1)
+                        .is_none_or(|previous: &Duration| seconds_between(time, *previous) >= 0.1)
                 {
                     times.push(time);
                 }
@@ -590,7 +584,7 @@ impl AudioAnalysis {
                         .times
                         .iter()
                         .filter(|time| {
-                            let position = (**time - origin).as_seconds() / period;
+                            let position = seconds_between(**time, origin) / period;
                             (position - position.round()).abs() < 0.1
                         })
                         .count()
@@ -604,7 +598,7 @@ impl AudioAnalysis {
             .times
             .iter()
             .filter(|time| {
-                let position = (**time - offset).as_seconds() / period;
+                let position = seconds_between(**time, offset) / period;
                 (position - position.round()).abs() < 0.1
             })
             .count();
@@ -614,6 +608,12 @@ impl AudioAnalysis {
             confidence: aligned as f64 / onsets.times.len() as f64,
         })
     }
+}
+
+/// Signed seconds from `earlier` to `later`, exact in integer ticks before conversion.
+fn seconds_between(later: Duration, earlier: Duration) -> f64 {
+    (i128::from(later.ticks()) - i128::from(earlier.ticks())) as f64
+        / motion_core::TICKS_PER_SECOND as f64
 }
 
 #[cfg(test)]
@@ -629,7 +629,7 @@ mod tests {
             })
             .collect();
         let analysis = AudioAnalysis::from_pcm(Arc::new(PcmBuffer::new(8000, 1, signal)?));
-        assert!((analysis.pitch()?.sample(500.milliseconds()) - 1000.0).abs() < 1.0);
+        assert!((analysis.pitch()?.sample(500.milliseconds().after_origin()) - 1000.0).abs() < 1.0);
         assert_eq!(analysis.spectrum(32, 20.0, 4000.0)?.bands().len(), 32);
         assert_eq!(analysis.chroma()?.bands().len(), 12);
         let signal = analysis
@@ -638,8 +638,8 @@ mod tests {
             .attack_release(10.milliseconds(), 100.milliseconds())?
             .log_scale()
             .threshold(0.5)?;
-        assert_eq!(signal.sample(500.milliseconds()), 1.0);
-        assert_eq!(signal.sample(2.seconds()), 0.0);
+        assert_eq!(signal.sample(500.milliseconds().after_origin()), 1.0);
+        assert_eq!(signal.sample(2.seconds().after_origin()), 0.0);
         assert!(analysis.spectrum(65, 20.0, 4000.0).is_err());
         Ok(())
     }

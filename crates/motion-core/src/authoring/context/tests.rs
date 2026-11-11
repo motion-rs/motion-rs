@@ -201,24 +201,21 @@ fn checked_context_inputs_and_declared_cache_bytes_preserve_ownership() {
         max_bytes: 96,
     });
     assert!(
-        SceneContext::try_new(Time::ZERO, FrameRate::from(30), Size::new(0.0, 1.0), &cache)
-            .is_err()
+        SceneContext::try_new(Time::ZERO, crate::fps!(30), Size::new(0.0, 1.0), &cache).is_err()
     );
     let context =
-        SceneContext::try_new(Time::ZERO, FrameRate::from(30), Size::new(1.0, 1.0), &cache)
-            .unwrap();
-    assert!(context.try_with_clip_duration((-1).seconds()).is_err());
+        SceneContext::try_new(Time::ZERO, crate::fps!(30), Size::new(1.0, 1.0), &cache).unwrap();
     assert_eq!(
-        context.try_shifted(1.seconds()).unwrap().time(),
-        (-1).seconds().after_origin()
+        context.try_shifted(1.seconds().offset()).unwrap().time(),
+        Time::ZERO - 1.seconds()
     );
     let extreme = SceneContext::new(
         Time::from_ticks(i64::MIN),
-        FrameRate::from(30),
+        crate::fps!(30),
         Size::new(1.0, 1.0),
         &cache,
     );
-    assert!(extreme.try_shifted(Duration::from_ticks(1)).is_err());
+    assert!(extreme.try_shifted(TimeOffset::from_ticks(1)).is_err());
     let get = |key: u8, count: usize| {
         context.cache_with_cost(
             key,
@@ -356,7 +353,7 @@ fn relative_layout_is_independent_of_seek_order_and_checks_both_inputs() {
     let subject = layout_node(Rect::new(0.0, 0.0, 20.0, 10.0));
     let reference = layout_node(Rect::new(100.0, 200.0, 160.0, 240.0));
     for ticks in [100, -999, 0, 100] {
-        let context = root.shifted(Duration::from_ticks(ticks));
+        let context = root.shifted(TimeOffset::from_ticks(ticks));
         let placed = context
             .try_next_to(subject.clone(), &reference, Side::Right, 3.0)
             .unwrap();
@@ -381,36 +378,42 @@ fn node_layout_measurement_is_independent_of_context_time() {
     let node = layout_node(Rect::new(0.0, 0.0, 20.0, 10.0))
         .at(Point::new(60.0, 40.0))
         .translate(-0.25, 1.5);
-    for time in [(-5).seconds(), Duration::ZERO, 100.seconds()] {
+    for time in [
+        Time::ZERO - 5.seconds(),
+        Time::ZERO,
+        100.seconds().after_origin(),
+    ] {
         assert_eq!(
-            context(&cache, time.after_origin()).measure(&node).unwrap(),
+            context(&cache, time).measure(&node).unwrap(),
             Rect::new(49.75, 36.5, 69.75, 46.5)
         );
     }
 }
 
 fn context(cache: &SceneCache, time: Time) -> SceneContext<'_> {
-    SceneContext::new(time, FrameRate::from(30), Size::new(640.5, 360.25), cache)
+    SceneContext::new(time, crate::fps!(30), Size::new(640.5, 360.25), cache)
 }
 
 #[test]
 fn local_shifts_preserve_global_inputs_and_sample_tick_animations() {
     let cache = SceneCache::default();
     let root = context(&cache, 3.seconds().after_origin()).with_clip_duration(4.seconds());
-    let local = root.shifted(1.seconds()).shifted(500.milliseconds());
+    let local = root
+        .shifted(1.seconds().offset())
+        .shifted(500.milliseconds().offset());
     assert_eq!(local.time(), 1500.milliseconds().after_origin());
     assert_eq!(local.global_time(), 3.seconds().after_origin());
     assert_eq!(local.seconds(), 1.5);
     assert_eq!(local.clip_duration(), Some(4.seconds()));
     assert_eq!(local.progress(), 0.375);
     assert_eq!(local.sample(&Tween::new(0.0, 10.0, 3.seconds())), 5.0);
-    let signal: Arc<dyn Signal<Duration>> = Arc::new(|time| time);
-    assert_eq!(local.sample(&signal), local.elapsed());
+    let signal: Arc<dyn Signal<Time>> = Arc::new(|time| time);
+    assert_eq!(local.sample(&signal), local.time());
     assert_eq!(local.size(), Size::new(640.5, 360.25));
     assert_eq!(local.bounds(), Rect::new(0.0, 0.0, 640.5, 360.25));
     assert_eq!(local.center(), Point::new(320.25, 180.125));
     assert_eq!(
-        root.shifted((-1).seconds()).time(),
+        root.shifted(TimeOffset::from_seconds(-1.0)).time(),
         4.seconds().after_origin()
     );
     assert_eq!(root.time(), 3.seconds().after_origin());
@@ -432,8 +435,10 @@ fn progress_uses_signed_integer_boundaries_including_extreme_queries() {
         );
     }
     assert_eq!(
-        context(&cache, Time::from_ticks(i64::MAX))
-            .progress_in(Time::from_ticks(i64::MIN), Duration::from_ticks(i64::MAX)),
+        context(&cache, Time::from_ticks(i64::MAX)).progress_in(
+            Time::from_ticks(i64::MIN),
+            Duration::from_ticks(i64::MAX as u64)
+        ),
         1.0
     );
     assert_eq!(
@@ -459,21 +464,12 @@ fn progress_uses_signed_integer_boundaries_including_extreme_queries() {
 #[test]
 fn frame_intervals_and_invalid_inputs_keep_checked_time_policy() {
     let cache = SceneCache::new(0);
-    let rate = FrameRate::new(30_000, 1001);
+    let rate = FrameRate::try_new(30_000, 1001).unwrap();
     let context = || SceneContext::new(Time::ZERO, rate, Size::new(1.0, 1.0), &cache);
     assert_eq!(context().frame_rate(), rate);
     assert_eq!(context().frames(30_000), 1001.seconds());
-    assert_eq!(context().frames(-30_000), (-1001).seconds());
     assert!(
-        std::panic::catch_unwind(|| context().with_clip_duration(Duration::from_ticks(-1)))
-            .is_err()
-    );
-    assert!(
-        std::panic::catch_unwind(|| context().progress_in(Time::ZERO, Duration::from_ticks(-1)))
-            .is_err()
-    );
-    assert!(
-        std::panic::catch_unwind(|| context().shifted(Duration::from_ticks(i64::MIN))).is_err()
+        std::panic::catch_unwind(|| context().shifted(TimeOffset::from_ticks(i64::MIN))).is_err()
     );
     for width in [0.0, -1.0, f64::NAN, f64::INFINITY] {
         assert!(
@@ -533,7 +529,7 @@ fn cache_eviction_disable_and_seek_order_do_not_change_values() {
         let cache = SceneCache::new(capacity);
         let builds = AtomicUsize::new(0);
         for frame in [9, 0, 4, 9, 2, 0] {
-            let context = context(&cache, Time::from_frame(frame, FrameRate::from(30)));
+            let context = context(&cache, Time::from_frame(frame, crate::fps!(30)));
             assert_eq!(
                 *cached(&context, frame as u32, &builds),
                 (frame * frame) as u32
@@ -583,7 +579,7 @@ fn keyed_randomness_is_identical_at_any_local_global_time_or_cache_capacity() {
         let cache = SceneCache::new(capacity);
         for ticks in [i64::MAX, 0, i64::MIN + 1, 782, -91, 0] {
             let root = context(&cache, Time::from_ticks(ticks));
-            let local = root.shifted(Duration::from_ticks(1));
+            let local = root.shifted(TimeOffset::from_ticks(1));
             assert_eq!(root.random(("position", 17_u64)), expected);
             assert_eq!(local.random(("position", 17_u64)), expected);
             let mut first = local.random_generator("stream");
@@ -659,14 +655,6 @@ fn during_is_half_open_and_nested_inputs_preserve_global_time_and_environment() 
         Time::from_ticks(i64::MAX),
         1.seconds(),
         |_| panic!("outside"),
-    );
-    assert!(
-        std::panic::catch_unwind(|| context(&cache, Time::ZERO).during(
-            Time::ZERO,
-            Duration::from_ticks(-1),
-            |_| Node::empty()
-        ))
-        .is_err()
     );
 }
 

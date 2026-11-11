@@ -251,8 +251,7 @@ pub struct FrameRateSpec {
 impl FrameRateSpec {
     /// Returns the engine rate, or None for a zero component.
     pub fn frame_rate(self) -> Option<FrameRate> {
-        (self.numerator != 0 && self.denominator != 0)
-            .then(|| FrameRate::new(self.numerator, self.denominator))
+        FrameRate::try_new(self.numerator, self.denominator).ok()
     }
 }
 

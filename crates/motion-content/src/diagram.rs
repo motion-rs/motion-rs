@@ -456,7 +456,7 @@ mod tests {
         let cache = motion_core::SceneCache::new(0);
         let context = SceneContext::new(
             motion_core::Time::ZERO,
-            motion_core::FrameRate::from(30),
+            motion_core::fps!(30),
             Size::new(320.0, 180.0),
             &cache,
         );

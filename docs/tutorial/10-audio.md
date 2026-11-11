@@ -27,7 +27,7 @@ fn main() -> motion::Result {
     let sound = AudioClip::source(pcm)
         .fade_in(100.milliseconds())
         .fade_out(100.milliseconds());
-    let timeline = Timeline::new(Size::new(320.0, 180.0), 30)
+    let timeline = Timeline::new(Size::new(320.0, 180.0), fps!(30))
         .audio(sound)
         .track(|track| {
             track.scene(1.seconds(), move |context| -> motion::Result<_> {
@@ -96,7 +96,7 @@ fn main() -> motion::Result {
         .offset(2.seconds())
         .duration(6.seconds())
         .volume(0.12);
-    let timeline = Timeline::new(Size::new(320.0, 180.0), 30)
+    let timeline = Timeline::new(Size::new(320.0, 180.0), fps!(30))
         .audio(narration)
         .audio(music)
         .duration(6.seconds())
@@ -124,7 +124,7 @@ fn main() -> motion::Result {
     let mut music = AudioBus::new("music");
     music.gain_db = -6.0;
     music.effects.push(Arc::new(Effect::Eq { kind: EqKind::LowPass, frequency: 8_000.0, q: 0.707, gain_db: 0.0 }));
-    let timeline = Timeline::new(Size::new(320.0, 180.0), 30)
+    let timeline = Timeline::new(Size::new(320.0, 180.0), fps!(30))
         .audio_bus(music)
         .audio(AudioClip::source(tone).duration(2.seconds()).bus("music").fade_in(50.milliseconds()))
         .master(Master::safe()).build()?;

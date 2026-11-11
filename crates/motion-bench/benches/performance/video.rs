@@ -18,7 +18,7 @@ pub(super) fn video_benchmark(
 ) -> motion::Result {
     use motion::authoring::Scene as _;
     use serde_json::json;
-    let timeline = Timeline::try_new(Size::new(320.0, 180.0), 30)?
+    let timeline = Timeline::try_new(Size::new(320.0, 180.0), motion::fps!(30))?
         .try_track(|track| {
             track.try_push(
                 (|context: &SceneContext<'_>| {
@@ -32,7 +32,7 @@ pub(super) fn video_benchmark(
                         Color::BLACK,
                     )
                 })
-                .with_duration(Duration::from_frame(i64::from(frames), FrameRate::from(30))),
+                .with_duration(Duration::from_frame(u64::from(frames), motion::fps!(30))),
             )
         })?
         .build()?;

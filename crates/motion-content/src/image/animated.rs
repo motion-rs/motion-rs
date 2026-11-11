@@ -49,23 +49,20 @@ impl AnimatedImageAsset {
             return Err(invalid("frames", "Animation requires 1..=4096 frames"));
         }
         let size = (frames[0].0.width(), frames[0].0.height());
-        let mut total = 0i64;
+        let mut total = 0u64;
         let mut bytes = frames.len()
             * (std::mem::size_of::<Arc<ImageAsset>>() + std::mem::size_of::<Duration>());
         let mut seen = std::collections::BTreeSet::new();
         let mut ends = Vec::with_capacity(frames.len());
         let mut images = Vec::with_capacity(frames.len());
         for (frame, duration) in frames {
-            if (frame.width(), frame.height()) != size || duration < Duration::ZERO {
-                return Err(invalid(
-                    "frames",
-                    "Animation dimensions must match and durations must be nonnegative",
-                ));
+            if (frame.width(), frame.height()) != size {
+                return Err(invalid("frames", "Animation dimensions must match"));
             }
             total = total
                 .checked_add(duration.ticks())
                 .ok_or_else(|| invalid("duration", "Animation time overflow"))?;
-            if total > 86400 * motion_core::TICKS_PER_SECOND {
+            if total > 86400 * motion_core::TICKS_PER_SECOND as u64 {
                 return Err(invalid("duration", "Animation exceeds 24 hours"));
             }
             if seen.insert(Arc::as_ptr(&frame) as usize) {
@@ -108,9 +105,9 @@ impl AnimatedImageAsset {
             .into_iter()
             .enumerate()
             .map(|(index, frame)| {
-                let start = Duration::checked_from_frame(index as i64, rate)
+                let start = Duration::checked_from_frame(index as u64, rate)
                     .ok_or_else(|| invalid("duration", "Sequence time overflow"))?;
-                let end = Duration::checked_from_frame(index as i64 + 1, rate)
+                let end = Duration::checked_from_frame(index as u64 + 1, rate)
                     .ok_or_else(|| invalid("duration", "Sequence time overflow"))?;
                 Ok((frame, end - start))
             })
@@ -199,7 +196,7 @@ impl AnimatedImageAsset {
                 + divisor / 2)
                 / divisor;
             let duration = Duration::from_ticks(
-                i64::try_from(ticks)
+                u64::try_from(ticks)
                     .map_err(|error| motion_core::Error::Parameters(Box::new(error)))?,
             );
             let rgba = frame.into_buffer();
@@ -266,17 +263,14 @@ impl AnimatedImageAsset {
         })
     }
 
-    /// Negative time is absent; finite play holds the last frame afterwards.
-    pub fn frame_index_at(&self, time: Duration, mode: ImageLoopMode) -> Option<usize> {
-        if time < Duration::ZERO {
-            return None;
-        }
+    /// Selects the frame at an elapsed time; finite play holds the last frame afterwards.
+    pub fn frame_index_at(&self, time: Duration, mode: ImageLoopMode) -> usize {
         let total = self.duration().ticks();
         let mut local = time.ticks();
         match mode {
             ImageLoopMode::Once => {
                 if local >= total {
-                    return Some(self.frames.len() - 1);
+                    return self.frames.len() - 1;
                 }
             }
             ImageLoopMode::File => {
@@ -284,7 +278,7 @@ impl AnimatedImageAsset {
                     .plays
                     .is_some_and(|plays| i128::from(local) >= i128::from(total) * i128::from(plays))
                 {
-                    return Some(self.frames.len() - 1);
+                    return self.frames.len() - 1;
                 }
                 local %= total;
             }
@@ -295,24 +289,21 @@ impl AnimatedImageAsset {
                     .frame_duration(self.frames.len() - 1)
                     .expect("last frame")
                     .ticks();
-                let interior = (total - first - last).max(0);
+                let interior = total.saturating_sub(first + last);
                 local %= total + interior;
                 if local >= total {
                     local = total - last - 1 - (local - total);
                 }
             }
         }
-        Some(
-            self.ends
-                .partition_point(|end| end.ticks() <= local)
-                .min(self.frames.len() - 1),
-        )
+        self.ends
+            .partition_point(|end| end.ticks() <= local)
+            .min(self.frames.len() - 1)
     }
 
     /// Samples without I/O, allocation, decoding or state mutation.
-    pub fn frame_at(&self, time: Duration, mode: ImageLoopMode) -> Option<&Arc<ImageAsset>> {
-        self.frame_index_at(time, mode)
-            .map(|index| &self.frames[index])
+    pub fn frame_at(&self, time: Duration, mode: ImageLoopMode) -> &Arc<ImageAsset> {
+        &self.frames[self.frame_index_at(time, mode)]
     }
 }
 
@@ -459,12 +450,11 @@ impl motion_core::Drawable for AnimatedImage {
         canvas: &mut motion_core::Canvas<'_>,
     ) -> Result<(), ValidationError> {
         match self.asset() {
-            Ok(asset) => match asset.frame_at(self.time, self.mode) {
-                Some(image) => {
-                    motion_core::Drawable::draw(&self.picture(image.clone()), context, canvas)
-                }
-                None => Ok(()),
-            },
+            Ok(asset) => motion_core::Drawable::draw(
+                &self.picture(asset.frame_at(self.time, self.mode).clone()),
+                context,
+                canvas,
+            ),
             Err(_) => canvas.fill(
                 &motion_core::Drawable::bounds(self, context)?,
                 motion_core::Color::rgb(255, 0, 255),
@@ -505,24 +495,20 @@ mod tests {
         ] {
             assert_eq!(
                 asset.frame_index_at(time.milliseconds(), ImageLoopMode::Loop),
-                Some(index)
+                index
             );
         }
         assert_eq!(
-            asset.frame_index_at((-1).milliseconds(), ImageLoopMode::Loop),
-            None
-        );
-        assert_eq!(
             asset.frame_index_at(600.milliseconds(), ImageLoopMode::Once),
-            Some(2)
+            2
         );
         assert_eq!(
             asset.frame_index_at(899.milliseconds(), ImageLoopMode::PingPong),
-            Some(1)
+            1
         );
         assert_eq!(
             asset.frame_index_at(900.milliseconds(), ImageLoopMode::PingPong),
-            Some(0)
+            0
         );
         for _ in 0..3 {
             let shared = asset.clone();
@@ -662,8 +648,11 @@ mod tests {
             (image([0, 255, 0, 255]), 300.milliseconds()),
             (image([0, 0, 255, 192]), 200.milliseconds()),
         ])?);
-        let composition =
-            motion_render::Composition::new(24, 16, motion_render::FrameClock::new(10, 20));
+        let composition = motion_render::Composition::new(
+            24,
+            16,
+            motion_render::FrameClock::new(motion_core::fps!(10), 20),
+        );
         let design = motion_core::Size::new(12.0, 8.0);
         let mut cpu = composition.clone().frame_renderer(design)?;
         let mut gpu = composition

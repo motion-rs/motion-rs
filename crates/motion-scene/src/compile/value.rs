@@ -6,8 +6,7 @@ use crate::value::{
     OscillateSpec, TweenSpec,
 };
 use motion_core::{
-    Color, Duration, Easing, FiniteAnimation, Interpolate, Keyframes, Noise, Oscillator, Signal,
-    Tween,
+    Color, Easing, FiniteAnimation, Interpolate, Keyframes, Noise, Oscillator, Signal, Time, Tween,
 };
 use std::sync::Arc;
 
@@ -24,7 +23,7 @@ pub(crate) enum Prop<Engine> {
 }
 
 impl<Engine: Clone> Prop<Engine> {
-    pub(crate) fn at(&self, time: Duration) -> Engine {
+    pub(crate) fn at(&self, time: Time) -> Engine {
         match self {
             Self::Fixed(value) => value.clone(),
             Self::Varying(animation) => animation.sample(time),
@@ -91,7 +90,7 @@ impl<const COUNT: usize> Value for [f64; COUNT] {
     fn from_signals(signals: &[Arc<dyn Signal<f64>>]) -> Option<Arc<dyn Signal<Self>>> {
         let signals: Vec<_> = signals.to_vec();
         (signals.len() == COUNT).then(|| {
-            Arc::new(move |time: Duration| std::array::from_fn(|index| signals[index].sample(time)))
+            Arc::new(move |time: Time| std::array::from_fn(|index| signals[index].sample(time)))
                 as Arc<dyn Signal<Self>>
         })
     }
@@ -140,9 +139,8 @@ impl Compiler<'_> {
     }
 
     pub(crate) fn easing(&mut self, easing: EasingSpec, path: &str) -> Option<Easing> {
-        let easing = Easing::from(easing);
-        match easing.try_validate() {
-            Ok(()) => Some(easing),
+        match Easing::try_from(easing) {
+            Ok(easing) => Some(easing),
             Err(error) => {
                 self.error(path, "easing", error.message);
                 None
@@ -263,10 +261,7 @@ impl Compiler<'_> {
         let to = self.value(&tween.to, &format!("{path}.to"));
         let duration = self.seconds(tween.duration, path, "duration");
         let easing = self.easing(tween.easing, path);
-        let animation = Tween::try_new(from?, to?, duration?)
-            .map_err(|error| self.error(path, "duration", error.message))
-            .ok()?
-            .easing(easing?);
+        let animation = Tween::new(from?, to?, duration?).easing(easing?);
         self.timing(
             Arc::new(animation),
             Timing {

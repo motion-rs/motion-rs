@@ -46,7 +46,7 @@ pub fn comparison_frames(directory: &std::path::Path, options: &RenderOptions) -
         for bloom in [false, true] {
             for tone_map in [ToneMap::None, ToneMap::AgX] {
                 let simulation = simulation.clone();
-                let timeline = Timeline::new(Size::new(320.0, 180.0), 30)
+                let timeline = Timeline::new(Size::new(320.0, 180.0), motion::fps!(30))
                     .track(|track| {
                         track.scene(3.seconds(), move |context| {
                             let particles = simulation.render(context);

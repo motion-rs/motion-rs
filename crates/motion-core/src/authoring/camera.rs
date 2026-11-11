@@ -94,7 +94,7 @@ pub fn camera(
 ///     MAX_STROKE_VERBS, MAX_SVG_PATH_BYTES, sample_offsets,
 /// };
 /// let cache = SceneCache::new(0);
-/// let context = SceneContext::new(Time::ZERO, FrameRate::from(30), Size::new(8.0, 8.0), &cache);
+/// let context = SceneContext::new(Time::ZERO, fps!(30), Size::new(8.0, 8.0), &cache);
 /// let view = Camera {
 ///     center: Point::new(10.0, 5.0),
 ///     zoom: 2.0,
@@ -289,7 +289,7 @@ mod tests {
         let cache = crate::SceneCache::new(0);
         let context = crate::SceneContext::new(
             crate::Time::ZERO,
-            crate::FrameRate::from(30),
+            crate::fps!(30),
             crate::Size::new(8.0, 8.0),
             &cache,
         );

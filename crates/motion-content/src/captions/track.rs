@@ -71,7 +71,7 @@ impl CaptionCue {
 /// use motion_content::captions::*;
 /// use motion_core::prelude::*;
 /// let captions = CaptionTrack::from_srt("1\n00:00:01,000 --> 00:00:03,000\nLight takes time.\n")?;
-/// let time = Time::from_frame(30, FrameRate::from(30));
+/// let time = Time::from_frame(30, fps!(30));
 /// assert_eq!(
 ///     captions.active_at_time(time).next().unwrap().text(),
 ///     "Light takes time."
@@ -357,7 +357,7 @@ mod tests {
                 track
                     .active_at_time(motion_core::Time::from_frame(
                         i64::from(index),
-                        motion_core::FrameRate::from(30)
+                        motion_core::fps!(30)
                     ))
                     .map(CaptionCue::text)
                     .collect::<Vec<_>>(),
@@ -378,11 +378,12 @@ mod tests {
             )?,
             CaptionCue::new(Duration::ZERO, Duration::from_nanos(333333333), "before")?,
         ])?;
-        let rate = motion_core::FrameRate::from(3);
+        let rate = motion_core::fps!(3);
         for frame in [
             motion_core::Time::from_frame(1, rate),
-            (motion_core::Time::from_frame(4, rate) - motion_core::Time::from_frame(3, rate))
-                .after_origin(),
+            motion_core::Time::ZERO
+                + (motion_core::Time::from_frame(4, rate) - motion_core::Time::from_frame(3, rate))
+                    .magnitude(),
             motion_core::Time::from_frame(1, rate),
         ] {
             assert_eq!(

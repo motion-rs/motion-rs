@@ -48,7 +48,7 @@ fn main() -> motion::Result {
         Mode::Film => ("film", Look::film(42)),
     };
     let scene_look = look.clone();
-    let timeline = Timeline::new(Size::new(640.0, 360.0), 24)
+    let timeline = Timeline::new(Size::new(640.0, 360.0), motion::fps!(24))
         .track(move |track| {
             track.scene(4.seconds(), move |context| {
                 scene_look

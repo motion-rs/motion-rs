@@ -133,7 +133,7 @@ impl AnimatedEq {
     }
 
     fn at(&self, frame: usize, rate: u32) -> Result<[f64; 5], ValidationError> {
-        let time = Duration::from_ticks(
+        let time = motion_core::Time::from_ticks(
             (frame as u128 * motion_core::TICKS_PER_SECOND as u128 / u128::from(rate)) as i64,
         );
         let frequency = self.frequency.sample(time);
@@ -464,7 +464,7 @@ impl AudioEffect for Effect {
                 ..
             } => {
                 let length =
-                    motion_core::audio::frames(delay, rate)?.max(1) as usize * channel_count;
+                    motion_core::audio::frames(delay, rate).max(1) as usize * channel_count;
                 let mut buffer = vec![0.0_f64; length];
                 for (index, sample) in input.iter_mut().enumerate() {
                     let echo = buffer[index % length];
@@ -678,7 +678,7 @@ mod tests {
             0.707,
             0.0,
         );
-        let timeline = Timeline::new(Size::new(1.0, 1.0), 30)
+        let timeline = Timeline::new(Size::new(1.0, 1.0), motion_core::fps!(30))
             .audio(AudioClip::source(pcm.clone()).effect(effect))
             .build()?;
         let whole = crate::MixedAudio::new(&timeline, crate::MixOptions::new(8000))?;

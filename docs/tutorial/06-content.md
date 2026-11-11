@@ -26,7 +26,7 @@ fn main() -> motion::Result {
     fonts.load_file("tests/fixtures/fonts/NotoSans-Regular.ttf")?;
     let assets = Assets::new(".")?.with_fonts(fonts);
     let options = RenderOptions::default().resources(assets);
-    let timeline = Timeline::new(Size::new(480.0, 270.0), 30).track(|track| {
+    let timeline = Timeline::new(Size::new(480.0, 270.0), fps!(30)).track(|track| {
         track.scene(2.seconds(), |context| {
             Text::new("Motion, one frame at a time.")
                 .family("Noto Sans")
@@ -58,7 +58,7 @@ fn main() -> motion::Result {
     let pixels = ImageAsset::from_rgba8(32, 32, vec![255; 32 * 32 * 4])?;
     assets.preload("tile.png", Arc::new(pixels))?;
     let options = RenderOptions::default().resources(assets);
-    let timeline = Timeline::new(Size::new(160.0, 90.0), 30).track(|track| {
+    let timeline = Timeline::new(Size::new(160.0, 90.0), fps!(30)).track(|track| {
         track.scene(1.seconds(), |_| {
             Image::open("tile.png").translate(64.0, 29.0)
         })

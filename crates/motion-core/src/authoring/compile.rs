@@ -38,7 +38,7 @@ impl Node {
     /// let cache = SceneCache::new(0);
     /// let context = SceneContext::new(
     ///     Time::ZERO,
-    ///     FrameRate::from(30),
+    ///     fps!(30),
     ///     Size::new(100.0, 50.0),
     ///     &cache,
     /// );

@@ -600,12 +600,13 @@ fn shared_context_texture_target_self_check_and_device_loss_are_real() -> motion
             .iter()
             .any(|pixel| pixel[3] > 0 && pixel[3] < 255)
     );
-    let composition = crate::Composition::new(16, 8, crate::FrameClock::new(30, 150))
-        .with_options(
-            crate::RenderOptions::default()
-                .gpu_context(context.clone())
-                .backend(crate::BackendPreference::automatic()),
-        )?;
+    let composition =
+        crate::Composition::new(16, 8, crate::FrameClock::new(motion_core::fps!(30), 150))
+            .with_options(
+                crate::RenderOptions::default()
+                    .gpu_context(context.clone())
+                    .backend(crate::BackendPreference::automatic()),
+            )?;
     let mut first = composition.frame_renderer(motion_core::Size::new(16.0, 8.0))?;
     let mut second = composition.frame_renderer(motion_core::Size::new(16.0, 8.0))?;
     assert_eq!(

@@ -37,7 +37,7 @@ The random marker's position is determined by its key. Repeated evaluation and b
 
 ## Time Is Not an Accumulator of Floating-Point Seconds
 
-`Time` (a point on a timeline) and `Duration` (a span) are distinct types over signed ticks, with `705600000` ticks per second. `Time - Time` is a `Duration` and `Time + Duration` is a `Time`; adding two `Time`s does not compile. Seconds are a convenient view, not internal playback state.
+`Time` (a signed point on a timeline), `Duration` (a nonnegative span) and `TimeOffset` (a signed displacement) are distinct types over integer ticks, with `705600000` ticks per second. `Time - Time` is a `TimeOffset`, `Time ± Duration` is a `Time`, and adding two `Time`s does not compile. A negative `Duration` cannot be built: `1.seconds()` literals are source constants and negative ones panic, while `Duration::try_from_seconds` reports runtime input. Seconds are a convenient view, not internal playback state. Frame rates are written `fps!(30)` (zero fails compilation) or `FrameRate::try_new(30_000, 1001)?`.
 
 | API | Purpose |
 | --- | --- |

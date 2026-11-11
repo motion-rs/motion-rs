@@ -71,7 +71,7 @@ fn cancelled_request_does_not_read_audio_or_open_device() -> motion_core::Result
     }
     let reads = Arc::new(AtomicU64::new(0));
     let timeline = Arc::new(
-        motion_core::Timeline::try_new(motion_core::Size::new(16.0, 8.0), 30)?
+        motion_core::Timeline::try_new(motion_core::Size::new(16.0, 8.0), motion_core::fps!(30))?
             .try_audio(motion_core::AudioClip::source(Source(reads.clone())))?
             .build()?,
     );
@@ -122,7 +122,7 @@ fn silent_timeline_finishes_preparation_without_an_output_device() -> motion_cor
         let _ = sender.send(());
     });
     let timeline = Arc::new(
-        motion_core::Timeline::try_new(motion_core::Size::new(16.0, 8.0), 30)?
+        motion_core::Timeline::try_new(motion_core::Size::new(16.0, 8.0), motion_core::fps!(30))?
             .try_duration(1.seconds())?
             .build()?,
     );
@@ -218,7 +218,7 @@ fn file_preview_windows_preserve_offsets_fades_and_export_crop() -> motion_core:
         .fade_in(400.milliseconds())
         .fade_out(400.milliseconds());
     let timeline = Arc::new(
-        motion_core::Timeline::new(motion_core::Size::new(1.0, 1.0), 100)
+        motion_core::Timeline::new(motion_core::Size::new(1.0, 1.0), motion_core::fps!(100))
             .audio(clip)
             .duration(1.seconds())
             .build()?,
@@ -365,12 +365,7 @@ fn changing_device_latency_cannot_move_the_audio_clock_backwards() {
 #[test]
 fn inactive_audio_never_starts_a_device_or_session() -> motion_core::Result {
     let mut preview = AudioPreview::new(egui::Context::default())?;
-    preview.start_at_rate(
-        &AudioForm::default(),
-        motion_core::FrameRate::from(24),
-        24,
-        0,
-    )?;
+    preview.start_at_rate(&AudioForm::default(), motion_core::fps!(24), 24, 0)?;
     assert!(preview.status().is_none());
     Ok(())
 }

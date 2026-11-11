@@ -5,22 +5,11 @@ use super::*;
 #[test]
 fn checked_animation_inputs_report_errors_without_changing_samples() {
     use crate::{Signal, TimeLiteral, Tween};
-    assert!(Tween::try_new(0.0, 1.0, (-1).seconds()).is_err());
-    assert!(
-        Tween::try_new(0.0, 1.0, 1.seconds())
-            .unwrap()
-            .try_easing(Easing::Steps(0))
-            .is_err()
-    );
-    let movement = Tween::try_new(0.0, 100.0, 2.seconds())
-        .unwrap()
-        .try_easing(Easing::CubicOut)
-        .unwrap();
-    assert_eq!(movement.sample(1.seconds()), 87.5);
-    assert!(Easing::Steps(0).try_validate().is_err());
+    assert!(Easing::steps(0).is_err());
+    let movement = Tween::new(0.0, 100.0, 2.seconds()).easing(Easing::CubicOut);
+    assert_eq!(movement.sample(1.seconds().after_origin()), 87.5);
     assert!(Easing::Linear.try_apply(f64::NAN).is_err());
     let invalid_output = Easing::Custom(Arc::new(|_| f64::NAN));
-    assert!(invalid_output.try_validate().is_ok());
     assert!(invalid_output.try_apply(0.0).is_err());
     assert!(invalid_output.try_apply(1.0).is_err());
     assert!(invalid_output.try_apply(0.5).is_err());
@@ -241,54 +230,36 @@ fn bezier_solves_flat_axes_and_preserves_double_precision_controls() {
 }
 
 #[test]
-fn invalid_parameters_and_nonfinite_progress_fail_even_at_boundaries() {
+fn constructors_reject_invalid_parameters() {
     let invalid = [
-        Easing::Steps(0),
-        Easing::BackIn { overshoot: -1.0 },
-        Easing::BackOut {
-            overshoot: f64::NAN,
-        },
-        Easing::BackInOut {
-            overshoot: f64::INFINITY,
-        },
-        Easing::ElasticOut {
-            amplitude: 0.5,
-            period: 0.3,
-        },
-        Easing::ElasticOut {
-            amplitude: f64::INFINITY,
-            period: 0.3,
-        },
-        Easing::ElasticOut {
-            amplitude: 1.0,
-            period: 0.0,
-        },
-        Easing::ElasticOut {
-            amplitude: 1.0,
-            period: f64::NAN,
-        },
-        Easing::CubicBezier {
-            x1: -0.1,
-            y1: 0.0,
-            x2: 1.0,
-            y2: 1.0,
-        },
-        Easing::CubicBezier {
-            x1: 0.0,
-            y1: f64::NAN,
-            x2: 1.0,
-            y2: 1.0,
-        },
+        Easing::steps(0),
+        Easing::back_in(-1.0),
+        Easing::back_out(f64::NAN),
+        Easing::back_in_out(f64::INFINITY),
+        Easing::elastic_out(0.5, 0.3),
+        Easing::elastic_out(f64::INFINITY, 0.3),
+        Easing::elastic_out(1.0, 0.0),
+        Easing::elastic_out(1.0, f64::NAN),
+        Easing::cubic_bezier(-0.1, 0.0, 1.0, 1.0),
+        Easing::cubic_bezier(0.0, f64::NAN, 1.0, 1.0),
+        Easing::cubic_bezier(0.0, 0.0, 1.1, 1.0),
     ];
-    for curve in invalid {
-        let curve = std::panic::AssertUnwindSafe(curve);
-        for progress in [0.0, 0.5, 1.0] {
-            assert!(std::panic::catch_unwind(|| curve.apply(progress)).is_err());
-        }
+    for result in invalid {
+        assert!(result.is_err());
     }
+    assert!(Easing::back_in(1.70158).is_ok());
+    assert!(Easing::elastic_out(1.0, 0.3).is_ok());
+    assert!(Easing::cubic_bezier(0.3, 1.8, 0.7, -0.5).is_ok());
+}
+
+#[test]
+fn nonfinite_progress_is_total_for_apply_and_rejected_by_try_apply() {
     for progress in [f64::NAN, f64::NEG_INFINITY, f64::INFINITY] {
-        assert!(std::panic::catch_unwind(|| Easing::Linear.apply(progress)).is_err());
+        assert!(Easing::Linear.try_apply(progress).is_err());
     }
+    assert!(Easing::Linear.apply(f64::NAN).is_nan());
+    assert_eq!(Easing::Linear.apply(f64::NEG_INFINITY), 0.0);
+    assert_eq!(Easing::CubicOut.apply(f64::INFINITY), 1.0);
 }
 
 #[test]
@@ -303,14 +274,14 @@ fn custom_curves_clone_across_threads_without_debug_evaluating_them() {
         0.25
     );
     assert_eq!(curve.apply(0.25), 0.0625);
-    let invalid = std::panic::AssertUnwindSafe(Easing::Custom(Arc::new(|_| f64::NAN)));
-    assert!(std::panic::catch_unwind(|| invalid.apply(0.5)).is_err());
-    assert!(std::panic::catch_unwind(|| invalid.apply(0.0)).is_err());
+    let invalid = Easing::Custom(Arc::new(|_| f64::NAN));
+    assert!(invalid.apply(0.5).is_nan());
+    assert!(invalid.try_apply(0.5).is_err());
 }
 
 #[test]
 fn inputs_preserve_double_precision_across_clip_durations() {
-    use crate::{Duration, Keyframes, Signal, TimeLiteral, Tween};
+    use crate::{Keyframes, Signal, Time, TimeLiteral, Tween};
     for curve in [
         Easing::Linear,
         Easing::QuadraticIn,
@@ -327,15 +298,15 @@ fn inputs_preserve_double_precision_across_clip_durations() {
             let tween = Tween::new(10.0_f64, 20.0, duration).easing(curve.clone());
             let track = Keyframes::new(10.0_f64).to(duration, 20.0, curve.clone());
             for time in [
-                Duration::from_ticks(i64::MIN),
-                Duration::ZERO,
-                Duration::from_ticks(1),
-                duration / 4.0,
-                duration / 2.0,
-                duration,
-                Duration::from_ticks(i64::MAX),
+                Time::from_ticks(i64::MIN),
+                Time::ZERO,
+                Time::from_ticks(1),
+                (duration / 4.0).after_origin(),
+                (duration / 2.0).after_origin(),
+                duration.after_origin(),
+                Time::from_ticks(i64::MAX),
             ] {
-                let progress = curve.apply(time / duration);
+                let progress = curve.apply(time.ticks() as f64 / duration.ticks() as f64);
                 let expected = 10.0 * (1.0 - progress) + 20.0 * progress;
                 assert_eq!(tween.sample(time).to_bits(), expected.to_bits());
                 assert_eq!(track.sample(time).to_bits(), expected.to_bits());

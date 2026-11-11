@@ -179,12 +179,12 @@ impl StudioApp {
                             ui.label(format!("Stereo correlation: {correlation:.2}"));
                         }
                     }
-                    let time = motion_core::Time::from_frame(
-                        i64::from(self.playback.transport.frame),
+                    let time = motion_core::Duration::from_frame(
+                        u64::from(self.playback.transport.frame),
                         self.clock.rate,
                     );
                     for meter in &overview.meters {
-                        let [rms, peak] = meter.level(time.since_origin());
+                        let [rms, peak] = meter.level(time);
                         ui.label(format!("{}: {rms:.1} / {peak:.1} dBFS", meter.name));
                         ui.add(
                             egui::ProgressBar::new(((rms + 96.0) / 96.0).clamp(0.0, 1.0) as f32)

@@ -177,7 +177,7 @@ impl FrameRenderer {
                 FrameRequest {
                     at: FrameAt::Index(index),
                     frame_rate: self.composition.clock.rate,
-                    duration: self.duration.since_origin(),
+                    duration: self.duration.since_origin().magnitude(),
                     background: Some(self.composition.snapshot_background()),
                     target: crate::RenderTarget::Memory(&mut output),
                     format: crate::PixelFormat::SrgbRgba8 {
@@ -216,7 +216,7 @@ impl FrameRenderer {
             FrameRequest {
                 at: FrameAt::Time(time),
                 frame_rate: rate,
-                duration: self.duration.since_origin(),
+                duration: self.duration.since_origin().magnitude(),
                 background,
                 target: crate::RenderTarget::Memory(&mut output),
                 format,
@@ -245,7 +245,7 @@ impl FrameRenderer {
             FrameRequest {
                 at: FrameAt::Index(index),
                 frame_rate: rate,
-                duration: self.duration.since_origin(),
+                duration: self.duration.since_origin().magnitude(),
                 background,
                 target: crate::RenderTarget::Texture(texture),
                 format,

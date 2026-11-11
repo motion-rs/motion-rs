@@ -312,7 +312,7 @@ mod _case_tests {
 
         let (resources, _) = load_resources()?;
         let cache = SceneCache::default();
-        let rate = FrameRate::from(30);
+        let rate = motion::fps!(30);
         let context = SceneContext::new(Time::from_frame(45, rate), rate, DESIGN, &cache)
             .with_assets(&resources);
         let node = artwork("layers-wide", &context);

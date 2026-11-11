@@ -9,7 +9,7 @@ fn scene_closures_infer_context_and_groups_accept_empty_and_mixed_children() {
     let cache = crate::SceneCache::default();
     let context = SceneContext::new(
         Time::ZERO,
-        crate::FrameRate::from(30),
+        crate::fps!(30),
         crate::Size::new(8.0, 8.0),
         &cache,
     );
@@ -32,7 +32,7 @@ fn scene_accepts_drawables_and_results_without_losing_original_errors() {
     let diagnostics = crate::RequestDiagnostics::default();
     let context = SceneContext::new(
         Time::ZERO,
-        crate::FrameRate::from(30),
+        crate::fps!(30),
         crate::Size::new(8.0, 8.0),
         &cache,
     )
@@ -244,7 +244,7 @@ fn memo_reuses_nodes_and_distinguishes_float_inputs() {
     let cache = crate::SceneCache::default();
     let context = SceneContext::new(
         Time::ZERO,
-        crate::FrameRate::from(30),
+        crate::fps!(30),
         crate::Size::new(8.0, 8.0),
         &cache,
     );
@@ -265,7 +265,7 @@ fn memo_reuses_nodes_and_distinguishes_float_inputs() {
 #[test]
 fn track_scene_accepts_drawables_tuples_and_result_outputs() {
     use crate::{Color, TimeLiteral, Timeline};
-    let timeline = Timeline::new(crate::Size::new(8.0, 8.0), 30)
+    let timeline = Timeline::new(crate::Size::new(8.0, 8.0), crate::fps!(30))
         .track(|track| {
             track
                 .scene(1.seconds(), |_| {
@@ -290,7 +290,7 @@ fn deferred_layout_matches_eager_placement_and_rejects_invalid_parameters() {
     let cache = crate::SceneCache::default();
     let context = SceneContext::new(
         Time::ZERO,
-        crate::FrameRate::from(30),
+        crate::fps!(30),
         crate::Size::new(100.0, 100.0),
         &cache,
     );

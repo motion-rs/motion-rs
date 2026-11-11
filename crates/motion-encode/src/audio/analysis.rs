@@ -12,13 +12,13 @@
 //! let pcm = Arc::new(PcmBuffer::new(48_000, 1, vec![0.5; 4800])?);
 //! let analysis = AudioAnalysis::from_pcm(pcm);
 //! let loudness = analysis.loudness()?;
-//! assert!((loudness.sample(10.milliseconds()) - 0.5).abs() < 1e-9);
+//! assert!((loudness.sample(10.milliseconds().after_origin()) - 0.5).abs() < 1e-9);
 //! # Ok::<(), motion_core::Error>(())
 //! ```
 
 use super::pcm::{MAX_SAMPLES, ceil_frames, invalid};
 use crate::PcmBuffer;
-use motion_core::{AudioSource, Duration, FiniteAnimation, Signal};
+use motion_core::{AudioSource, Duration, FiniteAnimation, Signal, Time};
 use rustfft::{FftPlanner, num_complex::Complex};
 use std::{
     collections::BTreeMap,
@@ -54,8 +54,11 @@ pub(crate) struct AnalysisTrace {
 pub struct AudioSignal(Arc<AnalysisTrace>);
 
 impl Signal<f64> for AudioSignal {
-    fn sample(&self, time: Duration) -> f64 {
-        if time < Duration::ZERO || time >= self.0.duration {
+    fn sample(&self, time: Time) -> f64 {
+        let Some(time) = time.duration_since(Time::ZERO) else {
+            return 0.0;
+        };
+        if time >= self.0.duration {
             return 0.0;
         }
         let frame = (time.ticks() as u128 * u128::from(self.0.sample_rate)
@@ -95,7 +98,7 @@ impl AudioAnalysis {
     /// Freezes a bounded interval of any pure procedural or mixed source.
     pub fn from_source(source: &dyn AudioSource, duration: Duration) -> motion_core::Result<Self> {
         let channels = usize::from(source.channels());
-        let count = ceil_frames(duration, source.sample_rate())?;
+        let count = ceil_frames(duration, source.sample_rate());
         if !(1..=192_000).contains(&source.sample_rate())
             || !(1..=2).contains(&channels)
             || count == 0
@@ -290,17 +293,17 @@ mod tests {
         let band = analysis.band(900.0, 1200.0)?;
         let quiet = analysis.band(0.0, 100.0)?;
         for time in [
-            500.milliseconds(),
-            100.milliseconds(),
-            700.milliseconds(),
-            500.milliseconds(),
+            500.milliseconds().after_origin(),
+            100.milliseconds().after_origin(),
+            700.milliseconds().after_origin(),
+            500.milliseconds().after_origin(),
         ] {
             assert!((loudness.sample(time) - 0.5 / libm::sqrt(2.0)).abs() < 1e-6);
             assert!((band.sample(time) - 0.5 / libm::sqrt(2.0)).abs() < 1e-6);
             assert!(quiet.sample(time) < 1e-6);
         }
-        assert_eq!(loudness.sample(-1.milliseconds()), 0.0);
-        assert_eq!(band.sample(1.seconds()), 0.0);
+        assert_eq!(loudness.sample(Time::ZERO - 1.milliseconds()), 0.0);
+        assert_eq!(band.sample(1.seconds().after_origin()), 0.0);
         assert!(Arc::ptr_eq(
             &band.0,
             &AudioAnalysis::from_pcm(pcm).band(900.0, 1200.0)?.0
@@ -312,12 +315,15 @@ mod tests {
                         analysis
                             .band(900.0, 1200.0)
                             .unwrap()
-                            .sample(500.milliseconds())
+                            .sample(500.milliseconds().after_origin())
                     })
                 })
                 .collect::<Vec<_>>();
             for task in tasks {
-                assert_eq!(task.join().unwrap(), band.sample(500.milliseconds()));
+                assert_eq!(
+                    task.join().unwrap(),
+                    band.sample(500.milliseconds().after_origin())
+                );
             }
         });
         assert!(analysis.band(-1.0, 10.0).is_err());
@@ -331,7 +337,9 @@ mod tests {
         )?;
         let mut output = [0.0; 2];
         mixed.read(4096, &mut output);
-        assert!((f64::from(output[0]) - band.sample(500.milliseconds())).abs() < 1e-6);
+        assert!(
+            (f64::from(output[0]) - band.sample(500.milliseconds().after_origin())).abs() < 1e-6
+        );
         Ok(())
     }
 }

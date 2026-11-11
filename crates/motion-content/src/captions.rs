@@ -158,7 +158,10 @@ impl CueSheet {
         if source.0 < motion_core::Time::ZERO || source.1 <= source.0 {
             return Err(invalid("Narration source requires 0 <= in < out").into());
         }
-        let duration = source.1 - source.0;
+        let duration = source
+            .1
+            .duration_since(source.0)
+            .ok_or_else(|| invalid("Narration source requires 0 <= in < out"))?;
         if duration.ticks() as u128 * 1_000_000_000
             > (cue.end() - cue.start()).as_nanos() * motion_core::TICKS_PER_SECOND as u128
         {
@@ -170,7 +173,7 @@ impl CueSheet {
             / 1_000_000_000;
         Ok(motion_core::AudioClip::source(audio)
             .start(motion_core::Time::from_ticks(start as i64))
-            .offset(source.0.since_origin())
+            .offset(source.0.since_origin().magnitude())
             .duration(duration))
     }
 }
@@ -183,14 +186,14 @@ fn invalid(message: &str) -> ValidationError {
 mod tests {
     use super::*;
     use crate::CaptionCue;
-    use motion_core::{AudioSource, FrameRate, Time, TimeLiteral};
+    use motion_core::{AudioSource, Time, TimeLiteral};
 
     #[test]
     fn markers_use_the_frame_clock_and_reject_ambiguous_names() -> Result<(), ValidationError> {
         let sheet = CueSheet::new(Duration::from_secs(10), CaptionTrack::default())?
             .mark("in", Duration::from_millis(100))?
             .mark("out", Duration::from_secs(1))?;
-        let frame = |index| Time::from_frame(index, FrameRate::from(30));
+        let frame = |index| Time::from_frame(index, motion_core::fps!(30));
         assert_eq!(sheet.elapsed(frame(2), "in")?, None);
         assert_eq!(sheet.elapsed(frame(3), "in")?, Some(Duration::ZERO));
         assert_eq!(sheet.progress(frame(30), "in", "out")?, 1.0);

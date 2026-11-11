@@ -153,7 +153,7 @@ pub(super) fn microbenchmarks(
             counter += 1;
             let mut state = 0;
             for index in 0..1024 {
-                let time = ((counter + index) % 3000).milliseconds();
+                let time = ((counter + index) % 3000).milliseconds().after_origin();
                 state = support::fold_checksum(state, noise.sample(time).to_bits());
             }
             Ok(state)

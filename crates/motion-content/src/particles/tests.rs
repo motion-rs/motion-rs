@@ -673,7 +673,7 @@ fn geometry_and_sdf_collisions_do_not_cross_thin_edges_or_corners() -> motion_co
     let cache = motion_core::SceneCache::new(1024 * 1024);
     let context = motion_core::SceneContext::new(
         Time::ZERO,
-        motion_core::FrameRate::from(30),
+        motion_core::fps!(30),
         motion_core::Size::new(2.0, 2.0),
         &cache,
     );
@@ -871,7 +871,7 @@ fn mixed_size_atlas_pads_cells_and_builds_a_sheet_style() -> motion_core::Result
     let cache = motion_core::SceneCache::default();
     let context = motion_core::SceneContext::new(
         100.milliseconds().after_origin(),
-        motion_core::FrameRate::from(30),
+        motion_core::fps!(30),
         motion_core::Size::new(32.0, 32.0),
         &cache,
     )
@@ -1022,7 +1022,7 @@ fn ribbon_trails_subdivide_bends_more_finely_than_round_trails() -> motion_core:
         let cache = motion_core::SceneCache::default();
         let context = motion_core::SceneContext::new(
             600.milliseconds().after_origin(),
-            motion_core::FrameRate::from(30),
+            motion_core::fps!(30),
             motion_core::Size::new(64.0, 64.0),
             &cache,
         )

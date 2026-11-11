@@ -69,7 +69,7 @@ pub(super) struct Pulse {
 }
 
 impl Signal<f64> for Pulse {
-    fn sample(&self, time: Duration) -> f64 {
+    fn sample(&self, time: Time) -> f64 {
         let seconds = time.as_seconds();
         if seconds < self.start || seconds >= self.end {
             0.0

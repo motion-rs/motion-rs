@@ -12,7 +12,7 @@ use motion::extend::{Canvas, Drawable};
 use motion::render::{DisplayList, FilterOperation, ValidatedDisplayList};
 
 fn main() -> motion::Result {
-    let timeline = Timeline::new(Size::new(480.0, 270.0), 30).track(|track| {
+    let timeline = Timeline::new(Size::new(480.0, 270.0), fps!(30)).track(|track| {
         track.scene(1.seconds(), |_| -> motion::Result<_> {
             Ok(Node::group((
                 Rect::new(60.0, 60.0, 420.0, 210.0)

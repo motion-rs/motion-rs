@@ -26,7 +26,7 @@ fn main() -> motion::Result {
     let selected = formula
         .select_symbol("c")?
         .apply(|node| node.translate(0.0, -8.0));
-    let timeline = Timeline::new(Size::new(480.0, 180.0), 30).track(|track| {
+    let timeline = Timeline::new(Size::new(480.0, 180.0), fps!(30)).track(|track| {
         track.scene(1.seconds(), move |_| selected.clone().translate(40.0, 55.0))
     }).build()?;
     render_still(&timeline, Time::ZERO, &RenderOptions::default())?
@@ -61,7 +61,7 @@ fn main() -> motion::Result {
     let equation = Formula::typst("f(t) = sin(2 pi t)")
         .size(36.0)
         .fill(Color::rgb(20, 140, 120));
-    let timeline = Timeline::new(Size::new(480.0, 180.0), 30).track(|track| {
+    let timeline = Timeline::new(Size::new(480.0, 180.0), fps!(30)).track(|track| {
         track.scene(2.seconds(), move |context| {
             equation.clone().write(context.progress()).translate(32.0, 60.0)
         })

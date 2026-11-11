@@ -266,8 +266,8 @@ pub(crate) fn process(samples: &mut [f32], rate: u32, master: Master) -> motion_
     }
     if let Some(limiter) = master.limiter {
         let ceiling = amplitude(limiter.ceiling_db);
-        let lookahead = motion_core::audio::ceil_frames(limiter.lookahead, rate)? as usize;
-        let release = motion_core::audio::ceil_frames(limiter.release, rate)?.max(1) as f64;
+        let lookahead = motion_core::audio::ceil_frames(limiter.lookahead, rate) as usize;
+        let release = motion_core::audio::ceil_frames(limiter.release, rate).max(1) as f64;
         let frames = samples.len() / 2;
         let mut envelope: Vec<f64> = samples
             .as_chunks::<2>()
@@ -379,7 +379,7 @@ mod tests {
                 [value, value]
             })
             .collect();
-        let timeline = Timeline::new(Size::new(1.0, 1.0), 30)
+        let timeline = Timeline::new(Size::new(1.0, 1.0), motion_core::fps!(30))
             .audio(AudioClip::source(PcmBuffer::new(48000, 2, signal)?))
             .build()?;
         let mix = MixedAudio::new(&timeline, MixOptions::new(48000))?;

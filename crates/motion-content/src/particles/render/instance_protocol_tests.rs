@@ -85,13 +85,17 @@ fn compare_batches(style: ParticleStyle, renderer: Renderer) -> motion_core::Res
             .gravity(Vector2::new(0.0, 20.0)),
     )
     .style(style);
-    let mut session = Composition::new(192, 144, motion_render::FrameClock::new(30, 120))
-        .with_options(
-            motion_render::RenderOptions::default()
-                .backend(renderer.into())
-                .background(Color::BLACK),
-        )?
-        .frame_renderer(Size::new(192.0, 144.0))?;
+    let mut session = Composition::new(
+        192,
+        144,
+        motion_render::FrameClock::new(motion_core::fps!(30), 120),
+    )
+    .with_options(
+        motion_render::RenderOptions::default()
+            .backend(renderer.into())
+            .background(Color::BLACK),
+    )?
+    .frame_renderer(Size::new(192.0, 144.0))?;
     for mode in 0..3 {
         let mut reference = None;
         let mut moving = None;
@@ -233,7 +237,7 @@ fn per_style_blend_reaches_instance_upload_and_cpu_pixels() -> motion_core::Resu
     let cache = motion_core::SceneCache::default();
     let context = SceneContext::new(
         300.milliseconds().after_origin(),
-        motion_core::FrameRate::from(30),
+        motion_core::fps!(30),
         Size::new(96.0, 72.0),
         &cache,
     )
@@ -269,13 +273,17 @@ fn per_style_blend_reaches_instance_upload_and_cpu_pixels() -> motion_core::Resu
             assert_eq!(seen, 1);
         }
     }
-    let mut session = Composition::new(96, 72, motion_render::FrameClock::new(30, 30))
-        .with_options(
-            motion_render::RenderOptions::default()
-                .backend(Renderer::Cpu.into())
-                .background(Color::rgb(96, 96, 96)),
-        )?
-        .frame_renderer(Size::new(96.0, 72.0))?;
+    let mut session = Composition::new(
+        96,
+        72,
+        motion_render::FrameClock::new(motion_core::fps!(30), 30),
+    )
+    .with_options(
+        motion_render::RenderOptions::default()
+            .backend(Renderer::Cpu.into())
+            .background(Color::rgb(96, 96, 96)),
+    )?
+    .frame_renderer(Size::new(96.0, 72.0))?;
     let frames = BLENDS
         .into_iter()
         .map(|blend| {

@@ -352,20 +352,24 @@ mod tests {
     ) -> motion_core::Result<motion_render::FrameBuffer> {
         let size = PixelSize::new(64, 48);
         let image = std::sync::Arc::new(recipe.render(size, time, RasterLimits::default())?);
-        Composition::new(64, 48, motion_render::FrameClock::new(30, 150))
-            .with_options(motion_render::RenderOptions::default().backend(renderer.into()))?
-            .render_frame(0, Size::new(64.0, 48.0), |_| {
-                Node::group([
-                    Rect::new(0.0, 0.0, 64.0, 48.0)
-                        .fill(Color::rgb(18, 38, 45))
-                        .into(),
-                    Node::from(
-                        crate::Image::from_asset(image.clone())
-                            .sampling(motion_core::Sampling::Bilinear),
-                    )
-                    .blend_mode(mode),
-                ])
-            })
+        Composition::new(
+            64,
+            48,
+            motion_render::FrameClock::new(motion_core::fps!(30), 150),
+        )
+        .with_options(motion_render::RenderOptions::default().backend(renderer.into()))?
+        .render_frame(0, Size::new(64.0, 48.0), |_| {
+            Node::group([
+                Rect::new(0.0, 0.0, 64.0, 48.0)
+                    .fill(Color::rgb(18, 38, 45))
+                    .into(),
+                Node::from(
+                    crate::Image::from_asset(image.clone())
+                        .sampling(motion_core::Sampling::Bilinear),
+                )
+                .blend_mode(mode),
+            ])
+        })
     }
 
     #[test]
@@ -377,18 +381,20 @@ mod tests {
         for recipe in [Atmosphere::fog(7), Atmosphere::light_leak(7)] {
             let overlay =
                 recipe.overlay(size, 1.seconds().after_origin(), RasterLimits::default())?;
-            let frame = Composition::new(64, 48, motion_render::FrameClock::new(30, 150))
-                .with_options(
-                    motion_render::RenderOptions::default().backend(Renderer::Cpu.into()),
-                )?
-                .render_frame(0, Size::new(64.0, 48.0), |_| {
-                    Node::group([
-                        Rect::new(0.0, 0.0, 64.0, 48.0)
-                            .fill(Color::rgb(18, 38, 45))
-                            .into(),
-                        overlay.clone(),
-                    ])
-                })?;
+            let frame = Composition::new(
+                64,
+                48,
+                motion_render::FrameClock::new(motion_core::fps!(30), 150),
+            )
+            .with_options(motion_render::RenderOptions::default().backend(Renderer::Cpu.into()))?
+            .render_frame(0, Size::new(64.0, 48.0), |_| {
+                Node::group([
+                    Rect::new(0.0, 0.0, 64.0, 48.0)
+                        .fill(Color::rgb(18, 38, 45))
+                        .into(),
+                    overlay.clone(),
+                ])
+            })?;
             let manual = compose(
                 recipe,
                 recipe.blend_mode(),

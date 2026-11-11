@@ -166,11 +166,12 @@ mod tests {
     #[cfg(not(feature = "gpu"))]
     #[test]
     fn disabled_gpu_fails_before_loading_invalid_font_data() {
-        let error = crate::Composition::new(32, 32, crate::FrameClock::new(30, 150))
-            .with_options(crate::RenderOptions::default().backend(Renderer::Gpu.into()))?
-            .frame_renderer(motion_core::Size::new(32.0, 32.0))
-            .err()
-            .expect("GPU is not compiled");
+        let error =
+            crate::Composition::new(32, 32, crate::FrameClock::new(motion_core::fps!(30), 150))
+                .with_options(crate::RenderOptions::default().backend(Renderer::Gpu.into()))?
+                .frame_renderer(motion_core::Size::new(32.0, 32.0))
+                .err()
+                .expect("GPU is not compiled");
         assert_eq!(
             error.downcast_ref::<ValidationError>().unwrap().kind,
             ValidationErrorKind::Unsupported
@@ -184,8 +185,9 @@ mod tests {
             max_nodes: 1,
             max_depth: 1,
         })?;
-        let composition = crate::Composition::new(24, 24, crate::FrameClock::new(30, 150))
-            .with_options(crate::RenderOptions::default().context(context))?;
+        let composition =
+            crate::Composition::new(24, 24, crate::FrameClock::new(motion_core::fps!(30), 150))
+                .with_options(crate::RenderOptions::default().context(context))?;
         let cloned = composition.clone();
         assert_eq!(cloned.context().validation_limits().max_nodes, 1);
         let size = motion_core::Size::new(24.0, 24.0);
@@ -238,8 +240,9 @@ mod tests {
             max_nodes: 1,
             max_depth: 1,
         })?;
-        let composition = crate::Composition::new(24, 24, crate::FrameClock::new(30, 150))
-            .with_options(crate::RenderOptions::default().context(context.clone()))?;
+        let composition =
+            crate::Composition::new(24, 24, crate::FrameClock::new(motion_core::fps!(30), 150))
+                .with_options(crate::RenderOptions::default().context(context.clone()))?;
         let mut renderer = composition.frame_renderer(motion_core::Size::new(24.0, 24.0))?;
         let error = renderer
             .render_frame(7, |_| {

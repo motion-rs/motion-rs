@@ -187,7 +187,7 @@ for both new and overwritten outputs; export never reads or changes that umask.
 ```rust,no_run
 use motion::prelude::*;
 use motion::render::Composition;
-let composition = Composition::new(320, 180, motion::render::FrameClock::new(30, 60));
+let composition = Composition::new(320, 180, motion::render::FrameClock::new(fps!(30), 60));
 let mut renderer = composition.frame_renderer(Size::new(320.0, 180.0))?;
 let circle = Circle::new(Point::new(160.0, 90.0), 24.0)?;
 let frame = renderer.render_frame(15, |_| {

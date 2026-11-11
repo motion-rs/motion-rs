@@ -22,7 +22,7 @@ impl WaveformPyramid {
         {
             return Err(invalid("waveform", "Invalid waveform format or duration").into());
         }
-        let frames = motion_core::audio::ceil_frames(duration, rate)?;
+        let frames = motion_core::audio::ceil_frames(duration, rate);
         let base = frames.div_ceil(1_000_000).max(64);
         let bins = frames.div_ceil(base) as usize;
         let mut peaks = vec![0.0_f32; bins];

@@ -84,7 +84,7 @@ impl ParticleSimulationBuilder {
             config: Config {
                 seed,
                 duration: None,
-                step: Duration::from_ticks(motion_core::TICKS_PER_SECOND / 240),
+                step: Duration::from_ticks(motion_core::TICKS_PER_SECOND as u64 / 240),
                 interval: 60,
                 emitters: Vec::new(),
                 modifiers: Vec::new(),
@@ -259,7 +259,7 @@ impl ParticleSimulation {
         if let Some(replay) = &prepared.replay {
             return replay.sample(&self.config, &mut cursor.replay, time);
         }
-        let target = time.ticks() as u64 / self.config.step.ticks() as u64;
+        let target = time.ticks() as u64 / self.config.step.ticks();
         let index = prepared
             .snapshots
             .partition_point(|snapshot| snapshot.step <= target)
@@ -420,7 +420,7 @@ fn births(
 
 fn advance(config: &Config, state: &mut State, work: &mut u64) -> Result<(), ValidationError> {
     state.step += 1;
-    let time = Time::from_ticks(state.step as i64 * config.step.ticks());
+    let time = Time::from_ticks(state.step as i64 * config.step.ticks() as i64);
     let seconds = config.step.as_seconds() as f32;
     charge(
         config,
@@ -481,7 +481,7 @@ fn prepare(config: &Config, duration: Duration) -> Result<Prepared, ValidationEr
             "Invalid simulation duration/step/components/limits",
         ));
     }
-    let steps = duration.ticks() as u64 / config.step.ticks() as u64;
+    let steps = duration.ticks() / config.step.ticks();
     if steps > limits.max_steps || steps > 1_000_000 {
         return Err(limit("Simulation fixed-step allowance exhausted"));
     }

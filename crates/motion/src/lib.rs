@@ -44,7 +44,7 @@
 //! ```no_run
 //! use motion::prelude::*;
 //! # fn main() -> motion::Result {
-//! let timeline = Timeline::new(Size::new(640.0, 360.0), 30).track(|track| {
+//! let timeline = Timeline::new(Size::new(640.0, 360.0), fps!(30)).track(|track| {
 //!     track.push(
 //!         scene(|context| {
 //!             Node::from(
@@ -221,10 +221,10 @@ pub use motion_core::{
     PathBuilder, Pivot, PixelSize, Point, Polygon, Polyline, Pose, Push, RadialGradient, Random,
     Rect, RegularPolygon, RenderQuality, Ring, RoundedRect, Row, Sampling, Scene, SceneContext,
     Shape, Side, Signal, Size, Skeleton, Slide, Soundtrack, Source, Spline, Spring, Star,
-    StrokeStyle, Styled, SweepGradient, Time, TimeLiteral, Timeline, TimelineBuilder,
+    StrokeStyle, Styled, SweepGradient, Time, TimeLiteral, TimeOffset, Timeline, TimelineBuilder,
     TimelineWarning, Track, TrackBuilder, Transform, TransformComponents, Tween, ValidationError,
-    Vector2, Wipe, ZoomBlur, animation, authoring, color, geometry, noise, path2d, sample_offsets,
-    shape, time, try_camera,
+    Vector2, Wipe, ZoomBlur, animation, authoring, color, fps, geometry, noise, path2d,
+    sample_offsets, shape, time, try_camera,
 };
 pub use motion_render::{BackendPreference, RenderOptions, render_still};
 
@@ -347,10 +347,10 @@ pub mod prelude {
         ProjectBuilder, ProjectOutcome, ProjectTimelineInfo, Push, RadialGradient, Random, Rect,
         RegularPolygon, RenderOptions, RenderQuality, Ring, RoundedRect, Row, Sampling, Scene,
         SceneContext, Shape, Side, Signal, Size, Skeleton, Slide, Source, Spline, Spring, Star,
-        StrokeStyle, Styled, SweepGradient, Time, TimeLiteral, Timeline, TimelineBuilder,
-        TimelineWarning, Track, TrackBuilder, Transform, TransformComponents, Tween,
-        ValidationError, Vector2, Waveform, Wipe, ZoomBlur, camera, export, group, key, math,
-        piecewise, remap, render_still, scene,
+        StrokeStyle, Styled, SweepGradient, Time, TimeLiteral, TimeOffset, Timeline,
+        TimelineBuilder, TimelineWarning, Track, TrackBuilder, Transform, TransformComponents,
+        Tween, ValidationError, Vector2, Waveform, Wipe, ZoomBlur, camera, export, fps, group, key,
+        math, piecewise, remap, render_still, scene,
     };
     pub use crate::{
         ApertureShape, BitDepth, Cdl, ColorWheels, DepthOfField, DepthPlane, DisplayTransform,

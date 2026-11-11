@@ -25,7 +25,7 @@ mod resources {
                 let error = motion::render::Composition::new(
                     1,
                     1,
-                    motion::render::FrameClock::new(30, 150),
+                    motion::render::FrameClock::new(motion::fps!(30), 150),
                 )
                 .with_options(
                     motion::render::RenderOptions::default()
@@ -69,7 +69,7 @@ mod resources {
                 0,
             )?;
             let text = Text::from_font("Used font", &face, 12.0, Color::WHITE)?;
-            let timeline = Timeline::new(Size::new(96.0, 32.0), 30)
+            let timeline = Timeline::new(Size::new(96.0, 32.0), motion::fps!(30))
                 .track(|track| track.scene(100.milliseconds(), move |_| text.clone()))
                 .build()?;
             let mut options =
@@ -83,7 +83,7 @@ mod resources {
             let second = motion::export(&timeline, &options, &NoProgress)?;
             assert_eq!(first.fonts, second.fonts);
             options.path = directory.path().join("empty");
-            let empty = Timeline::new(Size::new(96.0, 32.0), 30)
+            let empty = Timeline::new(Size::new(96.0, 32.0), motion::fps!(30))
                 .track(|track| track.scene(100.milliseconds(), |_| Node::empty()))
                 .build()?;
             assert!(
@@ -140,7 +140,7 @@ mod resources {
             let build = |_: &motion::SceneContext<'_>| {
                 Node::from(Image::open("missing.png").size(8.0, 8.0))
             };
-            let timeline = Timeline::try_new(Size::new(8.0, 8.0), 30)?
+            let timeline = Timeline::try_new(Size::new(8.0, 8.0), motion::fps!(30))?
                 .try_track(|track| track.try_push(build.with_duration(100.milliseconds())))?
                 .build()?;
             let mut options = ExportOptions::new(&destination);
@@ -167,8 +167,11 @@ mod resources {
             use motion::{Color, Image, Node, Rect, Size};
             let directory = tempfile::tempdir()?;
             let assets = Assets::new(directory.path())?;
-            let composition = Composition::new(8, 8, motion::render::FrameClock::new(30, 150))
-                .with_options(motion::render::RenderOptions::default().resources(assets.clone()))?;
+            let composition =
+                Composition::new(8, 8, motion::render::FrameClock::new(motion::fps!(30), 150))
+                    .with_options(
+                        motion::render::RenderOptions::default().resources(assets.clone()),
+                    )?;
             let mut strict = composition.frame_renderer(Size::new(8.0, 8.0))?;
             let error = strict
                 .render_frame(3, |_| Node::from(Image::open("missing.png").size(8.0, 8.0)))

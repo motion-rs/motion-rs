@@ -91,8 +91,8 @@ impl NativeOptions {
                     if chapter.start >= chapter.end {
                         return None;
                     }
-                    chapter.start = (chapter.start - range.start).after_origin();
-                    chapter.end = (chapter.end - range.start).after_origin();
+                    chapter.start -= range.start.since_origin();
+                    chapter.end -= range.start.since_origin();
                     Some(chapter)
                 })
                 .collect();
@@ -186,7 +186,7 @@ impl Encoder {
         Self::open(
             destination,
             size,
-            motion_core::FrameRate::from(fps),
+            motion_core::FrameRate::try_new(fps, 1).map_err(io::Error::other)?,
             frames,
             options,
         )
@@ -410,13 +410,13 @@ fn validate(
     frames: u32,
     options: &NativeOptions,
 ) -> io::Result<()> {
-    if fps == 0 {
-        return Err(io::Error::new(
+    let rate = motion_core::FrameRate::try_new(fps, 1).map_err(|_| {
+        io::Error::new(
             io::ErrorKind::InvalidInput,
             "MP4 export requires nonzero FPS",
-        ));
-    }
-    validate_at_rate(size, motion_core::FrameRate::from(fps), frames, options)
+        )
+    })?;
+    validate_at_rate(size, rate, frames, options)
 }
 
 #[cfg(any(feature = "ffmpeg", test))]

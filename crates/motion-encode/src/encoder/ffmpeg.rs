@@ -214,7 +214,7 @@ mod codec_tests {
         options.render.size = Some(motion_core::PixelSize::new(1920, 1080));
         options.range = Some(motion_core::Time::ZERO..300.seconds().after_origin());
         let mut encoder = FfmpegEncoder::new(&NoProgress);
-        encoder.open(&options, FrameRate::from(30), None)?;
+        encoder.open(&options, motion_core::fps!(30), None)?;
         let names = std::fs::read_dir(directory.path())?
             .map(|entry| entry.map(|entry| entry.file_name().to_string_lossy().into_owned()))
             .collect::<std::io::Result<Vec<_>>>()?;
@@ -230,7 +230,7 @@ mod codec_tests {
     #[ignore = "requires native FFmpeg with libx264/libx265/libvpx-vp9/prores_ks"]
     fn native_codecs_export_readable_ordered_frames_with_alpha_inputs() -> Result {
         let directory = tempfile::tempdir()?;
-        let timeline = Timeline::new(Size::new(16.0, 16.0), 2)
+        let timeline = Timeline::new(Size::new(16.0, 16.0), motion_core::fps!(2))
             .track(|track| {
                 track.push(motion_core::Scene::with_duration(
                     |_: &motion_core::SceneContext<'_>| {

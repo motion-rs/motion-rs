@@ -37,7 +37,7 @@ This is a complete standalone application:
 use motion::prelude::*;
 
 fn main() -> motion::Result {
-    let timeline = Timeline::new(Size::new(640.0, 360.0), 30).track(|track| {
+    let timeline = Timeline::new(Size::new(640.0, 360.0), fps!(30)).track(|track| {
         track.scene(3.seconds(), |context| -> motion::Result<_> {
             let horizontal = context.sample(&Tween::new(80.0, 560.0, 3.seconds()));
             Ok((
@@ -69,7 +69,7 @@ use motion::prelude::*;
 fn main() -> std::process::ExitCode {
     Project::new("tutorial")
         .timeline("intro", || {
-            Timeline::new(Size::new(640.0, 360.0), 30).track(|track| {
+            Timeline::new(Size::new(640.0, 360.0), fps!(30)).track(|track| {
                 track.scene(3.seconds(), |context| -> motion::Result<_> {
                     let horizontal =
                         context.sample(&Tween::new(80.0, 560.0, 3.seconds()));

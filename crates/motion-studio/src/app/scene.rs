@@ -52,7 +52,7 @@ impl StudioScene {
     /// use motion_studio::StudioScene;
     /// let scene = StudioScene::new(
     ///     "Geometry",
-    ///     Composition::new(640, 360, motion_render::FrameClock::new(30, 150)),
+    ///     Composition::new(640, 360, motion_render::FrameClock::new(fps!(30), 150)),
     ///     Size::new(640.0, 360.0),
     ///     |context| Node::from(context.bounds().fill(Color::WHITE)),
     /// );
@@ -96,7 +96,7 @@ impl StudioScene {
     /// use motion_studio::StudioScene;
     /// let scene = StudioScene::preview_only(
     ///     "Geometry",
-    ///     Composition::new(640, 360, motion_render::FrameClock::new(30, 150)),
+    ///     Composition::new(640, 360, motion_render::FrameClock::new(fps!(30), 150)),
     ///     Size::new(640.0, 360.0),
     ///     |context| Node::from(context.bounds().fill(Color::WHITE)),
     /// );
