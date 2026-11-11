@@ -123,9 +123,9 @@
 //! may be shared. [`RequestDiagnostics`] supports explicit cross-thread resource
 //! failures. Compiled [`RenderCapabilities`] are not a live-device probe.
 //!
-//! [`SceneDescriptor`] combines a stable scene ID, composition and callback with optional
-//! [`VisualCheckPolicy`] metadata. Descriptor preflight does not execute the callback;
-//! it is separate from validating the scene that a callback produces.
+//! [`ProjectBuilder::visual_check`] attaches optional [`VisualCheckPolicy`] metadata to a
+//! registered timeline. [`VisualCheckPolicy::preflight`] validates it against a composition
+//! without rendering; it is separate from validating the scene a timeline produces.
 //!
 //! Rendering and I/O entry points return [`Result`]. Validation timing is API-specific:
 //! some builders defer checks while convenience animation/value methods may panic;
@@ -184,8 +184,8 @@
 //!
 #![forbid(unsafe_code)]
 
-mod catalog;
 mod project;
+mod visual_check;
 
 #[cfg(feature = "ink")]
 pub use motion_content::vector::ink;
@@ -260,11 +260,11 @@ pub use motion_scene as declarative;
 #[cfg(feature = "studio")]
 pub use motion_studio as studio;
 
-pub use crate::catalog::{SceneDescriptor, VisualCheckPolicy, VisualRegion};
 pub use crate::project::{
     Backend, ExportArgs, OutputArgs, ParameterArgs, Project, ProjectBuilder, ProjectCommand,
     ProjectOutcome, ProjectTimelineInfo, RenderArgs, StillArgs, StudioArgs, ValidateArgs,
 };
+pub use crate::visual_check::{VisualCheckPolicy, VisualRegion};
 
 #[cfg(feature = "captions")]
 pub use motion_content::captions;

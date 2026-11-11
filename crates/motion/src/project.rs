@@ -49,6 +49,7 @@ pub struct ProjectTimelineInfo {
 struct Entry {
     info: ProjectTimelineInfo,
     build_film: Arc<dyn Fn(Option<Value>) -> Result<Film> + Send + Sync>,
+    visual: Option<crate::VisualCheckPolicy>,
 }
 
 /// A validated, immutable registry of lazy timeline factories. Listing never
@@ -86,6 +87,16 @@ impl Project {
     /// Returns the same defaults available to programmatic render/export callers.
     pub fn options(&self) -> &RenderOptions {
         &self.options
+    }
+
+    /// Optional automated keyframe policy registered for a timeline, if any.
+    /// Never read by rendering or export; checks are run by the caller.
+    pub fn visual_check(&self, name: &str) -> Option<&crate::VisualCheckPolicy> {
+        self.entries
+            .iter()
+            .find(|entry| entry.info.name == name)?
+            .visual
+            .as_ref()
     }
 
     /// Lists registration metadata without constructing any timeline.
@@ -378,6 +389,22 @@ impl ProjectBuilder {
         )
     }
 
+    /// Attaches optional visual-check metadata to an already registered timeline, deferring
+    /// unknown names and structurally invalid policies. Does not build the timeline; use
+    /// [`VisualCheckPolicy::preflight`](crate::VisualCheckPolicy::preflight) against its composition.
+    pub fn visual_check(self, name: &str, policy: crate::VisualCheckPolicy) -> Self {
+        self.defer(|mut project| {
+            policy.check_structure()?;
+            let entry = project
+                .entries
+                .iter_mut()
+                .find(|entry| entry.info.name == name)
+                .ok_or_else(|| invalid(format!("Unknown timeline: {name}")))?;
+            entry.visual = Some(policy);
+            Ok(project)
+        })
+    }
+
     fn register(
         mut self,
         info: ProjectTimelineInfo,
@@ -402,6 +429,7 @@ impl ProjectBuilder {
         self.entries.push(Entry {
             info,
             build_film: Arc::new(build),
+            visual: None,
         });
         Ok(self)
     }
@@ -532,6 +560,37 @@ mod tests {
                 .is_err()
         );
         Ok(())
+    }
+
+    #[test]
+    fn visual_checks_are_optional_registration_metadata() {
+        use super::*;
+        let policy = || {
+            crate::VisualCheckPolicy::new(
+                vec![0, 3],
+                vec![crate::VisualRegion::new(
+                    "art",
+                    crate::Rect::new(0.0, 0.0, 4.0, 4.0),
+                )],
+            )
+        };
+        let timeline = || Timeline::new(Size::new(8.0, 4.0), crate::fps!(30));
+        let project = Project::new("checks")
+            .timeline("main", timeline)
+            .timeline("plain", timeline)
+            .visual_check("main", policy())
+            .build()
+            .unwrap();
+        assert_eq!(project.visual_check("main").unwrap().frames, vec![0, 3]);
+        assert!(project.visual_check("plain").is_none());
+        let error = Project::new("checks")
+            .timeline("main", timeline)
+            .visual_check("missing", policy())
+            .visual_check("main", crate::VisualCheckPolicy::new(vec![0], vec![]))
+            .build()
+            .err()
+            .unwrap();
+        assert_eq!(error.len(), 2);
     }
 
     #[test]

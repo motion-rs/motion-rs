@@ -228,9 +228,10 @@ The gallery wraps the same CLI ([`gallery/src/lib.rs`](../gallery/src/lib.rs)):
 
 The [`motion-video` skill](../.github/skills/motion-video/SKILL.md) drives
 `still` and `export` of a film binary with `--size`, `--time`, `--range`,
-`--output` and `--overwrite`, and relies on exit code `0`. `SceneDescriptor` and
-`VisualCheckPolicy` in [`catalog.rs`](../crates/motion/src/catalog.rs) are
-Studio/test registration metadata, are exported from the crate root but not the prelude, and are not read by `Project`.
+`--output` and `--overwrite`, and relies on exit code `0`. `VisualCheckPolicy` in
+[`visual_check.rs`](../crates/motion/src/visual_check.rs) is optional registration metadata:
+attach it with `ProjectBuilder::visual_check` and read it with `Project::visual_check`. It is exported
+from the crate root but not the prelude, and the CLI, rendering and export never read it.
 
 ## Related
 
