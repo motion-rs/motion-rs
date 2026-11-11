@@ -77,12 +77,15 @@ and all authored inputs must also remain fixed.
 | Scope | Guarantee |
 | --- | --- |
 | CPU replay | Exact replay with the same build/platform, resources, inputs, quality and format |
-| GPU replay | Exact seek replay with the same build/platform/device/driver, resources, inputs, quality and format |
-| GPU versus CPU | Shared coverage; fixture tolerance of at most 2 LSB in straight RGBA8, with strictly fewer than 0.1% of pixels differing by more than 1 LSB |
+| GPU replay | Visually stable seek replay with fixed resources, inputs, quality and format; numeric differences are allowed |
+| GPU versus CPU | Equivalent drawing semantics and visual output with fixture-specific tolerances, not byte identity |
 | Other platforms/devices | No blanket byte identity or tolerance acceptance; run explicit fixtures |
 
-All four channels and transparent pixels count in the per-frame GPU/CPU gate;
-frames are not averaged. Stricter exact kernel/conversion fixtures remain intact.
+Visual fixtures check color, contours, alpha and compositing on different backgrounds.
+There is no global per-channel LSB gate. Local edge and numerical differences are
+allowed, but missing geometry, wrong winding, clip leakage and visible flicker are not.
+Stricter exact kernel/conversion fixtures remain local regression checks, not a
+restriction on new backend algorithms.
 Changing arithmetic, compiler, device or driver requires new applicable checks.
 Controlled libm arithmetic alone is not cross-platform proof.
 

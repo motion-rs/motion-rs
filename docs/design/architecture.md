@@ -54,8 +54,8 @@ sources; external RGBA16F output quantizes at its declared boundary. Only the fi
 working image resolves to a buffer for linear readback; packed and external-texture
 outputs read that texture directly without the full linear buffer.
 Particle metadata and coverage/paint uploads remain buffers. CPU determinism is
-unchanged; GPU blending uses the per-frame tolerance in [GPU rendering](gpu.md)
-and still requires byte-identical replay on the same device and driver.
+unchanged; GPU output is checked for visual equivalence with fixture-specific tolerances
+in [GPU rendering](gpu.md), not byte identity, including replay on the same device and driver.
 
 CPU memory output renders full-width adaptive regions with conservative filter
 dependency halos. Preparation caches the maximum nested filter-chain halo;

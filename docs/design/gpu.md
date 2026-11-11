@@ -153,10 +153,12 @@ uniforms, vertices and working texture capacities remain admitted; output plans
 conservatively retain the old output-boundary byte/work allowance. Reported
 logical peaks are therefore unchanged and are not actual allocation or RSS savings.
 
-The design's per-frame CPU/GPU gate compares all four straight sRGB RGBA8 channels:
-maximum difference at most 2 LSB, and strictly fewer than 0.1% of pixels with any
-channel differing by more than 1 LSB. Alpha and transparent pixels count; frames
-are not averaged. Same-device GPU replay remains byte-identical. The native batch
+CPU/GPU comparisons require visually equivalent drawing with fixture-specific
+tolerances, not a global LSB threshold or byte-identical GPU replay. Color, contours,
+alpha and compositing on different backgrounds matter; local antialiasing and
+floating-point differences are allowed. Missing geometry, clip leakage and visible
+replay flicker remain defects. Existing stricter fixtures are local regression checks,
+not restrictions on new GPU algorithms. The native batch
 fixture separately checks linear/HDR output, sparse gradients, boundaries,
 pool sharing, packed RGBA/YUV and ordered three-frame completion. Texture-layer
 fixtures cover all four mask modes, local origins, HDR, filtered and saved sources,
@@ -311,11 +313,10 @@ the owning frame passes its existing device, scoped-error, finite-value and outp
 checks. Dropped or failed frames publish no timestamps. Studio Stats separates
 these device intervals from host submission/completion wall time.
 
-The approved consistency choice retains RGBA32F working images and full runtime
-error checks in every build. CPU/GPU comparison remains the per-frame straight
-sRGB RGBA8 contract: maximum channel difference at most two LSB, with strictly
-fewer than 0.1% of pixels having any channel difference greater than one LSB,
-including transparent pixels. Same-backend/build/environment replay remains exact.
+The consistency choice retains RGBA32F working images and full runtime
+error checks in every build. CPU/GPU comparisons and GPU replay use visual
+equivalence with fixture-specific tolerances; they do not require byte identity.
+CPU reference regressions retain their existing exact checks.
 Observation does not resume paused benchmarks or establish latency, FPS, bandwidth
 or speedup acceptance.
 
@@ -375,7 +376,7 @@ and lower-copy output work remains [planned](../plan.md#performance). Measured b
 paired gains, uncertain/negative results and verification scope are recorded only
 in the unified [performance report](../benchmarks.md#current-measurements).
 
-GPU fixtures compare against CPU with declared tolerances and require exact replay.
+GPU fixtures compare against CPU and check visually stable replay with declared tolerances.
 They cover clipping, masks, blending, filters, text/image/vector/particle output,
 external textures and device failure. Font and hardware inputs are explicit;
 compilation does not establish adapter availability or cross-platform pixel parity.

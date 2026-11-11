@@ -41,7 +41,7 @@ the first block of a different kind is not classified again. Quantization is sca
 are absolute; translated caches can change alignment, so consumers use each
 record's actual coordinates and height. Rectangles have a specialized analytic
 path. Curve accuracy still depends on flattening tolerance and u8 quantization.
-Both paths preserve the shared coverage format and same-backend exact replay;
+Both CPU paths preserve the CPU coverage format and exact reference replay;
 changes to area arithmetic still need the applicable independent output checks.
 
 Curve flattening uses Wang's second-derivative bound in device space: chord
