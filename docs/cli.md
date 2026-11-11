@@ -49,7 +49,7 @@ clap parser (adding `--font` and the `--demo` alias of `--timeline`) and calls `
   together as one `ErrorReport` by the first `cli`/`build` call, before any
   argument is parsed.
 - `Project::render_options` supplies the shared fonts/assets and defaults. The CLI
-  always overrides the backend preference to `automatic` before applying `--backend`.
+  always overrides the backend preference to the engine default (GPU when `gpu` is enabled) before applying `--backend`.
 
 ## Subcommands
 
@@ -85,8 +85,8 @@ parser and call `Project::execute`, as the gallery does.
 | `--params JSON` | all | Inline parameters; text over 1 MiB is rejected |
 | `--params-file PATH`, `--parameters PATH` | all | Parameters from a regular file of at most 1 MiB |
 | `--size WIDTHxHEIGHT` | all | Output pixel size (two `u32`, split on `x`) |
-| `--backend cpu\|gpu\|automatic` | all | Backend preference |
-| `--allow-software-gpu` | all | Admits software adapters for `Gpu` and `Automatic` in `RenderOptions::backend`; not in help text |
+| `--backend cpu\|gpu` | all | Backend preference |
+| `--allow-software-gpu` | all | Admits software adapters for `Gpu` in `RenderOptions::backend`; not in help text |
 | `--output PATH` | still, export | Destination; default `NAME.png` or `NAME.EXT` |
 | `--overwrite` | still, export | Replace an existing destination |
 | `--time T` | still | Time of the frame; default `0` |

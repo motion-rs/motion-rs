@@ -70,7 +70,7 @@ Play starts a clock without preparing the entire film. When rendering falls behi
 
 Target fps, recently presented fps, cache hits, skipped frames and worker time are separate metrics. Smooth cached playback does not prove the same cold-rendering fps.
 
-Automatic samples CPU and GPU completion latency for the current scene and settings. It is a runtime heuristic affected by order, first-time setup and shared caches, not a fair AB/BA benchmark. Explicit GPU failures retain typed errors.
+The preview selects GPU or CPU explicitly; GPU failures retain typed errors and never fall back to CPU.
 
 ## Caches and Sound
 

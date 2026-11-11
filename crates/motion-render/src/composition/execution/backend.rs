@@ -104,7 +104,6 @@ impl FrameExecution<'_> {
         if preference == crate::BackendPreference::Cpu {
             self.backend = Some(crate::BackendDecision {
                 renderer: Renderer::Cpu,
-                reason: None,
             });
             return Ok(Renderer::Cpu);
         }
@@ -138,19 +137,13 @@ impl FrameExecution<'_> {
             Ok(()) => {
                 self.backend = Some(crate::BackendDecision {
                     renderer: Renderer::Gpu,
-                    reason: None,
                 });
                 Ok(Renderer::Gpu)
             }
-            Err(error) if matches!(preference, crate::BackendPreference::Automatic { .. }) => {
+            Err(error) => {
                 self.gpu_reset();
-                self.backend = Some(crate::BackendDecision {
-                    renderer: Renderer::Cpu,
-                    reason: Some(error.to_string()),
-                });
-                Ok(Renderer::Cpu)
+                Err(error)
             }
-            Err(error) => Err(error),
         }
     }
 
@@ -196,19 +189,6 @@ impl FrameExecution<'_> {
                 let plan = if requested {
                     match crate::gpu::Plan::new(&prepared, limits) {
                         Ok(plan) => Some(plan),
-                        Err(error)
-                            if self.backend.is_none()
-                                && matches!(
-                                    preference,
-                                    crate::BackendPreference::Automatic { .. }
-                                ) =>
-                        {
-                            self.backend = Some(crate::BackendDecision {
-                                renderer: Renderer::Cpu,
-                                reason: Some(error.to_string()),
-                            });
-                            None
-                        }
                         Err(error) => return Err(error.into()),
                     }
                 } else {
@@ -221,7 +201,7 @@ impl FrameExecution<'_> {
             };
             let (linear, preparation) = match self.select_backend()? {
                 Renderer::Cpu => {
-                    let (prepared, limits) = self.prepare_cpu_fallback(prepared, limits)?;
+                    let prepared = prepared.into_cpu()?;
                     let started = self.timings.map(|_| std::time::Instant::now());
                     let linear = prepared.render_linear_pooled(limits, &mut self.cpu_pool)?;
                     if let Some(started) = started {

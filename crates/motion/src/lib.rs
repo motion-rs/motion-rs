@@ -84,7 +84,8 @@
 //! # Features and Resources
 //!
 //! Default Cargo features include `gpu`, content, native FFmpeg and Studio;
-//! library rendering selects CPU unless requested explicitly; the CLI defaults to Automatic.
+//! rendering defaults to the GPU when `gpu` is enabled and never falls back to the CPU; select
+//! `BackendPreference::Cpu` explicitly for the reference rasterizer.
 //! Native GPU composition uses Metal, Vulkan or DX12. `BackendPreference::gpu()` selects an
 //! available native backend, including Metal on macOS. `studio` adds an egui
 //! workbench but does not open a window on import. Geometry-only rendering does

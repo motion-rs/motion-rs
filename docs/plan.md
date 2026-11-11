@@ -91,8 +91,8 @@ flattened into statically bounded edge storage on the device, followed by
 GPU-generated f32 coverage, not a CPU PreparedFrame.
 GPU coverage uses bounded 16-by-16 tile binning with signed row carries.
 Preparation reports expose segment/tile counts, geometry-upload bytes and classified
-per-path CPU coverage reasons; Automatic's startup self-check exercises independent
-CPU/GPU preparation with visual comparisons.
+explicit unsupported-path errors (no CPU coverage fallback); the GPU startup self-check
+exercises independent CPU/GPU preparation with visual comparisons.
 Immutable image/mip/atlas buffers have bounded context-local cross-frame residency.
 Eligible analytic particles generate the consumed primitive records on the GPU;
 CPU materialization remains available for unsupported or imprecise cases.

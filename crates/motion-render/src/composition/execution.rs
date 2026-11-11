@@ -205,31 +205,13 @@ impl FrameExecution<'_> {
             && crate::gpu::Gpu::supports_packed_output(prepared.size(), format)
         {
             let started = self.timings.map(|_| std::time::Instant::now());
-            let plan = match crate::gpu::Plan::new_packed(&prepared, limits, format) {
-                Ok(plan) => Some(plan.with_display(&display, u64::from(index))?),
-                Err(error)
-                    if self.backend.is_none()
-                        && matches!(
-                            self.composition.options.backend,
-                            crate::BackendPreference::Automatic { .. }
-                        ) =>
-                {
-                    self.backend = Some(crate::BackendDecision {
-                        renderer: Renderer::Cpu,
-                        reason: Some(error.to_string()),
-                    });
-                    None
-                }
-                Err(error) => {
-                    return Err(motion_core::Error::from(error).at_frame(u64::from(index)));
-                }
-            };
+            let plan = crate::gpu::Plan::new_packed(&prepared, limits, format)
+                .and_then(|plan| plan.with_display(&display, u64::from(index)))
+                .map_err(|error| motion_core::Error::from(error).at_frame(u64::from(index)))?;
             if let Some(started) = started {
                 self.timings.as_mut().expect("enabled timings").plan += started.elapsed();
             }
-            if let Some(plan) = plan
-                && self.select_backend()? == Renderer::Gpu
-            {
+            if self.select_backend()? == Renderer::Gpu {
                 let stats = plan.packed_stats(prepared.size(), format)?;
                 let output_work = crate::FrameBuffer::display_conversion_work(
                     prepared.size(),

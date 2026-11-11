@@ -60,20 +60,20 @@ use motion::prelude::*;
 
 fn main() {
     let cpu = RenderOptions::default().backend(BackendPreference::Cpu);
-    let automatic = RenderOptions::default().backend(BackendPreference::automatic());
+    let default = RenderOptions::default();
     let strict_gpu = RenderOptions::default().backend(BackendPreference::gpu());
     let ci_gpu = RenderOptions::default().backend(BackendPreference::Gpu {
         allow_software: true,
     });
-    let _ = (cpu, automatic, strict_gpu, ci_gpu);
+    let _ = (cpu, default, strict_gpu, ci_gpu);
 }
 ```
 
 This only configures policy; it does not initialize a GPU. Actual GPU requests require `gpu` and a supported native adapter.
 
-- `Cpu` is the library default and does not initialize a composition GPU.
-- `Automatic` can select CPU during startup policy and admission checks, retaining the reason.
-- `Gpu` explicitly requires GPU rendering. Device loss, unsupported formats and execution failures do not silently switch to CPU.
+- The default is `Gpu` when feature `gpu` is enabled and `Cpu` otherwise.
+- `Cpu` is an explicit choice of the reference rasterizer and does not initialize a composition GPU.
+- `Gpu` requires GPU rendering. Startup failures, unsupported content, device loss and execution failures are errors and never switch to CPU.
 - Software GPU adapters require explicit permission. Their measurements do not represent physical GPU performance.
 
 `RenderContext` manages Assets and structural policy, not a GPU. `RenderOptions.gpu_context` explicitly shares a device but does not select the backend.

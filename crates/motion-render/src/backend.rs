@@ -6,8 +6,6 @@
 pub struct BackendDecision {
     /// Actual renderer used for this session.
     pub renderer: crate::Renderer,
-    /// GPU setup/self-check explanation when Automatic selected CPU instead.
-    pub reason: Option<String>,
 }
 
 #[cfg(feature = "gpu")]
@@ -27,35 +25,47 @@ pub(crate) fn software_adapter(name: &str, device_type: &str) -> bool {
 }
 
 /// Offscreen composition backend, independent of the Studio window renderer.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+///
+/// The default is the GPU when feature `gpu` is enabled and the CPU reference otherwise.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Renderer {
-    /// Default CPU rasterizer; does not require a window or GPU adapter.
-    #[default]
+    /// Bounded CPU reference rasterizer; does not require a window or GPU adapter.
     Cpu,
     /// Native wgpu composition using an available Metal, Vulkan or DX12 adapter.
     /// Requires feature `gpu`; no fallback to the CPU renderer is performed.
     Gpu,
 }
 
-/// Requested native backend; explicit GPU never silently falls back.
+impl Default for Renderer {
+    fn default() -> Self {
+        BackendPreference::default().into_renderer()
+    }
+}
+
+/// Requested native backend; the GPU never silently falls back to the CPU.
 ///
 /// This is the only way to choose a backend. [`Renderer`] is the outcome
-/// reported by [`BackendDecision`].
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+/// reported by [`BackendDecision`]. The default is the GPU on hardware adapters
+/// when feature `gpu` is enabled and the CPU reference otherwise.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BackendPreference {
-    /// Bounded CPU reference.
-    #[default]
+    /// Bounded CPU reference, selected explicitly.
     Cpu,
-    /// Explicit native GPU, without fallback.
+    /// Native GPU; setup, self-check and unsupported content are errors.
     Gpu {
         /// Admits software adapters such as llvmpipe or WARP.
         allow_software: bool,
     },
-    /// Validates a native GPU once, falling back only before the session starts.
-    Automatic {
-        /// Admits software adapters such as llvmpipe or WARP.
-        allow_software: bool,
-    },
+}
+
+impl Default for BackendPreference {
+    fn default() -> Self {
+        if cfg!(feature = "gpu") {
+            Self::gpu()
+        } else {
+            Self::Cpu
+        }
+    }
 }
 
 impl BackendPreference {
@@ -66,10 +76,10 @@ impl BackendPreference {
         }
     }
 
-    /// GPU on hardware adapters with a startup fallback to CPU.
-    pub const fn automatic() -> Self {
-        Self::Automatic {
-            allow_software: false,
+    const fn into_renderer(self) -> Renderer {
+        match self {
+            Self::Cpu => Renderer::Cpu,
+            Self::Gpu { .. } => Renderer::Gpu,
         }
     }
 
@@ -77,7 +87,7 @@ impl BackendPreference {
     pub const fn allow_software(self) -> bool {
         match self {
             Self::Cpu => false,
-            Self::Gpu { allow_software } | Self::Automatic { allow_software } => allow_software,
+            Self::Gpu { allow_software } => allow_software,
         }
     }
 
@@ -86,11 +96,10 @@ impl BackendPreference {
         match self {
             Self::Cpu => Self::Cpu,
             Self::Gpu { .. } => Self::Gpu { allow_software },
-            Self::Automatic { .. } => Self::Automatic { allow_software },
         }
     }
 
-    /// Whether a GPU may be used, strictly or after a startup check.
+    /// Whether the GPU is requested.
     pub const fn wants_gpu(self) -> bool {
         !matches!(self, Self::Cpu)
     }
@@ -128,89 +137,41 @@ mod tests {
 
     #[test]
     #[cfg(feature = "gpu")]
-    fn automatic_precision_fallback_precedes_device_initialization() -> motion_core::Result<()> {
+    fn gpu_precision_rejection_is_an_error_not_a_cpu_retry() -> motion_core::Result<()> {
         use motion_core::NodeModifiers;
         use motion_core::Shape;
         let mut session =
             crate::Composition::new(4, 4, crate::FrameClock::new(motion_core::fps!(30), 150))
                 .with_options(
-                    crate::RenderOptions::default().backend(crate::BackendPreference::automatic()),
+                    crate::RenderOptions::default().backend(crate::BackendPreference::gpu()),
                 )?
                 .frame_renderer(motion_core::Size::new(4.0, 4.0))?;
-        session.render_frame(0, |_| {
-            motion_core::Node::from(
-                motion_core::Rect::new(0.0, 0.0, 4.0, 4.0).fill(motion_core::Color::WHITE),
-            )
-            .opacity(1e-50)
-        })?;
-        assert!(session.gpu_info().is_none());
-        let decision = session.backend_decision().unwrap();
-        assert_eq!(decision.renderer, crate::Renderer::Cpu);
-        assert!(
-            decision
-                .reason
-                .as_deref()
-                .is_some_and(|reason| reason.contains("precision"))
-        );
-        Ok(())
-    }
-
-    #[test]
-    #[cfg(feature = "gpu")]
-    fn automatic_startup_rejection_prepares_cpu_paths_independently() -> motion_core::Result<()> {
-        use motion_core::{Circle, NodeModifiers, Point, Shape};
-        let build = |opacity| {
-            Ok::<_, motion_core::ValidationError>(
+        let error = session
+            .render_frame(0, |_| {
                 motion_core::Node::from(
-                    Circle::new(Point::new(8.0, 8.0), 6.25)?.fill(motion_core::Color::WHITE),
+                    motion_core::Rect::new(0.0, 0.0, 4.0, 4.0).fill(motion_core::Color::WHITE),
                 )
-                .opacity(opacity),
-            )
-        };
-        let composition =
-            crate::Composition::new(16, 16, crate::FrameClock::new(motion_core::fps!(30), 150));
-        let mut automatic = composition
-            .clone()
-            .configure(|options| options.backend(crate::BackendPreference::automatic()))
-            .frame_renderer(motion_core::Size::new(16.0, 16.0))?;
-        let tiny = build(1e-50)?;
-        automatic.render_frame(0, |_| tiny.clone())?;
-        let attempted = automatic.report().gpu_preparation.unwrap();
-        assert!(attempted.segment_count > 0);
-        assert!(automatic.gpu_info().is_none());
-        assert!(automatic.cached_coverage_bytes() > 0);
-        assert_eq!(
-            automatic.backend_decision().unwrap().renderer,
-            crate::Renderer::Cpu
+                .opacity(1e-50)
+            })
+            .unwrap_err();
+        assert!(error.to_string().contains("precision"), "{error}");
+        assert!(
+            session
+                .backend_decision()
+                .is_none_or(|decision| decision.renderer == crate::Renderer::Gpu)
         );
-        let mut cpu = composition.frame_renderer(motion_core::Size::new(16.0, 16.0))?;
-        let opaque = build(1.0)?;
-        assert_eq!(
-            automatic.render_frame(1, |_| opaque.clone())?.bytes(),
-            cpu.render_frame(1, |_| opaque.clone())?.bytes()
-        );
-        assert!(automatic.report().gpu_preparation.is_none());
         Ok(())
     }
 
     #[test]
-    #[cfg(not(feature = "gpu"))]
-    fn automatic_without_feature_falls_back_before_rendering() -> motion_core::Result<()> {
-        let mut session =
-            crate::Composition::new(4, 4, crate::FrameClock::new(motion_core::fps!(30), 150))
-                .with_options(
-                    crate::RenderOptions::default().backend(crate::BackendPreference::automatic()),
-                )?
-                .frame_renderer(motion_core::Size::new(4.0, 4.0))?;
-        session.render_frame(0, |_| motion_core::Node::empty())?;
-        let decision = session.backend_decision().unwrap();
-        assert_eq!(decision.renderer, crate::Renderer::Cpu);
-        assert!(
-            decision
-                .reason
-                .as_deref()
-                .is_some_and(|reason| reason.contains("feature gpu"))
+    fn default_backend_is_gpu_only_when_the_feature_is_enabled() {
+        assert_eq!(
+            crate::BackendPreference::default().wants_gpu(),
+            cfg!(feature = "gpu")
         );
-        Ok(())
+        assert_eq!(
+            crate::Renderer::default() == crate::Renderer::Gpu,
+            cfg!(feature = "gpu")
+        );
     }
 }

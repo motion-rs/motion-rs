@@ -9,8 +9,7 @@ use std::ops::Range;
 mod tests;
 
 /// True when the pipeline applies: the request allows the GPU, the output can be packed on
-/// it, and the backend actually selected for this renderer is the GPU. An Automatic request
-/// that resolves to the CPU keeps the CPU path.
+/// it, and the backend selected for this renderer is the GPU.
 pub(super) fn eligible(
     options: &ExportOptions,
     format: PixelFormat,

@@ -199,7 +199,7 @@ impl PreviewCoordinator {
             crate::playback::StudioClock::new(&scene.composition).map_err(io::Error::other)?;
         let cache = scene
             .composition
-            .studio_render_options(motion_render::BackendPreference::automatic())
+            .studio_render_options(motion_render::BackendPreference::default())
             .cache
             .fork_partition(motion_core::CachePartition::Scene);
         scene.composition = scene
@@ -210,7 +210,6 @@ impl PreviewCoordinator {
         #[cfg(feature = "gpu")]
         let textures = textures::TextureRing::default();
         let mut slots = Vec::new();
-        let calibration = backend::Calibration::new(workers.clamp(1, 6));
         for _ in 0..workers.clamp(1, 6) {
             let wake = shared.clone();
             let slot_context = Context::default();
@@ -221,7 +220,6 @@ impl PreviewCoordinator {
             slots.push(worker::PreviewWorker::spawn(
                 scene.clone(),
                 slot_context,
-                calibration.clone(),
                 #[cfg(feature = "gpu")]
                 textures.clone(),
                 Some(completed),
@@ -501,7 +499,7 @@ impl CoordinatorRuntime {
                     ) {
                         self.scene
                             .composition
-                            .studio_render_options(motion_render::BackendPreference::automatic())
+                            .studio_render_options(motion_render::BackendPreference::default())
                             .cache
                             .partition(motion_core::CachePartition::Scene)
                             .clear();

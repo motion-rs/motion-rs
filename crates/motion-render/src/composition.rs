@@ -346,8 +346,7 @@ impl Composition {
     /// background alpha is ignored, as in the opaque `render_frame*` contract.
     /// Renderer::Gpu requires the gpu feature, initializes lazily on the first
     /// admitted render, and executes prepared coverage on f32 compute
-    /// buffers. Explicit GPU requests never fall back to CPU; Automatic policy may
-    /// select CPU during startup. Both backends implement the same output-format
+    /// buffers. GPU requests never fall back to CPU. Both backends implement the same output-format
     /// contract, but supported GPU formats use dedicated packing kernels.
     /// GPU f32 arithmetic is not bit-identical to CPU intermediates.
     /// Unrepresentable parameters or device limits fail explicitly.

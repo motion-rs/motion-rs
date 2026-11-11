@@ -17,7 +17,6 @@ use eframe::egui::{ColorImage, Context};
 use super::StudioScene;
 use motion_render::{FrameRenderer, Renderer};
 
-mod backend;
 mod pool;
 #[cfg(feature = "gpu")]
 mod textures;
@@ -221,7 +220,6 @@ impl PreviewRequestQueue {
 }
 
 struct PreviewRenderer {
-    automatic: bool,
     /// Frames may stay on the device and reach the UI as textures only when the scene was handed
     /// the UI's own device. A private device cannot share textures with it.
     #[cfg(feature = "gpu")]
@@ -229,9 +227,6 @@ struct PreviewRenderer {
     #[cfg(feature = "gpu")]
     textures: textures::TextureRing,
     renderer: FrameRenderer,
-
-    selection_reason: Option<String>,
-    admission_fallback: Option<String>,
     inspection_error: Option<Arc<motion_core::Error>>,
 }
 
@@ -249,18 +244,15 @@ impl PreviewRenderer {
             .frame_renderer(scene.timeline.size())?;
         frame_renderer.enable_timings(true);
         Ok(Self {
-            automatic: false,
             #[cfg(feature = "gpu")]
             native_textures: scene
                 .composition
-                .studio_render_options(motion_render::BackendPreference::automatic())
+                .studio_render_options(motion_render::BackendPreference::default())
                 .gpu_context
                 .is_some(),
             #[cfg(feature = "gpu")]
             textures: textures::TextureRing::default(),
             renderer: frame_renderer,
-            selection_reason: None,
-            admission_fallback: None,
             inspection_error: None,
         })
     }
@@ -318,7 +310,7 @@ impl PreviewRenderer {
                     .with_render_cache(
                         scene
                             .composition
-                            .studio_render_options(motion_render::BackendPreference::automatic())
+                            .studio_render_options(motion_render::BackendPreference::default())
                             .cache,
                     )
                     .with_assets(context.assets())
@@ -340,8 +332,6 @@ impl PreviewRenderer {
             node
         };
         #[cfg(feature = "gpu")]
-        let selecting = self.renderer.backend_decision().is_none();
-        #[cfg(feature = "gpu")]
         if !settings.pixels
             && self.native_textures
             && let Some(context) = self.renderer.selected_gpu_context()?
@@ -357,52 +347,20 @@ impl PreviewRenderer {
                 },
                 inspect_build,
             );
-            match result {
-                Ok(pending) => {
-                    self.inspection_error = inspection_error.into_inner();
-                    return Ok(PreviewSubmission::Gpu(Box::new(PendingPreview {
-                        backend: format!("GPU ({})", context.info().name),
-                        context,
-                        texture,
-                        pending,
-                        nodes: nodes.into_inner().into(),
-                        stats: self.renderer.last_stats().copied(),
-                        timings: self.renderer.timings().map(|mut timings| {
-                            timings.submission = submitted.elapsed();
-                            timings
-                        }),
-                    })));
-                }
-                Err(error)
-                    if (selecting || self.automatic)
-                        && (self.automatic
-                            || matches!(
-                                self.renderer.requested_backend(),
-                                motion_render::BackendPreference::Automatic { .. }
-                            ))
-                        && error
-                            .downcast_ref::<motion_core::ValidationError>()
-                            .is_some_and(|error| {
-                                error.kind == motion_core::ValidationErrorKind::StructuralLimit
-                                    && error.field == "max_bytes"
-                                    && error.path.starts_with("gpu.")
-                            }) =>
-                {
-                    let cpu = scene
-                        .composition
-                        .clone()
-                        .with_output_size(motion_core::PixelSize::new(width, height))?
-                        .configure(|options| {
-                            options
-                                .backend(motion_render::BackendPreference::Cpu)
-                                .allow_missing_assets(true)
-                                .mark_invalid_geometry(true)
-                        });
-                    self.renderer = cpu.frame_renderer(scene.timeline.size())?;
-                    self.admission_fallback = Some(error.to_string());
-                }
-                Err(error) => return Err(error),
-            }
+            let pending = result?;
+            self.inspection_error = inspection_error.into_inner();
+            return Ok(PreviewSubmission::Gpu(Box::new(PendingPreview {
+                backend: format!("GPU ({})", context.info().name),
+                context,
+                texture,
+                pending,
+                nodes: nodes.into_inner().into(),
+                stats: self.renderer.last_stats().copied(),
+                timings: self.renderer.timings().map(|mut timings| {
+                    timings.submission = submitted.elapsed();
+                    timings
+                }),
+            })));
         }
         let frame = self.renderer.render_output_at(
             motion_core::Time::from_frame(i64::from(index), scene.composition.frame_rate()),
@@ -451,18 +409,7 @@ impl PreviewRenderer {
             backend: self
                 .renderer
                 .backend_decision()
-                .map(|decision| {
-                    format!(
-                        "{:?}{}",
-                        decision.renderer,
-                        decision
-                            .reason
-                            .as_ref()
-                            .or(self.admission_fallback.as_ref())
-                            .map(|reason| format!(": {reason}"))
-                            .unwrap_or_default()
-                    )
-                })
+                .map(|decision| format!("{:?}", decision.renderer))
                 .unwrap_or_default(),
             image: Arc::new(if settings.pixels {
                 ColorImage::from_rgba_unmultiplied(
@@ -505,14 +452,6 @@ struct PendingPreview {
 }
 
 impl PreviewSubmission {
-    fn annotate(&mut self, reason: &str) {
-        match self {
-            Self::Ready(image) => image.backend = format!("{}; {reason}", image.backend),
-            #[cfg(feature = "gpu")]
-            Self::Gpu(preview) => preview.backend = format!("{}; {reason}", preview.backend),
-        }
-    }
-
     fn is_ready(&mut self) -> motion_core::Result<bool> {
         match self {
             Self::Ready(_) => Ok(true),

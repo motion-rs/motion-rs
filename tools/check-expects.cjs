@@ -432,12 +432,6 @@ const policies = [
     "The native-window branch is enabled only after installing its prepared window state.",
   ],
   [
-    "motion-studio/src/preview/backend.rs",
-    ["preview calibration entry"],
-    "invariant",
-    "position identifies an entry in the same deque while the calibration lock remains held.",
-  ],
-  [
     "motion-studio/src/preview/pool.rs",
     ["thumbnail cache", "preview cache", "preview texture cache"],
     "invariant",

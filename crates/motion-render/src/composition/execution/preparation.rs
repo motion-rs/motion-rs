@@ -89,11 +89,7 @@ impl FrameExecution<'_> {
                     )?
                     .quality(quality)
                     .blend_space(blend_space);
-                    PreparedOutput::Gpu {
-                        frame,
-                        source: list,
-                        tolerance,
-                    }
+                    PreparedOutput::Gpu(frame)
                 }
                 #[cfg(not(feature = "gpu"))]
                 {
@@ -110,51 +106,11 @@ impl FrameExecution<'_> {
             self.timings.as_mut().expect("enabled timings").coverage += started.elapsed();
         }
         #[cfg(feature = "gpu")]
-        if let PreparedOutput::Gpu { frame, .. } = &prepared {
+        if let PreparedOutput::Gpu(frame) = &prepared {
             self.gpu_preparation = Some(frame.geometry.stats(frame.stats()));
         }
         let limits = remaining(self.limits, prepared.stats().work)?;
         Ok((prepared, limits))
-    }
-
-    pub(super) fn prepare_cpu_fallback(
-        &mut self,
-        prepared: PreparedOutput,
-        limits: RasterLimits,
-    ) -> Result<(PreparedOutput, RasterLimits)> {
-        match prepared {
-            PreparedOutput::Cpu(frame) => Ok((PreparedOutput::Cpu(frame), limits)),
-            #[cfg(feature = "gpu")]
-            PreparedOutput::Gpu {
-                frame,
-                source,
-                tolerance,
-            } => {
-                let spent = frame.stats();
-                let quality = frame.quality;
-                let blend_space = frame.blend_space;
-                drop(frame);
-                let limits = remaining(self.limits, spent.work)?;
-                let validation = self.context().validation_limits();
-                let started = self.timings.map(|_| std::time::Instant::now());
-                let mut frame = crate::raster::prepare::prepare_validated_with_cache(
-                    &source,
-                    validation,
-                    limits,
-                    tolerance,
-                    Some(&mut self.coverage_cache),
-                )?
-                .quality(quality)
-                .blend_space(blend_space);
-                frame.stats.work += spent.work;
-                frame.stats.peak_bytes = frame.stats.peak_bytes.max(spent.peak_bytes);
-                if let Some(started) = started {
-                    self.timings.as_mut().expect("enabled timings").coverage += started.elapsed();
-                }
-                let limits = remaining(self.limits, frame.stats().work)?;
-                Ok((PreparedOutput::Cpu(frame), limits))
-            }
-        }
     }
 
     pub(in crate::composition) fn prepare_frame(

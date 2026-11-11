@@ -71,7 +71,7 @@ See the [audio_export example](../../examples/audio_export.rs) for a complete ve
 | `codec` | Explicit container and encoding format |
 | `size` | Output pixel dimensions, distinct from design dimensions |
 | `range` | Half-open absolute time range |
-| `backend` | CPU, Automatic or strict GPU |
+| `backend` | CPU or GPU (the default with feature `gpu`) |
 | `render` | Configure assets, caches, quality, background and budgets |
 | `workers` | Requested render concurrency; 1 preserves serial evaluation |
 | `overwrite` | Replace the destination only on successful commit |
@@ -135,7 +135,7 @@ Explicit CPU export renders the first frame normally, then uses its measured log
 
 Only supported byte-admission failures trigger this retry. Invalid content, work-limit failures and panics remain errors. Writers and progress callbacks stay ordered; more workers do not guarantee faster overall export.
 
-Automatic retains one session. Supported explicit-GPU packed output can use CPU preparation slots and a bounded GPU queue, completing and encoding in order. The aggregate concurrency allowance does not include all shared caches, encoders, idle pools or RSS.
+A GPU export retains one session. Supported GPU packed output can use CPU preparation slots and a bounded GPU queue, completing and encoding in order. The aggregate concurrency allowance does not include all shared caches, encoders, idle pools or RSS.
 
 ## Common Pitfalls
 

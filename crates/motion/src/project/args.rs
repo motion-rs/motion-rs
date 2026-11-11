@@ -62,7 +62,7 @@ impl RenderArgs {
         let allow_software = options.backend.allow_software() || self.allow_software_gpu;
         options.backend = self
             .backend
-            .map_or(crate::BackendPreference::automatic(), Backend::preference)
+            .map_or_else(crate::BackendPreference::default, Backend::preference)
             .with_software(allow_software);
         if let Some(size) = self.size {
             options.size = Some(size);
@@ -74,18 +74,15 @@ impl RenderArgs {
 /// Render backend selection.
 #[derive(Clone, Copy, Debug, ValueEnum)]
 pub enum Backend {
-    /// Validate a GPU once, falling back to the CPU before the session starts
-    Automatic,
     /// Bounded CPU reference
     Cpu,
-    /// Explicit GPU without fallback
+    /// Native GPU; errors are never retried on the CPU
     Gpu,
 }
 
 impl Backend {
     fn preference(self) -> crate::BackendPreference {
         match self {
-            Self::Automatic => crate::BackendPreference::automatic(),
             Self::Cpu => crate::BackendPreference::Cpu,
             Self::Gpu => crate::BackendPreference::gpu(),
         }

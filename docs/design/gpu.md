@@ -2,10 +2,12 @@
 
 ## Selection and Device Ownership
 
-BackendPreference::Cpu uses the scalar renderer. Gpu requires a supported native
-wgpu adapter; Automatic may choose CPU during startup policy checks and reports why.
-An explicit GPU request does not silently fall back after failure or device loss.
-`Gpu` and `Automatic` carry `allow_software`; software GPU adapters require it to be true.
+The engine defaults to the GPU when feature `gpu` is enabled (and to the CPU reference
+without it). BackendPreference::Cpu is an explicit choice of the scalar reference
+renderer. Gpu requires a supported native wgpu adapter. Nothing falls back to the CPU:
+adapter, policy and self-check failures, unsupported content, plan rejection, device
+loss and execution failures are typed errors.
+`Gpu` carries `allow_software`; software GPU adapters require it to be true.
 `Renderer` only reports the backend that was actually used.
 
 GpuContext owns the device, queue, pipelines, device-loss monitor and submission
@@ -16,9 +18,9 @@ Context construction creates texture/particle and all supported output pipelines
 including packing, finite checks and RGBA16F/RGBA8/BGRA8 presentation. It completes
 one empty submission under validation/OOM scopes before returning the context.
 Clones reuse those pipelines; worker sessions do not repeat warm-up. This does not
-prove that all driver first-use costs disappear. Automatic still uses startup
-policy and a shared visual self-check, not a frame-latency calibration benchmark.
-CPU and unsupported-precision early returns remain device-free.
+prove that all driver first-use costs disappear. The first GPU
+selection runs a shared visual self-check, not a frame-latency calibration benchmark.
+CPU requests remain device-free.
 
 The once-only self-check prepares CPU reference coverage and GPU edge records
 independently. Its small fixtures cover spatial paints, group blending, curves,
@@ -55,10 +57,8 @@ Simple boundaries retain analytic signed areas. Overlapping winding is refined o
 an eight-by-eight midpoint grid before applying the fill rule, rather than folding
 an integrated winding and leaving false coverage along duplicate even-odd contours.
 This is not the exact CPU sweep and permits localized antialiasing differences. CPU rendering
-prepares its own coverage with unchanged reference arithmetic. An Automatic startup
-rejection prepares CPU coverage independently from the validated source before
-rendering; both preparation attempts count toward the request's work allowance.
-An already selected GPU never changes backends after a frame failure.
+prepares its own coverage with unchanged reference arithmetic. GPU preparation never generates CPU coverage and a selected GPU never
+changes backends after a failure.
 
 Mesh and atmosphere paints upload admitted control/parameter descriptions rather
 than CPU-baked texels. CPU and WGSL independently evaluate patch geometry, Oklab
@@ -84,11 +84,12 @@ Wang segment upper bounds. Curves use up to eight subcurve hulls split at the
 device's uniform segment boundaries; this tightens capacity without generating
 host line segments. One extra tile on each
 horizontal side covers interpolation rounding at seams. Each tile admits at most
-4096 edge references. A fill admits at most 2^26 tile work units and the frame at
-most 2^28, 2^24 bounding-box pixels and 32768 fills. Coordinates outside the local
-8192-pixel precision range, excessive tile density or these work/frame ceilings
-choose CPU coverage for that path before submission. Exhausting the caller's
-byte/work allowance remains a validation error, not an uncharged retry.
+4096 edge references. A fill admits at most 2^28 tile work units and the frame at
+most 2^30, 2^24 bounding-box pixels and 32768 fills. Coordinates outside the local
+8192-pixel precision range, excessive tile density, decal image patterns or these
+work/frame ceilings return an unsupported `gpu.coverage` validation error naming the
+path; there is no CPU coverage route. Exhausting the caller's byte/work allowance
+remains a validation error.
 
 Planning reserves host/upload/device descriptors, tile counters and offsets,
 the full conservative index capacity and nine values per row: integrated signed
@@ -105,16 +106,13 @@ buffer check, including filter padding.
 
 `PreparedGpuFrame::gpu_stats` exposes `GpuPreparationStats`: logical preparation
 totals, retained GPU segments, admitted tiles/index capacity, geometry-upload
-bytes and `GpuFallbackCounts`. Upload bytes count only binning uniforms and
+bytes. Upload bytes count only binning uniforms and
 fill/line/curve descriptors, not CPU coverage, paints, textures or zeroed scratch.
-Fallback counts distinguish coordinate range, tile capacity, work/frame ceilings,
-decal paint and disabled device coverage (including encoded-sRGB blending).
-Analytic rectangles and CPU clip coverage are not fallback paths.
+Analytic rectangles and CPU-generated clip coverage are part of GPU preparation, not
+fallbacks.
 `RenderSession::report().gpu_preparation` exposes the same completed preparation
 attempt for memory, texture and preparation-only requests, including partial
-execution failure and Automatic startup rejection. A new request clears it.
-The report's separate backend decision identifies an actual whole-frame CPU
-selection; per-path counts do not imply a backend switch.
+execution failure. A new request clears it.
 
 Each composition dispatch uses a 256-byte `#[repr(C)]`/Pod `GpuUniforms` rather than a raw
 word array. Frame, bounds, operation, value rows, source rectangles and flags
@@ -453,8 +451,7 @@ physical GPU-memory, RSS, general speed or export-throughput acceptance. Full re
 and the separately validated post-freeze export wiring are retained in
 [the performance history](../performance-runs.json).
 
-GPU exports, explicit or an Automatic request whose startup selection chose the GPU,
-prepare and submit the first selected frame normally. Its
+GPU exports prepare and submit the first selected frame normally. Its
 preparation/planning maximum and packed-plan peak size separate CPU worker slots
 and the GPU queue. Bounded workers prepare, build an `OutputPlan` and read its peak;
 the ordered consumer only admits, submits and completes output for encoding.
@@ -469,8 +466,7 @@ Plans keep the original GPU submission limit; the smaller slot limit bounds CPU
 preparation and device-independent planning. Only slot byte-admission failures
 trigger this retry; invalid content, work-limit errors and panics remain failures.
 CPU/GPU policy, packing, frame order and transactional failure
-handling are unchanged. Unsupported packed formats and an Automatic request that selects
-the CPU retain the CPU memory-output path.
+handling are unchanged. Unsupported packed formats use the GPU linear readback path.
 
 Raster limits count logical live payloads and conservative work, not physical VRAM
 or process RSS. Local image/attachment capacities, metadata, uploads, staging and

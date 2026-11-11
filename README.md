@@ -66,7 +66,7 @@ application framework. Existing destinations are protected by export.
 | `captions` | Timed caption tracks and cue sheets; includes text support |
 | `declarative` | Versioned JSON film documents, their JSON Schema and CLI loading of `.json` paths |
 | `audio` | PCM decoding, resampling, mixing and analysis without a playback device |
-| `gpu` | Native wgpu composition and external texture output; Automatic permits startup fallback, explicit GPU remains strict |
+| `gpu` | Native wgpu composition and external texture output; the default backend, with no CPU fallback |
 | `typst` | Trusted single-page markup to outlined SVG/Node |
 | `formula` | Direct Typst math vectors, selection, writing and morphing |
 | `ffmpeg` | Native H.264/AAC video encoding and transactional output |
@@ -79,10 +79,10 @@ the prerequisites can be installed with `brew install ffmpeg pkg-config llvm`;
 set `LIBCLANG_PATH` to the LLVM library directory when needed. FFmpeg 8.x is the
 validated version. Studio needs a desktop.
 
-Default features make GPU and Studio APIs available; they do not select a GPU
-backend or open a window. Scene composition uses CPU unless a backend is selected
-explicitly. `BackendPreference::Automatic` permits startup fallback; explicit GPU
-selection does not silently fall back after initialization or device loss.
+Default features make GPU and Studio APIs available and select the GPU backend; they
+do not open a window. Choose `BackendPreference::Cpu` explicitly for the reference
+rasterizer. GPU selection never falls back to the CPU after initialization, an
+unsupported path or device loss.
 
 ## Guides
 

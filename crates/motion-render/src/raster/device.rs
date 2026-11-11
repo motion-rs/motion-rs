@@ -40,10 +40,10 @@ const DEVICE_MAX_FILLS: usize = 1 << 15;
 const DEVICE_MAX_PIXELS: u64 = 1 << 24;
 
 /// Most conservatively admitted tile coverage work units in one fill.
-const DEVICE_MAX_FILL_VISITS: u64 = 1 << 26;
+const DEVICE_MAX_FILL_VISITS: u64 = 1 << 28;
 
 /// Most conservatively admitted tile coverage work units in one frame.
-const DEVICE_MAX_FRAME_VISITS: u64 = 1 << 28;
+const DEVICE_MAX_FRAME_VISITS: u64 = 1 << 30;
 
 /// A path the device coverage pipeline cannot admit; GPU preparation has no CPU coverage route.
 pub(super) fn unsupported(path: &str, reason: &str) -> ValidationError {

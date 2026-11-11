@@ -607,7 +607,7 @@ fn shared_context_texture_target_self_check_and_device_loss_are_real() -> motion
             .with_options(
                 crate::RenderOptions::default()
                     .gpu_context(context.clone())
-                    .backend(crate::BackendPreference::automatic()),
+                    .backend(crate::BackendPreference::gpu()),
             )?;
     let mut first = composition.frame_renderer(motion_core::Size::new(16.0, 8.0))?;
     let mut second = composition.frame_renderer(motion_core::Size::new(16.0, 8.0))?;

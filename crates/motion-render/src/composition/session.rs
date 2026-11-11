@@ -237,9 +237,7 @@ impl RenderSession {
         self.backend.as_ref()
     }
 
-    /// Initial configured renderer, without initializing a device.
-    /// Automatic reports CPU here even after selecting GPU; use backend_decision
-    /// for the actual startup choice and any fallback reason.
+    /// Configured renderer, without initializing a device.
     pub fn renderer(&self) -> Renderer {
         if matches!(self.options.backend, crate::BackendPreference::Gpu { .. }) {
             Renderer::Gpu

@@ -186,7 +186,7 @@ fn shared_texture_preview_and_automatic_export_loss_preserve_transactions()
         PreviewSettings {
             scale: 50,
             transparent: true,
-            backend: Some(motion_render::BackendPreference::automatic()),
+            backend: Some(motion_render::BackendPreference::gpu()),
             ..Default::default()
         },
     );
@@ -223,7 +223,7 @@ fn shared_texture_preview_and_automatic_export_loss_preserve_transactions()
     let mut options = motion_encode::ExportOptions::new(&path);
     options.overwrite = true;
     options.render.gpu_context = Some(context);
-    options.render.backend = motion_render::BackendPreference::automatic();
+    options.render.backend = motion_render::BackendPreference::gpu();
     let error = motion_encode::export(&timeline, &options, &motion_encode::NoProgress)
         .expect_err("lost device must abort export");
     assert_eq!(error.kind(), motion_core::ErrorKind::DeviceLost);
@@ -314,7 +314,7 @@ fn automatic_preview_rejects_gpu_plan_without_rejecting_cpu_frame() -> motion_co
         .with_options(
             motion_render::RenderOptions::default()
                 .gpu_context(context)
-                .backend(motion_render::BackendPreference::automatic())
+                .backend(motion_render::BackendPreference::gpu())
                 .limits(limits),
         )?,
         motion_core::Size::new(64.0, 64.0),
@@ -330,7 +330,7 @@ fn automatic_preview_rejects_gpu_plan_without_rejecting_cpu_frame() -> motion_co
     )
     .unwrap();
     let settings = PreviewSettings {
-        backend: Some(motion_render::BackendPreference::automatic()),
+        backend: Some(motion_render::BackendPreference::gpu()),
         ..PreviewSettings::default()
     };
     let mut automatic = PreviewRenderer::new(&scene, Renderer::Cpu)?;
@@ -359,7 +359,7 @@ fn automatic_preview_rejects_gpu_plan_without_rejecting_cpu_frame() -> motion_co
     let mut inherited = PreviewRenderer::new(&scene, Renderer::Cpu)?;
     assert_eq!(
         inherited.renderer.requested_backend(),
-        motion_render::BackendPreference::automatic()
+        motion_render::BackendPreference::gpu()
     );
     assert_eq!(
         inherited

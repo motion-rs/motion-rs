@@ -254,9 +254,8 @@ and a request with `device_packing` (the one `render_frame*` makes) pack before 
 frame-pixel readback but still checks submission completion and finite status.
 See [GPU rendering](gpu.md) for supported targets and asynchronous completion.
 
-CPU requests do not initialize a composition GPU. Automatic may choose CPU during
-startup checks and records its reason; an explicit GPU request does not silently
-fall back after a failure. Supplying a shared GpuContext establishes device identity,
+CPU requests do not initialize a composition GPU. The default is the GPU when feature
+`gpu` is enabled; a GPU request never falls back to the CPU after a failure. Supplying a shared GpuContext establishes device identity,
 not backend selection.
 
 Explicit CPU memory output composes full-width adaptive bands. Preparation caches
@@ -466,7 +465,7 @@ flowchart TD
 
 Export renders the first selected frame and uses its actual startup backend
 decision and output to schedule remaining frames. CPU selection enables parallel
-rendering, including Automatic when GPU support is absent or startup chooses CPU.
+rendering of explicit CPU requests and of builds without feature `gpu`.
 Parallel CPU slots explicitly select CPU, preserving the first session's choice
 instead of probing a GPU again. Requested workers default to available parallelism,
 capped at 64; frame count and twice the first frame's logical peak further limit
@@ -477,8 +476,8 @@ Only byte-admission failures trigger this retry; invalid content, work-limit err
 and panics remain failures. Scene callbacks must be pure and may be retried.
 `.workers(1)` retains serial evaluation. Encoder/progress callbacks remain ordered
 on the caller through the public Encoder and ProgressSink protocols; native codec
-execution runs on its dedicated thread. Automatic selecting GPU retains one render session;
-explicit supported GPU output
+execution runs on its dedicated thread. A GPU selection retains one render session;
+supported GPU output
 uses measured preparation/planning slots and a bounded queue. Workers build GPU
 plans and packed-output charges; the ordered consumer handles admission, submission
 and encoding, as described in [GPU rendering](gpu.md#limits-and-validation).

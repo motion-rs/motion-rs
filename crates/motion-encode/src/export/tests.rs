@@ -67,11 +67,9 @@ fn native_main10_export_renders_display() -> motion_core::Result {
 fn parallel_worker_selection_respects_frames_memory_and_backend() {
     let cpu = motion_render::BackendDecision {
         renderer: motion_render::Renderer::Cpu,
-        reason: None,
     };
     let gpu = motion_render::BackendDecision {
         renderer: motion_render::Renderer::Gpu,
-        reason: None,
     };
     let mut options = ExportOptions::new("unused")
         .size(motion_core::PixelSize::new(8, 4))
@@ -86,7 +84,7 @@ fn parallel_worker_selection_respects_frames_memory_and_backend() {
     options.render.limits.max_bytes = u64::MAX;
     assert_eq!(render_workers(&options, 100, 1024, Some(&cpu)), 8);
     assert_eq!(render_workers(&options, 100, u64::MAX, Some(&cpu)), 1);
-    options.render.backend = motion_render::BackendPreference::automatic();
+    options.render.backend = motion_render::BackendPreference::gpu();
     assert_eq!(render_workers(&options, 100, 1024, None), 1);
     assert_eq!(render_workers(&options, 100, 1024, Some(&cpu)), 8);
     assert_eq!(render_workers(&options, 100, 1024, Some(&gpu)), 1);
@@ -177,7 +175,7 @@ fn parallel_export_matches_serial_pixels_ntsc_ranges_and_progress() -> Result<()
     #[cfg(not(feature = "gpu"))]
     let backends = [
         motion_render::BackendPreference::Cpu,
-        motion_render::BackendPreference::automatic(),
+        motion_render::BackendPreference::gpu(),
     ];
     for format in [
         PixelFormat::SrgbRgba8 {
@@ -270,7 +268,7 @@ fn parallel_export_matches_serial_pixels_ntsc_ranges_and_progress() -> Result<()
         .workers(4);
     #[cfg(not(feature = "gpu"))]
     {
-        options.render.backend = motion_render::BackendPreference::automatic();
+        options.render.backend = motion_render::BackendPreference::gpu();
     }
     let mut reference_renderer =
         motion_render::Composition::for_timeline(&changing, &options.render)?
@@ -561,7 +559,7 @@ fn parallel_native_exports_match_serial_files_and_preserve_destinations() -> Res
     let reference = std::fs::read(&path)?;
     #[cfg(not(feature = "gpu"))]
     {
-        options.render.backend = motion_render::BackendPreference::automatic();
+        options.render.backend = motion_render::BackendPreference::gpu();
     }
     for workers in [2, 4, 16] {
         options.path = directory.path().join(format!("workers-{workers}.mp4"));

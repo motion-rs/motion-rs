@@ -80,7 +80,7 @@ pub struct FrameReport {
     pub timings: Option<FrameTimings>,
     /// Backend decision made for this session.
     pub backend: Option<crate::BackendDecision>,
-    /// Latest completed GPU preparation attempt, even if Automatic later chose CPU.
+    /// Latest completed GPU preparation attempt.
     /// Available for memory, texture and preparation-only requests; cleared on the next request.
     pub gpu_preparation: Option<crate::GpuPreparationStats>,
 }
@@ -91,7 +91,7 @@ pub struct FrameReport {
 /// signed-tick SceneContext inputs and a session-owned entry-bounded scene cache.
 /// Also exposes typed memory and external-texture output. No implicit font discovery
 /// or encoding occurs. Backend/device work is deferred until execution; explicit
-/// GPU selection never silently falls back, while Automatic may choose CPU at startup.
+/// GPU selection never silently falls back to the CPU.
 pub struct FrameRenderer {
     pub(super) composition: Composition,
     pub(super) duration: Time,
@@ -211,14 +211,12 @@ impl FrameRenderer {
         match prepared {
             super::execution::PreparedOutput::Cpu(frame) => Ok((frame, limits)),
             #[cfg(feature = "gpu")]
-            super::execution::PreparedOutput::Gpu { .. } => {
-                Err(motion_core::ValidationError::invalid(
-                    "prepared",
-                    "backend",
-                    "CPU preparation returned a GPU frame",
-                )
-                .into())
-            }
+            super::execution::PreparedOutput::Gpu(_) => Err(motion_core::ValidationError::invalid(
+                "prepared",
+                "backend",
+                "CPU preparation returned a GPU frame",
+            )
+            .into()),
         }
     }
 
@@ -241,7 +239,7 @@ impl FrameRenderer {
                 "GPU preparation returned a CPU frame",
             )
             .into()),
-            super::execution::PreparedOutput::Gpu { frame, .. } => {
+            super::execution::PreparedOutput::Gpu(frame) => {
                 Ok((crate::gpu::PreparedGpuFrame::new(frame), limits))
             }
         }
@@ -329,7 +327,6 @@ impl FrameRenderer {
     }
 
     /// Configured backend policy, without selecting or initializing a device.
-    /// Automatic remains Automatic after its startup decision has been made.
     pub fn requested_backend(&self) -> crate::BackendPreference {
         self.composition.options.backend
     }
