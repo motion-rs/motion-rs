@@ -313,11 +313,10 @@ fn gpu_export_pipeline_matches_linear_reference_and_cancels_transactionally() ->
             |context| timeline.render(context),
         )?;
         let plan = motion_render::gpu::Plan::new(&frame, limits)?;
-        expected.push(FrameBuffer::from_linear(
-            &gpu.render(&frame, plan)?,
-            format,
-            options.render.limits,
-        )?);
+        expected.push(
+            gpu.render_linear(&frame, plan)?
+                .to_format(format, options.render.limits)?,
+        );
     }
     threads.lock().unwrap().clear();
     let written = Arc::new(Mutex::new(Vec::new()));

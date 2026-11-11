@@ -329,7 +329,7 @@ mod tests {
         )
     }
 
-    fn pixels(node: Node) -> motion_core::Result<motion_render::LinearFrame> {
+    fn pixels(node: Node) -> motion_core::Result<motion_render::FrameBuffer> {
         Ok(node
             .compile(
                 Size::new(20.0, 8.0),
@@ -346,25 +346,21 @@ mod tests {
         let from = tree(&[Color::rgb(255, 0, 0), Color::WHITE], false)?;
         let to = tree(&[Color::rgb(0, 0, 255), Color::WHITE, Color::WHITE], true)?;
         let morph = Morph::new(&from, &to)?;
-        assert_eq!(
-            pixels(morph.sample(0.0)?)?.pixels(),
-            pixels(from.node())?.pixels()
-        );
-        assert_eq!(
-            pixels(morph.sample(1.0)?)?.pixels(),
-            pixels(to.node())?.pixels()
-        );
+        assert_eq!(pixels(morph.sample(0.0)?)?, pixels(from.node())?);
+        assert_eq!(pixels(morph.sample(1.0)?)?, pixels(to.node())?);
         let middle = pixels(morph.sample(0.5)?)?;
-        assert_eq!(middle.pixel(2, 2).unwrap()[3], 0.5);
-        assert!(middle.pixel(2, 2).unwrap()[0] > 0.0 && middle.pixel(2, 2).unwrap()[2] > 0.0);
-        assert!(middle.pixel(12, 2).unwrap()[3] > 0.0);
-        assert_eq!(middle.pixels(), pixels(morph.sample(0.5)?)?.pixels());
+        assert_eq!(middle.linear_pixel(2, 2).unwrap()[3], 0.5);
+        assert!(
+            middle.linear_pixel(2, 2).unwrap()[0] > 0.0
+                && middle.linear_pixel(2, 2).unwrap()[2] > 0.0
+        );
+        assert!(middle.linear_pixel(12, 2).unwrap()[3] > 0.0);
+        assert_eq!(middle, pixels(morph.sample(0.5)?)?);
         let empty = VectorTree::new(from.view_box(), VectorGroup::default())?;
         assert!(
             pixels(Morph::new(&from, &empty)?.sample(1.0)?)?
-                .pixels()
-                .iter()
-                .all(|pixel| *pixel == [0.0; 4])
+                .linear_pixels()
+                .all(|pixel| pixel == [0.0; 4])
         );
         assert!(morph.sample(f64::NAN).is_err());
         Ok(())
@@ -400,7 +396,7 @@ mod tests {
         let target = VectorTree::new(base.view_box(), target)?;
         assert_eq!(
             pixels(Morph::new(&source, &target)?.sample(0.5)?)?
-                .pixel(2, 2)
+                .linear_pixel(2, 2)
                 .unwrap()[3],
             0.5
         );

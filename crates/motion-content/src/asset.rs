@@ -95,8 +95,8 @@ mod tests {
                 crate::Svg::open("diagram.svg").translate(4.0, 0.0),
             ))
         })?;
-        assert_eq!(frame.pixels()[0], 0xffffff);
-        assert_eq!(frame.pixels()[4], 0x00ff00);
+        assert_eq!(frame.packed_rgb()[0], 0xffffff);
+        assert_eq!(frame.packed_rgb()[4], 0x00ff00);
         let override_assets = Assets::new(".")?;
         override_assets.preload(
             "logo.png",
@@ -108,7 +108,7 @@ mod tests {
                 assert!(context.assets().pool().same_pool(override_assets.pool()));
                 crate::Image::open("logo.png").into()
             })?;
-        assert_eq!(frame.pixels()[0], 0xff0000);
+        assert_eq!(frame.packed_rgb()[0], 0xff0000);
         Ok(())
     }
 
@@ -132,7 +132,7 @@ mod tests {
         let frame = composition
             .configure(|options| options.allow_missing_assets(true))
             .render_frame(0, Size::new(2.0, 2.0), build)?;
-        assert_eq!(frame.pixels()[0], 0xff00ff);
+        assert_eq!(frame.packed_rgb()[0], 0xff00ff);
         Ok(())
     }
 

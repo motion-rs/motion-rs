@@ -23,14 +23,15 @@ mod drawing {
                 };
                 assert_eq!(outline.bounding_box(), expected);
                 let frame = render(line().stroke(2.0, Color::WHITE).stroke_style(style));
-                assert_eq!(frame.pixel(2, 0).unwrap(), [1.0; 4]);
+                assert_eq!(frame.linear_pixel(2, 0).unwrap(), [1.0; 4]);
                 let expected = match cap {
                     LineCap::Butt => 0.0,
                     LineCap::Square => 1.0,
                     LineCap::Round => std::f64::consts::FRAC_PI_4,
                 };
                 assert!(
-                    (f64::from(frame.pixel(0, 0).unwrap()[3]) - expected).abs() <= 1.0 / 255.0,
+                    (f64::from(frame.linear_pixel(0, 0).unwrap()[3]) - expected).abs()
+                        <= 1.0 / 255.0,
                     "{cap:?}"
                 );
             }
@@ -51,15 +52,16 @@ mod drawing {
                     ..StrokeStyle::default()
                 };
                 let frame = render(source.clone().stroke(2.0, Color::WHITE).stroke_style(style));
-                assert_eq!(frame.pixel(4, 4).unwrap(), [0.0; 4]);
-                assert_eq!(frame.pixel(0, 4).unwrap(), [1.0; 4]);
+                assert_eq!(frame.linear_pixel(4, 4).unwrap(), [0.0; 4]);
+                assert_eq!(frame.linear_pixel(0, 4).unwrap(), [1.0; 4]);
                 let expected = match join {
                     LineJoin::Miter { limit: 4.0 } => 1.0,
                     LineJoin::Round => std::f64::consts::FRAC_PI_4,
                     _ => 0.5,
                 };
                 assert!(
-                    (f64::from(frame.pixel(0, 0).unwrap()[3]) - expected).abs() <= 1.0 / 255.0,
+                    (f64::from(frame.linear_pixel(0, 0).unwrap()[3]) - expected).abs()
+                        <= 1.0 / 255.0,
                     "{join:?}"
                 );
                 let square = StrokeStyle {
@@ -93,7 +95,7 @@ mod drawing {
             ));
             assert_eq!(
                 render(Node::from(stroked.clone()).opacity(0.5))
-                    .pixel(1, 1)
+                    .linear_pixel(1, 1)
                     .unwrap(),
                 [0.5; 4]
             );
@@ -105,7 +107,7 @@ mod drawing {
                 1
             );
             let opaque = render(rect.stroke(2.0, Color::WHITE).fill(Color::WHITE));
-            assert_eq!(opaque.pixel(4, 4).unwrap(), [1.0; 4]);
+            assert_eq!(opaque.linear_pixel(4, 4).unwrap(), [1.0; 4]);
             assert!(
                 Node::from(stroked)
                     .compile(
@@ -187,7 +189,7 @@ mod drawing {
                 .translate(1.0, 1.0)
                 .clip_with(Rect::new(1.0, 0.0, 5.0, 2.0), motion::ClipMode::Geometric)
                 .opacity(0.6);
-            assert_eq!(render(actual).pixels(), render(expected).pixels());
+            assert_eq!(render(actual), render(expected));
             let commands = DrawContext::default()
                 .record(&line().stroke(2.0, color), ValidationLimits::default())
                 .unwrap();
@@ -224,8 +226,8 @@ mod drawing {
                     for row in 0..8 {
                         for column in 0..8 {
                             assert!(
-                                (curve_frame.pixel(column, row).unwrap()[3]
-                                    - reference.pixel(column, row).unwrap()[3])
+                                (curve_frame.linear_pixel(column, row).unwrap()[3]
+                                    - reference.linear_pixel(column, row).unwrap()[3])
                                     .abs()
                                     <= 1.0 / 255.0
                             );
@@ -277,11 +279,11 @@ mod drawing {
                     .is_err()
             );
             let dashed = render(line().stroke(2.0, Color::WHITE).dash(&[2.0, 2.0], 0.0));
-            assert_eq!(dashed.pixel(1, 0).unwrap()[3], 1.0);
-            assert_eq!(dashed.pixel(3, 0).unwrap()[3], 0.0);
+            assert_eq!(dashed.linear_pixel(1, 0).unwrap()[3], 1.0);
+            assert_eq!(dashed.linear_pixel(3, 0).unwrap()[3], 0.0);
             let grown = render(line().stroke(2.0, Color::WHITE).trim(0.0, 0.5));
-            assert_eq!(grown.pixel(1, 0).unwrap()[3], 1.0);
-            assert_eq!(grown.pixel(3, 0).unwrap()[3], 0.0);
+            assert_eq!(grown.linear_pixel(1, 0).unwrap()[3], 1.0);
+            assert_eq!(grown.linear_pixel(3, 0).unwrap()[3], 0.0);
             let point = Path2D::parse_svg("M4 4C4 4 4 4 4 4").unwrap();
             assert!(
                 StrokeStyle {
@@ -300,7 +302,7 @@ mod drawing {
                 cap: LineCap::Round,
                 join: LineJoin::Round,
             }));
-            assert_eq!(mixed.pixel(4, 5).unwrap()[3], 0.0);
+            assert_eq!(mixed.linear_pixel(4, 5).unwrap()[3], 0.0);
             assert!(
                 StrokeStyle {
                     width: 1e-40,
@@ -311,7 +313,7 @@ mod drawing {
             );
         }
 
-        fn render(node: impl Into<Node>) -> LinearFrame {
+        fn render(node: impl Into<Node>) -> FrameBuffer {
             node.into()
                 .compile(
                     Size::new(8.0, 8.0),
@@ -374,7 +376,7 @@ mod drawing {
             for index in [0, 11, 8, 5, 2, 9, 1, 10, 7, 4, 3, 6, 0] {
                 let expected = cpu.render_frame(index, build)?;
                 let actual = gpu.render_frame(index, build)?;
-                for (expected, actual) in expected.pixels().iter().zip(actual.pixels()) {
+                for (expected, actual) in expected.packed_rgb().iter().zip(actual.packed_rgb()) {
                     for shift in [0, 8, 16] {
                         max_difference = max_difference
                             .max(((expected >> shift) & 255).abs_diff((actual >> shift) & 255));
@@ -386,10 +388,10 @@ mod drawing {
                 );
                 if let Some(first) = &first {
                     if index == 0 {
-                        assert!(actual.pixels() == first, "GPU stroke replay differs");
+                        assert!(actual.packed_rgb() == *first, "GPU stroke replay differs");
                     }
                 } else {
-                    first = Some(actual.pixels().to_vec());
+                    first = Some(actual.packed_rgb());
                 }
             }
             assert!(gpu.gpu_info().is_some());
@@ -461,7 +463,7 @@ mod drawing {
                     .render_linear(RasterLimits::default())
                     .unwrap()
             };
-            assert_eq!(render(actual).pixels(), render(expected).pixels());
+            assert_eq!(render(actual), render(expected));
             let _ = parsed.bounding_box();
             let mut changed = parsed.clone();
             changed.try_line_to(Point::new(7.0, 7.0)).unwrap();
@@ -486,9 +488,9 @@ mod drawing {
                     .unwrap()
                     .render_linear(RasterLimits::default())
                     .unwrap();
-                assert_eq!(frame.pixel(2, 2), Some([1.0; 4]));
+                assert_eq!(frame.linear_pixel(2, 2), Some([1.0; 4]));
                 assert_eq!(
-                    frame.pixel(4, 4),
+                    frame.linear_pixel(4, 4),
                     Some([if rule == FillRule::EvenOdd { 0.0 } else { 1.0 }; 4])
                 );
             }
@@ -538,7 +540,7 @@ mod drawing {
             for index in [0, 4, 1, 3, 2, 0] {
                 let expected = cpu.render_frame(index, build)?;
                 let actual = gpu.render_frame(index, build)?;
-                for (expected, actual) in expected.pixels().iter().zip(actual.pixels()) {
+                for (expected, actual) in expected.packed_rgb().iter().zip(actual.packed_rgb()) {
                     for shift in [0, 8, 16] {
                         maximum = maximum
                             .max(((expected >> shift) & 255).abs_diff((actual >> shift) & 255));
@@ -547,10 +549,10 @@ mod drawing {
                 assert!(maximum <= 1, "SVG CPU/GPU RGB difference {maximum}");
                 if let Some(first) = &first {
                     if index == 0 {
-                        assert!(actual.pixels() == first, "SVG GPU replay differs");
+                        assert!(actual.packed_rgb() == *first, "SVG GPU replay differs");
                     }
                 } else {
-                    first = Some(actual.pixels().to_vec());
+                    first = Some(actual.packed_rgb());
                 }
             }
             assert!(gpu.gpu_info().is_some());
@@ -622,7 +624,7 @@ mod drawing {
                     .render_linear(RasterLimits::default())
                     .unwrap();
                 assert!((0..8).any(|row| {
-                    (0..8).any(|column| frame.pixel(column, row).unwrap()[3] > 0.0)
+                    (0..8).any(|column| frame.linear_pixel(column, row).unwrap()[3] > 0.0)
                 }));
             }
             let ring = Node::from(Ring::new(center, 2.0, 3.0).fill(Color::WHITE))
@@ -636,8 +638,8 @@ mod drawing {
                 .unwrap()
                 .render_linear(RasterLimits::default())
                 .unwrap();
-            assert_eq!(ring.pixel(4, 4).unwrap(), [0.0; 4]);
-            assert!(ring.pixel(4, 1).unwrap()[3] > 0.5);
+            assert_eq!(ring.linear_pixel(4, 4).unwrap(), [0.0; 4]);
+            assert!(ring.linear_pixel(4, 1).unwrap()[3] > 0.5);
         }
 
         #[test]
@@ -684,30 +686,38 @@ mod drawing {
                     )?
                     .prepare(ValidationLimits::default(), limits)?;
                 let cpu = prepared.render_linear(limits)?;
-                let rendered = gpu.render(
+                let rendered = gpu.render_linear(
                     &prepared,
                     motion::render::gpu::Plan::new(&prepared, limits)?,
                 )?;
                 for row in 0..8 {
                     for column in 0..8 {
                         for (first, second) in cpu
-                            .pixel(column, row)
+                            .linear_pixel(column, row)
                             .unwrap()
                             .into_iter()
-                            .zip(rendered.pixel(column, row).unwrap())
+                            .zip(rendered.linear_pixel(column, row).unwrap())
                         {
                             maximum = maximum.max((first - second).abs());
                         }
                     }
                 }
-                let cpu = cpu.to_srgb_rgba8(false, limits)?;
-                let rendered = rendered.to_srgb_rgba8(false, limits)?;
-                for (first, second) in cpu.pixels().iter().zip(rendered.pixels()) {
-                    for (first, second) in first.iter().zip(second) {
-                        assert!(first.abs_diff(*second) <= 1);
-                    }
+                let cpu = cpu.to_format(
+                    motion::render::PixelFormat::SrgbRgba8 {
+                        premultiplied: false,
+                    },
+                    limits,
+                )?;
+                let rendered = rendered.to_format(
+                    motion::render::PixelFormat::SrgbRgba8 {
+                        premultiplied: false,
+                    },
+                    limits,
+                )?;
+                for (first, second) in cpu.bytes().iter().zip(rendered.bytes()) {
+                    assert!(first.abs_diff(*second) <= 1);
                 }
-                saved.push(rendered.pixels().to_vec());
+                saved.push(rendered.bytes().to_vec());
             }
             assert!(maximum <= 2e-6, "maximum linear difference {maximum}");
             for (index, node) in nodes.iter().enumerate().rev() {
@@ -719,12 +729,17 @@ mod drawing {
                     )?
                     .prepare(ValidationLimits::default(), limits)?;
                 let replay = gpu
-                    .render(
+                    .render_linear(
                         &prepared,
                         motion::render::gpu::Plan::new(&prepared, limits)?,
                     )?
-                    .to_srgb_rgba8(false, limits)?;
-                assert_eq!(replay.pixels(), saved[index]);
+                    .to_format(
+                        motion::render::PixelFormat::SrgbRgba8 {
+                            premultiplied: false,
+                        },
+                        limits,
+                    )?;
+                assert_eq!(replay.bytes(), saved[index]);
             }
             eprintln!(
                 "_shapes_gpu adapter={} backend={:?} cases={} max_linear_difference={maximum} rgba_tolerance=1 reverse_replay=exact",

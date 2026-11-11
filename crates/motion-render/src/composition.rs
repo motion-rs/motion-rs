@@ -9,7 +9,7 @@ mod session;
 
 use execution::FrameExecution;
 
-use crate::{RasterLimits, Snapshot};
+use crate::{FrameBuffer, RasterLimits};
 
 use motion_core::{Node, PixelSize, SceneContext, Size, ValidationError};
 
@@ -48,7 +48,7 @@ impl FrameClock {
 /// The frame clock is explicit. Dimensions are output pixels.
 ///
 /// Rendering policy lives in one [`crate::RenderOptions`]: defaults select CPU rendering
-/// without font discovery, and the opaque Snapshot background is white unless
+/// without font discovery, and the opaque `render_frame*` background is white unless
 /// `RenderOptions::background` is set. Validation happens in preflight and rendering.
 /// Scene callbacks must be deterministic functions of their time and fixed inputs;
 /// no prior-frame history, wall-clock time, or unseeded randomness is supplied.
@@ -121,7 +121,7 @@ impl Composition {
 
     /// Replaces the render options with the same validation used by Timeline output.
     /// Absent `size` retains this composition's viewport. Output backgrounds are still
-    /// selected by render_still/render_output_at; Snapshot output composites over the
+    /// selected by render_still/render_output_at; `render_frame*` output composites over the
     /// opaque `background`, white when absent.
     pub fn with_options(mut self, mut options: crate::RenderOptions) -> Result<Self> {
         options.validate()?;
@@ -200,7 +200,10 @@ impl Composition {
         &self.options.context
     }
 
-    /// Opaque background Snapshot output composites over; alpha is ignored.
+    /// The single opaque-output rule: `render_frame*` composites over
+    /// `RenderOptions::background` with its alpha ignored, or over white when no
+    /// background is set. `render_output_at` and `render_still` instead use their
+    /// explicit background and preserve transparency when it is `None`.
     pub fn snapshot_background(&self) -> motion_core::Color {
         self.options
             .background
@@ -343,7 +346,7 @@ impl Composition {
     /// Creates an explicit consumer for Node scenes and logical dimensions.
     ///
     /// Uses this composition's timing, structural policy and opaque RGB background;
-    /// background alpha is ignored, as in Snapshot's opaque contract.
+    /// background alpha is ignored, as in the opaque `render_frame*` contract.
     /// Renderer::Gpu requires the gpu feature, initializes lazily on the first
     /// admitted render, and executes prepared coverage on f32 compute
     /// buffers. Explicit GPU requests never fall back to CPU; Automatic policy may
@@ -371,7 +374,7 @@ impl Composition {
     ///     )
     ///     .opacity(0.5)
     /// })?;
-    /// assert_eq!(snapshot.pixels()[0], 0xbbbbbb);
+    /// assert_eq!(snapshot.packed_rgb()[0], 0xbbbbbb);
     /// assert!(renderer.last_stats().unwrap().work() > 0);
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -410,7 +413,7 @@ impl Composition {
         index: u32,
         design_size: Size,
         build: impl FnOnce(&SceneContext<'_>) -> Node,
-    ) -> Result<Snapshot> {
+    ) -> Result<FrameBuffer> {
         self.frame_renderer(design_size)?.render_frame(index, build)
     }
 
@@ -420,7 +423,7 @@ impl Composition {
         index: u32,
         design_size: Size,
         build: impl FnMut(&SceneContext<'_>) -> Node,
-    ) -> Result<Snapshot> {
+    ) -> Result<FrameBuffer> {
         self.frame_renderer(design_size)?
             .render_frame_sampled(index, build)
     }
@@ -442,7 +445,7 @@ mod _contract_tests {
             .render_frame(0, Size::new(8.0, 4.0), |_| {
                 Node::from(Rect::new(0.0, 0.0, 8.0, 4.0).fill(Color::WHITE)).opacity(0.5)
             })?;
-        assert_eq!(frame.pixels()[0], 0xbbbbbb);
+        assert_eq!(frame.packed_rgb()[0], 0xbbbbbb);
         Ok(())
     }
 
@@ -537,14 +540,14 @@ mod _contract_tests {
                 Node::from(Rect::new(0.0, 0.0, width, 64.0).fill(Color::from_hex(0x118677)))
             })?;
             assert_eq!(
-                output.pixels()[5 * 64 + 40],
+                output.packed_rgb()[5 * 64 + 40],
                 if index == 2 { 0x118677 } else { 0xffffff }
             );
             if index == 2 {
                 if let Some(previous) = &previous {
-                    assert_eq!(output.pixels(), previous);
+                    assert_eq!(output.packed_rgb(), *previous);
                 }
-                previous = Some(output.pixels().to_vec());
+                previous = Some(output.packed_rgb());
             }
         }
         Ok(())

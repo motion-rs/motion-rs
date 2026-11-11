@@ -233,7 +233,7 @@ fn rgba8_thresholds_match_scalar_boundaries_and_alpha_modes() {
         };
         for premultiplied in [false, true] {
             let actual = frame
-                .to_srgb_rgba8(premultiplied, RasterLimits::default())
+                .to_rgba8_frame(premultiplied, RasterLimits::default())
                 .unwrap();
             let buffer = crate::FrameBuffer::from_linear(
                 &frame,
@@ -316,124 +316,6 @@ fn byte_lookup_is_exhaustively_equal_to_counting_thresholds() {
 }
 
 #[test]
-fn opaque_snapshot_packing_preserves_rgb_order_and_has_exact_budgets() {
-    for count in [1, 3, 7, 8, 15, 16, 17, 31, 32, 33, 65] {
-        let frame = Rgba8Frame {
-            size: PixelSize::new(count, 1),
-            pixels: (0..count)
-                .map(|index| {
-                    [
-                        (index * 37) as u8,
-                        (index * 91 + 3) as u8,
-                        (index * 13 + 17) as u8,
-                        255,
-                    ]
-                })
-                .collect(),
-            premultiplied: false,
-            stats: WorkStats::default(),
-        };
-        let expected = frame
-            .pixels()
-            .iter()
-            .map(|pixel| {
-                (u32::from(pixel[0]) << 16) | (u32::from(pixel[1]) << 8) | u32::from(pixel[2])
-            })
-            .collect::<Vec<_>>();
-        let snapshot = frame
-            .clone()
-            .into_snapshot(RasterLimits::default())
-            .unwrap();
-        assert_eq!(snapshot.pixels(), expected, "{count} pixels");
-        for index in [0, count / 2, count - 1] {
-            let mut transparent = frame.clone();
-            transparent.pixels[index as usize][3] = 128;
-            let error = transparent
-                .into_snapshot(RasterLimits::default())
-                .err()
-                .unwrap();
-            assert_eq!(
-                (error.kind, error.field.as_str()),
-                (ValidationErrorKind::InvalidValue, "alpha")
-            );
-        }
-    }
-    let frame = Rgba8Frame {
-        size: PixelSize::new(2, 1),
-        pixels: vec![[1, 2, 3, 255], [240, 128, 64, 255]],
-        premultiplied: false,
-        stats: WorkStats::default(),
-    };
-    let (snapshot, stats) = frame
-        .clone()
-        .into_snapshot_with_stats(RasterLimits::default())
-        .unwrap();
-    assert_eq!((snapshot.width(), snapshot.height()), (2, 1));
-    assert_eq!(snapshot.pixels(), &[0x010203, 0xf08040]);
-    let exact = RasterLimits {
-        max_bytes: stats.peak_bytes,
-        max_work: stats.work,
-        max_pixels: 2,
-    };
-    assert_eq!(
-        frame.clone().into_snapshot(exact).unwrap().pixels(),
-        snapshot.pixels()
-    );
-    assert_eq!(
-        frame
-            .clone()
-            .into_snapshot(RasterLimits {
-                max_bytes: exact.max_bytes - 1,
-                ..exact
-            })
-            .err()
-            .unwrap()
-            .field,
-        "max_bytes"
-    );
-    assert_eq!(
-        frame
-            .clone()
-            .into_snapshot(RasterLimits {
-                max_work: exact.max_work - 1,
-                ..exact
-            })
-            .err()
-            .unwrap()
-            .field,
-        "max_work"
-    );
-    assert_eq!(
-        frame
-            .clone()
-            .into_snapshot(RasterLimits {
-                max_pixels: 1,
-                ..exact
-            })
-            .err()
-            .unwrap()
-            .field,
-        "max_pixels"
-    );
-    let mut premultiplied = frame.clone();
-    premultiplied.premultiplied = true;
-    assert_eq!(
-        premultiplied.into_snapshot(exact).unwrap().pixels(),
-        snapshot.pixels()
-    );
-    let mut transparent = frame;
-    transparent.pixels[1][3] = 128;
-    let error = transparent
-        .into_snapshot(RasterLimits::default())
-        .err()
-        .unwrap();
-    assert_eq!(
-        (error.kind, error.field.as_str()),
-        (ValidationErrorKind::InvalidValue, "alpha")
-    );
-}
-
-#[test]
 fn gamma_and_alpha_modes_use_straight_linear_channels_first() {
     let source = LinearFrame {
         size: PixelSize {
@@ -449,9 +331,11 @@ fn gamma_and_alpha_modes_use_straight_linear_channels_first() {
         stats: WorkStats::default(),
     };
     let straight = source
-        .to_srgb_rgba8(false, RasterLimits::default())
+        .to_rgba8_frame(false, RasterLimits::default())
         .unwrap();
-    let premultiplied = source.to_srgb_rgba8(true, RasterLimits::default()).unwrap();
+    let premultiplied = source
+        .to_rgba8_frame(true, RasterLimits::default())
+        .unwrap();
     assert_eq!(
         straight.pixels(),
         &[[187, 187, 187, 255], [188, 0, 0, 128], [0; 4], [255; 4]]
@@ -476,13 +360,15 @@ fn ordered_dither_has_fixed_spatial_phase_and_no_channel_or_history_noise() {
                 stats: WorkStats::default(),
             };
             let first = source
-                .to_srgb_rgba8(false, RasterLimits::default())
+                .to_rgba8_frame(false, RasterLimits::default())
                 .unwrap();
-            let _other_mode = source.to_srgb_rgba8(true, RasterLimits::default()).unwrap();
+            let _other_mode = source
+                .to_rgba8_frame(true, RasterLimits::default())
+                .unwrap();
             assert_eq!(
                 first,
                 source
-                    .to_srgb_rgba8(false, RasterLimits::default())
+                    .to_rgba8_frame(false, RasterLimits::default())
                     .unwrap()
             );
             for row in 0..height {
@@ -517,7 +403,7 @@ fn hdr_clips_only_at_output_and_zero_quantized_alpha_clears_hidden_rgb() {
     };
     let original = source.clone();
     let straight = source
-        .to_srgb_rgba8(false, RasterLimits::default())
+        .to_rgba8_frame(false, RasterLimits::default())
         .unwrap();
     assert_eq!(
         straight.pixels(),
@@ -530,7 +416,9 @@ fn hdr_clips_only_at_output_and_zero_quantized_alpha_clears_hidden_rgb() {
             [0; 4],
         ]
     );
-    let premultiplied = source.to_srgb_rgba8(true, RasterLimits::default()).unwrap();
+    let premultiplied = source
+        .to_rgba8_frame(true, RasterLimits::default())
+        .unwrap();
     assert_eq!(premultiplied.pixel(2, 0), Some([1, 0, 0, 1]));
     for pixel in premultiplied.pixels() {
         assert!(pixel[..3].iter().all(|channel| *channel <= pixel[3]));
@@ -553,7 +441,9 @@ fn alpha_rounding_and_premultiplied_bounds_hold_at_all_byte_midpoints() {
         stats: WorkStats::default(),
     };
     for mode in [false, true] {
-        let output = source.to_srgb_rgba8(mode, RasterLimits::default()).unwrap();
+        let output = source
+            .to_rgba8_frame(mode, RasterLimits::default())
+            .unwrap();
         for (input, pixel) in source.pixels().iter().zip(output.pixels()) {
             let expected_alpha = alpha_to_byte(input[3]);
             assert_eq!(pixel[3], expected_alpha);
@@ -582,7 +472,7 @@ fn exact_conversion_limits_succeed_and_short_limits_preserve_the_source() {
     };
     let original = source.clone();
     let output = source
-        .to_srgb_rgba8(false, RasterLimits::default())
+        .to_rgba8_frame(false, RasterLimits::default())
         .unwrap();
     assert_eq!(output.size(), source.size());
     assert_eq!(output.stats().work, 4);
@@ -595,7 +485,7 @@ fn exact_conversion_limits_succeed_and_short_limits_preserve_the_source() {
         max_bytes: output.stats().peak_bytes,
         max_work: 4,
     };
-    assert_eq!(source.to_srgb_rgba8(false, exact).unwrap(), output);
+    assert_eq!(source.to_rgba8_frame(false, exact).unwrap(), output);
     for (limits, field) in [
         (
             RasterLimits {
@@ -619,11 +509,11 @@ fn exact_conversion_limits_succeed_and_short_limits_preserve_the_source() {
             "max_work",
         ),
     ] {
-        let error = source.to_srgb_rgba8(false, limits).unwrap_err();
+        let error = source.to_rgba8_frame(false, limits).unwrap_err();
         assert_eq!(error.kind, ValidationErrorKind::StructuralLimit);
         assert_eq!(error.field, field);
         assert_eq!(source, original);
-        assert_eq!(source.to_srgb_rgba8(false, exact).unwrap(), output);
+        assert_eq!(source.to_rgba8_frame(false, exact).unwrap(), output);
     }
     for limits in [
         RasterLimits {
@@ -640,7 +530,7 @@ fn exact_conversion_limits_succeed_and_short_limits_preserve_the_source() {
         },
     ] {
         assert_eq!(
-            source.to_srgb_rgba8(false, limits).unwrap_err().kind,
+            source.to_rgba8_frame(false, limits).unwrap_err().kind,
             ValidationErrorKind::InvalidValue
         );
     }

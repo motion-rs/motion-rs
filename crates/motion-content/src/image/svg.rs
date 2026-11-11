@@ -267,13 +267,13 @@ mod tests {
             for index in [0, 45, 17] {
                 let expected = cpu.render_frame(index, build)?;
                 let actual = gpu.render_frame(index, build)?;
-                for (expected, actual) in expected.pixels().iter().zip(actual.pixels()) {
+                for (expected, actual) in expected.packed_rgb().iter().zip(actual.packed_rgb()) {
                     for shift in [0, 8, 16] {
                         assert!(((expected >> shift) & 255).abs_diff((actual >> shift) & 255) <= 1);
                     }
                 }
                 if index == 17 {
-                    assert_eq!(first.pixels(), actual.pixels());
+                    assert_eq!(first.packed_rgb(), actual.packed_rgb());
                 }
             }
         }

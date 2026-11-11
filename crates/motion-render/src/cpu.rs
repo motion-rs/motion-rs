@@ -18,8 +18,6 @@ pub(crate) mod pool;
 mod tests;
 mod walk;
 
-pub use output::Rgba8Frame;
-
 #[cfg(test)]
 use crate::prepared::RenderPrepare;
 
@@ -64,9 +62,9 @@ pub struct WorkStats {
 ///
 /// Storage is read-only and may contain finite extended/negative RGB values.
 /// CPU/GPU consumers share this read-only output after optional GPU readback.
-/// This is not an opaque Snapshot, PNG/video encoder or resident GPU target.
+/// This is not a PNG/video encoder or resident GPU target.
 #[derive(Clone, Debug, PartialEq)]
-pub struct LinearFrame {
+pub(crate) struct LinearFrame {
     size: PixelSize,
     pixels: Vec<[f32; 4]>,
     stats: WorkStats,
@@ -77,6 +75,14 @@ impl LinearFrame {
         Self {
             size,
             pixels: vec![pixel; size.width as usize * size.height as usize],
+            stats: WorkStats::default(),
+        }
+    }
+
+    pub(crate) fn from_pixels(size: PixelSize, pixels: Vec<[f32; 4]>) -> Self {
+        Self {
+            size,
+            pixels,
             stats: WorkStats::default(),
         }
     }
@@ -105,6 +111,7 @@ impl LinearFrame {
     }
 
     /// One output pixel, or None outside the half-open output bounds.
+    #[cfg(test)]
     pub fn pixel(&self, x: u32, y: u32) -> Option<[f32; 4]> {
         if x >= self.size.width || y >= self.size.height {
             return None;
@@ -141,8 +148,32 @@ impl PreparedFrame {
     /// still multiply independently; clip_shape instead intersects filled regions.
     /// Nonfinite working results fail instead of clipping to an invented color.
     /// Returned output is transparent when there is no background or coverage.
-    pub fn render_linear(&self, limits: RasterLimits) -> Result<LinearFrame, ValidationError> {
+    pub(crate) fn compose_linear(
+        &self,
+        limits: RasterLimits,
+    ) -> Result<LinearFrame, ValidationError> {
         self.render_linear_pooled(limits, &mut pool::SurfacePool::default())
+    }
+
+    /// Composes the frame on the CPU and converts the result into `format`.
+    ///
+    /// The linear composition follows the rules above; its working storage and the
+    /// converted buffer are admitted against `limits`. No display transform applies.
+    pub fn render_buffer(
+        &self,
+        format: crate::PixelFormat,
+        limits: RasterLimits,
+    ) -> Result<crate::FrameBuffer, ValidationError> {
+        crate::FrameBuffer::from_linear(&self.compose_linear(limits)?, format, limits)
+    }
+
+    /// Composes the frame into unquantized [`crate::PixelFormat::LinearRgba32Float`] output;
+    /// read it with [`crate::FrameBuffer::linear_pixel`].
+    pub fn render_linear(
+        &self,
+        limits: RasterLimits,
+    ) -> Result<crate::FrameBuffer, ValidationError> {
+        self.render_buffer(crate::PixelFormat::LinearRgba32Float, limits)
     }
 
     pub(crate) fn render_linear_pooled(

@@ -667,8 +667,10 @@ mod tests {
 
     #[test]
     fn output_identity_alpha_and_display_budget() {
-        let frame =
-            crate::LinearFrame::constant(motion_core::PixelSize::new(8, 8), [0.5, 0.25, 2.0, 0.5]);
+        let frame = crate::cpu::LinearFrame::constant(
+            motion_core::PixelSize::new(8, 8),
+            [0.5, 0.25, 2.0, 0.5],
+        );
         let limits = motion_core::RasterLimits::default();
         let format = crate::PixelFormat::SrgbRgba8 {
             premultiplied: false,

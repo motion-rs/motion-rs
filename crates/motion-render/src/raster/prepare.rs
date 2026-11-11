@@ -79,9 +79,9 @@ impl RenderPrepare for DisplayList {
     /// )?;
     /// let prepared = list.prepare(ValidationLimits::default(), RasterLimits::default())?;
     /// assert_eq!(prepared.items().len(), list.commands.len());
-    /// let output: LinearFrame = prepared.render_linear(RasterLimits::default())?;
-    /// assert_eq!(output.pixel(3, 0), Some([0.5; 4]));
-    /// assert_eq!(output.pixel(6, 0), Some([0.0; 4]));
+    /// let output = prepared.render_linear(RasterLimits::default())?;
+    /// assert_eq!(output.linear_pixel(3, 0), Some([0.5; 4]));
+    /// assert_eq!(output.linear_pixel(6, 0), Some([0.0; 4]));
     /// # Ok::<(), motion_core::ValidationError>(())
     /// ```
     fn prepare(
@@ -123,7 +123,7 @@ impl RenderPrepare for DisplayList {
     ///     1.0 / 1024.0,
     /// )?;
     /// assert_eq!(
-    ///     frame.render_linear(RasterLimits::default())?.pixel(0, 0),
+    ///     frame.render_linear(RasterLimits::default())?.linear_pixel(0, 0),
     ///     Some([170.0 / 255.0; 4])
     /// );
     /// # Ok::<(), motion_core::ValidationError>(())

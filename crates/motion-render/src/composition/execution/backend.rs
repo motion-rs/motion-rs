@@ -1,7 +1,7 @@
 //! Backend selection and dispatch of prepared frames to the CPU rasterizer or native GPU,
 //! including same-device texture targets and GPU timing collection.
 
-use super::{FrameExecution, RenderedFrame};
+use super::FrameExecution;
 use crate::composition::FrameStats;
 use crate::{RasterLimits, Renderer, WorkStats};
 use motion_core::Result;
@@ -178,23 +178,7 @@ impl FrameExecution<'_> {
         index: u32,
         prepared: crate::PreparedFrame,
         limits: RasterLimits,
-    ) -> Result<crate::LinearFrame> {
-        match self.render_prepared_output(index, prepared, limits, false)? {
-            RenderedFrame::Linear(linear) => Ok(linear),
-            #[cfg(feature = "gpu")]
-            RenderedFrame::Packed(_) => unreachable!("linear output requested"),
-        }
-    }
-
-    pub(super) fn render_prepared_output(
-        &mut self,
-        index: u32,
-        prepared: crate::PreparedFrame,
-        limits: RasterLimits,
-        packed: bool,
-    ) -> Result<RenderedFrame> {
-        #[cfg(not(feature = "gpu"))]
-        let _ = packed;
+    ) -> Result<crate::cpu::LinearFrame> {
         let result = (|| -> Result<_> {
             let preparation = prepared.stats();
             #[cfg(feature = "gpu")]
@@ -211,18 +195,7 @@ impl FrameExecution<'_> {
                     .filter(|_| requested)
                     .map(|_| std::time::Instant::now());
                 let plan = if requested {
-                    let planned = if packed {
-                        crate::gpu::Plan::new_packed(
-                            &prepared,
-                            limits,
-                            crate::PixelFormat::SrgbRgba8 {
-                                premultiplied: false,
-                            },
-                        )
-                    } else {
-                        crate::gpu::Plan::new(&prepared, limits)
-                    };
-                    match planned {
+                    match crate::gpu::Plan::new(&prepared, limits) {
                         Ok(plan) => Some(plan),
                         Err(error)
                             if self.backend.is_none()
@@ -247,8 +220,7 @@ impl FrameExecution<'_> {
                 }
                 plan
             };
-            let renderer = self.select_backend()?;
-            let rendered = match renderer {
+            let linear = match self.select_backend()? {
                 Renderer::Cpu => {
                     let started = self.timings.map(|_| std::time::Instant::now());
                     let linear = prepared.render_linear_pooled(limits, &mut self.cpu_pool)?;
@@ -256,58 +228,22 @@ impl FrameExecution<'_> {
                         self.timings.as_mut().expect("enabled timings").composition +=
                             started.elapsed();
                     }
-                    RenderedFrame::Linear(linear)
+                    linear
                 }
                 Renderer::Gpu => {
                     #[cfg(feature = "gpu")]
                     {
-                        let plan = if let Some(plan) = plan {
-                            plan
-                        } else if packed {
-                            crate::gpu::Plan::new_packed(
-                                &prepared,
-                                limits,
-                                crate::PixelFormat::SrgbRgba8 {
-                                    premultiplied: false,
-                                },
-                            )?
-                        } else {
-                            crate::gpu::Plan::new(&prepared, limits)?
+                        let plan = match plan {
+                            Some(plan) => plan,
+                            None => crate::gpu::Plan::new(&prepared, limits)?,
                         };
-                        let plan = if packed {
-                            plan.with_display(&self.composition.options.display, u64::from(index))?
-                        } else {
-                            plan
-                        };
-                        let gpu = self.gpu.as_mut().expect("selected native GPU");
-                        if packed {
-                            let format = crate::PixelFormat::SrgbRgba8 {
-                                premultiplied: false,
-                            };
-                            let packed_stats = plan.packed_stats(prepared.size(), format)?;
-                            let output_work =
-                                crate::FrameBuffer::conversion_work(prepared.size(), format);
-                            let frame = gpu.render_output(&prepared, plan, format)?;
-                            self.record_gpu_timings();
-                            return Ok((
-                                RenderedFrame::Packed(frame),
-                                FrameStats {
-                                    preparation,
-                                    linear: crate::WorkStats {
-                                        peak_bytes: packed_stats.peak_bytes,
-                                        work: packed_stats.work - output_work,
-                                    },
-                                    output: WorkStats {
-                                        peak_bytes: packed_stats.peak_bytes,
-                                        work: output_work,
-                                    },
-                                    snapshot: WorkStats::default(),
-                                },
-                            ));
-                        }
-                        let linear = gpu.render(&prepared, plan)?;
+                        let linear = self
+                            .gpu
+                            .as_mut()
+                            .expect("selected native GPU")
+                            .render(&prepared, plan)?;
                         self.record_gpu_timings();
-                        RenderedFrame::Linear(linear)
+                        linear
                     }
                     #[cfg(not(feature = "gpu"))]
                     {
@@ -317,20 +253,12 @@ impl FrameExecution<'_> {
                     }
                 }
             };
-            let linear_stats = match &rendered {
-                RenderedFrame::Linear(linear) => linear.stats(),
-                #[cfg(feature = "gpu")]
-                RenderedFrame::Packed(_) => unreachable!("packed output returned above"),
+            let stats = FrameStats {
+                preparation,
+                linear: linear.stats(),
+                output: WorkStats::default(),
             };
-            Ok((
-                rendered,
-                FrameStats {
-                    preparation,
-                    linear: linear_stats,
-                    output: WorkStats::default(),
-                    snapshot: WorkStats::default(),
-                },
-            ))
+            Ok((linear, stats))
         })()
         .map_err(|error| error.at_frame(u64::from(index)))?;
         self.last_stats = Some(result.1);

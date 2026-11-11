@@ -282,7 +282,7 @@ or establish cross-device, overall speedup or physical-memory benefits.
 
 `RenderSession::enable_timings` enables separate host observations for evaluation,
 compilation, coverage preparation, GPU planning, command encoding/submission,
-completion/readback, output conversion and snapshot assembly. CPU banded output
+completion/readback and output conversion. CPU banded output
 reports composition and conversion as one fused stage rather than fabricating
 independent durations. Command encoding is not video/audio encoder timing.
 
@@ -323,7 +323,7 @@ and validate work before submission. Queues still admit at most three frames and
 reject excess aggregate bytes before executing a plan.
 
 Dedicated packed plans reserve output resources before optional batch-data padding.
-They omit unused RGBA32F mapped readback and CPU `LinearFrame` reservations, but retain
+They omit unused RGBA32F mapped readback and CPU linear-frame reservations, but retain
 actual RGBA32F working/output-boundary textures. Packed storage, mapped readback and
 owned CPU output coexist, so all three payloads remain charged, alongside status and
 output metadata. Output size/format are fixed by planning; submission cannot charge

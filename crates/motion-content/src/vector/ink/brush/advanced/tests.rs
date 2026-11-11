@@ -358,7 +358,12 @@ fn pigment_intersections_and_height_outputs_are_nonblank() -> motion_core::Resul
             )?
             .prepare(motion_core::ValidationLimits::default(), limits)?
             .render_linear(limits)?
-            .to_srgb_rgba8(false, limits)?
+            .to_format(
+                motion_render::PixelFormat::SrgbRgba8 {
+                    premultiplied: false,
+                },
+                limits,
+            )?
             .bytes()
             .to_vec())
     };
@@ -399,7 +404,12 @@ fn tiled_pixels_match_single_tile_and_default_reveal_is_unchanged() -> motion_co
             .prepare(motion_core::ValidationLimits::default(), limits)?;
         Ok(prepared
             .render_linear(limits)?
-            .to_srgb_rgba8(false, limits)?
+            .to_format(
+                motion_render::PixelFormat::SrgbRgba8 {
+                    premultiplied: false,
+                },
+                limits,
+            )?
             .bytes()
             .to_vec())
     };
@@ -435,13 +445,21 @@ fn extended_brush_material_matches_cpu_gpu() -> motion_core::Result {
             motion_core::ValidationLimits::default(),
         )?
         .prepare(motion_core::ValidationLimits::default(), limits)?;
-    let expected = prepared
-        .render_linear(limits)?
-        .to_srgb_rgba8(false, limits)?;
+    let expected = prepared.render_linear(limits)?.to_format(
+        motion_render::PixelFormat::SrgbRgba8 {
+            premultiplied: false,
+        },
+        limits,
+    )?;
     let mut gpu = motion_render::gpu::Gpu::new()?;
     let actual = gpu
-        .render(&prepared, motion_render::gpu::Plan::new(&prepared, limits)?)?
-        .to_srgb_rgba8(false, limits)?;
+        .render_linear(&prepared, motion_render::gpu::Plan::new(&prepared, limits)?)?
+        .to_format(
+            motion_render::PixelFormat::SrgbRgba8 {
+                premultiplied: false,
+            },
+            limits,
+        )?;
     assert!(
         expected
             .bytes()
@@ -450,8 +468,13 @@ fn extended_brush_material_matches_cpu_gpu() -> motion_core::Result {
             .all(|(expected, actual)| expected.abs_diff(*actual) <= 2)
     );
     let replay = gpu
-        .render(&prepared, motion_render::gpu::Plan::new(&prepared, limits)?)?
-        .to_srgb_rgba8(false, limits)?;
+        .render_linear(&prepared, motion_render::gpu::Plan::new(&prepared, limits)?)?
+        .to_format(
+            motion_render::PixelFormat::SrgbRgba8 {
+                premultiplied: false,
+            },
+            limits,
+        )?;
     assert_eq!(actual.bytes(), replay.bytes());
     Ok(())
 }

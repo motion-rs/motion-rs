@@ -52,7 +52,7 @@ fn explicit_fonts_use_paragraph_layout_and_keep_registry_snapshots() -> motion_c
         )?
         .prepare(ValidationLimits::default(), RasterLimits::default())?;
     let output = prepared.render_linear(RasterLimits::default())?;
-    assert!(output.pixels().iter().any(|pixel| pixel[3] > 0.5));
+    assert!(output.linear_pixels().any(|pixel| pixel[3] > 0.5));
     assert_eq!(prepared.render_linear(RasterLimits::default())?, output);
     Ok(())
 }
@@ -97,8 +97,8 @@ fn explicit_font_gpu_matches_cpu_and_replays() -> motion_core::Result {
     for index in [2, 0, 1, 2] {
         let expected = cpu.render_frame(index, build)?;
         let actual = gpu.render_frame(index, build)?;
-        assert!(actual.pixels().iter().any(|pixel| *pixel != 0));
-        for (actual, expected) in actual.pixels().iter().zip(expected.pixels()) {
+        assert!(actual.packed_rgb().iter().any(|pixel| *pixel != 0));
+        for (actual, expected) in actual.packed_rgb().iter().zip(expected.packed_rgb()) {
             for shift in [0, 8, 16] {
                 let difference =
                     (((actual >> shift) & 255) as i32 - ((expected >> shift) & 255) as i32).abs();
@@ -108,9 +108,9 @@ fn explicit_font_gpu_matches_cpu_and_replays() -> motion_core::Result {
         }
         if index == 2 {
             if let Some(previous) = &replay {
-                assert_eq!(actual.pixels(), previous);
+                assert_eq!(actual.packed_rgb(), *previous);
             }
-            replay = Some(actual.pixels().to_vec());
+            replay = Some(actual.packed_rgb());
         }
     }
     let info = gpu.gpu_info().unwrap();

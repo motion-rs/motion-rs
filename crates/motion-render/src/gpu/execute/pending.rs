@@ -131,7 +131,8 @@ impl PendingLinearFrame {
     }
 
     /// Waits and consumes the frame; another pending frame may already be executing.
-    pub fn finish(self) -> motion_core::Result<LinearFrame> {
+    #[cfg(test)]
+    pub(crate) fn finish(self) -> motion_core::Result<LinearFrame> {
         self.finish_reusable().map(|(frame, _, _, _)| frame)
     }
 

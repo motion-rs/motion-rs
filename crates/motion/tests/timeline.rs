@@ -207,7 +207,7 @@ mod scenes {
                     .blend_space(space)
                     .render_linear(motion::render::RasterLimits::default())?;
                 for (actual, expected) in frame
-                    .pixel(0, 0)
+                    .linear_pixel(0, 0)
                     .unwrap()
                     .iter()
                     .zip([0.25, 0.0, 0.25, 0.5])
@@ -226,7 +226,7 @@ mod scenes {
                     motion::render::RasterLimits::default(),
                 )?
                 .render_linear(motion::render::RasterLimits::default())?;
-            assert_eq!(half.pixel(0, 0), Some([0.25, 0.0, 0.0, 0.25]));
+            assert_eq!(half.linear_pixel(0, 0), Some([0.25, 0.0, 0.0, 0.25]));
             assert!(sample.measure(ValidationLimits::default()).is_ok());
             assert!(
                 sample
@@ -261,7 +261,7 @@ mod scenes {
             assert_eq!(
                 prepared
                     .render_linear(motion::render::RasterLimits::default())?
-                    .pixel(0, 0),
+                    .linear_pixel(0, 0),
                 Some([0.25, 0.0, 0.25, 0.5])
             );
             assert!(Node::accumulate([]).is_err());
@@ -320,7 +320,7 @@ mod scenes {
                 )?
                 .prepare(ValidationLimits::default(), RasterLimits::default())?
                 .render_linear(RasterLimits::default())?;
-            assert_eq!(frame.pixel(0, 0), Some([0.25, 0.0, 0.25, 0.5]));
+            assert_eq!(frame.linear_pixel(0, 0), Some([0.25, 0.0, 0.25, 0.5]));
             assert_eq!(
                 MotionBlur {
                     shutter_angle: 180.0,
@@ -372,7 +372,10 @@ mod scenes {
                 .prepare(ValidationLimits::default(), RasterLimits::default())?
                 .render_linear(RasterLimits::default())?;
             for column in 0..4 {
-                assert_eq!(moving.pixel(column, 0), Some([0.125, 0.0, 0.0, 0.125]));
+                assert_eq!(
+                    moving.linear_pixel(column, 0),
+                    Some([0.125, 0.0, 0.0, 0.125])
+                );
             }
             Ok(())
         }
@@ -511,25 +514,25 @@ mod scenes {
                         }
                     })?;
                     assert_eq!(
-                        actual.pixels(),
-                        expected.pixels(),
+                        actual.packed_rgb(),
+                        expected.packed_rgb(),
                         "manual timeline {renderer:?}/{index}"
                     );
-                    assert_eq!(actual.pixels()[0], 0xffffff);
+                    assert_eq!(actual.packed_rgb()[0], 0xffffff);
                     if index >= 20 {
-                        assert!(actual.pixels().iter().all(|pixel| *pixel == 0xffffff));
+                        assert!(actual.packed_rgb().iter().all(|pixel| *pixel == 0xffffff));
                     }
                     if index == 5 {
                         if let Some(first) = &replay {
-                            assert_eq!(actual.pixels(), first);
+                            assert_eq!(actual.packed_rgb(), *first);
                         }
-                        replay = Some(actual.pixels().to_vec());
+                        replay = Some(actual.packed_rgb());
                     }
                     if remap && index == 16 {
-                        held = Some(actual.pixels().to_vec());
+                        held = Some(actual.packed_rgb());
                     }
                     if remap && index == 19 {
-                        assert_eq!(actual.pixels(), held.as_ref().unwrap());
+                        assert_eq!(actual.packed_rgb(), *held.as_ref().unwrap());
                     }
                 }
             }
@@ -642,7 +645,7 @@ mod scenes {
                 .compile(size(), PixelSize::new(8, 4), ValidationLimits::default())?
                 .prepare(ValidationLimits::default(), RasterLimits::default())?
                 .render_linear(RasterLimits::default())?;
-            assert_eq!(frame.pixel(1, 1), Some([0.5, 0.0, 0.5, 1.0]));
+            assert_eq!(frame.linear_pixel(1, 1), Some([0.5, 0.0, 0.5, 1.0]));
             assert_eq!(
                 calls.lock().unwrap().as_slice(),
                 &[
@@ -755,7 +758,7 @@ mod scenes {
                 .compile(size(), PixelSize::new(8, 4), ValidationLimits::default())?
                 .prepare(ValidationLimits::default(), RasterLimits::default())?
                 .render_linear(RasterLimits::default())?;
-            assert_eq!(frame.pixel(1, 1), Some([0.75, 0.0, 0.25, 1.0]));
+            assert_eq!(frame.linear_pixel(1, 1), Some([0.75, 0.0, 0.25, 1.0]));
             Ok(())
         }
 
@@ -795,7 +798,7 @@ mod scenes {
                             && f64::from(row) + 0.5 >= expected.top
                             && f64::from(row) + 0.5 < expected.bottom;
                         assert_eq!(
-                            frame.pixel(column, row),
+                            frame.linear_pixel(column, row),
                             Some(if inside { [1.0; 4] } else { [0.0; 4] })
                         );
                     }
@@ -831,7 +834,7 @@ mod scenes {
                 .render_linear(RasterLimits::default())?;
             for column in 0..8 {
                 assert_eq!(
-                    shifted.pixel(column, 1),
+                    shifted.linear_pixel(column, 1),
                     Some(if column >= 4 { [1.0; 4] } else { [0.0; 4] })
                 );
             }
@@ -858,7 +861,7 @@ mod scenes {
             for row in 0..12 {
                 for column in 0..8 {
                     assert_eq!(
-                        frame.pixel(column, row),
+                        frame.linear_pixel(column, row),
                         Some(if (2..6).contains(&column) && (4..8).contains(&row) {
                             [1.0; 4]
                         } else {
@@ -960,7 +963,7 @@ mod scenes {
                     .compile(size(), PixelSize::new(8, 4), ValidationLimits::default())?
                     .prepare(ValidationLimits::default(), RasterLimits::default())?
                     .render_linear(RasterLimits::default())?;
-                assert_eq!(frame.pixel(2, 1), Some(color));
+                assert_eq!(frame.linear_pixel(2, 1), Some(color));
                 let recorded = calls.lock().unwrap();
                 assert_eq!(recorded.iter().map(|call| call.0).collect::<Vec<_>>(), ids);
                 for (id, local, global, duration) in recorded.iter() {
@@ -1032,17 +1035,17 @@ mod scenes {
             let build = |context: &SceneContext<'_>| timeline.render(context);
             let late = composition.render_frame(14, size(), build)?;
             let early = composition.render_frame(0, size(), build)?;
-            assert_ne!(late.pixels(), early.pixels());
+            assert_ne!(late.packed_rgb(), early.packed_rgb());
             assert_eq!(
-                late.pixels(),
-                composition.render_frame(14, size(), build)?.pixels()
+                late.packed_rgb(),
+                composition.render_frame(14, size(), build)?.packed_rgb()
             );
             std::thread::scope(|scope| {
                 let tasks = (0..3)
                     .map(|_| scope.spawn(|| composition.render_frame(14, size(), build).unwrap()))
                     .collect::<Vec<_>>();
                 for task in tasks {
-                    assert_eq!(task.join().unwrap().pixels(), late.pixels());
+                    assert_eq!(task.join().unwrap().packed_rgb(), late.packed_rgb());
                 }
             });
             let cache = SceneCache::new(0);
@@ -1127,30 +1130,43 @@ mod scenes {
                         .compile(design, PixelSize::new(32, 16), validation)?
                         .prepare(validation, limits)?;
                     let expected = prepared.render_linear(limits)?;
-                    let actual = gpu.render(
+                    let actual = gpu.render_linear(
                         &prepared,
                         motion::render::gpu::Plan::new(&prepared, limits)?,
                     )?;
-                    for (left, right) in actual.pixels().iter().zip(expected.pixels()) {
+                    for (left, right) in actual.linear_pixels().zip(expected.linear_pixels()) {
                         for (left, right) in left.iter().zip(right) {
                             maximum = maximum.max((left - right).abs());
                             assert!((left - right).abs() <= 3e-6);
                         }
                     }
-                    let expected = expected.to_srgb_rgba8(false, limits)?;
-                    let actual = actual.to_srgb_rgba8(false, limits)?;
-                    for (left, right) in actual.pixels().iter().zip(expected.pixels()) {
-                        for (left, right) in left.iter().zip(right) {
-                            bytes = bytes.max(left.abs_diff(*right));
-                            assert!(left.abs_diff(*right) <= 1);
-                        }
+                    let expected = expected.to_format(
+                        motion::render::PixelFormat::SrgbRgba8 {
+                            premultiplied: false,
+                        },
+                        limits,
+                    )?;
+                    let actual = actual.to_format(
+                        motion::render::PixelFormat::SrgbRgba8 {
+                            premultiplied: false,
+                        },
+                        limits,
+                    )?;
+                    for (left, right) in actual.bytes().iter().zip(expected.bytes()) {
+                        bytes = bytes.max(left.abs_diff(*right));
+                        assert!(left.abs_diff(*right) <= 1);
                     }
                     let replay = gpu
-                        .render(
+                        .render_linear(
                             &prepared,
                             motion::render::gpu::Plan::new(&prepared, limits)?,
                         )?
-                        .to_srgb_rgba8(false, limits)?;
+                        .to_format(
+                            motion::render::PixelFormat::SrgbRgba8 {
+                                premultiplied: false,
+                            },
+                            limits,
+                        )?;
                     assert_eq!(replay, actual);
                     requests += 1;
                 }
@@ -1275,38 +1291,52 @@ mod scenes {
                         )?
                         .prepare(validation, limits)?;
                     let expected = frame.render_linear(limits)?;
-                    assert_eq!(expected.pixel(0, 0), Some([0.0; 4]));
+                    assert_eq!(expected.linear_pixel(0, 0), Some([0.0; 4]));
                     if time >= start && time < start + child.duration() {
                         assert_eq!(
-                            expected.pixel((4.0 * scale) as u32, (offset + 4.0 * scale) as u32),
+                            expected
+                                .linear_pixel((4.0 * scale) as u32, (offset + 4.0 * scale) as u32),
                             Some([0.0, 1.0, 0.0, 1.0])
                         );
-                        assert!(expected.pixels().iter().any(|pixel| pixel[3] > 0.9));
+                        assert!(expected.linear_pixels().any(|pixel| pixel[3] > 0.9));
                     } else {
-                        assert!(expected.pixels().iter().all(|pixel| pixel[3] == 0.0));
+                        assert!(expected.linear_pixels().all(|pixel| pixel[3] == 0.0));
                     }
                     let actual =
-                        gpu.render(&frame, motion::render::gpu::Plan::new(&frame, limits)?)?;
-                    for (left, right) in actual.pixels().iter().zip(expected.pixels()) {
+                        gpu.render_linear(&frame, motion::render::gpu::Plan::new(&frame, limits)?)?;
+                    for (left, right) in actual.linear_pixels().zip(expected.linear_pixels()) {
                         for (left, right) in left.iter().zip(right) {
                             maximum = maximum.max((left - right).abs());
                             assert!((left - right).abs() <= 3e-6);
                         }
                     }
-                    let expected = expected.to_srgb_rgba8(false, limits)?;
-                    let actual = actual.to_srgb_rgba8(false, limits)?;
+                    let expected = expected.to_format(
+                        motion::render::PixelFormat::SrgbRgba8 {
+                            premultiplied: false,
+                        },
+                        limits,
+                    )?;
+                    let actual = actual.to_format(
+                        motion::render::PixelFormat::SrgbRgba8 {
+                            premultiplied: false,
+                        },
+                        limits,
+                    )?;
                     if let Some(previous) = seen.insert(index, expected.clone()) {
                         assert_eq!(previous, expected);
                     }
-                    for (left, right) in actual.pixels().iter().zip(expected.pixels()) {
-                        for (left, right) in left.iter().zip(right) {
-                            bytes = bytes.max(left.abs_diff(*right));
-                            assert!(left.abs_diff(*right) <= 1);
-                        }
+                    for (left, right) in actual.bytes().iter().zip(expected.bytes()) {
+                        bytes = bytes.max(left.abs_diff(*right));
+                        assert!(left.abs_diff(*right) <= 1);
                     }
                     assert_eq!(
-                        gpu.render(&frame, motion::render::gpu::Plan::new(&frame, limits)?)?
-                            .to_srgb_rgba8(false, limits)?,
+                        gpu.render_linear(&frame, motion::render::gpu::Plan::new(&frame, limits)?)?
+                            .to_format(
+                                motion::render::PixelFormat::SrgbRgba8 {
+                                    premultiplied: false
+                                },
+                                limits
+                            )?,
                         actual
                     );
                     requests += 1;
@@ -1414,8 +1444,8 @@ mod scenes {
                         .blend_space(space);
                     let expected = frame.render_linear(limits)?;
                     let actual =
-                        gpu.render(&frame, motion::render::gpu::Plan::new(&frame, limits)?)?;
-                    for (left, right) in actual.pixels().iter().zip(expected.pixels()) {
+                        gpu.render_linear(&frame, motion::render::gpu::Plan::new(&frame, limits)?)?;
+                    for (left, right) in actual.linear_pixels().zip(expected.linear_pixels()) {
                         for (left, right) in left.iter().zip(right) {
                             maximum = maximum.max((left - right).abs());
                             assert!(
@@ -1424,17 +1454,30 @@ mod scenes {
                             );
                         }
                     }
-                    let expected = expected.to_srgb_rgba8(false, limits)?;
-                    let actual = actual.to_srgb_rgba8(false, limits)?;
-                    for (left, right) in actual.pixels().iter().zip(expected.pixels()) {
-                        for (left, right) in left.iter().zip(right) {
-                            bytes = bytes.max(left.abs_diff(*right));
-                            assert!(left.abs_diff(*right) <= 1, "space={space:?} case={index}");
-                        }
+                    let expected = expected.to_format(
+                        motion::render::PixelFormat::SrgbRgba8 {
+                            premultiplied: false,
+                        },
+                        limits,
+                    )?;
+                    let actual = actual.to_format(
+                        motion::render::PixelFormat::SrgbRgba8 {
+                            premultiplied: false,
+                        },
+                        limits,
+                    )?;
+                    for (left, right) in actual.bytes().iter().zip(expected.bytes()) {
+                        bytes = bytes.max(left.abs_diff(*right));
+                        assert!(left.abs_diff(*right) <= 1, "space={space:?} case={index}");
                     }
                     assert_eq!(
-                        gpu.render(&frame, motion::render::gpu::Plan::new(&frame, limits)?)?
-                            .to_srgb_rgba8(false, limits)?,
+                        gpu.render_linear(&frame, motion::render::gpu::Plan::new(&frame, limits)?)?
+                            .to_format(
+                                motion::render::PixelFormat::SrgbRgba8 {
+                                    premultiplied: false
+                                },
+                                limits
+                            )?,
                         actual
                     );
                     cases += 1;
@@ -1513,7 +1556,7 @@ mod scenes {
                             && f64::from(row) >= bounds.top
                             && f64::from(row) < bounds.bottom;
                         assert_eq!(
-                            frame.pixel(column, row),
+                            frame.linear_pixel(column, row),
                             Some(if inside { [1.0; 4] } else { [0.0; 4] })
                         );
                     }
@@ -1600,7 +1643,7 @@ mod scenes {
                         Node::from(Rect::new(1.0, 1.0, 4.0, 4.0).fill(Color::BLACK)),
                     ]);
                     let snapshot = renderer.render_frame(index, |_| scene)?;
-                    let pixels = snapshot.pixels();
+                    let pixels = snapshot.packed_rgb();
                     assert_eq!(pixels[30 * 64 + 32], 0x118677);
                     assert_eq!(pixels[13 * 64 + 9], 0x2d66e5);
                     let marker = camera
@@ -1632,7 +1675,7 @@ mod scenes {
                         }
                     }
                     if let Some(reference) = references.get(&index) {
-                        assert!(pixels == reference, "camera replay at {index}");
+                        assert!(pixels == *reference, "camera replay at {index}");
                     }
                     references.insert(index, pixels.to_vec());
                     if backend == Renderer::Cpu {
@@ -1667,7 +1710,7 @@ mod scenes {
         use motion::render::{RasterLimits, SceneCache, ValidationLimits};
         use motion::{FrameRate, PixelSize, Size, Time};
 
-        fn pixel(node: Node, space: motion::BlendSpace) -> motion::render::LinearFrame {
+        fn pixel(node: Node, space: motion::BlendSpace) -> motion::render::FrameBuffer {
             node.compile(
                 Size::new(4.0, 4.0),
                 PixelSize::new(4, 4),
@@ -1709,7 +1752,7 @@ mod scenes {
                             effect.compose(progress, outgoing.clone(), incoming.clone(), &context),
                             motion::BlendSpace::LinearRgb
                         )
-                        .pixel(1, 1),
+                        .linear_pixel(1, 1),
                         Some(expected)
                     );
                 }
@@ -1720,7 +1763,7 @@ mod scenes {
                     space,
                 );
                 for (value, reference) in frame
-                    .pixel(1, 1)
+                    .linear_pixel(1, 1)
                     .unwrap()
                     .iter()
                     .zip([0.25, 0.0, 0.25, 0.5])
@@ -1741,12 +1784,12 @@ mod scenes {
                     effect.compose(0.5, outgoing.clone(), incoming.clone(), &context),
                     motion::BlendSpace::LinearRgb,
                 );
-                let left = if frame.pixel(0, 1).unwrap()[2] > 0.0 {
+                let left = if frame.linear_pixel(0, 1).unwrap()[2] > 0.0 {
                     0
                 } else {
                     3
                 };
-                assert_eq!(frame.pixel(left, 1), Some([0.0, 0.0, 0.5, 0.5]));
+                assert_eq!(frame.linear_pixel(left, 1), Some([0.0, 0.0, 0.5, 0.5]));
             }
             assert!(
                 CrossFade
@@ -1803,7 +1846,7 @@ mod scenes {
                                 Direction::Down => row < 2,
                             };
                             assert_eq!(
-                                frame.pixel(column, row),
+                                frame.linear_pixel(column, row),
                                 Some(if blue {
                                     [0.0, 0.0, 0.5, 0.5]
                                 } else {
@@ -1824,7 +1867,7 @@ mod scenes {
             );
             for (column, blue) in [1.0, 0.75, 0.25, 0.0].into_iter().enumerate() {
                 assert_eq!(
-                    feather.pixel(column as u32, 1),
+                    feather.linear_pixel(column as u32, 1),
                     Some([0.5 * (1.0 - blue), 0.0, 0.5 * blue, 0.5])
                 );
             }
@@ -1838,7 +1881,7 @@ mod scenes {
             for row in 0..4 {
                 for column in 0..4 {
                     assert_eq!(
-                        iris.pixel(column, row),
+                        iris.linear_pixel(column, row),
                         Some(if (1..3).contains(&column) && (1..3).contains(&row) {
                             [0.0, 0.0, 0.5, 0.5]
                         } else {
@@ -1851,14 +1894,14 @@ mod scenes {
                 Iris::default().compose(0.5, outgoing.clone(), incoming.clone(), &context),
                 motion::BlendSpace::LinearRgb,
             );
-            assert_eq!(circle.pixel(2, 2), Some([0.0, 0.0, 0.5, 0.5]));
-            assert_eq!(circle.pixel(0, 0), Some([0.5, 0.0, 0.0, 0.5]));
+            assert_eq!(circle.linear_pixel(2, 2), Some([0.0, 0.0, 0.5, 0.5]));
+            assert_eq!(circle.linear_pixel(0, 0), Some([0.5, 0.0, 0.0, 0.5]));
             let zoom = pixel(
                 ZoomBlur.compose(0.5, outgoing, incoming, &context),
                 motion::BlendSpace::LinearRgb,
             );
-            assert!((zoom.pixel(1, 1).unwrap()[2] - 0.25).abs() < 1e-6);
-            assert!(zoom.pixel(0, 0).unwrap()[2] < 0.25);
+            assert!((zoom.linear_pixel(1, 1).unwrap()[2] - 0.25).abs() < 1e-6);
+            assert!(zoom.linear_pixel(0, 0).unwrap()[2] < 0.25);
         }
     }
 }

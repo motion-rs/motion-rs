@@ -140,19 +140,19 @@ fn compare_batches(style: ParticleStyle, renderer: Renderer) -> motion_core::Res
             let batch = session.render_frame(index, |context| make(context, false))?;
             let expanded = session.render_frame(index, |context| make(context, true))?;
             assert_eq!(
-                batch.pixels(),
-                expanded.pixels(),
+                batch.packed_rgb(),
+                expanded.packed_rgb(),
                 "batch/expanded {renderer:?}/{mode}/{index}"
             );
             if index == 30 {
-                assert!(batch.pixels().iter().any(|pixel| *pixel != 0));
+                assert!(batch.packed_rgb().iter().any(|pixel| *pixel != 0));
                 if let Some(first) = &reference {
-                    assert_eq!(batch.pixels(), first);
+                    assert_eq!(batch.packed_rgb(), *first);
                 }
-                reference = Some(batch.pixels().to_vec());
+                reference = Some(batch.packed_rgb());
             }
             if index == 45 {
-                moving = Some(batch.pixels().to_vec());
+                moving = Some(batch.packed_rgb());
             }
         }
         assert_ne!(reference, moving);
@@ -282,7 +282,7 @@ fn per_style_blend_reaches_instance_upload_and_cpu_pixels() -> motion_core::Resu
             let source = blend_source(ParticleStyle::Dots { radius: 4.0 }.blend(blend));
             session
                 .render_frame(9, |context| source.try_render(context).unwrap())
-                .map(|frame| frame.pixels().to_vec())
+                .map(|frame| frame.packed_rgb())
         })
         .collect::<Result<Vec<_>, _>>()?;
     for first in 0..frames.len() {

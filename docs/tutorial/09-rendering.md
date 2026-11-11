@@ -26,6 +26,7 @@ fn main() -> motion::Result {
             background: None,
             target: RenderTarget::Memory(&mut output),
             format: PixelFormat::SrgbRgba8 { premultiplied: false },
+            device_packing: false,
         },
         |context| Node::from(context.bounds().fill(Color::rgb(20, 150, 125))),
     )?;
@@ -75,12 +76,13 @@ This only configures policy; it does not initialize a GPU. Actual GPU requests r
 
 ## FrameBuffer
 
-`FrameBuffer` is the single stored image type; in straight `SrgbRgba8` it provides transparent images and `save_png`. `Snapshot` is explicit low-level opaque RGB output. Its PPM writer writes directly to a file and does not provide the same protection contract as transactional exports.
+`FrameBuffer` is the single stored image type; in straight `SrgbRgba8` it provides transparent images and `save_png`. `Composition::render_frame` and `FrameRenderer::render_frame` return an opaque (white-backed unless `RenderOptions::background` is set) straight `SrgbRgba8` `FrameBuffer`. Its `write_ppm` writes directly to a file and does not provide the same protection contract as transactional exports.
 
 | `PixelFormat` | Key Requirements |
 | --- | --- |
 | `SrgbRgba8` | Explicit straight or premultiplied alpha |
 | Linear RGBA16F | Linear-premultiplied; output is limited by half-float range |
+| Linear RGBA32F | Linear-premultiplied, unquantized; read with `linear_pixel`, convert with `to_format` |
 | `Yuv420` 8/10-bit | Limited-range BT.709; even width and height; no transparent pixels |
 
 Do not infer plane strides from format names or reinterpret bytes with different alpha representations as the same frame. YUV is not a synonym for an arbitrary RGBA buffer, and HDR has no automatic tone mapping.

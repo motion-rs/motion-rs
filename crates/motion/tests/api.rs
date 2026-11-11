@@ -127,7 +127,10 @@ mod canonical_api_tests {
                 assert_eq!(context.sample(&movement), time.since_origin() / duration);
                 Node::empty()
             })?;
-        assert_eq!((output.width(), output.height()), (2, 1));
+        assert_eq!(
+            (output.size().width as usize, output.size().height as usize),
+            (2, 1)
+        );
         assert_eq!(
             std::any::TypeId::of::<Time>(),
             std::any::TypeId::of::<motion_core::Time>()

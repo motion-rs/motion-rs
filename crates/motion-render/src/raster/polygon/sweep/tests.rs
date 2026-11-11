@@ -142,11 +142,11 @@ fn overlapping_nonzero_contours_match_reference_with_fewer_integrals() {
         let expected = prepared(&edges, rule, false, RasterLimits::default()).unwrap();
         assert_eq!(
             actual
-                .render_linear(RasterLimits::default())
+                .compose_linear(RasterLimits::default())
                 .unwrap()
                 .pixels(),
             expected
-                .render_linear(RasterLimits::default())
+                .compose_linear(RasterLimits::default())
                 .unwrap()
                 .pixels()
         );
@@ -283,8 +283,8 @@ fn dense_parallel_contours_keep_pixels_with_less_candidate_work() {
         assert_eq!(actual.spans, expected.spans);
         assert_eq!(actual.alphas, expected.alphas);
         assert_eq!(
-            actual.render_linear(RasterLimits::default()).unwrap(),
-            expected.render_linear(RasterLimits::default()).unwrap()
+            actual.compose_linear(RasterLimits::default()).unwrap(),
+            expected.compose_linear(RasterLimits::default()).unwrap()
         );
         assert!(
             actual.stats.work < expected.stats.work * 3 / 4,
@@ -348,8 +348,8 @@ fn generated_contours_match_all_edge_prepared_storage_and_cpu_pixels() {
             assert_eq!(actual.alphas, expected.alphas);
             assert_eq!(actual.stats.retained_bytes, expected.stats.retained_bytes);
             assert_eq!(
-                actual.render_linear(RasterLimits::default()).unwrap(),
-                expected.render_linear(RasterLimits::default()).unwrap()
+                actual.compose_linear(RasterLimits::default()).unwrap(),
+                expected.compose_linear(RasterLimits::default()).unwrap()
             );
         }
     }

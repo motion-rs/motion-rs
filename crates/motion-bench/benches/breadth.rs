@@ -324,7 +324,7 @@ mod _case_tests {
         let linear = list
             .prepare(ValidationLimits::default(), limits())?
             .render_linear(limits())?;
-        assert!(linear.pixels().iter().any(|pixel| pixel[3] > 0.0));
+        assert!(linear.linear_pixels().any(|pixel| pixel[3] > 0.0));
         Ok(())
     }
 }

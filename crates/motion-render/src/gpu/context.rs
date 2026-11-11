@@ -716,20 +716,24 @@ impl GpuContext {
                 .and_then(|list| list.prepare(motion_core::ValidationLimits::default(), limits))
                 .map_err(|error| error.to_string())?;
             let expected = frame
-                .render_linear(limits)
-                .and_then(|frame| frame.to_srgb_rgba8(false, limits))
+                .compose_linear(limits)
+                .and_then(|frame| crate::FrameBuffer::from_linear_rgba8(&frame, limits))
                 .map_err(|error| error.to_string())?;
             let actual = Gpu::from_context(self.clone())
                 .render(
                     &frame,
                     Plan::new(&frame, limits).map_err(|error| error.to_string())?,
                 )
-                .and_then(|frame| frame.to_srgb_rgba8(false, limits).map_err(Into::into))
+                .and_then(|frame| {
+                    crate::FrameBuffer::from_linear_rgba8(&frame, limits).map_err(Into::into)
+                })
                 .map_err(|error| error.to_string())?;
             let differences = expected
-                .pixels()
+                .bytes()
+                .as_chunks::<4>()
+                .0
                 .iter()
-                .zip(actual.pixels())
+                .zip(actual.bytes().as_chunks::<4>().0)
                 .map(|(expected, actual)| {
                     expected
                         .iter()

@@ -159,8 +159,8 @@ fn explicit_font_video_commit_cancel_and_failure() -> Result {
     let snapshot = Composition::new(64, 32, motion_render::FrameClock::new(30, 150))
         .with_options(motion_render::RenderOptions::default().background(Color::BLACK))?
         .render_frame(0, Size::new(64.0, 32.0), |_| Node::from(text.clone()))?;
-    assert!(snapshot.pixels().iter().any(|pixel| *pixel != 0));
-    assert!(snapshot.pixels().contains(&0));
+    assert!(snapshot.packed_rgb().iter().any(|pixel| *pixel != 0));
+    assert!(snapshot.packed_rgb().contains(&0));
     let directory = tempfile::tempdir()?;
     let destination = directory.path().join("text.mp4");
     let order = Arc::new(Mutex::new(Vec::new()));

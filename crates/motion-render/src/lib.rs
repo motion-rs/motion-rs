@@ -27,11 +27,10 @@ pub use gpu::GpuContext;
 pub use look::{GateWeave, Look, SceneEffects};
 pub use motion_core::{CachePartition, RenderCache, RenderQuality};
 pub use options::{RenderOptions, composition, render_still};
-pub use output::{FrameBuffer, PixelFormat, PixelPlane, RenderTarget, Snapshot};
+pub use output::{FrameBuffer, PixelFormat, PixelPlane, RenderTarget};
 pub use prepared::{
-    ClipRecord, LinearFrame, PaintRecord, PixelRect, PreparationStats, PreparedFilters,
-    PreparedFrame, PreparedItem, PreparedLayer, RasterLimits, RenderPrepare, Rgba8Frame, Span,
-    Strip, WorkStats,
+    ClipRecord, PaintRecord, PixelRect, PreparationStats, PreparedFilters, PreparedFrame,
+    PreparedItem, PreparedLayer, RasterLimits, RenderPrepare, Span, Strip, WorkStats,
 };
 
 /// Rendering contracts used alongside core authoring values.
@@ -42,7 +41,7 @@ pub mod prelude {
     };
     pub use crate::{Cdl, DisplayTransform, FilmGrain, OutputTransfer, ToneMap};
     pub use crate::{
-        FrameBuffer, LinearFrame, PixelFormat, PixelPlane, PreparedFrame, PreparedItem,
-        RenderContext, RenderPrepare, RenderTarget, Renderer,
+        FrameBuffer, PixelFormat, PixelPlane, PreparedFrame, PreparedItem, RenderContext,
+        RenderPrepare, RenderTarget, Renderer,
     };
 }

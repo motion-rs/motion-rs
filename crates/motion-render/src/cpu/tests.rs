@@ -150,7 +150,7 @@ fn pooled_render_clears_previous_layers_and_recovers_after_budget_failure() {
         ])
         .opacity(0.75),
     );
-    let reference = prepared.render_linear(limits).unwrap();
+    let reference = prepared.compose_linear(limits).unwrap();
     let first = prepared.render_linear_pooled(limits, &mut pool).unwrap();
     assert_eq!(first, reference);
     first.recycle(&mut pool);
@@ -168,7 +168,7 @@ fn pooled_render_clears_previous_layers_and_recovers_after_budget_failure() {
     );
     let empty = frame(&Node::empty());
     let actual = empty.render_linear_pooled(limits, &mut pool).unwrap();
-    assert_eq!(actual, empty.render_linear(limits).unwrap());
+    assert_eq!(actual, empty.compose_linear(limits).unwrap());
     assert!(actual.pixels().iter().all(|pixel| *pixel == [0.0; 4]));
     actual.recycle(&mut pool);
     assert!(pool.bytes() <= 64 * 1024 * 1024);
@@ -182,10 +182,10 @@ fn pooled_render_clears_previous_layers_and_recovers_after_budget_failure() {
 fn zero_blur_preserves_the_completed_group() {
     let content = Node::group([tile(Color::WHITE), tile(Color::WHITE)]);
     let plain = frame(&content)
-        .render_linear(RasterLimits::default())
+        .compose_linear(RasterLimits::default())
         .unwrap();
     let filtered = frame(&content.filter(motion_core::Filter::Blur { sigma: 0.0 }))
-        .render_linear(RasterLimits::default())
+        .compose_linear(RasterLimits::default())
         .unwrap();
     assert_eq!(plain.pixels(), filtered.pixels());
 }
@@ -194,7 +194,9 @@ fn zero_blur_preserves_the_completed_group() {
 fn blur_retains_offscreen_inputs_and_expands_parent_captures() {
     let source = Node::from(Rect::new(-1.0, 1.0, 0.0, 2.0).fill(Color::WHITE));
     let node = Node::group([source.filter(motion_core::Filter::Blur { sigma: 0.5 })]).opacity(0.5);
-    let output = frame(&node).render_linear(RasterLimits::default()).unwrap();
+    let output = frame(&node)
+        .compose_linear(RasterLimits::default())
+        .unwrap();
     assert_eq!(output.size(), PixelSize::new(8, 4));
     assert!(output.pixel(0, 1).unwrap()[3] > 0.03);
     assert_eq!(output.pixel(3, 1), Some([0.0; 4]));
@@ -204,7 +206,7 @@ fn blur_retains_offscreen_inputs_and_expands_parent_captures() {
 fn overlapping_group_fades_once_instead_of_fading_each_primitive() {
     let pair = [tile(Color::WHITE), tile(Color::WHITE).translate(2.0, 0.0)];
     let isolated = frame(&Node::group(pair.clone()).opacity(0.5))
-        .render_linear(RasterLimits::default())
+        .compose_linear(RasterLimits::default())
         .unwrap();
     assert_eq!(isolated.pixel(0, 0), Some([0.5; 4]));
     assert_eq!(isolated.pixel(3, 0), Some([0.5; 4]));
@@ -212,7 +214,7 @@ fn overlapping_group_fades_once_instead_of_fading_each_primitive() {
     assert_eq!(isolated.pixel(6, 0), Some([0.0; 4]));
     assert_eq!(isolated.pixel(8, 0), None);
     let individual = frame(&Node::group(pair.map(|node| node.opacity(0.5))))
-        .render_linear(RasterLimits::default())
+        .compose_linear(RasterLimits::default())
         .unwrap();
     assert_eq!(individual.pixel(3, 0), Some([0.75; 4]));
 }
@@ -230,22 +232,24 @@ fn source_over_is_linear_and_nested_alpha_preserves_extended_rgb() {
     let prepared = source
         .prepare(ValidationLimits::default(), RasterLimits::default())
         .unwrap();
-    let output = prepared.render_linear(RasterLimits::default()).unwrap();
+    let output = prepared.compose_linear(RasterLimits::default()).unwrap();
     assert_eq!(output.pixel(0, 0), Some([0.5, 0.5, 0.5, 1.0]));
     assert_eq!(output.pixel(4, 0), Some([0.0, 0.0, 0.0, 1.0]));
     let red = tile(Color::from_hex(0xff0000).with_alpha(0.5));
     let blue = tile(Color::from_hex(0x0000ff).with_alpha(0.5));
     let output = frame(&Node::group([red.clone(), blue.clone()]))
-        .render_linear(RasterLimits::default())
+        .compose_linear(RasterLimits::default())
         .unwrap();
     assert_eq!(output.pixel(0, 0), Some([0.25, 0.0, 0.5, 0.75]));
     let reverse = frame(&Node::group([blue, red]))
-        .render_linear(RasterLimits::default())
+        .compose_linear(RasterLimits::default())
         .unwrap();
     assert_eq!(reverse.pixel(0, 0), Some([0.5, 0.0, 0.25, 0.75]));
     let color = Color::from_rgb_float(1.25, -0.125, 0.333);
     let node = Node::group([tile(color).opacity(0.5)]).opacity(0.5);
-    let output = frame(&node).render_linear(RasterLimits::default()).unwrap();
+    let output = frame(&node)
+        .compose_linear(RasterLimits::default())
+        .unwrap();
     assert_eq!(
         output.pixel(0, 0).unwrap(),
         color
@@ -259,12 +263,12 @@ fn fractional_strips_and_solid_spans_produce_the_same_working_pixels() {
     let node: Node = Rect::new(0.25, 0.5, 7.5, 4.0).fill(Color::WHITE).into();
     let prepared = frame(&node);
     let expected = crate::raster::tests::coverage(&prepared);
-    let output = prepared.render_linear(RasterLimits::default()).unwrap();
+    let output = prepared.compose_linear(RasterLimits::default()).unwrap();
     for (pixel, coverage) in output.pixels().iter().zip(expected) {
         assert_eq!(*pixel, [f32::from(coverage) / 255.0; 4]);
     }
     let empty = frame(&Node::empty())
-        .render_linear(RasterLimits::default())
+        .compose_linear(RasterLimits::default())
         .unwrap();
     assert!(empty.pixels().iter().all(|pixel| *pixel == [0.0; 4]));
 }
@@ -275,7 +279,7 @@ fn tiny_opacity_multiplies_hdr_before_f32_narrowing() {
     let opacity = 1.0e-50;
     assert_eq!(opacity as f32, 0.0);
     let output = frame(&tile(color).opacity(opacity))
-        .render_linear(RasterLimits::default())
+        .compose_linear(RasterLimits::default())
         .unwrap();
     let expected = (f64::from(color.to_linear_premultiplied()[0] as f32) * opacity) as f32;
     assert!(expected > 0.0);
@@ -287,18 +291,18 @@ fn captures_use_clipped_bounds_and_release_before_the_next_sibling() {
     let child = tile(Color::WHITE).opacity(0.5);
     let single = frame(&child);
     let pair = frame(&Node::group([child.clone(), child]));
-    let one = single.render_linear(RasterLimits::default()).unwrap();
-    let two = pair.render_linear(RasterLimits::default()).unwrap();
+    let one = single.compose_linear(RasterLimits::default()).unwrap();
+    let two = pair.compose_linear(RasterLimits::default()).unwrap();
     assert_eq!(
         one.stats.peak_bytes - single.stats.retained_bytes,
         two.stats.peak_bytes - pair.stats.retained_bytes
     );
     let hidden = frame(&tile(Color::WHITE).translate(1000.0, 1000.0).opacity(0.0))
-        .render_linear(RasterLimits::default())
+        .compose_linear(RasterLimits::default())
         .unwrap();
     assert!(hidden.pixels().iter().all(|pixel| *pixel == [0.0; 4]));
     let clipped = frame(&Node::group([tile(Color::WHITE).translate(-2.0, 0.0)]).opacity(0.5))
-        .render_linear(RasterLimits::default())
+        .compose_linear(RasterLimits::default())
         .unwrap();
     assert_eq!(clipped.pixel(0, 0), Some([0.5; 4]));
     assert_eq!(clipped.pixel(2, 0), Some([0.0; 4]));
@@ -307,13 +311,13 @@ fn captures_use_clipped_bounds_and_release_before_the_next_sibling() {
 #[test]
 fn live_surface_bytes_pixels_and_work_have_exact_independent_budgets() {
     let prepared = frame(&Node::group([tile(Color::WHITE).opacity(0.5)]).opacity(0.5));
-    let output = prepared.render_linear(RasterLimits::default()).unwrap();
+    let output = prepared.compose_linear(RasterLimits::default()).unwrap();
     let exact = RasterLimits {
         max_pixels: 32,
         max_bytes: output.stats.peak_bytes,
         max_work: output.stats.work,
     };
-    assert_eq!(prepared.render_linear(exact).unwrap(), output);
+    assert_eq!(prepared.compose_linear(exact).unwrap(), output);
     for (limits, field) in [
         (
             RasterLimits {
@@ -337,8 +341,8 @@ fn live_surface_bytes_pixels_and_work_have_exact_independent_budgets() {
             "max_work",
         ),
     ] {
-        assert_eq!(prepared.render_linear(limits).unwrap_err().field, field);
-        assert_eq!(prepared.render_linear(exact).unwrap(), output);
+        assert_eq!(prepared.compose_linear(limits).unwrap_err().field, field);
+        assert_eq!(prepared.compose_linear(exact).unwrap(), output);
     }
 }
 
@@ -347,12 +351,14 @@ fn finite_working_overflow_fails_without_mutating_the_prepared_input() {
     let color = Color::from_rgb_float(1.5e16, 0.0, 0.0).with_alpha(0.5);
     let prepared = frame(&Node::group([tile(color), tile(color)]));
     let original = prepared.clone();
-    let error = prepared.render_linear(RasterLimits::default()).unwrap_err();
+    let error = prepared
+        .compose_linear(RasterLimits::default())
+        .unwrap_err();
     assert_eq!(error.field, "color");
     assert_eq!(prepared, original);
     assert!(
         frame(&tile(Color::WHITE))
-            .render_linear(RasterLimits::default())
+            .compose_linear(RasterLimits::default())
             .is_ok()
     );
 }

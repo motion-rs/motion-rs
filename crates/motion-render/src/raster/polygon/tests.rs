@@ -369,7 +369,7 @@ fn rectangle_paths_match_fast_coverage_and_linear_pixels_under_both_rules() {
             .prepare(ValidationLimits::default(), RasterLimits::default())
             .unwrap();
         let expected = crate::raster::tests::coverage(&fast);
-        let pixels = fast.render_linear(RasterLimits::default()).unwrap();
+        let pixels = fast.compose_linear(RasterLimits::default()).unwrap();
         for rule in [FillRule::NonZero, FillRule::EvenOdd] {
             list.commands = vec![DrawCommand::Fill {
                 path: Arc::new(Path2D::from_rect(bounds).unwrap()),
@@ -387,7 +387,7 @@ fn rectangle_paths_match_fast_coverage_and_linear_pixels_under_both_rules() {
             );
             assert_eq!(
                 frame
-                    .render_linear(RasterLimits::default())
+                    .compose_linear(RasterLimits::default())
                     .unwrap()
                     .pixels(),
                 pixels.pixels()
@@ -609,7 +609,7 @@ fn compilation_composes_shared_path_coverage_and_accepts_curves() {
     let expected = (coverage + coverage * (1.0 - coverage)) * 0.5;
     assert_eq!(
         frame
-            .render_linear(RasterLimits::default())
+            .compose_linear(RasterLimits::default())
             .unwrap()
             .pixel(0, 0),
         Some([expected; 4])
@@ -650,7 +650,7 @@ fn compilation_composes_shared_path_coverage_and_accepts_curves() {
                 assert_eq!(frame.items.len(), 3);
                 assert_eq!(
                     frame
-                        .render_linear(RasterLimits::default())
+                        .compose_linear(RasterLimits::default())
                         .unwrap()
                         .pixel(0, 0),
                     Some([0.0; 4])
@@ -793,11 +793,11 @@ fn transformed_and_pretransformed_curves_have_identical_coverage() {
             );
             assert_eq!(
                 first
-                    .render_linear(RasterLimits::default())
+                    .compose_linear(RasterLimits::default())
                     .unwrap()
                     .pixels(),
                 second
-                    .render_linear(RasterLimits::default())
+                    .compose_linear(RasterLimits::default())
                     .unwrap()
                     .pixels()
             );

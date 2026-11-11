@@ -351,7 +351,7 @@ mod tests {
     use motion_core::Size;
     use motion_render::RenderPrepare;
 
-    fn pixels(node: Node) -> motion_core::Result<motion_render::LinearFrame> {
+    fn pixels(node: Node) -> motion_core::Result<motion_render::FrameBuffer> {
         Ok(node
             .compile(
                 Size::new(192.0, 64.0),
@@ -378,11 +378,10 @@ mod tests {
         let full = pixels(from.node())?;
         assert!(
             subset
-                .pixels()
-                .iter()
+                .linear_pixels()
                 .filter(|pixel| pixel[3] > 0.0)
                 .count()
-                < full.pixels().iter().filter(|pixel| pixel[3] > 0.0).count()
+                < full.linear_pixels().filter(|pixel| pixel[3] > 0.0).count()
         );
         assert!(from.select_subexpression("frac(1, y)")?.symbols().len() >= 2);
         assert!(
@@ -395,29 +394,23 @@ mod tests {
         let hidden = pixels(selected.apply(|node| node.opacity(0.0)))?;
         assert!(
             hidden
-                .pixels()
-                .iter()
+                .linear_pixels()
                 .filter(|pixel| pixel[3] > 0.0)
                 .count()
-                < full.pixels().iter().filter(|pixel| pixel[3] > 0.0).count()
+                < full.linear_pixels().filter(|pixel| pixel[3] > 0.0).count()
         );
-        assert_eq!(pixels(from.write(1.0)?)?.pixels(), full.pixels());
+        assert_eq!(pixels(from.write(1.0)?)?, full);
         assert!(
             pixels(from.write(0.0)?)?
-                .pixels()
-                .iter()
-                .all(|pixel| *pixel == [0.0; 4])
+                .linear_pixels()
+                .all(|pixel| pixel == [0.0; 4])
         );
         let fraction = from.select_subexpression("frac(1, y)")?;
         assert!(fraction.symbols().iter().any(|symbol| symbol.structural));
-        assert_eq!(
-            pixels(fraction.write(1.0)?)?.pixels(),
-            pixels(fraction.node())?.pixels()
-        );
+        assert_eq!(pixels(fraction.write(1.0)?)?, pixels(fraction.node())?);
         assert!(
             pixels(selected.write(0.3)?)?
-                .pixels()
-                .iter()
+                .linear_pixels()
                 .any(|pixel| pixel[3] > 0.0)
         );
         let morph = from.morph_to(&to)?;
@@ -449,15 +442,9 @@ mod tests {
                 .count(),
             2
         );
-        assert_eq!(pixels(morph.sample(0.0)?)?.pixels(), full.pixels());
-        assert_eq!(
-            pixels(morph.sample(1.0)?)?.pixels(),
-            pixels(to.node())?.pixels()
-        );
-        assert_eq!(
-            pixels(morph.sample(0.5)?)?.pixels(),
-            pixels(morph.sample(0.5)?)?.pixels()
-        );
+        assert_eq!(pixels(morph.sample(0.0)?)?, full);
+        assert_eq!(pixels(morph.sample(1.0)?)?, pixels(to.node())?);
+        assert_eq!(pixels(morph.sample(0.5)?)?, pixels(morph.sample(0.5)?)?);
         Ok(())
     }
 }

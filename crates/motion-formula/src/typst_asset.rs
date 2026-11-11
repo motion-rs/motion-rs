@@ -263,7 +263,7 @@ mod tests {
             page.size().height.ceil() as u32,
         );
         let node = page.node()?;
-        let render = || -> motion_core::Result<motion_render::LinearFrame> {
+        let render = || -> motion_core::Result<motion_render::FrameBuffer> {
             Ok(node
                 .compile(page.size(), size, motion_core::ValidationLimits::default())?
                 .prepare(
@@ -273,7 +273,7 @@ mod tests {
                 .render_linear(motion_core::RasterLimits::default())?)
         };
         let frame = render()?;
-        assert!(frame.pixels().iter().any(|pixel| pixel[3] > 0.0));
+        assert!(frame.linear_pixels().any(|pixel| pixel[3] > 0.0));
         assert_eq!(frame, render()?);
         for source in [
             "$frac($",

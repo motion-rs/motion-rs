@@ -65,6 +65,11 @@ pub struct FrameRequest<'a> {
     pub target: crate::RenderTarget<'a>,
     /// Requested output color/alpha/storage contract.
     pub format: crate::PixelFormat,
+    /// Whether a GPU-rendered straight [`crate::PixelFormat::SrgbRgba8`] memory request
+    /// packs its bytes on the device before readback instead of converting the read-back
+    /// linear frame on the host. Device packing may differ from host conversion by GPU
+    /// f32 rounding; it is ignored for other formats, textures and CPU rendering.
+    pub device_packing: bool,
 }
 
 impl RenderSession {
@@ -188,6 +193,7 @@ impl RenderSession {
             duration: request.duration.after_origin(),
             time: Some(time),
             limits,
+            device_packing: request.device_packing,
             session: self,
         };
         match request.target {

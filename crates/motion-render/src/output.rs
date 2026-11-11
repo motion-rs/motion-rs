@@ -1,22 +1,21 @@
 //! Validated memory targets and shared CPU/GPU output conversion.
 
-use crate::{LinearFrame, RasterLimits};
+use crate::RasterLimits;
+use crate::cpu::LinearFrame;
 use motion_core::{PixelSize, ValidationError};
 
 mod bands;
 mod png;
-mod snapshot;
+mod rgb;
 #[cfg(test)]
 mod tests;
 mod yuv;
 
-pub use snapshot::Snapshot;
-
 /// Bytes of one linear-sRGB premultiplied f32 RGBA pixel.
 const LINEAR_PIXEL_BYTES: u64 = 16;
 
-/// Bytes of the widest packed output pixel (half-float RGBA).
-const MAX_OUTPUT_PIXEL_BYTES: u64 = 8;
+/// Bytes of the widest packed output pixel (single-float RGBA).
+const MAX_OUTPUT_PIXEL_BYTES: u64 = 16;
 
 /// Planes of the most planar output format (Y, U and V).
 const MAX_PLANES: u64 = 3;
@@ -31,6 +30,9 @@ pub(crate) type OutputPool = crate::cpu::pool::BufferPool<u8>;
 pub enum PixelFormat {
     /// Little-endian half-float linear-sRGB premultiplied RGBA.
     LinearRgba16Float,
+    /// Little-endian f32 linear-sRGB premultiplied RGBA, exactly as composed and unquantized.
+    /// RGB may be extended or negative; no display transform applies.
+    LinearRgba32Float,
     /// Encoded sRGB with linear alpha; premultiplication is encoded-space.
     SrgbRgba8 {
         /// Whether RGB is multiplied by alpha.
@@ -93,6 +95,7 @@ impl FrameBuffer {
         let depth = match format {
             PixelFormat::SrgbRgba8 { .. } => 4,
             PixelFormat::LinearRgba16Float => 8,
+            PixelFormat::LinearRgba32Float => 16,
             PixelFormat::Yuv420 { bit_depth } => {
                 if !size.width.is_multiple_of(2)
                     || !size.height.is_multiple_of(2)
@@ -321,7 +324,7 @@ impl FrameBuffer {
     }
 
     /// Converts linear output into straight sRGB RGBA8; transparent pixels keep their alpha.
-    pub fn from_linear_rgba8(
+    pub(crate) fn from_linear_rgba8(
         frame: &LinearFrame,
         limits: RasterLimits,
     ) -> Result<Self, ValidationError> {
@@ -334,8 +337,18 @@ impl FrameBuffer {
         )
     }
 
+    /// Wraps pixels whose storage a GPU plan already admitted as linear f32 output.
+    pub(crate) fn linear_unbounded(frame: &LinearFrame) -> Result<Self, ValidationError> {
+        let unbounded = RasterLimits {
+            max_pixels: u64::MAX,
+            max_bytes: u64::MAX,
+            max_work: u64::MAX,
+        };
+        Self::from_linear(frame, PixelFormat::LinearRgba32Float, unbounded)
+    }
+
     /// Converts the same immutable linear pixels regardless of rendering backend.
-    pub fn from_linear(
+    pub(crate) fn from_linear(
         frame: &LinearFrame,
         format: PixelFormat,
         limits: RasterLimits,
@@ -360,7 +373,7 @@ impl FrameBuffer {
 
     /// Converts scene-linear pixels using explicit grading and frame-addressed grain.
     /// LinearRgba16Float remains scene-linear, without a display transform.
-    pub fn from_linear_display(
+    pub(crate) fn from_linear_display(
         frame: &LinearFrame,
         format: PixelFormat,
         limits: RasterLimits,
@@ -393,6 +406,7 @@ impl FrameBuffer {
         let bytes = match format {
             PixelFormat::SrgbRgba8 { .. } => count * 4,
             PixelFormat::LinearRgba16Float => count * 8,
+            PixelFormat::LinearRgba32Float => count * 16,
             PixelFormat::Yuv420 { bit_depth } => {
                 if !size.width.is_multiple_of(2)
                     || !size.height.is_multiple_of(2)
@@ -473,6 +487,18 @@ impl FrameBuffer {
                     width: size.width,
                     height: size.height,
                     stride: size.width as usize * 8,
+                    bytes,
+                }]
+            }
+            PixelFormat::LinearRgba32Float => {
+                let mut bytes = storage(bytes as usize, pool)?;
+                for value in frame.pixels().iter().flatten() {
+                    bytes.extend(value.to_le_bytes());
+                }
+                vec![PixelPlane {
+                    width: size.width,
+                    height: size.height,
+                    stride: size.width as usize * 16,
                     bytes,
                 }]
             }
@@ -574,7 +600,10 @@ impl FrameBuffer {
         format: PixelFormat,
         display: Option<&crate::DisplayTransform>,
     ) -> u64 {
-        let extra = if format == PixelFormat::LinearRgba16Float {
+        let extra = if matches!(
+            format,
+            PixelFormat::LinearRgba16Float | PixelFormat::LinearRgba32Float
+        ) {
             0
         } else {
             display.map_or(0, crate::DisplayTransform::work_per_pixel)
@@ -610,7 +639,7 @@ impl FrameBuffer {
     }
 
     /// Atomically replaces a memory target on successful conversion.
-    pub fn write_linear(
+    pub(crate) fn write_linear(
         frame: &LinearFrame,
         target: RenderTarget<'_>,
         format: PixelFormat,

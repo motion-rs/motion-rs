@@ -1,6 +1,8 @@
 //! Explicit SDR output conversion of immutable linear-premultiplied frames.
 
+#[cfg(test)]
 use super::{LinearFrame, WorkStats};
+#[cfg(test)]
 use motion_core::{PixelSize, RasterLimits, ValidationError, budget::Budget};
 
 #[cfg(test)]
@@ -134,8 +136,9 @@ fn threshold_byte(value: f32, thresholds: &[u32; 255]) -> u8 {
 ///
 /// RGB is SDR-clipped and ordered-dithered. Premultiplication, when requested,
 /// is in encoded sRGB, not linear light. This buffer does not encode a file.
+#[cfg(test)]
 #[derive(Clone, Debug, PartialEq)]
-pub struct Rgba8Frame {
+pub(crate) struct Rgba8Frame {
     size: PixelSize,
     pixels: Vec<[u8; 4]>,
     premultiplied: bool,
@@ -187,6 +190,7 @@ impl RgbaEncoder {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn encode(
         &mut self,
         source: &[[f32; 4]],
@@ -284,6 +288,7 @@ impl RgbaEncoder {
     }
 }
 
+#[cfg(test)]
 impl Rgba8Frame {
     /// Output dimensions.
     pub fn size(&self) -> PixelSize {
@@ -317,77 +322,9 @@ impl Rgba8Frame {
     pub fn stats(&self) -> WorkStats {
         self.stats
     }
-
-    /// Consumes opaque RGBA8 into the shared tightly packed RGB Snapshot.
-    ///
-    /// Rejects any nonopaque pixel rather than discarding alpha or compositing
-    /// in encoded space. Encoded premultiplication is immaterial at alpha one.
-    /// Limits admit both source and destination storage and one work unit per
-    /// pixel before allocation. No file is written and no encoder is invoked.
-    pub fn into_snapshot(self, limits: RasterLimits) -> Result<crate::Snapshot, ValidationError> {
-        self.into_snapshot_with_stats(limits).map(|result| result.0)
-    }
-
-    pub(crate) fn into_snapshot_with_stats(
-        self,
-        limits: RasterLimits,
-    ) -> Result<(crate::Snapshot, WorkStats), ValidationError> {
-        Self::snapshot_from_bytes(
-            self.size,
-            self.bytes(),
-            size_of::<Rgba8Frame>() as u64 + self.pixels.len() as u64 * 4,
-            limits,
-        )
-    }
-
-    pub(crate) fn snapshot_from_bytes(
-        size: PixelSize,
-        source: &[u8],
-        source_bytes: u64,
-        limits: RasterLimits,
-    ) -> Result<(crate::Snapshot, WorkStats), ValidationError> {
-        let mut budget = Budget::new(size, limits)?;
-        if source.len() as u64 != u64::from(size.width) * u64::from(size.height) * 4 {
-            return Err(ValidationError::invalid(
-                "snapshot.pixels",
-                "size",
-                "Snapshot source must contain one RGBA8 pixel per output pixel",
-            ));
-        }
-        let count = source.len() as u64 / 4;
-        budget.bytes(source_bytes, "snapshot.source")?;
-        budget.bytes(
-            size_of::<crate::Snapshot>() as u64 + count * size_of::<u32>() as u64,
-            "snapshot.output",
-        )?;
-        budget.work(count, "snapshot.pixels")?;
-        let mut pixels = Vec::new();
-        pixels.try_reserve_exact(count as usize).map_err(|_| {
-            ValidationError::limit(
-                "snapshot.pixels",
-                "max_bytes",
-                "Could not reserve snapshot storage",
-            )
-        })?;
-        let rgba = source.as_chunks::<4>().0;
-        if rgba.iter().any(|pixel| pixel[3] != 255) {
-            return Err(ValidationError::invalid(
-                "snapshot.pixels",
-                "alpha",
-                "Snapshot requires opaque RGBA8; composite a background in linear light first",
-            ));
-        }
-        pixels.extend(rgba.iter().map(|pixel| u32::from_be_bytes(*pixel) >> 8));
-        Ok((
-            crate::Snapshot::from_pixels(size.width as usize, size.height as usize, pixels),
-            WorkStats {
-                peak_bytes: budget.peak_bytes(),
-                work: budget.work_done(),
-            },
-        ))
-    }
 }
 
+#[cfg(test)]
 impl LinearFrame {
     /// Converts to SDR sRGB RGBA8, with straight or encoded-premultiplied RGB.
     ///
@@ -402,31 +339,7 @@ impl LinearFrame {
     /// payloads, excluding clones, PreparedFrame, excess capacity and allocator
     /// overhead. One work unit per pixel is admitted before allocation. Failure
     /// leaves the linear source unchanged, without returning a partial output.
-    ///
-    /// ```
-    /// use motion_render::prelude::*;
-    /// use motion_core::prelude::*;
-    /// use motion_core::{
-    ///     DisplayList, RasterLimits, ResourcePool, ValidatedDisplayList, MAX_PATH_VERBS,
-    ///     MAX_STROKE_VERBS, MAX_SVG_PATH_BYTES, sample_offsets,
-    /// };
-    /// use motion_render::{Composition, RenderPrepare, RenderOptions, Renderer, render_still};
-    /// let node =
-    ///     Node::from(Rect::new(0.0, 0.0, 2.0, 1.0).fill(Color::from_hex(0xff0000))).opacity(0.5);
-    /// let prepared = node
-    ///     .compile(
-    ///         Size::new(2.0, 1.0),
-    ///         PixelSize::new(2, 1),
-    ///         ValidationLimits::default(),
-    ///     )?
-    ///     .prepare(ValidationLimits::default(), RasterLimits::default())?;
-    /// let linear = prepared.render_linear(RasterLimits::default())?;
-    /// let rgba = linear.to_srgb_rgba8(false, RasterLimits::default())?;
-    /// assert_eq!(rgba.pixel(0, 0), Some([255, 0, 0, 128]));
-    /// assert_eq!(rgba.bytes(), &[255, 0, 0, 128, 255, 0, 0, 128]);
-    /// # Ok::<(), motion_core::ValidationError>(())
-    /// ```
-    pub fn to_srgb_rgba8(
+    pub(crate) fn to_rgba8_frame(
         &self,
         premultiplied: bool,
         limits: RasterLimits,

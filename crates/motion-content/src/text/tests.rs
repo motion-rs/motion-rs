@@ -606,15 +606,15 @@ fn explicit_paragraph_fonts_shaping_fallback_metrics_parts_and_replay() {
         .unwrap()
     };
     let initial = composition.render_frame(0, context.size(), build).unwrap();
-    assert!(initial.pixels().iter().all(|pixel| *pixel == 0));
+    assert!(initial.packed_rgb().iter().all(|pixel| *pixel == 0));
     let later = composition.render_frame(10, context.size(), build).unwrap();
-    assert!(later.pixels().iter().any(|pixel| *pixel != 0));
+    assert!(later.packed_rgb().iter().any(|pixel| *pixel != 0));
     let replay = composition.render_frame(10, context.size(), build).unwrap();
-    assert_eq!(later.pixels(), replay.pixels());
+    assert_eq!(later.packed_rgb(), replay.packed_rgb());
     let hidden = composition
         .render_frame(1, context.size(), |_| text.clone().visible_parts(0).into())
         .unwrap();
-    assert!(hidden.pixels().iter().all(|pixel| *pixel == 0));
+    assert!(hidden.packed_rgb().iter().all(|pixel| *pixel == 0));
     println!(
         "paragraph: faces={} lines={} glyphs={} graphemes={} bidi/fallback/baseline/cache/stagger/visibility/replay=pass",
         fonts.len(),
@@ -647,7 +647,7 @@ fn explicit_bitmap_emoji_uses_image_and_shared_paragraph() {
         .unwrap();
     assert!(
         frame
-            .pixels()
+            .packed_rgb()
             .iter()
             .filter(|pixel| (((**pixel >> 16) & 255) as i32 - (**pixel & 255) as i32).abs() > 30)
             .count()
@@ -754,13 +754,13 @@ fn explicit_colrv0_and_cbdt_are_actual_color_glyphs() {
         .unwrap();
     assert!(
         frame
-            .pixels()
+            .packed_rgb()
             .iter()
             .any(|pixel| pixel & 0x00ff00 > 0x008000)
     );
     assert!(
         frame
-            .pixels()
+            .packed_rgb()
             .iter()
             .any(|pixel| pixel & 0xff0000 > 0x800000)
     );
@@ -813,7 +813,7 @@ fn explicit_colrv0_and_cbdt_are_actual_color_glyphs() {
         .unwrap();
     assert!(
         frame
-            .pixels()
+            .packed_rgb()
             .iter()
             .filter(|pixel| **pixel >> 16 > 200 && (**pixel & 255) < 70)
             .count()
@@ -857,7 +857,7 @@ fn explicit_fonts_project_memory_svg_and_snapshot_isolation() {
         .unwrap()
         .render_linear(motion_core::RasterLimits::default())
         .unwrap();
-    assert!(rendered.pixels().iter().any(|pixel| pixel[3] > 0.5));
+    assert!(rendered.linear_pixels().any(|pixel| pixel[3] > 0.5));
     assert!(
         Text::new("Shared")
             .layout(&snapshot)
@@ -884,7 +884,7 @@ fn explicit_underlined_run_is_geometry_and_replays() -> motion_core::Result {
     let draw = DrawContext::default().with_fonts(fonts);
     let glyphs = text.vector_tree(&draw)?.node();
     let node = Node::group([glyphs, Node::from(underline.fill(Color::WHITE))]);
-    let render = || -> motion_core::Result<motion_render::LinearFrame> {
+    let render = || -> motion_core::Result<motion_render::FrameBuffer> {
         Ok(node
             .compile(
                 motion_core::Size::new(160.0, 48.0),
@@ -900,8 +900,7 @@ fn explicit_underlined_run_is_geometry_and_replays() -> motion_core::Result {
     let frame = render()?;
     assert_eq!(frame, render()?);
     let area = frame
-        .pixels()
-        .iter()
+        .linear_pixels()
         .enumerate()
         .filter(|(index, pixel)| {
             let position =
@@ -989,12 +988,14 @@ fn explicit_gpu_paragraphs_and_parts_match_cpu_and_replay() {
                 .unwrap();
             let cpu = frame.render_linear(limits).unwrap();
             let actual = gpu
-                .render(
+                .render_linear(
                     &frame,
                     motion_render::gpu::Plan::new(&frame, limits).unwrap(),
                 )
                 .unwrap();
-            for (pixel, (left, right)) in actual.pixels().iter().zip(cpu.pixels()).enumerate() {
+            for (pixel, (left, right)) in
+                actual.linear_pixels().zip(cpu.linear_pixels()).enumerate()
+            {
                 for (channel, (left, right)) in left.iter().zip(right).enumerate() {
                     difference = difference.max((left - right).abs());
                     assert!(
@@ -1004,21 +1005,38 @@ fn explicit_gpu_paragraphs_and_parts_match_cpu_and_replay() {
                     );
                 }
             }
-            let actual = actual.to_srgb_rgba8(false, limits).unwrap();
-            let expected = cpu.to_srgb_rgba8(false, limits).unwrap();
-            for (left, right) in actual.pixels().iter().zip(expected.pixels()) {
-                for (left, right) in left.iter().zip(right) {
-                    bytes = bytes.max(left.abs_diff(*right));
-                    assert!(left.abs_diff(*right) <= 1);
-                }
+            let actual = actual
+                .to_format(
+                    motion_render::PixelFormat::SrgbRgba8 {
+                        premultiplied: false,
+                    },
+                    limits,
+                )
+                .unwrap();
+            let expected = cpu
+                .to_format(
+                    motion_render::PixelFormat::SrgbRgba8 {
+                        premultiplied: false,
+                    },
+                    limits,
+                )
+                .unwrap();
+            for (left, right) in actual.bytes().iter().zip(expected.bytes()) {
+                bytes = bytes.max(left.abs_diff(*right));
+                assert!(left.abs_diff(*right) <= 1);
             }
             let replay = gpu
-                .render(
+                .render_linear(
                     &frame,
                     motion_render::gpu::Plan::new(&frame, limits).unwrap(),
                 )
                 .unwrap()
-                .to_srgb_rgba8(false, limits)
+                .to_format(
+                    motion_render::PixelFormat::SrgbRgba8 {
+                        premultiplied: false,
+                    },
+                    limits,
+                )
                 .unwrap();
             assert_eq!(actual, replay);
             cases += 1;

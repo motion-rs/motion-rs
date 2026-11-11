@@ -585,9 +585,8 @@ fn instance_styles_are_not_paths_and_respect_budget_and_custom_callbacks() -> mo
     assert!(
         collapsed
             .render_linear(RasterLimits::default())?
-            .pixels()
-            .iter()
-            .all(|pixel| *pixel == [0.0; 4])
+            .linear_pixels()
+            .all(|pixel| pixel == [0.0; 4])
     );
 
     struct Ignored(Arc<dyn motion_core::instances::InstanceBatch>);
@@ -620,7 +619,7 @@ fn instance_styles_are_not_paths_and_respect_budget_and_custom_callbacks() -> mo
     let frame = prepared(node)?;
     assert!(frame.strips().is_empty());
     let pixels = frame.render_linear(RasterLimits::default())?;
-    assert!(pixels.pixels().iter().any(|pixel| pixel[3] > 0.0));
+    assert!(pixels.linear_pixels().any(|pixel| pixel[3] > 0.0));
     assert!(
         frame
             .render_linear(RasterLimits {
@@ -644,8 +643,7 @@ fn instance_styles_are_not_paths_and_respect_budget_and_custom_callbacks() -> mo
         assert!(
             frame
                 .render_linear(RasterLimits::default())?
-                .pixels()
-                .iter()
+                .linear_pixels()
                 .any(|pixel| pixel[3] > 0.0)
         );
     }
@@ -675,7 +673,7 @@ fn instance_styles_are_not_paths_and_respect_budget_and_custom_callbacks() -> mo
     assert!(
         prepared(custom.try_render(&context)?)?
             .render_linear(RasterLimits::default())?
-            .pixel(0, 0)
+            .linear_pixel(0, 0)
             .unwrap()[3]
             > 0.0
     );
@@ -814,20 +812,19 @@ mod gpu {
                         .try_render(&context)?,
                 )?;
                 let expected = frame.render_linear(limits)?;
-                let actual = gpu.render(&frame, motion_render::gpu::Plan::new(&frame, limits)?)?;
-                assert!(actual.pixels().iter().any(|pixel| pixel[3] > 0.0));
+                let actual =
+                    gpu.render_linear(&frame, motion_render::gpu::Plan::new(&frame, limits)?)?;
+                assert!(actual.linear_pixels().any(|pixel| pixel[3] > 0.0));
                 assert_eq!(
-                    actual.pixels(),
-                    gpu.render(&frame, motion_render::gpu::Plan::new(&frame, limits)?)?
-                        .pixels()
+                    actual,
+                    gpu.render_linear(&frame, motion_render::gpu::Plan::new(&frame, limits)?)?
                 );
                 let maximum = expected
-                    .pixels()
-                    .iter()
-                    .zip(actual.pixels())
+                    .linear_pixels()
+                    .zip(actual.linear_pixels())
                     .flat_map(|(first, second)| {
                         first
-                            .iter()
+                            .into_iter()
                             .zip(second)
                             .map(|(first, second)| (first - second).abs())
                     })
@@ -836,8 +833,18 @@ mod gpu {
                     maximum < 0.03,
                     "style={style_index}, blend={blend:?}, maximum={maximum}"
                 );
-                let expected = expected.to_srgb_rgba8(false, limits)?;
-                let actual = actual.to_srgb_rgba8(false, limits)?;
+                let expected = expected.to_format(
+                    motion_render::PixelFormat::SrgbRgba8 {
+                        premultiplied: false,
+                    },
+                    limits,
+                )?;
+                let actual = actual.to_format(
+                    motion_render::PixelFormat::SrgbRgba8 {
+                        premultiplied: false,
+                    },
+                    limits,
+                )?;
                 assert!(
                     expected
                         .bytes()
@@ -924,11 +931,23 @@ mod gpu {
                     node
                 };
                 let frame = prepared(node)?.blend_space(space);
-                let expected = frame.render_linear(limits)?.to_srgb_rgba8(false, limits)?;
-                let actual = gpu.render(&frame, motion_render::gpu::Plan::new(&frame, limits)?)?;
-                let replay = gpu.render(&frame, motion_render::gpu::Plan::new(&frame, limits)?)?;
-                assert_eq!(actual.pixels(), replay.pixels());
-                let packed = actual.to_srgb_rgba8(false, limits)?;
+                let expected = frame.render_linear(limits)?.to_format(
+                    motion_render::PixelFormat::SrgbRgba8 {
+                        premultiplied: false,
+                    },
+                    limits,
+                )?;
+                let actual =
+                    gpu.render_linear(&frame, motion_render::gpu::Plan::new(&frame, limits)?)?;
+                let replay =
+                    gpu.render_linear(&frame, motion_render::gpu::Plan::new(&frame, limits)?)?;
+                assert_eq!(actual, replay);
+                let packed = actual.to_format(
+                    motion_render::PixelFormat::SrgbRgba8 {
+                        premultiplied: false,
+                    },
+                    limits,
+                )?;
                 assert!(
                     expected
                         .bytes()
@@ -942,16 +961,15 @@ mod gpu {
                     ..limits
                 };
                 let error = gpu
-                    .render(&frame, motion_render::gpu::Plan::new(&frame, limited)?)
+                    .render_linear(&frame, motion_render::gpu::Plan::new(&frame, limited)?)
                     .unwrap_err();
                 assert_eq!(
                     error.downcast_ref::<ValidationError>().unwrap().field,
                     "max_work"
                 );
                 assert_eq!(
-                    gpu.render(&frame, motion_render::gpu::Plan::new(&frame, limits)?)?
-                        .pixels(),
-                    actual.pixels()
+                    gpu.render_linear(&frame, motion_render::gpu::Plan::new(&frame, limits)?)?,
+                    actual
                 );
             }
         }
@@ -984,23 +1002,31 @@ mod gpu {
             .prepare(ValidationLimits::default(), limits)?;
         let cpu = frame.render_linear(limits)?;
         assert!(
-            cpu.pixels()
-                .iter()
+            cpu.linear_pixels()
                 .any(|pixel| pixel[..3].iter().any(|channel| *channel > 0.01))
         );
-        assert_eq!(cpu.pixels(), frame.render_linear(limits)?.pixels());
+        assert_eq!(cpu, frame.render_linear(limits)?);
         let restricted = frame.render_linear(RasterLimits::sandbox()).unwrap_err();
         assert_eq!(restricted.field, "max_work");
         let mut gpu = motion_render::gpu::Gpu::new()?;
         let plan = motion_render::gpu::Plan::new(&frame, limits)?;
-        let actual = gpu.render(&frame, plan)?;
+        let actual = gpu.render_linear(&frame, plan)?;
         assert_eq!(
-            actual.pixels(),
-            gpu.render(&frame, motion_render::gpu::Plan::new(&frame, limits)?)?
-                .pixels()
+            actual,
+            gpu.render_linear(&frame, motion_render::gpu::Plan::new(&frame, limits)?)?
         );
-        let cpu_bytes = cpu.to_srgb_rgba8(false, limits)?;
-        let gpu_bytes = actual.to_srgb_rgba8(false, limits)?;
+        let cpu_bytes = cpu.to_format(
+            motion_render::PixelFormat::SrgbRgba8 {
+                premultiplied: false,
+            },
+            limits,
+        )?;
+        let gpu_bytes = actual.to_format(
+            motion_render::PixelFormat::SrgbRgba8 {
+                premultiplied: false,
+            },
+            limits,
+        )?;
         assert!(
             cpu_bytes
                 .bytes()
@@ -1010,23 +1036,20 @@ mod gpu {
         );
         let rejected = motion_render::gpu::Plan::new(&frame, RasterLimits::sandbox())
             .map_err(motion_core::Error::from)
-            .and_then(|plan| gpu.render(&frame, plan))
+            .and_then(|plan| gpu.render_linear(&frame, plan))
             .unwrap_err();
         assert_eq!(
             rejected.downcast_ref::<ValidationError>().unwrap().field,
             "max_work"
         );
         assert_eq!(
-            actual.pixels(),
-            gpu.render(&frame, motion_render::gpu::Plan::new(&frame, limits)?)?
-                .pixels()
+            actual,
+            gpu.render_linear(&frame, motion_render::gpu::Plan::new(&frame, limits)?)?
         );
         println!(
-            "Default 1080p/10000 particles admitted: CPU work {}, CPU peak {}, GPU work {}, GPU peak {}",
-            cpu.stats().work,
-            cpu.stats().peak_bytes,
-            actual.stats().work,
-            actual.stats().peak_bytes
+            "Default 1080p/10000 particles admitted: CPU bytes {}, GPU bytes {}",
+            cpu.byte_len(),
+            actual.byte_len()
         );
         Ok(())
     }
@@ -1053,15 +1076,24 @@ mod gpu {
                 ValidationLimits::default(),
             )?
             .prepare(ValidationLimits::default(), limits)?;
-        let cpu = frame.render_linear(limits)?.to_srgb_rgba8(false, limits)?;
+        let cpu = frame.render_linear(limits)?.to_format(
+            motion_render::PixelFormat::SrgbRgba8 {
+                premultiplied: false,
+            },
+            limits,
+        )?;
         let mut gpu = motion_render::gpu::Gpu::new()?;
-        let actual = gpu.render(&frame, motion_render::gpu::Plan::new(&frame, limits)?)?;
+        let actual = gpu.render_linear(&frame, motion_render::gpu::Plan::new(&frame, limits)?)?;
         assert_eq!(
-            actual.pixels(),
-            gpu.render(&frame, motion_render::gpu::Plan::new(&frame, limits)?)?
-                .pixels()
+            actual,
+            gpu.render_linear(&frame, motion_render::gpu::Plan::new(&frame, limits)?)?
         );
-        let bytes = actual.to_srgb_rgba8(false, limits)?;
+        let bytes = actual.to_format(
+            motion_render::PixelFormat::SrgbRgba8 {
+                premultiplied: false,
+            },
+            limits,
+        )?;
         assert!(
             cpu.bytes()
                 .iter()
@@ -1211,21 +1243,37 @@ mod gpu {
                     ] {
                         let frame = prepared(node.clone())?.blend_space(space);
                         let expected = frame.render_linear(limits)?;
-                        let actual =
-                            gpu.render(&frame, motion_render::gpu::Plan::new(&frame, limits)?)?;
+                        let actual = gpu.render_linear(
+                            &frame,
+                            motion_render::gpu::Plan::new(&frame, limits)?,
+                        )?;
                         assert_eq!(
-                            actual.pixels(),
-                            gpu.render(&frame, motion_render::gpu::Plan::new(&frame, limits)?)?
-                                .pixels()
+                            actual,
+                            gpu.render_linear(
+                                &frame,
+                                motion_render::gpu::Plan::new(&frame, limits)?
+                            )?
                         );
-                        for (reference, result) in expected.pixels().iter().zip(actual.pixels()) {
+                        for (reference, result) in
+                            expected.linear_pixels().zip(actual.linear_pixels())
+                        {
                             for channel in 0..4 {
                                 max_linear =
                                     max_linear.max((reference[channel] - result[channel]).abs());
                             }
                         }
-                        let expected = expected.to_srgb_rgba8(false, limits)?;
-                        let actual = actual.to_srgb_rgba8(false, limits)?;
+                        let expected = expected.to_format(
+                            motion_render::PixelFormat::SrgbRgba8 {
+                                premultiplied: false,
+                            },
+                            limits,
+                        )?;
+                        let actual = actual.to_format(
+                            motion_render::PixelFormat::SrgbRgba8 {
+                                premultiplied: false,
+                            },
+                            limits,
+                        )?;
                         for (reference, result) in expected.bytes().iter().zip(actual.bytes()) {
                             max_byte = max_byte.max(reference.abs_diff(*result));
                         }
@@ -1265,19 +1313,29 @@ mod gpu {
                 )?
                 .blend_space(space);
                 let expected = frame.render_linear(limits)?;
-                let actual = gpu.render(&frame, motion_render::gpu::Plan::new(&frame, limits)?)?;
+                let actual =
+                    gpu.render_linear(&frame, motion_render::gpu::Plan::new(&frame, limits)?)?;
                 assert_eq!(
-                    actual.pixels(),
-                    gpu.render(&frame, motion_render::gpu::Plan::new(&frame, limits)?)?
-                        .pixels()
+                    actual,
+                    gpu.render_linear(&frame, motion_render::gpu::Plan::new(&frame, limits)?)?
                 );
-                for (reference, result) in expected.pixels().iter().zip(actual.pixels()) {
+                for (reference, result) in expected.linear_pixels().zip(actual.linear_pixels()) {
                     for channel in 0..4 {
                         max_linear = max_linear.max((reference[channel] - result[channel]).abs());
                     }
                 }
-                let expected = expected.to_srgb_rgba8(false, limits)?;
-                let actual = actual.to_srgb_rgba8(false, limits)?;
+                let expected = expected.to_format(
+                    motion_render::PixelFormat::SrgbRgba8 {
+                        premultiplied: false,
+                    },
+                    limits,
+                )?;
+                let actual = actual.to_format(
+                    motion_render::PixelFormat::SrgbRgba8 {
+                        premultiplied: false,
+                    },
+                    limits,
+                )?;
                 for (reference, result) in expected.bytes().iter().zip(actual.bytes()) {
                     max_byte = max_byte.max(reference.abs_diff(*result));
                 }

@@ -349,7 +349,7 @@ mod tests {
         mode: BlendMode,
         renderer: Renderer,
         time: Time,
-    ) -> motion_core::Result<motion_render::Snapshot> {
+    ) -> motion_core::Result<motion_render::FrameBuffer> {
         let size = PixelSize::new(64, 48);
         let image = std::sync::Arc::new(recipe.render(size, time, RasterLimits::default())?);
         Composition::new(64, 48, motion_render::FrameClock::new(30, 150))
@@ -395,7 +395,7 @@ mod tests {
                 Renderer::Cpu,
                 1.seconds().after_origin(),
             )?;
-            assert_eq!(frame.pixels(), manual.pixels());
+            assert_eq!(frame.packed_rgb(), manual.packed_rgb());
         }
         let invalid = Atmosphere {
             opacity: 2.0,
@@ -419,16 +419,16 @@ mod tests {
             for mode in [BlendMode::Plus, BlendMode::Screen] {
                 let frame = compose(recipe, mode, Renderer::Cpu, 0.seconds().after_origin())?;
                 assert_eq!(
-                    frame.pixels(),
-                    compose(recipe, mode, Renderer::Cpu, 0.seconds().after_origin())?.pixels()
+                    frame.packed_rgb(),
+                    compose(recipe, mode, Renderer::Cpu, 0.seconds().after_origin())?.packed_rgb()
                 );
                 assert_ne!(
-                    frame.pixels(),
-                    compose(recipe, mode, Renderer::Cpu, 1.seconds().after_origin())?.pixels()
+                    frame.packed_rgb(),
+                    compose(recipe, mode, Renderer::Cpu, 1.seconds().after_origin())?.packed_rgb()
                 );
                 assert!(
                     frame
-                        .pixels()
+                        .packed_rgb()
                         .windows(2)
                         .any(|pixels| pixels[0] != pixels[1])
                 );
@@ -449,10 +449,10 @@ mod tests {
                 let cpu = compose(recipe, mode, Renderer::Cpu, 1.seconds().after_origin())?;
                 let gpu = compose(recipe, mode, Renderer::Gpu, 1.seconds().after_origin())?;
                 assert_eq!(
-                    gpu.pixels(),
-                    compose(recipe, mode, Renderer::Gpu, 1.seconds().after_origin())?.pixels()
+                    gpu.packed_rgb(),
+                    compose(recipe, mode, Renderer::Gpu, 1.seconds().after_origin())?.packed_rgb()
                 );
-                for (cpu, gpu) in cpu.pixels().iter().zip(gpu.pixels()) {
+                for (cpu, gpu) in cpu.packed_rgb().iter().zip(gpu.packed_rgb()) {
                     for (cpu, gpu) in cpu.to_le_bytes().into_iter().zip(gpu.to_le_bytes()) {
                         assert!(
                             cpu.abs_diff(gpu) <= 1,

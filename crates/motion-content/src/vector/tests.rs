@@ -57,8 +57,8 @@ fn groups_ids_source_order_affine_and_isolation_share_nodes() -> motion_core::Re
         )?
         .prepare(ValidationLimits::default(), RasterLimits::default())?
         .render_linear(RasterLimits::default())?;
-    assert_eq!(frame.pixel(2, 1), Some([0.5; 4]));
-    assert_eq!(frame.pixel(0, 0), Some([0.0; 4]));
+    assert_eq!(frame.linear_pixel(2, 1), Some([0.5; 4]));
+    assert_eq!(frame.linear_pixel(0, 0), Some([0.0; 4]));
     assert_eq!(
         node.clone()
             .at(Point::new(9.0, 4.0))
@@ -119,8 +119,10 @@ fn text_tree_preserves_actual_rich_paragraph_pixels_bounds_and_reading_order()
             )?
             .prepare(ValidationLimits::default(), RasterLimits::default())?
             .render_linear(RasterLimits::default())?;
-        Ok(motion_render::FrameBuffer::from_linear_rgba8(
-            &frame,
+        Ok(frame.to_format(
+            motion_render::PixelFormat::SrgbRgba8 {
+                premultiplied: false,
+            },
             RasterLimits::default(),
         )?)
     };
@@ -237,12 +239,22 @@ fn vector_effects_match_cpu_with_clips_images_morphs_and_surface_points() -> mot
                 .prepare(ValidationLimits::default(), limits)?;
             let expected = prepared.render_linear(limits)?;
             let actual =
-                gpu.render(&prepared, motion_render::gpu::Plan::new(&prepared, limits)?)?;
+                gpu.render_linear(&prepared, motion_render::gpu::Plan::new(&prepared, limits)?)?;
             let replay =
-                gpu.render(&prepared, motion_render::gpu::Plan::new(&prepared, limits)?)?;
-            assert_eq!(actual.pixels(), replay.pixels());
-            let a = expected.to_srgb_rgba8(false, limits)?;
-            let b = actual.to_srgb_rgba8(false, limits)?;
+                gpu.render_linear(&prepared, motion_render::gpu::Plan::new(&prepared, limits)?)?;
+            assert_eq!(actual, replay);
+            let a = expected.to_format(
+                motion_render::PixelFormat::SrgbRgba8 {
+                    premultiplied: false,
+                },
+                limits,
+            )?;
+            let b = actual.to_format(
+                motion_render::PixelFormat::SrgbRgba8 {
+                    premultiplied: false,
+                },
+                limits,
+            )?;
             assert!(
                 a.bytes()
                     .iter()

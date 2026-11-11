@@ -12,11 +12,12 @@ pub(super) fn checksum(pixels: &[u32]) -> u64 {
     })
 }
 
-pub(super) fn ppm(snapshot: &motion::render::Snapshot) -> Vec<u8> {
-    let mut bytes = format!("P6\n{} {}\n255\n", snapshot.width(), snapshot.height()).into_bytes();
-    for pixel in snapshot.pixels() {
-        bytes.extend_from_slice(&[(pixel >> 16) as u8, (pixel >> 8) as u8, *pixel as u8]);
-    }
+pub(super) fn ppm(snapshot: &motion::render::FrameBuffer) -> Vec<u8> {
+    let size = snapshot.size();
+    let mut bytes = format!("P6\n{} {}\n255\n", size.width, size.height).into_bytes();
+    snapshot
+        .write_rgb(&mut bytes)
+        .expect("benchmark output is opaque SrgbRgba8");
     bytes
 }
 
@@ -104,13 +105,13 @@ pub(super) fn verify_replay(
         let first = session.render_frame(index, |context| artwork(case, context))?;
         session.render_frame((index + 31) % 90, |context| artwork(case, context))?;
         let replay = session.render_frame(index, |context| artwork(case, context))?;
-        if first.pixels() != replay.pixels() {
+        if first != replay {
             return Err(invalid(format!("Seek replay differs: {name}/{index}")));
         }
         if first
-            .pixels()
+            .packed_rgb()
             .iter()
-            .all(|pixel| *pixel == first.pixels()[0])
+            .all(|pixel| *pixel == first.packed_rgb()[0])
             && index == 45
         {
             return Err(invalid(format!("Case renders a flat image: {name}")));

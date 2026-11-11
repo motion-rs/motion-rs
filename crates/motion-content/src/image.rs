@@ -68,8 +68,8 @@ mod tests {
                 motion_core::RasterLimits::default(),
             )?
             .render_linear(motion_core::RasterLimits::default())?;
-        assert_eq!(frame.pixel(0, 0), Some([0.5, 0.0, 0.0, 0.5]));
-        assert_eq!(frame.pixel(2, 0), Some([0.0; 4]));
+        assert_eq!(frame.linear_pixel(0, 0), Some([0.5, 0.0, 0.0, 0.5]));
+        assert_eq!(frame.linear_pixel(2, 0), Some([0.0; 4]));
         assert!(Arc::ptr_eq(&asset.tree, &asset.clone().tree));
         Ok(())
     }
@@ -412,11 +412,11 @@ mod tests {
                         .translate(2.0, 2.0)
                     })?;
                     assert!(
-                        sampled.pixels() == reference.pixels(),
+                        sampled.packed_rgb() == reference.packed_rgb(),
                         "sequence mismatch at {index} in {mode:?}"
                     );
-                    assert_ne!(sampled.pixels()[3 * 8 + 3], 0x00ff_ffff);
-                    assert_eq!(sampled.pixels()[0], 0x00ff_ffff);
+                    assert_ne!(sampled.packed_rgb()[3 * 8 + 3], 0x00ff_ffff);
+                    assert_eq!(sampled.packed_rgb()[0], 0x00ff_ffff);
                 }
             }
         }

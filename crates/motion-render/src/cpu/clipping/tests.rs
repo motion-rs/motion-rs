@@ -33,14 +33,14 @@ fn unified_clip_preserves_coverage_multiplication_and_geometric_intersection() {
         &Node::group([source.clone().clip(bounds)]).clip(bounds),
         PixelSize::new(2, 1),
     )
-    .render_linear(RasterLimits::default())
+    .compose_linear(RasterLimits::default())
     .unwrap();
     let geometric = prepare(
         &Node::group([source.clip_with(bounds, motion_core::ClipMode::Geometric)])
             .clip_with(bounds, motion_core::ClipMode::Geometric),
         PixelSize::new(2, 1),
     )
-    .render_linear(RasterLimits::default())
+    .compose_linear(RasterLimits::default())
     .unwrap();
     let half = 128.0_f32 / 255.0;
     assert_eq!(coverage.pixel(0, 0).unwrap()[3], half * half);
@@ -82,7 +82,7 @@ fn generic_shapes_intersect_before_fractional_coverage_is_quantized() {
     let inner = tile(1.0, 1.0, Color::WHITE).clip_with(Triangle, motion_core::ClipMode::Geometric);
     let node = Node::group([inner]).clip_with(Triangle, motion_core::ClipMode::Geometric);
     let output = prepare(&node, PixelSize::new(1, 1))
-        .render_linear(RasterLimits::default())
+        .compose_linear(RasterLimits::default())
         .unwrap();
     assert_eq!(output.pixel(0, 0), Some([128.0 / 255.0; 4]));
 }
@@ -98,7 +98,7 @@ fn generic_shapes_and_rectangles_share_one_geometric_domain_in_either_order() {
         .clip_with(outer, motion_core::ClipMode::Geometric);
         assert_eq!(
             prepare(&node, PixelSize::new(1, 1))
-                .render_linear(RasterLimits::default())
+                .compose_linear(RasterLimits::default())
                 .unwrap()
                 .pixel(0, 0),
             Some([0.0; 4])
@@ -126,7 +126,7 @@ fn generic_shapes_and_rectangles_share_one_geometric_domain_in_either_order() {
             .unwrap();
         assert_eq!(frame.items().len(), commands.commands.len());
         let pixel = frame
-            .render_linear(RasterLimits::default())
+            .compose_linear(RasterLimits::default())
             .unwrap()
             .pixel(0, 0)
             .unwrap();
@@ -152,7 +152,7 @@ fn generic_shape_intersections_respect_holes_concavity_and_self_crossings() {
         let inner = tile(3.0, 1.0, Color::WHITE).clip_with(clip, motion_core::ClipMode::Geometric);
         let node = Node::group([inner]).clip_with(donut.clone(), motion_core::ClipMode::Geometric);
         let output = prepare(&node, PixelSize::new(3, 1))
-            .render_linear(RasterLimits::default())
+            .compose_linear(RasterLimits::default())
             .unwrap();
         assert_eq!(output.pixel(0, 0), Some([1.0; 4]));
         assert_eq!(output.pixel(2, 0), Some([1.0; 4]));
@@ -172,7 +172,7 @@ fn generic_shape_intersections_respect_holes_concavity_and_self_crossings() {
     ])
     .clip_with(hole, motion_core::ClipMode::Geometric);
     let output = prepare(&node, PixelSize::new(3, 3))
-        .render_linear(RasterLimits::default())
+        .compose_linear(RasterLimits::default())
         .unwrap();
     for (index, pixel) in output.pixels().iter().enumerate() {
         assert_eq!(*pixel, [if index == 4 { 0.0 } else { 1.0 }; 4]);
@@ -199,7 +199,7 @@ fn generic_shape_intersections_respect_holes_concavity_and_self_crossings() {
     .clip_with(islands, motion_core::ClipMode::Geometric);
     assert_eq!(
         prepare(&node, PixelSize::new(2, 2))
-            .render_linear(RasterLimits::default())
+            .compose_linear(RasterLimits::default())
             .unwrap()
             .pixels(),
         &[
@@ -219,7 +219,7 @@ fn generic_shape_intersections_respect_holes_concavity_and_self_crossings() {
             .clip_with(clip, motion_core::ClipMode::Geometric);
         assert_eq!(
             prepare(&node, PixelSize::new(1, 1))
-                .render_linear(RasterLimits::default())
+                .compose_linear(RasterLimits::default())
                 .unwrap()
                 .pixel(0, 0),
             Some([128.0 / 255.0; 4])
@@ -257,7 +257,7 @@ fn generic_curves_reuse_fill_flattening_tolerance_without_repeat_fading() {
                         tolerance,
                     )
                     .unwrap()
-                    .render_linear(RasterLimits::default())
+                    .compose_linear(RasterLimits::default())
                     .unwrap()
             };
             assert_eq!(render(&expected).pixels(), render(&repeated).pixels());
@@ -305,7 +305,7 @@ fn generic_shapes_snapshot_once_without_measuring_clip_layout() {
     for _ in 0..2 {
         assert_eq!(
             prepare(&clipped, PixelSize::new(1, 1))
-                .render_linear(RasterLimits::default())
+                .compose_linear(RasterLimits::default())
                 .unwrap()
                 .pixel(0, 0),
             Some([128.0 / 255.0; 4])
@@ -318,14 +318,14 @@ fn generic_shapes_snapshot_once_without_measuring_clip_layout() {
     );
     assert_eq!(
         prepare(&replaced, PixelSize::new(1, 1))
-            .render_linear(RasterLimits::default())
+            .compose_linear(RasterLimits::default())
             .unwrap()
             .pixel(0, 0),
         Some([1.0; 4])
     );
     assert_eq!(
         prepare(&clipped, PixelSize::new(1, 1))
-            .render_linear(RasterLimits::default())
+            .compose_linear(RasterLimits::default())
             .unwrap()
             .pixel(0, 0),
         Some([128.0 / 255.0; 4])
@@ -357,7 +357,7 @@ fn generic_shape_transforms_follow_contain_mapping_and_preserve_layout() {
     let output = commands
         .prepare(ValidationLimits::default(), RasterLimits::default())
         .unwrap()
-        .render_linear(RasterLimits::default())
+        .compose_linear(RasterLimits::default())
         .unwrap();
     for point in [(4, 4), (5, 7)] {
         assert_eq!(output.pixel(point.0, point.1), Some([1.0; 4]));
@@ -372,7 +372,7 @@ fn generic_shape_transforms_follow_contain_mapping_and_preserve_layout() {
         &tile(2.0, 2.0, Color::WHITE).clip_with(clip, motion_core::ClipMode::Geometric),
         PixelSize::new(2, 2),
     )
-    .render_linear(RasterLimits::default())
+    .compose_linear(RasterLimits::default())
     .unwrap();
     assert_eq!(
         output.pixels(),
@@ -395,7 +395,7 @@ fn generic_shapes_preserve_extended_colors_across_unclipped_isolation() {
         });
         assert_eq!(
             prepare(&node, PixelSize::new(1, 1))
-                .render_linear(RasterLimits::default())
+                .compose_linear(RasterLimits::default())
                 .unwrap()
                 .pixel(0, 0),
             Some(expected)
@@ -430,7 +430,7 @@ fn generic_shapes_keep_mask_domains_and_path_coverage_independent() {
         let output = commands
             .prepare(ValidationLimits::default(), RasterLimits::default())
             .unwrap()
-            .render_linear(RasterLimits::default())
+            .compose_linear(RasterLimits::default())
             .unwrap();
         for column in 0..2 {
             let geometry = if column == 0 { 128.0 / 255.0 } else { 1.0 };
@@ -490,7 +490,7 @@ fn generic_shapes_validate_hidden_empty_edited_and_composed_geometry() {
         tile(1.0, 1.0, Color::WHITE).clip_with(Path2D::new(), motion_core::ClipMode::Geometric);
     assert_eq!(
         prepare(&node, size)
-            .render_linear(RasterLimits::default())
+            .compose_linear(RasterLimits::default())
             .unwrap()
             .pixel(0, 0),
         Some([0.0; 4])
@@ -595,7 +595,7 @@ fn generic_shape_structural_depth_and_raster_budgets_are_shared_and_retryable() 
         .prepare(ValidationLimits::default(), RasterLimits::default())
         .unwrap();
     let prepared_snapshot = frame.clone();
-    let output = frame.render_linear(RasterLimits::default()).unwrap();
+    let output = frame.compose_linear(RasterLimits::default()).unwrap();
     for render in [false, true] {
         let exact = RasterLimits {
             max_pixels: 2,
@@ -634,7 +634,7 @@ fn generic_shape_structural_depth_and_raster_budgets_are_shared_and_retryable() 
             ),
         ] {
             let error = if render {
-                frame.render_linear(limits).unwrap_err()
+                frame.compose_linear(limits).unwrap_err()
             } else {
                 source
                     .prepare(ValidationLimits::default(), limits)
@@ -647,7 +647,7 @@ fn generic_shape_structural_depth_and_raster_budgets_are_shared_and_retryable() 
             assert_eq!(source, snapshot);
             assert_eq!(frame, prepared_snapshot);
             if render {
-                assert_eq!(frame.render_linear(exact).unwrap(), output);
+                assert_eq!(frame.compose_linear(exact).unwrap(), output);
             } else {
                 assert_eq!(
                     source.prepare(ValidationLimits::default(), exact).unwrap(),
@@ -659,12 +659,12 @@ fn generic_shape_structural_depth_and_raster_budgets_are_shared_and_retryable() 
     let one = prepare(&child, size);
     let two = prepare(&Node::group([child.clone(), child]), size);
     assert_eq!(
-        one.render_linear(RasterLimits::default())
+        one.compose_linear(RasterLimits::default())
             .unwrap()
             .stats()
             .peak_bytes
             - one.stats().retained_bytes,
-        two.render_linear(RasterLimits::default())
+        two.compose_linear(RasterLimits::default())
             .unwrap()
             .stats()
             .peak_bytes
@@ -698,7 +698,7 @@ fn generic_shape_structural_depth_and_raster_budgets_are_shared_and_retryable() 
             source
                 .prepare(limits, RasterLimits::default())
                 .unwrap()
-                .render_linear(RasterLimits::default())
+                .compose_linear(RasterLimits::default())
                 .unwrap();
         } else {
             assert_eq!(source.preflight(limits).unwrap_err().field, "max_depth");
@@ -712,7 +712,7 @@ fn rectangular_intersection_preserves_a_shared_fractional_edge_once() {
     let inner = tile(2.0, 1.0, Color::WHITE).clip_with(bounds, motion_core::ClipMode::Geometric);
     let node = Node::group([inner]).clip_with(bounds, motion_core::ClipMode::Geometric);
     let output = prepare(&node, PixelSize::new(2, 1))
-        .render_linear(RasterLimits::default())
+        .compose_linear(RasterLimits::default())
         .unwrap();
     assert_eq!(output.pixel(0, 0), Some([128.0 / 255.0; 4]));
     assert_eq!(output.pixel(1, 0), Some([1.0; 4]));
@@ -740,7 +740,7 @@ fn rectangles_intersect_geometrically_even_when_disjoint_inside_one_pixel() {
             let width = (outer_right.min(inner_right) - outer_left.max(inner_left)).max(0.0);
             let expected = (width * 255.0).round() as f32 / 255.0;
             let pixel = prepare(&node, PixelSize::new(1, 1))
-                .render_linear(RasterLimits::default())
+                .compose_linear(RasterLimits::default())
                 .unwrap()
                 .pixel(0, 0)
                 .unwrap();
@@ -762,7 +762,7 @@ fn rectangles_intersect_geometrically_even_when_disjoint_inside_one_pixel() {
     );
     assert_eq!(
         prepare(&node, PixelSize::new(1, 1))
-            .render_linear(RasterLimits::default())
+            .compose_linear(RasterLimits::default())
             .unwrap()
             .pixel(0, 0),
         Some([64.0 / 255.0; 4])
@@ -781,7 +781,7 @@ fn rectangles_intersect_geometrically_even_when_disjoint_inside_one_pixel() {
     .clip_with(upper, motion_core::ClipMode::Geometric);
     assert_eq!(
         prepare(&node, PixelSize::new(1, 1))
-            .render_linear(RasterLimits::default())
+            .compose_linear(RasterLimits::default())
             .unwrap()
             .pixel(0, 0),
         Some([0.0; 4])
@@ -797,7 +797,7 @@ fn rectangular_domains_cross_unclipped_isolation_without_refading() {
         let middle = Node::group([leaf]).opacity(opacity);
         let outer = Node::group([middle]).clip_with(rect, motion_core::ClipMode::Geometric);
         let frame = prepare(&outer, PixelSize::new(2, 1));
-        let output = frame.render_linear(RasterLimits::default()).unwrap();
+        let output = frame.compose_linear(RasterLimits::default()).unwrap();
         for column in 0..2 {
             let covered = if column == 0 { 128.0 / 255.0 } else { 1.0 };
             let expected = color.to_linear_premultiplied().map(|channel| {
@@ -833,7 +833,7 @@ fn rectangle_clips_follow_local_parent_contain_rotation_shear_and_reflection() {
     let output = commands
         .prepare(ValidationLimits::default(), RasterLimits::default())
         .unwrap()
-        .render_linear(RasterLimits::default())
+        .compose_linear(RasterLimits::default())
         .unwrap();
     for point in [(4, 4), (5, 7)] {
         assert_eq!(output.pixel(point.0, point.1), Some([1.0; 4]));
@@ -855,7 +855,7 @@ fn rectangle_clips_follow_local_parent_contain_rotation_shear_and_reflection() {
     );
     assert_eq!(
         prepare(&node, PixelSize::new(2, 2))
-            .render_linear(RasterLimits::default())
+            .compose_linear(RasterLimits::default())
             .unwrap()
             .pixels(),
         &[[128.0 / 255.0; 4]; 4]
@@ -878,10 +878,10 @@ fn rectangle_clips_follow_local_parent_contain_rotation_shear_and_reflection() {
                 .translate(2.0, 1.0)
         };
         let one = prepare(&place(single), PixelSize::new(6, 6))
-            .render_linear(RasterLimits::default())
+            .compose_linear(RasterLimits::default())
             .unwrap();
         let two = prepare(&place(repeated), PixelSize::new(6, 6))
-            .render_linear(RasterLimits::default())
+            .compose_linear(RasterLimits::default())
             .unwrap();
         assert_eq!(
             one.pixels(),
@@ -898,7 +898,7 @@ fn rectangle_snapshots_and_overlapping_groups_preserve_layout() {
     let clipped = Node::group([original.clone(), original.clone()])
         .clip_with(rect, motion_core::ClipMode::Geometric);
     let output = prepare(&clipped, PixelSize::new(2, 1))
-        .render_linear(RasterLimits::default())
+        .compose_linear(RasterLimits::default())
         .unwrap();
     assert_eq!(output.pixels(), &[[128.0 / 255.0; 4], [1.0; 4]]);
     assert_eq!(
@@ -912,14 +912,14 @@ fn rectangle_snapshots_and_overlapping_groups_preserve_layout() {
     );
     assert_eq!(
         prepare(&replaced, PixelSize::new(2, 1))
-            .render_linear(RasterLimits::default())
+            .compose_linear(RasterLimits::default())
             .unwrap()
             .pixels(),
         &[[1.0; 4]; 2]
     );
     assert_eq!(
         prepare(&clipped, PixelSize::new(2, 1))
-            .render_linear(RasterLimits::default())
+            .compose_linear(RasterLimits::default())
             .unwrap()
             .pixels(),
         output.pixels()
@@ -935,7 +935,7 @@ fn rectangle_snapshots_and_overlapping_groups_preserve_layout() {
         Rect::new(0.0, 0.0, 5.0, 1.0)
     );
     let output = prepare(&row, PixelSize::new(5, 1))
-        .render_linear(RasterLimits::default())
+        .compose_linear(RasterLimits::default())
         .unwrap();
     assert_eq!(
         output.pixels(),
@@ -981,7 +981,7 @@ fn rectangles_normalize_ancestors_but_keep_path_and_content_masks_independent() 
             .prepare(ValidationLimits::default(), RasterLimits::default())
             .unwrap();
         assert_eq!(frame.items().len(), commands.commands.len());
-        let output = frame.render_linear(RasterLimits::default()).unwrap();
+        let output = frame.compose_linear(RasterLimits::default()).unwrap();
         for column in 0..2 {
             let geometric = if column == 0 { covered } else { 1.0 };
             let artwork = f64::from((0.5 * geometric) as f32);
@@ -1011,7 +1011,7 @@ fn rectangles_normalize_ancestors_but_keep_path_and_content_masks_independent() 
     ])
     .clip_with(rect, motion_core::ClipMode::Geometric);
     let output = prepare(&source, size)
-        .render_linear(RasterLimits::default())
+        .compose_linear(RasterLimits::default())
         .unwrap();
     assert_eq!(
         output.pixel(0, 0),
@@ -1030,7 +1030,7 @@ fn empty_hidden_invalid_rectangles_and_edited_lists_validate_before_allocation()
         );
         assert_eq!(
             frame
-                .render_linear(RasterLimits::default())
+                .compose_linear(RasterLimits::default())
                 .unwrap()
                 .pixels(),
             &[[0.0; 4]; 2]
@@ -1161,7 +1161,7 @@ fn rectangle_structural_limits_and_mask_phase_boundaries_remain_bounded() {
             let frame = commands.prepare(limits, RasterLimits::default()).unwrap();
             assert_eq!(
                 frame
-                    .render_linear(RasterLimits::default())
+                    .compose_linear(RasterLimits::default())
                     .unwrap()
                     .pixel(0, 0),
                 Some([0.0; 4])
@@ -1214,7 +1214,7 @@ fn rectangular_preparation_and_render_budgets_are_exact_and_retryable() {
         .prepare(ValidationLimits::default(), RasterLimits::default())
         .unwrap();
     let snapshot = frame.clone();
-    let output = frame.render_linear(RasterLimits::default()).unwrap();
+    let output = frame.compose_linear(RasterLimits::default()).unwrap();
     for rendering in [false, true] {
         let exact = RasterLimits {
             max_pixels: 32,
@@ -1253,7 +1253,7 @@ fn rectangular_preparation_and_render_budgets_are_exact_and_retryable() {
             ),
         ] {
             let error = if rendering {
-                frame.render_linear(limits).unwrap_err()
+                frame.compose_linear(limits).unwrap_err()
             } else {
                 source
                     .prepare(ValidationLimits::default(), limits)
@@ -1266,7 +1266,7 @@ fn rectangular_preparation_and_render_budgets_are_exact_and_retryable() {
             assert_eq!(source, source_snapshot);
             assert_eq!(frame, snapshot);
             if rendering {
-                assert_eq!(frame.render_linear(exact).unwrap(), output);
+                assert_eq!(frame.compose_linear(exact).unwrap(), output);
             } else {
                 assert_eq!(
                     source.prepare(ValidationLimits::default(), exact).unwrap(),
@@ -1278,13 +1278,13 @@ fn rectangular_preparation_and_render_budgets_are_exact_and_retryable() {
     let one = prepare(&child, size);
     let two = prepare(&Node::group([child.clone(), child]), size);
     let one_peak = one
-        .render_linear(RasterLimits::default())
+        .compose_linear(RasterLimits::default())
         .unwrap()
         .stats()
         .peak_bytes
         - one.stats().retained_bytes;
     let two_peak = two
-        .render_linear(RasterLimits::default())
+        .compose_linear(RasterLimits::default())
         .unwrap()
         .stats()
         .peak_bytes
@@ -1316,7 +1316,7 @@ fn rectangle_intersection_rejects_unresolvable_visible_cancellation() {
     );
     assert_eq!(
         prepare(&huge, PixelSize::new(1, 1))
-            .render_linear(RasterLimits::default())
+            .compose_linear(RasterLimits::default())
             .unwrap()
             .pixel(0, 0),
         Some([1.0; 4])
@@ -1367,7 +1367,7 @@ fn overlapping_children_receive_the_path_clip_once_per_completed_group() {
         .prepare(ValidationLimits::default(), RasterLimits::default())
         .unwrap();
     assert_eq!(frame.clips().len(), 1);
-    let output = frame.render_linear(RasterLimits::default()).unwrap();
+    let output = frame.compose_linear(RasterLimits::default()).unwrap();
     assert_eq!(output.pixel(0, 0), Some([128.0 / 255.0; 4]));
     assert_eq!(output.pixel(1, 0), Some([1.0; 4]));
 }
@@ -1398,7 +1398,7 @@ fn local_clip_transform_follows_node_rotation_and_contain_mapping() {
     let output = list
         .prepare(ValidationLimits::default(), RasterLimits::default())
         .unwrap()
-        .render_linear(RasterLimits::default())
+        .compose_linear(RasterLimits::default())
         .unwrap();
     for point in [(4, 4), (5, 7)] {
         assert_eq!(output.pixel(point.0, point.1), Some([1.0; 4]));
@@ -1410,7 +1410,7 @@ fn local_clip_transform_follows_node_rotation_and_contain_mapping() {
         .clip(rectangle(Rect::new(0.0, 0.0, 1.0, 2.0)))
         .rotate(std::f64::consts::FRAC_PI_2);
     let output = prepare(&rotated, PixelSize::new(2, 2))
-        .render_linear(RasterLimits::default())
+        .compose_linear(RasterLimits::default())
         .unwrap();
     assert_eq!(output.pixels(), &[[1.0; 4], [1.0; 4], [0.0; 4], [0.0; 4]]);
 }
@@ -1428,7 +1428,7 @@ fn curves_and_fill_rules_generate_mask_coverage_without_paint_records() {
     );
     assert_eq!(
         frame
-            .render_linear(RasterLimits::default())
+            .compose_linear(RasterLimits::default())
             .unwrap()
             .pixel(0, 0),
         Some([169.0 / 255.0; 4])
@@ -1449,7 +1449,7 @@ fn curves_and_fill_rules_generate_mask_coverage_without_paint_records() {
             &tile(3.0, 1.0, Color::WHITE).clip(clip),
             PixelSize::new(3, 1),
         );
-        let output = frame.render_linear(RasterLimits::default()).unwrap();
+        let output = frame.compose_linear(RasterLimits::default()).unwrap();
         assert_eq!(output.pixel(0, 0), Some([1.0; 4]));
         assert_eq!(output.pixel(2, 0), Some([1.0; 4]));
         assert_eq!(
@@ -1474,7 +1474,7 @@ fn nested_masks_opacity_and_blending_apply_in_the_documented_order() {
     let expected = (f64::from(covered) * (128.0 / 255.0)) as f32;
     assert_eq!(
         prepare(&nested, PixelSize::new(1, 1))
-            .render_linear(RasterLimits::default())
+            .compose_linear(RasterLimits::default())
             .unwrap()
             .pixel(0, 0),
         Some([expected; 4])
@@ -1487,7 +1487,7 @@ fn nested_masks_opacity_and_blending_apply_in_the_documented_order() {
             .blend_mode(BlendMode::Multiply),
     ]);
     let output = prepare(&blended, PixelSize::new(2, 1))
-        .render_linear(RasterLimits::default())
+        .compose_linear(RasterLimits::default())
         .unwrap();
     let channel = (1.0 - f64::from(covered * 0.5)) as f32;
     assert_eq!(output.pixel(0, 0), Some([channel, channel, channel, 1.0]));
@@ -1505,7 +1505,7 @@ fn empty_offscreen_clips_and_invalid_hidden_geometry_remain_explicit() {
         assert_eq!(frame.clips().len(), 1);
         assert_eq!(
             frame
-                .render_linear(RasterLimits::default())
+                .compose_linear(RasterLimits::default())
                 .unwrap()
                 .pixels(),
             &[[0.0; 4]; 2]
@@ -1593,7 +1593,7 @@ fn clip_verbs_share_structural_limits_and_snapshots_preserve_old_boundaries() {
     assert_eq!(frame.clips().len(), 1);
     assert_eq!(
         frame
-            .render_linear(RasterLimits::default())
+            .compose_linear(RasterLimits::default())
             .unwrap()
             .pixels(),
         &[[1.0; 4]; 2]
@@ -1656,13 +1656,13 @@ fn preparation_and_render_budgets_include_clip_storage_and_recover() {
         );
     }
     let original = frame.clone();
-    let output = frame.render_linear(RasterLimits::default()).unwrap();
+    let output = frame.compose_linear(RasterLimits::default()).unwrap();
     let exact = RasterLimits {
         max_pixels: 80,
         max_bytes: output.stats().peak_bytes,
         max_work: output.stats().work,
     };
-    assert_eq!(frame.render_linear(exact).unwrap(), output);
+    assert_eq!(frame.compose_linear(exact).unwrap(), output);
     for (limits, field) in [
         (
             RasterLimits {
@@ -1686,13 +1686,13 @@ fn preparation_and_render_budgets_include_clip_storage_and_recover() {
             "max_work",
         ),
     ] {
-        let error = frame.render_linear(limits).unwrap_err();
+        let error = frame.compose_linear(limits).unwrap_err();
         assert_eq!(
             (error.kind, error.field.as_str()),
             (ValidationErrorKind::StructuralLimit, field)
         );
         assert_eq!(frame, original);
-        assert_eq!(frame.render_linear(exact).unwrap(), output);
+        assert_eq!(frame.compose_linear(exact).unwrap(), output);
     }
 }
 
@@ -1753,9 +1753,9 @@ fn mask_subregions_full_spans_and_sibling_release_are_bounded() {
         )
         .is_ok()
     );
-    let single = frame.render_linear(RasterLimits::default()).unwrap();
+    let single = frame.compose_linear(RasterLimits::default()).unwrap();
     let siblings = prepare(&Node::group([node.clone(), node]), size);
-    let double = siblings.render_linear(RasterLimits::default()).unwrap();
+    let double = siblings.compose_linear(RasterLimits::default()).unwrap();
     assert_eq!(
         single.stats().peak_bytes - frame.stats().retained_bytes,
         double.stats().peak_bytes - siblings.stats().retained_bytes

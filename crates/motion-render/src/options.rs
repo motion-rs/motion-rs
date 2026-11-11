@@ -10,8 +10,8 @@ pub struct RenderOptions {
     /// Defaults to ceil(design dimensions).
     pub size: Option<PixelSize>,
     /// Background used by render_still and export; None preserves transparency.
-    /// A direct FrameRequest supplies its own background. Composition's opaque
-    /// Snapshot background is not replaced by render_options.
+    /// A direct FrameRequest supplies its own background.
+    /// The opaque `render_frame*` background is this value with alpha ignored, or white when None.
     pub background: Option<Color>,
     /// Optional whole-frame shutter.
     pub motion_blur: Option<motion_core::MotionBlur>,

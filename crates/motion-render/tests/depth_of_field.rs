@@ -5,7 +5,7 @@ use motion_core::{
     Color, DepthOfField, DepthPlane, FrameRate, Node, PixelSize, RasterLimits, Rect, SceneCache,
     SceneContext, Size, Time, ValidationLimits,
 };
-use motion_render::{LinearFrame, RenderPrepare};
+use motion_render::{FrameBuffer, RenderPrepare};
 
 fn lens() -> DepthOfField {
     DepthOfField {
@@ -32,7 +32,7 @@ fn planes() -> Vec<DepthPlane> {
     ]
 }
 
-fn render(node: Node) -> LinearFrame {
+fn render(node: Node) -> FrameBuffer {
     node.compile(
         Size::new(32.0, 32.0),
         PixelSize::new(32, 32),
@@ -69,7 +69,7 @@ fn focused_plane_is_sharp_and_defocused_plane_spreads_energy() {
         },
         planes(),
     ));
-    let at = |frame: &LinearFrame, x: usize, y: usize| frame.pixels()[y * 32 + x];
+    let at = |frame: &FrameBuffer, x: u32, y: u32| frame.linear_pixel(x, y).unwrap();
     // The focus plane is byte-identical with and without the lens.
     for y in 3..10 {
         for x in 3..10 {
@@ -80,7 +80,7 @@ fn focused_plane_is_sharp_and_defocused_plane_spreads_energy() {
     assert_eq!(at(&sharp, 25, 22)[3], 0.0);
     assert!(at(&blurred, 25, 22)[3] > 0.01);
     assert!(at(&blurred, 21, 21)[3] < at(&sharp, 21, 21)[3]);
-    let total = |frame: &LinearFrame| frame.pixels().iter().map(|pixel| pixel[3]).sum::<f32>();
+    let total = |frame: &FrameBuffer| frame.linear_pixels().map(|pixel| pixel[3]).sum::<f32>();
     assert!((total(&blurred) - total(&sharp)).abs() < 0.02 * total(&sharp));
 }
 

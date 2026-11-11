@@ -22,7 +22,7 @@ fn prepared(node: &Node) -> PreparedFrame {
 
 fn render(node: &Node) -> LinearFrame {
     prepared(node)
-        .render_linear(RasterLimits::default())
+        .compose_linear(RasterLimits::default())
         .unwrap()
 }
 
@@ -187,11 +187,11 @@ fn gpu_plus_capture_bounds_preserve_pixels_and_replay() {
             .unwrap();
         assert_eq!(actual.pixels(), reference.pixels());
         let cpu = frame
-            .render_linear(limits)
+            .compose_linear(limits)
             .unwrap()
-            .to_srgb_rgba8(false, limits)
+            .to_rgba8_frame(false, limits)
             .unwrap();
-        let output = actual.to_srgb_rgba8(false, limits).unwrap();
+        let output = actual.to_rgba8_frame(false, limits).unwrap();
         let mut large_difference = 0;
         for (actual, expected) in output.pixels().iter().zip(cpu.pixels()) {
             let difference = actual
@@ -314,8 +314,8 @@ fn check_plus_capture_bounds(mut check: impl FnMut(&PreparedFrame, &PreparedFram
                 actual.blend_space = space;
                 reference.blend_space = space;
                 check(&actual, &reference);
-                let actual = actual.render_linear(RasterLimits::default()).unwrap();
-                let reference = reference.render_linear(RasterLimits::default()).unwrap();
+                let actual = actual.compose_linear(RasterLimits::default()).unwrap();
+                let reference = reference.compose_linear(RasterLimits::default()).unwrap();
                 assert_eq!(actual.pixels(), reference.pixels());
                 assert!(actual.stats().peak_bytes <= reference.stats().peak_bytes);
                 assert!(actual.stats().work <= reference.stats().work);
@@ -1224,7 +1224,7 @@ fn draft_filter_uses_one_box_and_final_retains_original_kernel() {
     assert_eq!(frame.quality, motion_core::RenderQuality::Final);
     frame
         .quality(motion_core::RenderQuality::Draft)
-        .render_linear(RasterLimits::default())
+        .compose_linear(RasterLimits::default())
         .unwrap();
 }
 
@@ -1670,19 +1670,19 @@ fn filter_storage_work_and_guard_pixels_share_transactional_limits() {
     );
     let prepared = prepared(&node);
     let snapshot = prepared.clone();
-    let output = prepared.render_linear(RasterLimits::default()).unwrap();
+    let output = prepared.compose_linear(RasterLimits::default()).unwrap();
     let exact = RasterLimits {
         max_bytes: output.stats().peak_bytes,
         max_work: output.stats().work,
         ..RasterLimits::default()
     };
     assert_eq!(
-        prepared.render_linear(exact).unwrap().pixels(),
+        prepared.compose_linear(exact).unwrap().pixels(),
         output.pixels()
     );
     assert_eq!(
         prepared
-            .render_linear(RasterLimits {
+            .compose_linear(RasterLimits {
                 max_bytes: exact.max_bytes - 1,
                 ..exact
             })
@@ -1692,7 +1692,7 @@ fn filter_storage_work_and_guard_pixels_share_transactional_limits() {
     );
     assert_eq!(
         prepared
-            .render_linear(RasterLimits {
+            .compose_linear(RasterLimits {
                 max_work: exact.max_work - 1,
                 ..exact
             })
@@ -1703,7 +1703,7 @@ fn filter_storage_work_and_guard_pixels_share_transactional_limits() {
     assert_eq!(prepared, snapshot);
     assert_eq!(
         prepared
-            .render_linear(RasterLimits::default())
+            .compose_linear(RasterLimits::default())
             .unwrap()
             .pixels(),
         output.pixels()
@@ -1713,7 +1713,7 @@ fn filter_storage_work_and_guard_pixels_share_transactional_limits() {
     let siblings = self::prepared(&Node::group([neutral.clone(), neutral]));
     let live_peak = |frame: &PreparedFrame| {
         frame
-            .render_linear(RasterLimits::default())
+            .compose_linear(RasterLimits::default())
             .unwrap()
             .stats()
             .peak_bytes
@@ -1737,7 +1737,7 @@ fn filter_color_overflow_returns_error_without_mutating_prepared_input() {
     let before = prepared.clone();
     assert_eq!(
         prepared
-            .render_linear(RasterLimits::default())
+            .compose_linear(RasterLimits::default())
             .unwrap_err()
             .kind,
         ValidationErrorKind::InvalidValue

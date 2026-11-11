@@ -134,14 +134,14 @@ fn translated_curve_bands_match_gpu_pixels_and_exact_replay() -> motion_core::Re
         };
         let prepared = cached(&source, &mut cache, limits, 1.0 / 256.0)?;
         let cpu = prepared
-            .render_linear(limits)?
-            .to_srgb_rgba8(false, limits)?;
+            .compose_linear(limits)?
+            .to_rgba8_frame(false, limits)?;
         let native = gpu
             .render(&prepared, crate::gpu::Plan::new(&prepared, limits)?)?
-            .to_srgb_rgba8(false, limits)?;
+            .to_rgba8_frame(false, limits)?;
         let replay = gpu
             .render(&prepared, crate::gpu::Plan::new(&prepared, limits)?)?
-            .to_srgb_rgba8(false, limits)?;
+            .to_rgba8_frame(false, limits)?;
         assert_eq!(native.bytes(), replay.bytes());
         let mut beyond_one = 0_usize;
         for (expected, actual) in cpu.pixels().iter().zip(native.pixels()) {
@@ -401,11 +401,11 @@ fn compare(actual: &PreparedFrame, expected: &PreparedFrame) {
     assert_eq!(actual.stats(), expected.stats());
     assert_eq!(
         actual
-            .render_linear(RasterLimits::default())
+            .compose_linear(RasterLimits::default())
             .unwrap()
             .pixels(),
         expected
-            .render_linear(RasterLimits::default())
+            .compose_linear(RasterLimits::default())
             .unwrap()
             .pixels()
     );

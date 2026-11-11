@@ -251,7 +251,7 @@ fn local_images_preserve_filter_neighborhoods_transparency_and_replay() -> motio
                     ValidationLimits::default(),
                 )?
                 .prepare(ValidationLimits::default(), limits)?;
-            let expected = frame.render_linear(limits)?;
+            let expected = frame.compose_linear(limits)?;
             let plan = Plan::new(&frame, limits)?;
             assert!(plan.steps.iter().any(|step| {
                 let bounds = step.parameters.image_bounds(2);
@@ -268,8 +268,8 @@ fn local_images_preserve_filter_neighborhoods_transparency_and_replay() -> motio
                     );
                 }
             }
-            let actual = actual.to_srgb_rgba8(false, limits)?;
-            let expected = expected.to_srgb_rgba8(false, limits)?;
+            let actual = actual.to_rgba8_frame(false, limits)?;
+            let expected = expected.to_rgba8_frame(false, limits)?;
             assert!(
                 actual
                     .bytes()
@@ -280,7 +280,7 @@ fn local_images_preserve_filter_neighborhoods_transparency_and_replay() -> motio
             assert_eq!(
                 actual,
                 gpu.render(&frame, Plan::new(&frame, limits)?)?
-                    .to_srgb_rgba8(false, limits)?
+                    .to_rgba8_frame(false, limits)?
             );
             count += 1;
         }
@@ -644,7 +644,7 @@ fn compact_coverage_all_alpha_bytes_match_cpu_exactly() -> motion_core::Result<(
             .collect(),
     }
     .prepare(ValidationLimits::default(), RasterLimits::default())?;
-    let expected = frame.render_linear(RasterLimits::default())?;
+    let expected = frame.compose_linear(RasterLimits::default())?;
     let mut gpu = Gpu::new()?;
     let actual = gpu.render(&frame, Plan::new(&frame, RasterLimits::default())?)?;
     for (index, (actual, expected)) in actual.pixels().iter().zip(expected.pixels()).enumerate() {
@@ -916,7 +916,7 @@ fn gpu_additional_separable_modes_match_cpu_and_replay() {
                 foreground,
             ]));
             let unchanged = frame.clone();
-            let cpu = frame.render_linear(RasterLimits::default()).unwrap();
+            let cpu = frame.compose_linear(RasterLimits::default()).unwrap();
             let actual = gpu
                 .render(&frame, Plan::new(&frame, RasterLimits::default()).unwrap())
                 .unwrap();
@@ -928,9 +928,9 @@ fn gpu_additional_separable_modes_match_cpu_and_replay() {
                 }
             }
             let output = actual
-                .to_srgb_rgba8(false, RasterLimits::default())
+                .to_rgba8_frame(false, RasterLimits::default())
                 .unwrap();
-            let expected = cpu.to_srgb_rgba8(false, RasterLimits::default()).unwrap();
+            let expected = cpu.to_rgba8_frame(false, RasterLimits::default()).unwrap();
             for (actual, expected) in output.pixels().iter().zip(expected.pixels()) {
                 for channel in 0..4 {
                     let difference = actual[channel].abs_diff(expected[channel]);
@@ -1063,7 +1063,7 @@ fn gpu_device_matches_cpu_filters_layers_masks_and_shared_output() {
     let mut large_difference_pixels = 0;
     for (index, node) in cases.into_iter().enumerate() {
         let frame = prepared(node);
-        let cpu = frame.render_linear(RasterLimits::default()).unwrap();
+        let cpu = frame.compose_linear(RasterLimits::default()).unwrap();
         let plan = Plan::new(&frame, RasterLimits::default()).unwrap();
         let actual = gpu.render(&frame, plan).unwrap();
         assert_eq!(actual.size(), cpu.size());
@@ -1078,9 +1078,9 @@ fn gpu_device_matches_cpu_filters_layers_masks_and_shared_output() {
             }
         }
         let actual = actual
-            .to_srgb_rgba8(false, RasterLimits::default())
+            .to_rgba8_frame(false, RasterLimits::default())
             .unwrap();
-        let expected = cpu.to_srgb_rgba8(false, RasterLimits::default()).unwrap();
+        let expected = cpu.to_rgba8_frame(false, RasterLimits::default()).unwrap();
         let mut large_difference = 0;
         for (actual, expected) in actual.pixels().iter().zip(expected.pixels()) {
             let delta = actual
@@ -1101,7 +1101,7 @@ fn gpu_device_matches_cpu_filters_layers_masks_and_shared_output() {
             .unwrap();
         assert_eq!(
             replay
-                .to_srgb_rgba8(false, RasterLimits::default())
+                .to_rgba8_frame(false, RasterLimits::default())
                 .unwrap(),
             actual
         );
@@ -1133,7 +1133,9 @@ fn gpu_device_matches_cpu_filters_layers_masks_and_shared_output() {
                 ]),
             ])),
     );
-    let cpu_error = overflow.render_linear(RasterLimits::default()).unwrap_err();
+    let cpu_error = overflow
+        .compose_linear(RasterLimits::default())
+        .unwrap_err();
     let gpu_error = gpu
         .render(
             &overflow,
@@ -1155,7 +1157,7 @@ fn gpu_device_matches_cpu_filters_layers_masks_and_shared_output() {
         .unwrap()
         .pixels(),
         healthy
-            .render_linear(RasterLimits::default())
+            .compose_linear(RasterLimits::default())
             .unwrap()
             .pixels()
     );

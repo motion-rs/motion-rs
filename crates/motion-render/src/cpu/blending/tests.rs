@@ -80,7 +80,7 @@ fn all_blend_spaces_modes_and_box_filters_match_gpu() -> motion_core::Result {
                 )?
                 .prepare(ValidationLimits::default(), limits)?
                 .blend_space(space);
-            let cpu = prepared.render_linear(limits)?;
+            let cpu = prepared.compose_linear(limits)?;
             let rendered = gpu.render(&prepared, crate::gpu::Plan::new(&prepared, limits)?)?;
             for row in 0..8 {
                 for column in 0..8 {
@@ -94,8 +94,8 @@ fn all_blend_spaces_modes_and_box_filters_match_gpu() -> motion_core::Result {
                     }
                 }
             }
-            let cpu = cpu.to_srgb_rgba8(false, limits)?;
-            let rendered = rendered.to_srgb_rgba8(false, limits)?;
+            let cpu = cpu.to_rgba8_frame(false, limits)?;
+            let rendered = rendered.to_rgba8_frame(false, limits)?;
             for (first, second) in cpu.pixels().iter().zip(rendered.pixels()) {
                 for (first, second) in first.iter().zip(second) {
                     assert!(first.abs_diff(*second) <= 1);
@@ -103,7 +103,7 @@ fn all_blend_spaces_modes_and_box_filters_match_gpu() -> motion_core::Result {
             }
             let replay = gpu
                 .render(&prepared, crate::gpu::Plan::new(&prepared, limits)?)?
-                .to_srgb_rgba8(false, limits)?;
+                .to_rgba8_frame(false, limits)?;
             assert_eq!(rendered.pixels(), replay.pixels());
             cases += 1;
         }
@@ -450,7 +450,7 @@ fn every_mode_composites_with_saved_filter_input_under_geometric_clipping() {
     for mode in MODES {
         let content = tile(Color::from_hex(0x75b4de).with_alpha(0.6));
         let unfiltered = prepared(&content)
-            .render_linear(RasterLimits::default())
+            .compose_linear(RasterLimits::default())
             .unwrap();
         let mut expected = unfiltered.pixel(0, 0).unwrap();
         composite(
@@ -469,11 +469,11 @@ fn every_mode_composites_with_saved_filter_input_under_geometric_clipping() {
                 motion_core::ClipMode::Geometric,
             );
         let frame = prepared(&node);
-        let actual = frame.render_linear(RasterLimits::default()).unwrap();
+        let actual = frame.compose_linear(RasterLimits::default()).unwrap();
         assert_eq!(actual.pixel(0, 0), Some(expected), "{mode:?}");
         assert_eq!(actual.pixel(1, 0), Some([0.0; 4]));
         assert_eq!(
-            frame.render_linear(RasterLimits::default()).unwrap(),
+            frame.compose_linear(RasterLimits::default()).unwrap(),
             actual
         );
         assert!(
@@ -521,7 +521,7 @@ fn node_mode_survives_commands_and_preparation() {
     )));
     assert_eq!(
         prepared
-            .render_linear(RasterLimits::default())
+            .compose_linear(RasterLimits::default())
             .unwrap()
             .pixel(0, 0),
         Some([0.75; 4])
@@ -601,14 +601,14 @@ fn group_mode_and_opacity_apply_once_against_the_immediate_parent() {
     ]);
     assert_eq!(
         prepared(&isolated)
-            .render_linear(RasterLimits::default())
+            .compose_linear(RasterLimits::default())
             .unwrap()
             .pixel(0, 0),
         Some([0.5, 0.5, 0.5, 1.0])
     );
     assert_eq!(
         prepared(&individual)
-            .render_linear(RasterLimits::default())
+            .compose_linear(RasterLimits::default())
             .unwrap()
             .pixel(0, 0),
         Some([0.25, 0.25, 0.25, 1.0])
@@ -619,7 +619,7 @@ fn group_mode_and_opacity_apply_once_against_the_immediate_parent() {
     ]);
     assert_eq!(
         prepared(&nested)
-            .render_linear(RasterLimits::default())
+            .compose_linear(RasterLimits::default())
             .unwrap()
             .pixel(0, 0),
         Some([0.5, 0.5, 0.5, 1.0])
@@ -709,13 +709,13 @@ fn every_mode_obeys_exact_and_short_render_limits_and_recovers() {
         ]);
         let frame = prepared(&node);
         let original = frame.clone();
-        let rendered = frame.render_linear(RasterLimits::default()).unwrap();
+        let rendered = frame.compose_linear(RasterLimits::default()).unwrap();
         let exact = RasterLimits {
             max_pixels: 2,
             max_bytes: rendered.stats().peak_bytes,
             max_work: rendered.stats().work,
         };
-        assert_eq!(frame.render_linear(exact).unwrap(), rendered);
+        assert_eq!(frame.compose_linear(exact).unwrap(), rendered);
         for (limits, field) in [
             (
                 RasterLimits {
@@ -739,13 +739,13 @@ fn every_mode_obeys_exact_and_short_render_limits_and_recovers() {
                 "max_work",
             ),
         ] {
-            let error = frame.render_linear(limits).unwrap_err();
+            let error = frame.compose_linear(limits).unwrap_err();
             assert_eq!(
                 (error.kind, error.field.as_str()),
                 (ValidationErrorKind::StructuralLimit, field)
             );
             assert_eq!(frame, original);
-            assert_eq!(frame.render_linear(exact).unwrap(), rendered);
+            assert_eq!(frame.compose_linear(exact).unwrap(), rendered);
         }
     }
 }
@@ -801,7 +801,7 @@ fn hdr_is_not_gamut_clipped_and_overflow_is_transactional() {
         hdr.clone().blend_mode(BlendMode::Plus),
     ]));
     let original = failing.clone();
-    let error = failing.render_linear(RasterLimits::default()).unwrap_err();
+    let error = failing.compose_linear(RasterLimits::default()).unwrap_err();
     assert_eq!(
         (error.kind, error.field.as_str()),
         (ValidationErrorKind::InvalidValue, "color")
@@ -809,7 +809,7 @@ fn hdr_is_not_gamut_clipped_and_overflow_is_transactional() {
     assert_eq!(failing, original);
     assert!(
         prepared(&hdr)
-            .render_linear(RasterLimits::default())
+            .compose_linear(RasterLimits::default())
             .is_ok()
     );
 }

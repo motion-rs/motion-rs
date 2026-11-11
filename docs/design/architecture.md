@@ -20,7 +20,7 @@ pixels; prepared frames have no deferred image-production phase.
 Preparation resolves device-space curves, coverage, paints, clipping and filter
 domains into shared bounded data. Both renderers consume the same commands and
 resource contracts. Outputs are typed FrameBuffer (straight RGBA8 for transparent PNG), borrowed
-external RenderTarget, opaque Snapshot or an ordered Encoder.
+external RenderTarget (opaque white-backed frames are straight RGBA8 FrameBuffers) or an ordered Encoder.
 
 RenderOptions stores policy; RenderSession owns reusable caches, backend state and
 request diagnostics. FrameRequest addresses a frame by index or exact time and supplies rational rate, duration,
@@ -67,7 +67,7 @@ Only the valid region is converted; final encoded planes stay owned until output
 return to a separately bounded shared pool. Layer/mask/filter scratch uses the
 session pixel pool. Work is cumulative across regions; logical peaks include the
 final output plus simultaneous prepared, capture and conversion payloads. Explicit
-linear-frame and Snapshot entry points remain available and are not implicit caches.
+linear-frame and opaque-frame entry points remain available and are not implicit caches.
 
 Paint preparation retains gradient geometry and pattern inverses. Row sampling
 reuses vertical terms and advances exact bounded binary-grid products; unsupported

@@ -1,7 +1,7 @@
 //! Explicit CPU/GPU consumption without implicit font discovery.
 
 use super::*;
-use crate::{PreparationStats, Snapshot, WorkStats};
+use crate::{FrameBuffer, PreparationStats, WorkStats};
 use motion_core::{Color, Node, Result, SceneContext, Time};
 
 /// Opt-in host stage observations and separately identified device timestamps.
@@ -27,8 +27,6 @@ pub struct FrameTimings {
     pub fused_output: bool,
     /// CPU completion wait, mapping and output extraction, not device execution time.
     pub readback: std::time::Duration,
-    /// CPU assembly of the opaque RGB snapshot after output conversion.
-    pub snapshot: std::time::Duration,
     /// Consumer-side CPU wall time spent enqueueing a texture upload.
     pub upload: std::time::Duration,
     /// Consumer-side CPU wall time of native texture preparation and submission.
@@ -42,8 +40,7 @@ pub struct FrameTimings {
 ///
 /// Preparation/rendering peaks include retained prepared storage. CPU conversion
 /// runs after prepared storage is dropped; GPU conversion includes its working
-/// and packed output resources. Snapshot packing runs after linear storage is
-/// dropped. Source nodes/lists, bounded scene/coverage caches, allocator capacity and overhead are
+/// and packed output resources. Source nodes/lists, bounded scene/coverage caches, allocator capacity and overhead are
 /// outside these logical totals, which are not a process memory cap.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct FrameStats {
@@ -53,8 +50,6 @@ pub struct FrameStats {
     pub linear: WorkStats,
     /// SDR sRGB RGBA8 conversion, including its CPU linear or GPU working resources.
     pub output: WorkStats,
-    /// Opaque RGB snapshot packing, including the source RGBA8 frame.
-    pub snapshot: WorkStats,
 }
 
 impl FrameStats {
@@ -64,16 +59,14 @@ impl FrameStats {
             .peak_bytes
             .max(self.linear.peak_bytes)
             .max(self.output.peak_bytes)
-            .max(self.snapshot.peak_bytes)
     }
 
-    /// Total admitted work across preparation, composition, conversion and packing.
+    /// Total admitted work across preparation, composition and conversion.
     pub fn work(&self) -> u64 {
         self.preparation
             .work
             .saturating_add(self.linear.work)
             .saturating_add(self.output.work)
-            .saturating_add(self.snapshot.work)
     }
 }
 
@@ -123,26 +116,79 @@ impl FrameRenderer {
             duration: self.duration,
             time: None,
             limits: self.session.limits,
+            device_packing: false,
             session: &mut self.session,
         }
     }
 
     /// Renders an opaque frame using this composition's exact clock.
+    ///
+    /// The frame composites over [`Composition::snapshot_background`] (white unless
+    /// `RenderOptions::background` is set) and is returned as fully opaque straight
+    /// [`crate::PixelFormat::SrgbRgba8`]. It is one [`RenderSession::render`] request; the GPU
+    /// packs the encoded bytes on the device before readback, while the CPU converts its
+    /// linear frame. Runtime errors carry the requested frame.
     pub fn render_frame(
         &mut self,
         index: u32,
         build: impl FnOnce(&SceneContext<'_>) -> Node,
-    ) -> Result<Snapshot> {
-        self.execution().render_frame(index, build)
+    ) -> Result<FrameBuffer> {
+        if self.composition.shutter().is_some() {
+            self.last_stats = None;
+            self.asset_diagnostics.clear();
+            return Err(motion_core::Error::from(ValidationError::unsupported(
+                "_frame",
+                "motion_blur",
+                "FnOnce entry cannot resample; use render_frame_sampled",
+            ))
+            .at_frame(u64::from(index)));
+        }
+        let mut build = Some(build);
+        self.render_opaque(index, move |context| match build.take() {
+            Some(build) => build(context),
+            None => unreachable!("a frame without shutter evaluates its scene once"),
+        })
     }
 
     /// Renders a repeatable frame including configured shutter samples.
+    /// Global out-of-range samples contain background only; callbacks retain full
+    /// clip duration and are never given out-of-range global frame times.
     pub fn render_frame_sampled(
         &mut self,
         index: u32,
         build: impl FnMut(&SceneContext<'_>) -> Node,
-    ) -> Result<Snapshot> {
-        self.execution().render_frame_sampled(index, build)
+    ) -> Result<FrameBuffer> {
+        self.render_opaque(index, build)
+    }
+
+    fn render_opaque(
+        &mut self,
+        index: u32,
+        build: impl FnMut(&SceneContext<'_>) -> Node,
+    ) -> Result<FrameBuffer> {
+        self.last_stats = None;
+        self.asset_diagnostics.clear();
+        self.composition
+            .validate_frame_index(index)
+            .map_err(|error| error.at_frame(u64::from(index)))?;
+        let mut output = FrameBuffer::vacant();
+        self.session
+            .render(
+                FrameRequest {
+                    at: FrameAt::Index(index),
+                    frame_rate: self.composition.clock.rate,
+                    duration: self.duration.since_origin(),
+                    background: Some(self.composition.snapshot_background()),
+                    target: crate::RenderTarget::Memory(&mut output),
+                    format: crate::PixelFormat::SrgbRgba8 {
+                        premultiplied: false,
+                    },
+                    device_packing: true,
+                },
+                build,
+            )
+            .map_err(|error| error.at_frame(u64::from(index)))?;
+        Ok(output)
     }
 
     /// Prepares exact ticks, shutter and resources without selecting or submitting a GPU.
@@ -174,6 +220,7 @@ impl FrameRenderer {
                 background,
                 target: crate::RenderTarget::Memory(&mut output),
                 format,
+                device_packing: false,
             },
             build,
         )?;
@@ -202,6 +249,7 @@ impl FrameRenderer {
                 background,
                 target: crate::RenderTarget::Texture(texture),
                 format,
+                device_packing: false,
             },
             build,
         )

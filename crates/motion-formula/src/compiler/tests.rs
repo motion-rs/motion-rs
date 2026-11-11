@@ -87,7 +87,7 @@ fn typst_formulas_keep_curves_rules_original_ranges_and_real_pixels() -> motion_
                 motion_core::RasterLimits::default(),
             )?
             .render_linear(motion_core::RasterLimits::default())?;
-        assert!(frame.pixels().iter().any(|pixel| pixel[3] > 0.5), "{math}");
+        assert!(frame.linear_pixels().any(|pixel| pixel[3] > 0.5), "{math}");
         if math.contains("frac") {
             assert!(formula.symbols().iter().any(|symbol| symbol.structural));
         }
@@ -305,15 +305,16 @@ fn formula_writing_selection_and_morph_match_cpu_gpu() -> motion_core::Result<()
                     motion_core::ValidationLimits::default(),
                 )?
                 .prepare(motion_core::ValidationLimits::default(), limits)?;
-            let expected = frame.render_linear(limits)?;
-            let actual = gpu.render(&frame, motion_render::gpu::Plan::new(&frame, limits)?)?;
-            assert_eq!(
-                actual.pixels(),
-                gpu.render(&frame, motion_render::gpu::Plan::new(&frame, limits)?)?
-                    .pixels()
-            );
-            let expected = expected.to_srgb_rgba8(false, limits)?;
-            let actual = actual.to_srgb_rgba8(false, limits)?;
+            let srgb = motion_render::PixelFormat::SrgbRgba8 {
+                premultiplied: false,
+            };
+            let render = |gpu: &mut motion_render::gpu::Gpu| {
+                gpu.render_linear(&frame, motion_render::gpu::Plan::new(&frame, limits)?)
+            };
+            let actual = render(&mut gpu)?;
+            assert_eq!(actual, render(&mut gpu)?);
+            let expected = frame.render_buffer(srgb, limits)?;
+            let actual = actual.to_format(srgb, limits)?;
             for (expected, actual) in expected.bytes().iter().zip(actual.bytes()) {
                 maximum = maximum.max(expected.abs_diff(*actual));
             }

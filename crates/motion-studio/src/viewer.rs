@@ -316,7 +316,6 @@ impl crate::app::StudioApp {
                             timings.output,
                         ),
                         ("Completion/readback (host)", timings.readback),
-                        ("Snapshot assembly", timings.snapshot),
                         ("Upload enqueue", timings.upload),
                         ("Native submit (CPU wall)", timings.submission),
                     ] {

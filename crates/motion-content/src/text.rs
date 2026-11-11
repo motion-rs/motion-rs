@@ -20,7 +20,7 @@
 //! let frame = Composition::new(320, 120, motion_render::FrameClock::new(30, 150))
 //!     .configure(|options| options.resources(resources))
 //!     .render_frame(0, Size::new(320.0, 120.0), |_| text.clone().into())?;
-//! assert_eq!(frame.width(), 320);
+//! assert_eq!(frame.size().width, 320);
 //! # Ok::<(), motion_core::Error>(())
 //! ```
 

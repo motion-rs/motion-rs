@@ -3,7 +3,7 @@
 use artwork::artwork_with_particles;
 use micro::microbenchmarks;
 use motion::prelude::*;
-use motion::render::{Composition, RasterLimits, Snapshot};
+use motion::render::{Composition, FrameBuffer, RasterLimits};
 use stages::cpu_stages;
 use video::video_benchmark;
 
@@ -151,7 +151,7 @@ fn main() -> motion::Result {
                 let replay = session.render_frame(index, |context| {
                     artwork_with_particles(case, context, particle_count)
                 })?;
-                if first.pixels() != replay.pixels() {
+                if first.packed_rgb() != replay.packed_rgb() {
                     return Err(invalid(format!("Seek replay differs: {name}/{index}")));
                 }
                 report.reference(&format!("{renderer:?}-{case}-{index}.ppm"), &ppm(&first))?;
@@ -162,7 +162,7 @@ fn main() -> motion::Result {
                         artwork_with_particles(case, context, particle_count)
                     })
                 },
-                |snapshot| checksum(snapshot.pixels()),
+                |snapshot| checksum(&snapshot.packed_rgb()),
                 &settings,
                 settings.iterations,
             )?;
@@ -174,7 +174,6 @@ fn main() -> motion::Result {
                 "prepare_peak_bytes":stats.preparation.peak_bytes,"prepare_work":stats.preparation.work,
                 "linear_peak_bytes":stats.linear.peak_bytes,"linear_work":stats.linear.work,
                 "output_peak_bytes":stats.output.peak_bytes,"output_work":stats.output.work,
-                "pack_peak_bytes":stats.snapshot.peak_bytes,"pack_work":stats.snapshot.work,
             }))?;
             if sequences {
                 for shuffled in [false, true] {
@@ -187,7 +186,7 @@ fn main() -> motion::Result {
                                 artwork_with_particles(case, context, particle_count)
                             })
                         },
-                        |snapshot| checksum(snapshot.pixels()),
+                        |snapshot| checksum(&snapshot.packed_rgb()),
                         &settings,
                     )?;
                     report.record(format!("{name}/{}",if shuffled {"random-seek"}else{"sequential-playback"}),measured,json!({"adapter":format!("{:?}",playback.gpu_info()),"complete_timeline":sequence_frames==90}))?;
@@ -202,7 +201,7 @@ fn main() -> motion::Result {
                         })?;
                         Ok((fresh, snapshot))
                     },
-                    |(_, snapshot)| checksum(snapshot.pixels()),
+                    |(_, snapshot)| checksum(&snapshot.packed_rgb()),
                     &settings,
                     1,
                 )?;
@@ -244,11 +243,12 @@ fn checksum(pixels: &[u32]) -> u64 {
     })
 }
 
-fn ppm(snapshot: &Snapshot) -> Vec<u8> {
-    let mut bytes = format!("P6\n{} {}\n255\n", snapshot.width(), snapshot.height()).into_bytes();
-    for pixel in snapshot.pixels() {
-        bytes.extend_from_slice(&[(pixel >> 16) as u8, (pixel >> 8) as u8, *pixel as u8]);
-    }
+fn ppm(snapshot: &FrameBuffer) -> Vec<u8> {
+    let size = snapshot.size();
+    let mut bytes = format!("P6\n{} {}\n255\n", size.width, size.height).into_bytes();
+    snapshot
+        .write_rgb(&mut bytes)
+        .expect("benchmark output is opaque SrgbRgba8");
     bytes
 }
 
@@ -303,13 +303,17 @@ mod _case_tests {
             let first = renderer.render_frame(45, |context| artwork(case, context))?;
             let _other = renderer.render_frame(17, |context| artwork(case, context))?;
             let replay = renderer.render_frame(45, |context| artwork(case, context))?;
-            assert_eq!(first.pixels(), replay.pixels(), "benchmark replay {case}");
+            assert_eq!(
+                first.packed_rgb(),
+                replay.packed_rgb(),
+                "benchmark replay {case}"
+            );
             if *case != "empty" {
                 assert!(
                     first
-                        .pixels()
+                        .packed_rgb()
                         .iter()
-                        .any(|pixel| *pixel != first.pixels()[0]),
+                        .any(|pixel| *pixel != first.packed_rgb()[0]),
                     "empty benchmark {case}"
                 );
             }

@@ -322,11 +322,13 @@ fn native_sparse_nested_clips_preserve_cpu_tolerance_and_replay() -> motion_core
                 .take(frame.alphas.len())
                 .collect();
             assert_eq!(uploaded, frame.alphas);
-            let expected = frame.render_linear(limits)?.to_srgb_rgba8(false, limits)?;
-            let actual = gpu.render(&frame, plan)?.to_srgb_rgba8(false, limits)?;
+            let expected = frame
+                .compose_linear(limits)?
+                .to_rgba8_frame(false, limits)?;
+            let actual = gpu.render(&frame, plan)?.to_rgba8_frame(false, limits)?;
             let replay = gpu
                 .render(&frame, Plan::new(&frame, limits)?)?
-                .to_srgb_rgba8(false, limits)?;
+                .to_rgba8_frame(false, limits)?;
             assert_eq!(actual.pixels(), replay.pixels());
             let mut over_one = 0;
             for (actual, expected) in actual.pixels().iter().zip(expected.pixels()) {

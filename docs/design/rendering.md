@@ -173,7 +173,9 @@ Composition owns a `FrameClock` (rational rate and frame count, never defaulted)
 no per-option setters beyond `with_options` and `configure`. Reuse `frame_renderer(size)` for random-access frames and cache reuse;
 its FrameRenderer wraps a RenderSession. For Timeline output, render_still/export
 apply the same RenderOptions policy.
-Snapshot is opaque RGB; its PPM writer truncates/replaces the selected file explicitly.
+`render_frame` and `render_frame_sampled` return a fully opaque straight `SrgbRgba8` `FrameBuffer`: the frame
+composites over `RenderOptions::background` made opaque, or over white when it is absent. Its `write_ppm` and
+`write_rgb` truncate/replace the selected file explicitly and reject non-opaque buffers.
 Use `render_still` and a straight RGBA8 FrameBuffer for transparent PNG with protected output destinations.
 
 On Unix, transactional PNG, GIF and native video outputs request mode 0666;
@@ -196,8 +198,11 @@ frame.write_ppm("frame.ppm")?;
 RenderOptions selects output size, background/transparency, backend,
 resources, structural/raster limits and optional shutter sampling. FrameBuffer
 preserves its declared planes/format: straight or premultiplied sRGB RGBA8,
-linear-premultiplied RGBA16F, or limited-range BT.709 YUV420 at 8/10 bits.
+linear-premultiplied RGBA16F or unquantized RGBA32F, or limited-range BT.709 YUV420 at 8/10 bits.
 YUV requires even dimensions and opaque pixels. There is no implicit HDR tone mapper.
+`PreparedFrame::render_linear` and `Gpu::render_linear` return RGBA32F `FrameBuffer`s that
+`FrameBuffer::linear_pixel`, `linear_pixels` and `to_format` read or convert; the CPU working
+frame behind them is crate-private.
 
 RenderQuality::Final is the default production policy. Draft explicitly permits
 preview approximations in geometry, shutter sampling and ink material; it is not
@@ -222,20 +227,18 @@ flowchart TD
     Prepared --> GPU["GPU composition: RGBA32F working textures"]
     CPU --> Bands["Memory output: adaptive bands"]
     Bands --> Buffer["FrameBuffer: declared planes and format"]
-    CPU --> Linear["LinearFrame"]
-    Linear --> Snapshot["Opaque RGB Snapshot"]
+    CPU --> Linear["Linear working frame (crate-private)"]
     Linear -->|CPU format conversion| Buffer
     GPU --> Readback["Linear readback"]
     Readback --> Linear
     GPU --> Packed["Packed output readback"]
     Packed --> Buffer
-    Packed -->|Snapshot: straight RGBA8| Snapshot
     GPU --> Texture["Same-device external texture: status readback only"]
 ```
 
 These routes are not interchangeable: a normal RenderSession memory target on GPU
-uses linear readback followed by CPU format conversion, while GPU Snapshot and
-supported packed-output APIs pack before readback. An external texture avoids
+uses linear readback followed by CPU format conversion, while supported packed-output APIs
+and a request with `device_packing` (the one `render_frame*` makes) pack before readback. An external texture avoids
 frame-pixel readback but still checks submission completion and finite status.
 See [GPU rendering](gpu.md) for supported targets and asynchronous completion.
 
@@ -252,11 +255,10 @@ before retrying, while all failed-attempt work remains charged. Conservative fil
 halos retain offscreen and cross-band dependencies; only valid output rows are
 converted. Masks, once-per-layer opacity, source-only effects and global noise
 coordinates are unchanged. Bayer phase is relative to the final output origin,
-and YUV bands preserve complete 2x2 chroma blocks. CPU Snapshot and explicit
-full-linear APIs retain full linear frames; GPU Snapshot instead reads back packed
-straight sRGB RGBA8 and constructs its opaque RGB result from that output.
+and YUV bands preserve complete 2x2 chroma blocks. Explicit full-linear APIs retain full linear frames; a GPU request with `device_packing`
+reads back packed straight sRGB RGBA8 instead.
 
-CPU LinearFrame-to-RGBA8 conversion and FrameBuffer plane conversion share one
+CPU linear-frame-to-RGBA8 conversion and FrameBuffer plane conversion share one
 row-wise encoder, including straight/premultiplied alpha and Bayer phase. They
 write directly to their own output storage without an intermediate RGBA image.
 Synchronous and pending GPU linear readback likewise share crop and finite-pixel
@@ -314,18 +316,22 @@ session.render(FrameRequest {
     background: None,
     target: RenderTarget::Memory(&mut output),
     format: PixelFormat::SrgbRgba8 { premultiplied: false },
+    device_packing: false,
 }, |context| Node::from(context.bounds().fill(Color::WHITE)))?;
 # Ok::<(), motion::Error>(())
 ```
 
 `FrameAt::Time` is not snapped to the frame grid; `FrameAt::Index` converts exactly with the request's rate.
-`FrameRenderer` and `render_still` are thin wrappers over this one request path. Motion blur may call the builder
+`FrameRenderer::render_frame*`, `Composition::render_frame*` and `render_still` are thin wrappers over this one request path;
+`device_packing` lets a GPU-rendered straight `SrgbRgba8` request pack bytes on the device, which may differ from host
+conversion by GPU f32 rounding. Motion blur may call the builder
 multiple times. A memory target is replaced only on success and its old retained
 payload is charged while rendering; an external texture has no rollback guarantee
 after a GPU failure. Each request installs new diagnostics and clears prior totals.
 last_stats describes successful memory output, not external-texture conversion. Each stage reports a `WorkStats { peak_bytes, work }`, and `RenderSession::report()` aggregates stats, timings and the backend decision into one `FrameReport`.
-Request background overrides the options' background. Snapshot output composites over
-`RenderOptions::background` made opaque, or white when it is absent. Query
+Request background overrides the options' background. `render_frame*` output composites over
+`RenderOptions::background` made opaque, or white when it is absent; `render_still` and direct requests
+keep transparency when no background is given. Query
 backend_decision for the actual backend; `requested_backend()` reports the request.
 
 ## Resources and Content

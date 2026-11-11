@@ -161,7 +161,7 @@ mod tests {
     use motion_core::{Color, PixelSize, RasterLimits, Size};
     use motion_render::RenderPrepare;
 
-    fn pixels(node: Node) -> motion_core::Result<motion_render::LinearFrame> {
+    fn pixels(node: Node) -> motion_core::Result<motion_render::FrameBuffer> {
         Ok(node
             .compile(
                 Size::new(16.0, 8.0),
@@ -193,19 +193,20 @@ mod tests {
         )?;
         let options = WriteOptions::default();
         let early = pixels(tree.write(0.8 * 16.0 / 40.0, options)?)?;
-        assert!(early.pixel(1, 1).unwrap()[3] > 0.0);
-        assert_eq!(early.pixel(3, 3), Some([0.0; 4]));
-        assert_eq!(early.pixel(7, 1), Some([0.0; 4]));
-        assert!(pixels(tree.write(0.9, options)?)?.pixel(3, 3).unwrap()[3] > 0.0);
-        assert_eq!(
-            pixels(tree.write(1.0, options)?)?.pixels(),
-            pixels(tree.node())?.pixels()
+        assert!(early.linear_pixel(1, 1).unwrap()[3] > 0.0);
+        assert_eq!(early.linear_pixel(3, 3), Some([0.0; 4]));
+        assert_eq!(early.linear_pixel(7, 1), Some([0.0; 4]));
+        assert!(
+            pixels(tree.write(0.9, options)?)?
+                .linear_pixel(3, 3)
+                .unwrap()[3]
+                > 0.0
         );
+        assert_eq!(pixels(tree.write(1.0, options)?)?, pixels(tree.node())?);
         assert!(
             pixels(tree.write(0.0, options)?)?
-                .pixels()
-                .iter()
-                .all(|pixel| *pixel == [0.0; 4])
+                .linear_pixels()
+                .all(|pixel| pixel == [0.0; 4])
         );
         assert!(tree.write(f64::NAN, options).is_err());
         Ok(())

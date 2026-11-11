@@ -87,7 +87,7 @@ fn zero_optical_parameters_preserve_pixels_and_invalid_settings_fail() {
         let actual = prepare(source.clone().filter(filter))
             .render_linear(limits)
             .unwrap();
-        assert_eq!(reference.pixels(), actual.pixels());
+        assert_eq!(reference, actual);
     }
     assert!(
         Filter::Optics(Optics::Bokeh {
@@ -137,7 +137,7 @@ fn anamorphic_streak_extends_bright_highlights_horizontally_and_validates() {
     };
     let base = streak(0.0, 0.5);
     let lit = streak(1.0, 0.5);
-    let at = |frame: &motion_render::LinearFrame, x: usize, y: usize| frame.pixels()[y * 32 + x];
+    let at = |frame: &motion_render::FrameBuffer, x: u32, y: u32| frame.linear_pixel(x, y).unwrap();
     // The streak reaches far left/right of the 4px highlight but barely above and below it.
     assert!(at(&lit, 24, 16)[2] > at(&base, 24, 16)[2] + 1e-3);
     assert!(at(&lit, 8, 16)[2] > at(&base, 8, 16)[2] + 1e-3);
@@ -148,7 +148,7 @@ fn anamorphic_streak_extends_bright_highlights_horizontally_and_validates() {
     assert!(at(&lit, 16, 26)[2] < (at(&lit, 24, 16)[2] * 0.25).max(1e-4));
     // Above the highlight's luminance nothing is extracted.
     let none = streak(1.0, 1.0e6);
-    assert_eq!(base.pixels(), none.pixels());
+    assert_eq!(base, none);
     for invalid in [
         Optics::Anamorphic {
             threshold: -1.0,
@@ -196,12 +196,12 @@ fn anamorphic_streak_extends_bright_highlights_horizontally_and_validates() {
 #[test]
 fn elevation_shadow_renders_below_the_card_and_spreads_with_height() {
     use motion_core::{Elevation, NodeModifiers};
-    let alpha_at = |height: f64, x: usize, y: usize| {
+    let alpha_at = |height: f64, x: u32, y: u32| {
         let card: Node = Rect::new(10.0, 8.0, 22.0, 16.0).fill(Color::WHITE).into();
         let frame = prepare(card.elevated(Elevation::shadow(height).unwrap()))
             .render_linear(RasterLimits::default())
             .unwrap();
-        frame.pixels()[y * 32 + x][3]
+        frame.linear_pixel(x, y).unwrap()[3]
     };
     // Just under the card bottom edge and far below it, outside the card itself.
     let (near_low, far_low) = (alpha_at(2.0, 16, 16), alpha_at(2.0, 16, 26));
@@ -258,7 +258,7 @@ proptest! {
         let linear = frame.render_linear(RasterLimits::default()).unwrap();
         for row in 0..32 {
             for column in 0..32 {
-                let pixel = linear.pixel(column, row).unwrap();
+                let pixel = linear.linear_pixel(column, row).unwrap();
                 prop_assert!(pixel.iter().all(|value| value.is_finite() && (0.0..=1.0).contains(value)));
                 let alpha = f32::from(expected[(row * 32 + column) as usize]) / 255.0;
                 prop_assert!((pixel[3] - alpha).abs() <= f32::EPSILON);

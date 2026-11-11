@@ -916,8 +916,14 @@ fn preview_session_uses_linear_cpu_without_fonts() -> motion_core::Result {
     );
     let mut session = PreviewRenderer::new(&scene, Renderer::Cpu)?;
     let snapshot = session.render_frame(&scene, 0)?;
-    assert_eq!((snapshot.width(), snapshot.height()), (8, 4));
-    assert_eq!(snapshot.pixels()[0], 0xbbbbbb);
+    assert_eq!(
+        (
+            snapshot.size().width as usize,
+            snapshot.size().height as usize
+        ),
+        (8, 4)
+    );
+    assert_eq!(snapshot.packed_rgb()[0], 0xbbbbbb);
     let denied = StudioScene {
         composition: scene.composition.clone().configure(|options| {
             options.limits(motion_core::RasterLimits {
@@ -930,8 +936,7 @@ fn preview_session_uses_linear_cpu_without_fonts() -> motion_core::Result {
     let mut restricted = PreviewRenderer::new(&denied, Renderer::Cpu)?;
     let error = restricted
         .render_frame(&denied, 0)
-        .err()
-        .expect("preview must inherit scene budget");
+        .expect_err("preview must inherit scene budget");
     assert_eq!(
         error
             .downcast_ref::<motion_core::ValidationError>()
@@ -943,7 +948,10 @@ fn preview_session_uses_linear_cpu_without_fonts() -> motion_core::Result {
         scene.composition.raster_limits().max_bytes,
         motion_core::RasterLimits::default().max_bytes
     );
-    assert_eq!(session.render_frame(&scene, 0)?.pixels(), snapshot.pixels());
+    assert_eq!(
+        session.render_frame(&scene, 0)?.packed_rgb(),
+        snapshot.packed_rgb()
+    );
     Ok(())
 }
 
@@ -976,8 +984,11 @@ fn preview_honors_global_shutter_and_replays_without_fonts() -> motion_core::Res
     let mut renderer = PreviewRenderer::new(&scene, Renderer::Cpu)?;
     let first = renderer.render_frame(&scene, 1)?;
     assert_eq!(calls.load(std::sync::atomic::Ordering::Relaxed), 4);
-    assert_eq!(first.pixels()[0], 0xbbbbbb);
-    assert_eq!(first.pixels(), renderer.render_frame(&scene, 1)?.pixels());
+    assert_eq!(first.packed_rgb()[0], 0xbbbbbb);
+    assert_eq!(
+        first.packed_rgb(),
+        renderer.render_frame(&scene, 1)?.packed_rgb()
+    );
     assert_eq!(calls.load(std::sync::atomic::Ordering::Relaxed), 8);
     Ok(())
 }
@@ -1792,11 +1803,14 @@ fn preview_pixels_keep_rgb_channels_and_opaque_alpha() {
     assert_eq!(image.pixels, vec![Color32::from_rgb(17, 134, 119); 2]);
 }
 
-fn color_image(snapshot: Snapshot) -> ColorImage {
+fn color_image(snapshot: motion_render::FrameBuffer) -> ColorImage {
     ColorImage::new(
-        [snapshot.width(), snapshot.height()],
+        [
+            snapshot.size().width as usize,
+            snapshot.size().height as usize,
+        ],
         snapshot
-            .pixels()
+            .packed_rgb()
             .iter()
             .map(|pixel| Color32::from_rgb((pixel >> 16) as u8, (pixel >> 8) as u8, *pixel as u8))
             .collect(),

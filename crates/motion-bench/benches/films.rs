@@ -1,7 +1,7 @@
 //! Film playback benchmarks with deterministic checksums and optional frame dumps.
 
 use motion::prelude::*;
-use motion::render::Snapshot;
+use motion::render::FrameBuffer;
 use serde_json::json;
 use std::hint::black_box;
 
@@ -12,17 +12,18 @@ use std::hint::black_box;
 #[path = "support.rs"]
 mod support;
 
-fn checksum(snapshot: &Snapshot) -> u64 {
-    snapshot.pixels().iter().fold(0, |state, pixel| {
+fn checksum(snapshot: &FrameBuffer) -> u64 {
+    snapshot.packed_rgb().iter().fold(0, |state, pixel| {
         support::fold_checksum(state, u64::from(*pixel))
     })
 }
 
-fn ppm(snapshot: &Snapshot) -> Vec<u8> {
-    let mut bytes = format!("P6\n{} {}\n255\n", snapshot.width(), snapshot.height()).into_bytes();
-    for pixel in snapshot.pixels() {
-        bytes.extend_from_slice(&[(pixel >> 16) as u8, (pixel >> 8) as u8, *pixel as u8]);
-    }
+fn ppm(snapshot: &FrameBuffer) -> Vec<u8> {
+    let size = snapshot.size();
+    let mut bytes = format!("P6\n{} {}\n255\n", size.width, size.height).into_bytes();
+    snapshot
+        .write_rgb(&mut bytes)
+        .expect("benchmark output is opaque SrgbRgba8");
     bytes
 }
 
@@ -307,7 +308,7 @@ fn main() -> motion::Result {
                 let expected = session.render_frame(frame, |context| timeline.render(context))?;
                 session.render_frame(0, |context| timeline.render(context))?;
                 let replay = session.render_frame(frame, |context| timeline.render(context))?;
-                if expected.pixels() != replay.pixels() {
+                if expected != replay {
                     return Err(support::invalid(format!(
                         "Film replay differs: {film}/{frame}"
                     )));
@@ -324,7 +325,7 @@ fn main() -> motion::Result {
                     "adapter":format!("{:?}",session.gpu_info()),"peak_bytes":stats.peak_bytes(),"work":stats.work(),
                     "prepare_peak_bytes":stats.preparation.peak_bytes,"prepare_retained_bytes":stats.preparation.retained_bytes,
                     "prepare_work":stats.preparation.work,"linear_work":stats.linear.work,
-                    "linear_peak_bytes":stats.linear.peak_bytes,"output_work":stats.output.work,"pack_work":stats.snapshot.work,
+                    "linear_peak_bytes":stats.linear.peak_bytes,"output_work":stats.output.work,
                 }))?;
             }
             if sequences {

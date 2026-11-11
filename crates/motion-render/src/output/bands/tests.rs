@@ -31,7 +31,7 @@ fn cinematic_grain_is_identical_across_band_heights() {
         frame: 7,
     };
     let limits = RasterLimits::default();
-    let linear = prepared.render_linear(limits).unwrap();
+    let linear = prepared.compose_linear(limits).unwrap();
     for format in [
         PixelFormat::SrgbRgba8 {
             premultiplied: false,
@@ -169,7 +169,7 @@ fn adaptive_bands_shrink_within_byte_limits_without_refunding_failed_work() {
             ..limits
         };
         assert!(matches!(
-            frame.render_linear(tight).unwrap_err().kind,
+            frame.compose_linear(tight).unwrap_err().kind,
             motion_core::ValidationErrorKind::StructuralLimit
         ));
         let (actual, attempted, converted) =
@@ -272,7 +272,7 @@ fn fused_bands_match_full_frames_for_layers_masks_filters_and_all_formats() {
             ] {
                 let frame = prepared(node.clone(), opaque).quality(quality);
                 let limits = RasterLimits::default();
-                let linear = frame.render_linear(limits).unwrap();
+                let linear = frame.compose_linear(limits).unwrap();
                 for format in [
                     PixelFormat::SrgbRgba8 {
                         premultiplied: false,

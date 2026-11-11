@@ -217,8 +217,8 @@ fn paints_validate_hidden_commands_budget_failures_and_composition_blend_space()
                 .blend_space(BlendSpace::Srgb),
         )?
         .render_frame(0, Size::new(2.0, 2.0), |_| scene())?;
-    assert_ne!(linear.pixels(), encoded.pixels());
-    assert!((127..=129).contains(&((encoded.pixels()[0] >> 16) & 255)));
+    assert_ne!(linear.packed_rgb(), encoded.packed_rgb());
+    assert!((127..=129).contains(&((encoded.packed_rgb()[0] >> 16) & 255)));
     assert!(
         Composition::new(2, 2, crate::FrameClock::new(30, 150))
             .with_options(crate::RenderOptions::default().blend_space(BlendSpace::Srgb))?
@@ -239,7 +239,7 @@ fn paints_validate_hidden_commands_budget_failures_and_composition_blend_space()
         ValidationLimits::default(),
     )?
     .prepare(ValidationLimits::default(), RasterLimits::default())?
-    .render_linear(RasterLimits::default())?;
+    .compose_linear(RasterLimits::default())?;
     assert_eq!(collapsed.pixel(0, 0), Some([0.0; 4]));
     let empty = Node::from(
         Rect::new(0.0, 0.0, 0.0, 8.0).fill(
@@ -254,7 +254,7 @@ fn paints_validate_hidden_commands_budget_failures_and_composition_blend_space()
         ValidationLimits::default(),
     )?
     .prepare(ValidationLimits::default(), RasterLimits::default())?
-    .render_linear(RasterLimits::default())?;
+    .compose_linear(RasterLimits::default())?;
     assert_eq!(empty.pixel(0, 0), Some([0.0; 4]));
     Ok(())
 }
@@ -353,7 +353,7 @@ fn spatial_paints_match_gpu_and_replay() -> motion_core::Result {
                 ValidationLimits::default(),
             )?
             .prepare(ValidationLimits::default(), limits)?;
-        let cpu = prepared.render_linear(limits)?;
+        let cpu = prepared.compose_linear(limits)?;
         let output = gpu.render(&prepared, crate::gpu::Plan::new(&prepared, limits)?)?;
         for row in 0..8 {
             for column in 0..8 {
@@ -367,8 +367,8 @@ fn spatial_paints_match_gpu_and_replay() -> motion_core::Result {
                 }
             }
         }
-        let cpu = cpu.to_srgb_rgba8(false, limits)?;
-        let output = output.to_srgb_rgba8(false, limits)?;
+        let cpu = cpu.to_rgba8_frame(false, limits)?;
+        let output = output.to_rgba8_frame(false, limits)?;
         for (first, second) in cpu.pixels().iter().zip(output.pixels()) {
             for (first, second) in first.iter().zip(second) {
                 assert!(first.abs_diff(*second) <= 1);
@@ -376,7 +376,7 @@ fn spatial_paints_match_gpu_and_replay() -> motion_core::Result {
         }
         let replay = gpu
             .render(&prepared, crate::gpu::Plan::new(&prepared, limits)?)?
-            .to_srgb_rgba8(false, limits)?;
+            .to_rgba8_frame(false, limits)?;
         assert_eq!(output.pixels(), replay.pixels());
     }
     assert!(
@@ -409,7 +409,7 @@ fn spatial_paints_render_analytic_pixels_and_preserve_linear_image_alpha()
         )?
         .prepare(ValidationLimits::default(), limits)?;
     assert_eq!(
-        prepared.render_linear(limits)?.pixel(3, 3),
+        prepared.compose_linear(limits)?.pixel(3, 3),
         Some([0.4375, 0.4375, 0.4375, 1.0])
     );
     let image = std::sync::Arc::new(
@@ -434,7 +434,7 @@ fn spatial_paints_render_analytic_pixels_and_preserve_linear_image_alpha()
         [0.5, 0.0, 0.0, 0.5]
     );
     assert_eq!(
-        prepared.render_linear(limits)?.pixel(0, 0),
+        prepared.compose_linear(limits)?.pixel(0, 0),
         Some([1.0, 0.0, 0.0, 1.0])
     );
     let _protocol = [

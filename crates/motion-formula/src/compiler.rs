@@ -19,7 +19,7 @@
 //!     )?
 //!     .prepare(ValidationLimits::default(), RasterLimits::default())?
 //!     .render_linear(RasterLimits::default())?;
-//! assert!(frame.pixels().iter().any(|pixel| pixel[3] > 0.0));
+//! assert!(frame.linear_pixels().any(|pixel| pixel[3] > 0.0));
 //! # Ok::<(), motion_core::Error>(())
 //! ```
 

@@ -110,6 +110,7 @@ fn explicit_requests_preserve_exact_time_project_diagnostics_and_atomic_targets(
             format: crate::PixelFormat::SrgbRgba8 {
                 premultiplied: false,
             },
+            device_packing: false,
         }
     }
     session.render(request(&mut target), |context| {
@@ -217,7 +218,7 @@ fn global_shutter_averages_complete_frames_and_preserves_old_once_contract() -> 
             )
             .unwrap()
         })?;
-        assert_eq!(result.pixels(), expected.pixels());
+        assert_eq!(result.packed_rgb(), expected.packed_rgb());
         let mut calls = 0;
         assert!(
             configured
@@ -355,8 +356,8 @@ fn composition_raster_policy_is_inherited_and_overrides_are_local() -> Result {
     assert_eq!(second.limits.max_bytes, configured_limits.max_bytes);
     first.raster_limits(configured_limits)?;
     assert_eq!(
-        first.render_frame(0, |_| tile())?.pixels(),
-        configured.render_frame(0, size, |_| tile())?.pixels()
+        first.render_frame(0, |_| tile())?.packed_rgb(),
+        configured.render_frame(0, size, |_| tile())?.packed_rgb()
     );
     let denied = configured.clone().configure(|options| {
         options.limits(RasterLimits {
@@ -413,7 +414,7 @@ fn cpu_design_mapping_and_background_ignore_background_alpha() -> Result {
         assert_eq!(context.size(), Size::new(4.0, 4.0));
         tile()
     })?;
-    for row in snapshot.pixels().as_chunks::<8>().0 {
+    for row in snapshot.packed_rgb().as_chunks::<8>().0 {
         assert_eq!(row, &[0, 0, 0xffffff, 0xffffff, 0xffffff, 0xffffff, 0, 0]);
     }
     Ok(())
@@ -442,15 +443,20 @@ fn cpu_consumer_matches_direct_prepared_filters_clips_and_masks() -> Result {
     let list = list.with_background(Some(Color::rgb(20, 40, 60)));
     let expected = list
         .prepare(ValidationLimits::default(), RasterLimits::default())?
-        .render_linear(RasterLimits::default())?
-        .to_srgb_rgba8(false, RasterLimits::default())?;
+        .compose_linear(RasterLimits::default())?
+        .to_rgba8_frame(false, RasterLimits::default())?;
     let expected: Vec<_> = expected
         .pixels()
         .iter()
         .map(|pixel| u32::from(pixel[0]) << 16 | u32::from(pixel[1]) << 8 | u32::from(pixel[2]))
         .collect();
-    assert_eq!(actual.pixels(), expected);
-    assert!(actual.pixels().iter().all(|pixel| pixel & 0xff000000 == 0));
+    assert_eq!(actual.packed_rgb(), expected);
+    assert!(
+        actual
+            .packed_rgb()
+            .iter()
+            .all(|pixel| pixel & 0xff000000 == 0)
+    );
     Ok(())
 }
 
@@ -477,19 +483,19 @@ fn cpu_repeated_and_out_of_order_frames_are_cache_independent() -> Result {
         })?;
         if index == 5 {
             if let Some(expected) = &first {
-                assert_eq!(snapshot.pixels(), expected);
+                assert_eq!(snapshot.packed_rgb(), *expected);
             }
-            first = Some(snapshot.pixels().to_vec());
+            first = Some(snapshot.packed_rgb());
         }
     }
     assert_eq!(evaluations.get(), 4);
     assert_eq!(computations.get(), 1);
     renderer.cache().clear();
     let snapshot = renderer.render_frame(5, |_| tile().translate(3.0, 0.0))?;
-    assert_eq!(snapshot.pixels(), first.unwrap());
+    assert_eq!(snapshot.packed_rgb(), first.unwrap());
     let single =
         composition().render_frame(5, Size::new(8.0, 4.0), |_| tile().translate(3.0, 0.0))?;
-    assert_eq!(snapshot.pixels(), single.pixels());
+    assert_eq!(snapshot.packed_rgb(), single.packed_rgb());
     Ok(())
 }
 
@@ -500,7 +506,6 @@ fn cpu_shared_work_and_live_bytes_admit_exactly_then_reject_one_short() -> Resul
     let reference = renderer.render_frame(2, build)?;
     let stats = *renderer.last_stats().unwrap();
     assert_eq!(stats.output.work, 32);
-    assert_eq!(stats.snapshot.work, 32);
     let exact = RasterLimits {
         max_bytes: stats.peak_bytes(),
         max_work: stats.work(),
@@ -508,8 +513,8 @@ fn cpu_shared_work_and_live_bytes_admit_exactly_then_reject_one_short() -> Resul
     };
     renderer.raster_limits(exact)?;
     assert_eq!(
-        renderer.render_frame(2, build)?.pixels(),
-        reference.pixels()
+        renderer.render_frame(2, build)?.packed_rgb(),
+        reference.packed_rgb()
     );
     renderer.raster_limits(RasterLimits {
         max_work: exact.max_work - 1,
@@ -518,7 +523,7 @@ fn cpu_shared_work_and_live_bytes_admit_exactly_then_reject_one_short() -> Resul
     let error = diagnostic(renderer.render_frame(2, build).err().unwrap());
     assert_eq!(error.kind, ValidationErrorKind::StructuralLimit);
     assert_eq!((error.field.as_str(), error.frame), ("max_work", Some(2)));
-    assert_eq!(error.path, "snapshot.pixels");
+    assert_eq!(error.path, "linear.output");
     assert!(renderer.last_stats().is_none());
     renderer.raster_limits(RasterLimits {
         max_bytes: exact.max_bytes - 1,
@@ -530,15 +535,14 @@ fn cpu_shared_work_and_live_bytes_admit_exactly_then_reject_one_short() -> Resul
     );
     renderer.raster_limits(exact)?;
     assert_eq!(
-        renderer.render_frame(2, build)?.pixels(),
-        reference.pixels()
+        renderer.render_frame(2, build)?.packed_rgb(),
+        reference.packed_rgb()
     );
     let single_stage = stats
         .preparation
         .work
         .max(stats.linear.work)
-        .max(stats.output.work)
-        .max(stats.snapshot.work);
+        .max(stats.output.work);
     renderer.raster_limits(RasterLimits {
         max_work: single_stage,
         ..exact
@@ -613,7 +617,7 @@ fn cpu_failures_tag_the_requested_frame_and_preserve_session_reuse() -> Result {
         ("max_pixels", Some(8))
     );
     let output = renderer.render_frame(0, |_| tile())?;
-    assert_eq!(output.pixels()[0], 0xffffff);
+    assert_eq!(output.packed_rgb()[0], 0xffffff);
     Ok(())
 }
 
@@ -793,7 +797,7 @@ fn gpu_device_session_seek_budget_and_recovery_match_cpu() -> Result {
             let expected = cpu.render_frame(index, build)?;
             let actual = gpu.render_frame(index, build)?;
             let mut large = 0;
-            for (expected, actual) in expected.pixels().iter().zip(actual.pixels()) {
+            for (expected, actual) in expected.packed_rgb().iter().zip(actual.packed_rgb()) {
                 let mut delta = 0;
                 for shift in [0, 8, 16] {
                     delta =
@@ -806,12 +810,12 @@ fn gpu_device_session_seek_budget_and_recovery_match_cpu() -> Result {
                 );
                 large += usize::from(delta > 1);
             }
-            assert!((large as f64) / (actual.pixels().len() as f64) < 0.001);
+            assert!((large as f64) / (actual.packed_rgb().len() as f64) < 0.001);
             if index == 5 {
                 if let Some(first) = &first {
-                    assert_eq!(actual.pixels(), first);
+                    assert_eq!(actual.packed_rgb(), *first);
                 }
-                first = Some(actual.pixels().to_vec());
+                first = Some(actual.packed_rgb());
             }
         }
         let info = gpu.gpu_info().expect("actual GPU initialization required");
@@ -830,7 +834,10 @@ fn gpu_device_session_seek_budget_and_recovery_match_cpu() -> Result {
             ..RasterLimits::default()
         };
         gpu.raster_limits(exact)?;
-        assert_eq!(gpu.render_frame(2, build)?.pixels(), expected.pixels());
+        assert_eq!(
+            gpu.render_frame(2, build)?.packed_rgb(),
+            expected.packed_rgb()
+        );
         for limits in [
             RasterLimits {
                 max_bytes: exact.max_bytes - 1,
@@ -850,7 +857,10 @@ fn gpu_device_session_seek_budget_and_recovery_match_cpu() -> Result {
             assert!(gpu.last_stats().is_none());
             assert_eq!(gpu.gpu_info().unwrap().name, info.name);
             gpu.raster_limits(exact)?;
-            assert_eq!(gpu.render_frame(2, build)?.pixels(), expected.pixels());
+            assert_eq!(
+                gpu.render_frame(2, build)?.packed_rgb(),
+                expected.packed_rgb()
+            );
         }
         gpu.raster_limits(RasterLimits::default())?;
         let invalid = diagnostic(
@@ -863,7 +873,10 @@ fn gpu_device_session_seek_budget_and_recovery_match_cpu() -> Result {
             (ValidationErrorKind::InvalidValue, Some(7))
         );
         assert!(gpu.last_stats().is_none());
-        assert_eq!(gpu.render_frame(2, build)?.pixels(), expected.pixels());
+        assert_eq!(
+            gpu.render_frame(2, build)?.packed_rgb(),
+            expected.packed_rgb()
+        );
         println!("_gpu_session size={width}x{height} exact_budget=pass one_short=pass retry=pass");
     }
     Ok(())

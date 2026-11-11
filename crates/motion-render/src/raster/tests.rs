@@ -246,14 +246,17 @@ fn extreme_output_coordinates_and_invalid_limits_fail_before_pixel_allocation() 
     let prepared = source.prepare(ValidationLimits::default(), wide).unwrap();
     assert_eq!(prepared.strips[0].x, u32::MAX - 3);
     assert_eq!(prepared.alphas, vec![255; 3]);
-    assert_eq!(prepared.render_linear(wide).unwrap_err().field, "max_bytes");
+    assert_eq!(
+        prepared.compose_linear(wide).unwrap_err().field,
+        "max_bytes"
+    );
     source.commands.clear();
     source.output_size = PixelSize::new(u32::MAX, u32::MAX);
     assert_eq!(
         source
             .prepare(ValidationLimits::default(), wide)
             .unwrap()
-            .render_linear(wide)
+            .compose_linear(wide)
             .unwrap_err()
             .field,
         "max_bytes"

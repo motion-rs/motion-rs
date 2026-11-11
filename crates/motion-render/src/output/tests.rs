@@ -245,7 +245,7 @@ fn linear(color: Color, alpha: f64) -> LinearFrame {
         .unwrap()
         .prepare(ValidationLimits::default(), RasterLimits::default())
         .unwrap()
-        .render_linear(RasterLimits::default())
+        .compose_linear(RasterLimits::default())
         .unwrap()
 }
 

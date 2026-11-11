@@ -131,7 +131,7 @@ fn external_texture_formats_guard_bands_and_rejections_match_cpu() -> motion_cor
                     bottom: 7,
                 };
             }
-            let linear = frame.render_linear(limits)?;
+            let linear = frame.compose_linear(limits)?;
             let size = frame.size();
             let texture = context.device().create_texture(&wgpu::TextureDescriptor {
                 label: Some("External format/guard-band acceptance"),
@@ -586,7 +586,7 @@ fn shared_context_texture_target_self_check_and_device_loss_are_real() -> motion
         .collect::<Vec<_>>();
     drop(mapped);
     readback.unmap();
-    let expected = frame.render_linear(limits)?.to_srgb_rgba8(true, limits)?;
+    let expected = frame.compose_linear(limits)?.to_rgba8_frame(true, limits)?;
     assert!(
         actual
             .iter()
@@ -609,8 +609,8 @@ fn shared_context_texture_target_self_check_and_device_loss_are_real() -> motion
     let mut first = composition.frame_renderer(motion_core::Size::new(16.0, 8.0))?;
     let mut second = composition.frame_renderer(motion_core::Size::new(16.0, 8.0))?;
     assert_eq!(
-        first.render_frame(0, |_| node.clone())?.pixels(),
-        second.render_frame(0, |_| node.clone())?.pixels()
+        first.render_frame(0, |_| node.clone())?.packed_rgb(),
+        second.render_frame(0, |_| node.clone())?.packed_rgb()
     );
     assert_eq!(
         first.backend_decision().unwrap().renderer,
@@ -620,8 +620,7 @@ fn shared_context_texture_target_self_check_and_device_loss_are_real() -> motion
     let _ = wait_for_gpu(context.device(), None);
     let error = first
         .render_frame(1, |_| node.clone())
-        .err()
-        .expect("lost device fails");
+        .expect_err("lost device fails");
     assert_eq!(error.kind(), motion_core::ErrorKind::DeviceLost);
     Ok(())
 }

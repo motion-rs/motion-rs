@@ -184,7 +184,7 @@ mod resources {
                 .frame_renderer(Size::new(8.0, 8.0))?;
             let frame = preview
                 .render_frame(4, |_| Node::from(Image::open("missing.png").size(8.0, 8.0)))?;
-            assert!(frame.pixels().iter().all(|pixel| *pixel == 0xff00ff));
+            assert!(frame.packed_rgb().iter().all(|pixel| *pixel == 0xff00ff));
             assert_eq!(preview.asset_diagnostics()[0].frame(), Some(4));
             preview.render_frame(1, |_| {
                 Node::from(Rect::new(0.0, 0.0, 8.0, 8.0).fill(Color::WHITE))

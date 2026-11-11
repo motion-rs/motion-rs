@@ -30,6 +30,7 @@ fn fresh_texts_reuse_actual_session_layouts_across_out_of_order_frames() -> moti
                 format: PixelFormat::SrgbRgba8 {
                     premultiplied: false,
                 },
+                device_packing: false,
             },
             |context| {
                 assert_eq!(context.assets().fonts().unwrap().snapshot_id(), identity);
@@ -67,7 +68,9 @@ fn authoring_example_1() -> Result<(), Box<dyn std::error::Error>> {
         )?
         .prepare(ValidationLimits::default(), RasterLimits::default())?;
     assert_eq!(
-        prepared.render_linear(RasterLimits::default())?.pixel(0, 0),
+        prepared
+            .render_linear(RasterLimits::default())?
+            .linear_pixel(0, 0),
         Some([0.75; 4])
     );
     assert_eq!(
@@ -94,7 +97,7 @@ fn authoring_example_2() -> Result<(), Box<dyn std::error::Error>> {
         )?
         .prepare(ValidationLimits::default(), RasterLimits::default())?
         .render_linear(RasterLimits::default())?;
-    assert!(output.pixel(2, 0).unwrap()[3] > 0.0);
+    assert!(output.linear_pixel(2, 0).unwrap()[3] > 0.0);
     Ok(())
 }
 
@@ -116,8 +119,8 @@ fn authoring_example_3() -> Result<(), Box<dyn std::error::Error>> {
         .prepare(ValidationLimits::default(), RasterLimits::default())?;
     assert_eq!(prepared.clips().len(), 1);
     let output = prepared.render_linear(RasterLimits::default())?;
-    assert_eq!(output.pixel(0, 0), Some([128.0 / 255.0; 4]));
-    assert_eq!(output.pixel(1, 0), Some([1.0; 4]));
+    assert_eq!(output.linear_pixel(0, 0), Some([128.0 / 255.0; 4]));
+    assert_eq!(output.linear_pixel(1, 0), Some([1.0; 4]));
     Ok(())
 }
 
@@ -138,8 +141,8 @@ fn authoring_example_4() -> Result<(), Box<dyn std::error::Error>> {
         )?
         .prepare(ValidationLimits::default(), RasterLimits::default())?
         .render_linear(RasterLimits::default())?;
-    assert_eq!(frame.pixel(0, 0), Some([128.0 / 255.0; 4]));
-    assert_eq!(frame.pixel(1, 0), Some([1.0; 4]));
+    assert_eq!(frame.linear_pixel(0, 0), Some([128.0 / 255.0; 4]));
+    assert_eq!(frame.linear_pixel(1, 0), Some([1.0; 4]));
     Ok(())
 }
 
@@ -160,7 +163,7 @@ fn authoring_example_5() -> Result<(), Box<dyn std::error::Error>> {
         )?
         .prepare(ValidationLimits::default(), RasterLimits::default())?
         .render_linear(RasterLimits::default())?;
-    assert_eq!(frame.pixel(0, 0), Some([128.0 / 255.0; 4]));
+    assert_eq!(frame.linear_pixel(0, 0), Some([128.0 / 255.0; 4]));
     Ok(())
 }
 
@@ -182,7 +185,9 @@ fn authoring_example_6() -> Result<(), Box<dyn std::error::Error>> {
         )?
         .prepare(ValidationLimits::default(), RasterLimits::default())?;
     assert_eq!(
-        frame.render_linear(RasterLimits::default())?.pixel(0, 0),
+        frame
+            .render_linear(RasterLimits::default())?
+            .linear_pixel(0, 0),
         Some([0.1063; 4])
     );
     Ok(())
@@ -204,7 +209,10 @@ fn authoring_example_7() -> Result<(), Box<dyn std::error::Error>> {
         )?
         .prepare(ValidationLimits::default(), RasterLimits::default())?
         .render_linear(RasterLimits::default())?;
-    assert_eq!(frame.pixels(), &[[0.0; 4], [0.0; 4], [1.0; 4], [0.0; 4]]);
+    assert_eq!(
+        frame.linear_pixels().collect::<Vec<_>>(),
+        [[0.0; 4], [0.0; 4], [1.0; 4], [0.0; 4]]
+    );
     Ok(())
 }
 
@@ -224,7 +232,7 @@ fn authoring_example_8() -> Result<(), Box<dyn std::error::Error>> {
             Rect::new(context.seconds() * 4.0, 0.0, 4.0, 4.0).fill(Color::from_hex(0x24a49b)),
         )
     })?;
-    assert_eq!(frame.width(), 8);
+    assert_eq!(frame.size().width as usize, 8);
     // A whole-frame shutter and a subtree shutter are never combined.
     let nested = composition.render_frame_sampled(1, Size::new(8.0, 4.0), |context| {
         context
@@ -293,7 +301,7 @@ fn authoring_example_10() -> Result<(), Box<dyn std::error::Error>> {
         FrameClock::new(timeline.frame_rate(), timeline.frame_count()),
     )
     .render_frame(0, timeline.size(), |context| timeline.render(context))?;
-    assert!(frame.pixels().iter().all(|pixel| *pixel == 0xffffff));
+    assert!(frame.packed_rgb().iter().all(|pixel| *pixel == 0xffffff));
     Ok(())
 }
 
@@ -344,7 +352,10 @@ fn authoring_example_12() -> Result<(), Box<dyn std::error::Error>> {
         )?
         .prepare(ValidationLimits::default(), RasterLimits::default())?
         .render_linear(RasterLimits::default())?;
-    assert_eq!(frame.pixels(), &[[128.0 / 255.0; 4]; 2]);
+    assert_eq!(
+        frame.linear_pixels().collect::<Vec<_>>(),
+        [[128.0 / 255.0; 4]; 2]
+    );
     Ok(())
 }
 
@@ -362,7 +373,7 @@ fn authoring_example_13() -> Result<(), Box<dyn std::error::Error>> {
         .render_frame(0, Size::new(8.0, 8.0), |_| {
             Node::from(Rect::new(0.0, 0.0, 8.0, 8.0).fill(brush.clone()))
         })?;
-    assert_eq!(image.width(), 8);
+    assert_eq!(image.size().width as usize, 8);
     Ok(())
 }
 
@@ -387,7 +398,7 @@ fn authoring_example_14() -> Result<(), Box<dyn std::error::Error>> {
     let frame = list
         .prepare(ValidationLimits::default(), RasterLimits::default())?
         .render_linear(RasterLimits::default())?;
-    assert_eq!(frame.pixel(1, 1).unwrap()[3], 0.5);
+    assert_eq!(frame.linear_pixel(1, 1).unwrap()[3], 0.5);
     Ok(())
 }
 
@@ -406,7 +417,7 @@ fn authoring_example_15() -> Result<(), Box<dyn std::error::Error>> {
         )?
         .prepare(ValidationLimits::default(), RasterLimits::default())?
         .render_linear(RasterLimits::default())?;
-    assert_eq!(frame.pixel(2, 2), Some([1.0; 4]));
+    assert_eq!(frame.linear_pixel(2, 2), Some([1.0; 4]));
     Ok(())
 }
 
@@ -426,7 +437,7 @@ fn authoring_example_16() -> Result<(), Box<dyn std::error::Error>> {
     let frame = Composition::new(8, 8, motion::render::FrameClock::new(30, 150))
         .with_options(motion::render::RenderOptions::default().background(Color::BLACK))?
         .render_frame(0, Size::new(8.0, 8.0), |_| Node::from(curve.clone()))?;
-    assert_eq!(frame.width(), 8);
+    assert_eq!(frame.size().width as usize, 8);
     Ok(())
 }
 
@@ -445,6 +456,6 @@ fn authoring_example_17() -> Result<(), Box<dyn std::error::Error>> {
     let frame = Composition::new(8, 8, motion::render::FrameClock::new(30, 150))
         .with_options(motion::render::RenderOptions::default().background(Color::BLACK))?
         .render_frame(0, Size::new(8.0, 8.0), |_| Node::from(curve.clone()))?;
-    assert_eq!(frame.width(), 8);
+    assert_eq!(frame.size().width as usize, 8);
     Ok(())
 }

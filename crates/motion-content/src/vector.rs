@@ -31,7 +31,7 @@
 //!     )?
 //!     .prepare(ValidationLimits::default(), RasterLimits::default())?
 //!     .render_linear(RasterLimits::default())?;
-//! assert_eq!(frame.pixel(8, 8), Some([1.0; 4]));
+//! assert_eq!(frame.linear_pixel(8, 8), Some([1.0; 4]));
 //! # Ok::<(), motion_core::Error>(())
 //! ```
 

@@ -34,8 +34,13 @@ fn measure_frame(
         .render_frame(30, &build)
         .expect("benchmark admission");
     let replay = session.render_frame(30, &build).expect("benchmark replay");
-    assert_eq!(expected.pixels(), replay.pixels());
-    assert!(expected.pixels().iter().any(|pixel| *pixel != 0xffff_ffff));
+    assert_eq!(expected, replay);
+    assert!(
+        expected
+            .packed_rgb()
+            .iter()
+            .any(|pixel| *pixel != 0xffff_ffff)
+    );
     let mut group = criterion.benchmark_group("cpu_warm_frame");
     group.throughput(Throughput::Elements(1));
     group.bench_function(name, |bencher| {

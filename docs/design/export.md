@@ -80,14 +80,14 @@ validated in [`encoder.rs`](../../crates/motion-ffmpeg/src/encoder.rs).
 ## Pixels
 
 [`output.rs`](../../crates/motion-render/src/output.rs) defines the `PixelFormat`
-contract shared by the CPU and GPU backends: `LinearRgba16Float`, `SrgbRgba8
+contract shared by the CPU and GPU backends: `LinearRgba16Float`, `LinearRgba32Float`, `SrgbRgba8
 { premultiplied }` and `Yuv420 { bit_depth }` (8 or 10, even dimensions, BT.709
 limited range, 10-bit as little-endian `u16`). `FrameBuffer` owns tightly packed
 planes with byte strides. [`yuv.rs`](../../crates/motion-render/src/output/yuv.rs)
 does 4:2:0 block conversion; the display-transform path applies a 4x4 ordered
-dither when quantizing. `Snapshot` ([`snapshot.rs`](../../crates/motion-render/src/output/snapshot.rs))
-is a separate opaque `0x00RRGGBB` image with `write_ppm` (P6); it does not use FFmpeg
-or the video overwrite policy and overwrites its destination unconditionally.
+dither when quantizing. An opaque `SrgbRgba8` `FrameBuffer` ([`rgb.rs`](../../crates/motion-render/src/output/rgb.rs))
+writes `write_ppm` (P6) and `write_rgb`; they do not use FFmpeg
+or the video overwrite policy and overwrite their destination unconditionally.
 
 ## Streaming and threads
 

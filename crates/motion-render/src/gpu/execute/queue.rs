@@ -86,8 +86,9 @@ impl FrameQueue {
         Ok(())
     }
 
-    /// Completes the oldest frame. Later submissions may already be executing.
-    pub fn finish_next(&mut self) -> motion_core::Result<Option<LinearFrame>> {
+    /// Completes the oldest frame as unquantized [`crate::PixelFormat::LinearRgba32Float`]
+    /// output. Later submissions may already be executing.
+    pub fn finish_next(&mut self) -> motion_core::Result<Option<crate::FrameBuffer>> {
         let Some((charge, pending)) = self.pending.pop_front() else {
             return Ok(None);
         };
@@ -97,7 +98,9 @@ impl FrameQueue {
                 if bytes <= self.maximum / 4 && bytes <= 64 * 1024 * 1024 {
                     self.renderer.readback = Some((bytes, pixels, status));
                 }
-                Ok(Some(frame))
+                crate::FrameBuffer::linear_unbounded(&frame)
+                    .map(Some)
+                    .map_err(Into::into)
             }
             Err(error) => {
                 self.pending.clear();

@@ -97,7 +97,7 @@ pub(super) fn cpu_stages(
     let measured = support::measure_output(
         || Ok(prepared.render_linear(limits)?),
         |linear| {
-            linear.pixels().iter().step_by(64).fold(0, |state, pixel| {
+            linear.linear_pixels().step_by(64).fold(0, |state, pixel| {
                 support::fold_checksum(state, u64::from(pixel[3].to_bits()))
             })
         },
@@ -108,10 +108,17 @@ pub(super) fn cpu_stages(
     report.record(
         format!("Software/{case}/stage-linear"),
         measured,
-        json!({"peak_bytes":linear.stats().peak_bytes,"work":linear.stats().work}),
+        json!({"peak_bytes": linear.byte_len(), "work": linear.linear_pixels().len()}),
     )?;
     let measured = support::measure_output(
-        || Ok(linear.to_srgb_rgba8(false, limits)?),
+        || {
+            Ok(linear.to_format(
+                motion::render::PixelFormat::SrgbRgba8 {
+                    premultiplied: false,
+                },
+                limits,
+            )?)
+        },
         |output| {
             output.bytes().iter().step_by(256).fold(0, |state, value| {
                 support::fold_checksum(state, u64::from(*value))
@@ -128,7 +135,7 @@ pub(super) fn cpu_stages(
     if size.width.is_multiple_of(2) && size.height.is_multiple_of(2) {
         for bit_depth in [8, 10] {
             let format = motion::render::PixelFormat::Yuv420 { bit_depth };
-            let reference = motion::render::FrameBuffer::from_linear(&linear, format, limits)?;
+            let reference = linear.to_format(format, limits)?;
             for (index, plane) in reference.planes().iter().enumerate() {
                 report.reference(
                     &format!("Cpu-{case}-yuv{bit_depth}-plane{index}.bin"),
@@ -136,11 +143,7 @@ pub(super) fn cpu_stages(
                 )?;
             }
             let measured = support::measure_output(
-                || {
-                    Ok(motion::render::FrameBuffer::from_linear(
-                        &linear, format, limits,
-                    )?)
-                },
+                || Ok(linear.to_format(format, limits)?),
                 |output| {
                     output.planes().iter().fold(0, |state, plane| {
                         plane

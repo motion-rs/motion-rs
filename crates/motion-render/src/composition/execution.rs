@@ -4,7 +4,7 @@
 //! CPU and GPU backends use only explicitly supplied fonts; nothing is discovered implicitly.
 
 use super::*;
-use crate::{RasterLimits, RenderContext, Renderer, Snapshot, WorkStats};
+use crate::{RasterLimits, RenderContext, Renderer, WorkStats};
 use motion_core::{Color, Node, Result, SceneContext, Shape, Time, ValidationError};
 
 mod backend;
@@ -12,17 +12,12 @@ mod preparation;
 
 use preparation::remaining;
 
-enum RenderedFrame {
-    Linear(crate::LinearFrame),
-    #[cfg(feature = "gpu")]
-    Packed(crate::FrameBuffer),
-}
-
 pub(super) struct FrameExecution<'a> {
     pub(super) composition: Composition,
     pub(super) duration: Time,
     pub(super) time: Option<Time>,
     pub(super) limits: RasterLimits,
+    pub(super) device_packing: bool,
     pub(super) session: &'a mut RenderSession,
 }
 
@@ -45,144 +40,6 @@ impl FrameExecution<'_> {
     /// assets through SceneContext. fonts are explicit preloaded handles.
     pub fn context(&self) -> &RenderContext {
         &self.composition.options.context
-    }
-
-    /// Evaluates once at the requested frame's signed-tick time, then consumes
-    /// Node -> DisplayList -> PreparedFrame -> linear-light composition -> sRGB RGBA8 -> Snapshot.
-    /// GPU execution packs RGBA8 before readback; CPU execution converts its linear frame.
-    ///
-    /// Composition dimensions/timing/index and configured raster limits validate
-    /// before evaluation. Runtime validation errors carry the requested frame.
-    /// Panics in user code propagate; failures return no partial public output.
-    /// SDR output uses the existing clipping/Bayer-dither contract, not HDR tone
-    /// mapping or encoded-space compositing. Source builders must be pure.
-    pub fn render_frame(
-        &mut self,
-        index: u32,
-        build: impl FnOnce(&SceneContext<'_>) -> Node,
-    ) -> Result<Snapshot> {
-        if self.composition.shutter().is_some() {
-            self.last_stats = None;
-            self.asset_diagnostics.clear();
-            return Err(motion_core::Error::from(ValidationError::unsupported(
-                "_frame",
-                "motion_blur",
-                "FnOnce entry cannot resample; use render_frame_sampled",
-            ))
-            .at_frame(u64::from(index)));
-        }
-        self.render_frame_once(index, build)
-    }
-
-    /// Captures the whole frame with a centered shutter, including its background.
-    /// Global out-of-range samples contain background only; callbacks retain full
-    /// clip duration and are never given out-of-range global frame times.
-    pub fn render_frame_sampled(
-        &mut self,
-        index: u32,
-        mut build: impl FnMut(&SceneContext<'_>) -> Node,
-    ) -> Result<Snapshot> {
-        let Some(configuration) = self.composition.shutter() else {
-            return self.render_frame_once(index, build);
-        };
-        let color = self.composition.snapshot_background();
-        let color = color.with_alpha(1.0);
-        let sampling = self.composition.options.shutter_sampling;
-        let output = self.composition.output_size();
-        self.render_frame_once(index, |context| {
-            sampling
-                .capture(configuration, context, output, |sample| {
-                    let background = Node::from(sample.bounds().fill(color));
-                    if sample.time() < Time::ZERO
-                        || sample
-                            .clip_duration()
-                            .is_some_and(|duration| sample.time() >= duration.after_origin())
-                    {
-                        background
-                    } else {
-                        Node::group([background, Node::group([build(sample)])])
-                    }
-                })
-                .unwrap_or_else(motion_core::authoring::transition::diagnostic)
-        })
-    }
-
-    pub(super) fn render_frame_once(
-        &mut self,
-        index: u32,
-        build: impl FnOnce(&SceneContext<'_>) -> Node,
-    ) -> Result<Snapshot> {
-        (|| -> Result<Snapshot> {
-            let background = self.composition.snapshot_background();
-            let (prepared, limits) =
-                self.prepare_frame(index, None, Some(background.with_alpha(1.0)), build)?;
-            let rendered = self.render_prepared_output(index, prepared, limits, true)?;
-            let mut stats = self.last_stats.take().expect("successful linear stage");
-            #[cfg(feature = "gpu")]
-            if let RenderedFrame::Packed(frame) = rendered {
-                let started = self.timings.map(|_| std::time::Instant::now());
-                let (snapshot, snapshot_stats) = crate::Rgba8Frame::snapshot_from_bytes(
-                    frame.size(),
-                    frame.planes()[0].bytes(),
-                    frame.retained_bytes(),
-                    remaining(self.limits, stats.work())?,
-                )?;
-                if let Some(started) = started {
-                    self.timings.as_mut().expect("enabled timings").snapshot += started.elapsed();
-                }
-                stats.snapshot = snapshot_stats;
-                self.last_stats = Some(stats);
-                return Ok(snapshot);
-            }
-            #[cfg(feature = "gpu")]
-            let linear = match rendered {
-                RenderedFrame::Linear(linear) => linear,
-                RenderedFrame::Packed(_) => unreachable!("packed output consumed above"),
-            };
-            #[cfg(not(feature = "gpu"))]
-            let RenderedFrame::Linear(linear) = rendered;
-            let started = self.timings.map(|_| std::time::Instant::now());
-            let spent = stats.preparation.work + stats.linear.work;
-            let rgba = remaining(self.limits, spent).and_then(|limits| {
-                crate::FrameBuffer::from_linear_display(
-                    &linear,
-                    crate::PixelFormat::SrgbRgba8 {
-                        premultiplied: false,
-                    },
-                    limits,
-                    &self.composition.options.display,
-                    u64::from(index),
-                )
-            });
-            linear.recycle(&mut self.cpu_pool);
-            let rgba = rgba?;
-            if let Some(started) = started {
-                self.timings.as_mut().expect("enabled timings").output += started.elapsed();
-            }
-            stats.output = WorkStats {
-                work: crate::FrameBuffer::display_conversion_work(
-                    rgba.size(),
-                    rgba.format(),
-                    Some(&self.composition.options.display),
-                ),
-                peak_bytes: rgba.retained_bytes()
-                    + u64::from(rgba.size().width) * u64::from(rgba.size().height) * 16,
-            };
-            let started = self.timings.map(|_| std::time::Instant::now());
-            let (snapshot, snapshot_stats) = crate::Rgba8Frame::snapshot_from_bytes(
-                rgba.size(),
-                rgba.planes()[0].bytes(),
-                rgba.retained_bytes(),
-                remaining(self.limits, spent + stats.output.work)?,
-            )?;
-            if let Some(started) = started {
-                self.timings.as_mut().expect("enabled timings").snapshot += started.elapsed();
-            }
-            stats.snapshot = snapshot_stats;
-            self.last_stats = Some(stats);
-            Ok(snapshot)
-        })()
-        .map_err(|error| error.at_frame(u64::from(index)))
     }
 
     /// Renders a repeatable callback at an exact in-range tick into a chosen memory
@@ -282,7 +139,6 @@ impl FrameExecution<'_> {
                 preparation: prepared.stats(),
                 linear,
                 output,
-                snapshot: WorkStats::default(),
             });
             if let Some(started) = started {
                 self.timings.as_mut().expect("enabled timings").output += started.elapsed();
@@ -327,7 +183,6 @@ impl FrameExecution<'_> {
                     peak_bytes: peak,
                     work: crate::FrameBuffer::conversion_work(frame.size(), format),
                 },
-                snapshot: WorkStats::default(),
             });
             if let Some(started) = started {
                 self.timings.as_mut().expect("enabled timings").output += started.elapsed();
@@ -337,7 +192,12 @@ impl FrameExecution<'_> {
         }
         #[cfg(feature = "gpu")]
         if !cpu
-            && format == (crate::PixelFormat::Yuv420 { bit_depth: 10 })
+            && (format == (crate::PixelFormat::Yuv420 { bit_depth: 10 })
+                || self.device_packing
+                    && format
+                        == (crate::PixelFormat::SrgbRgba8 {
+                            premultiplied: false,
+                        }))
             && crate::gpu::Gpu::supports_packed_output(prepared.size(), format)
         {
             let started = self.timings.map(|_| std::time::Instant::now());
@@ -389,7 +249,6 @@ impl FrameExecution<'_> {
                         peak_bytes: stats.peak_bytes,
                         work: output_work,
                     },
-                    snapshot: WorkStats::default(),
                 });
                 return Ok(frame);
             }
@@ -413,7 +272,7 @@ impl FrameExecution<'_> {
         let frame = frame?;
         stats.output = WorkStats {
             peak_bytes: linear_bytes
-                + std::mem::size_of::<crate::LinearFrame>() as u64
+                + std::mem::size_of::<crate::cpu::LinearFrame>() as u64
                 + frame.retained_bytes(),
             work: crate::FrameBuffer::display_conversion_work(frame.size(), format, Some(&display)),
         };
@@ -475,10 +334,16 @@ mod scene_output_tests {
         renderer.enable_timings(true);
         let observed = renderer.render_frame(0, build)?;
         assert_eq!(
-            (observed.width(), observed.height()),
-            (expected.width(), expected.height())
+            (
+                observed.size().width as usize,
+                observed.size().height as usize
+            ),
+            (
+                expected.size().width as usize,
+                expected.size().height as usize
+            )
         );
-        assert_eq!(observed.pixels(), expected.pixels());
+        assert_eq!(observed.packed_rgb(), expected.packed_rgb());
         assert_eq!(*renderer.last_stats().unwrap(), stats);
         let supported = renderer
             .selected_gpu_context()?
@@ -488,7 +353,10 @@ mod scene_output_tests {
         assert!(!renderer.timings().unwrap().fused_output);
         renderer.enable_timings(false);
         assert!(renderer.timings().is_none());
-        assert_eq!(renderer.render_frame(0, build)?.pixels(), expected.pixels());
+        assert_eq!(
+            renderer.render_frame(0, build)?.packed_rgb(),
+            expected.packed_rgb()
+        );
         Ok(())
     }
 

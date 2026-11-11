@@ -31,7 +31,7 @@
 //! `ink::InkFill`; `ink::Paper` selects procedural or texture paper. Pressure and ink-load profiles
 //! are sampled in full arc length.
 //! [`Signal`] and [`Keyframes`] are analytic, clock-free samplers, not playback
-//! tasks. [`Snapshot`] is opaque RGB; [`FrameBuffer`] stills preserve alpha.
+//! tasks. [`FrameBuffer`] is the single stored image: `Composition::render_frame` yields it opaque over white, `render_still` preserves alpha.
 //! [`AudioClip`] supplies explicit timeline PCM, mixed into export or Studio Play.
 //! [`Skeleton`] solves 2D forward kinematics from timeline-compatible [`Pose`]
 //! values; [`BoneTransform`] positions artwork without changing either backend.
@@ -161,7 +161,6 @@
 //! [`DisplayList`]: render::DisplayList
 //! [`PreparedFrame`]: render::PreparedFrame
 //! [`FrameBuffer`]: render::FrameBuffer
-//! [`Snapshot`]: render::Snapshot
 //! [`RenderSession`]: render::RenderSession
 //! [`FrameRequest`]: render::FrameRequest
 //! [`FrameRenderer`]: render::FrameRenderer

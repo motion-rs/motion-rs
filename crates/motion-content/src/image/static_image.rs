@@ -21,7 +21,7 @@
 //!     .sampling(Sampling::Trilinear);
 //! let frame =
 //!     Composition::new(8, 4, motion_render::FrameClock::new(30, 150)).render_frame(0, Size::new(8.0, 4.0), |_| picture.clone().into())?;
-//! assert_eq!(frame.width(), 8);
+//! assert_eq!(frame.size().width, 8);
 //! # Ok::<(), motion_core::Error>(())
 //! ```
 
@@ -557,31 +557,49 @@ mod tests {
                         )?
                         .prepare(ValidationLimits::default(), limits)?;
                     let cpu = prepared.render_linear(limits)?;
-                    let output =
-                        gpu.render(&prepared, motion_render::gpu::Plan::new(&prepared, limits)?)?;
+                    let output = gpu.render_linear(
+                        &prepared,
+                        motion_render::gpu::Plan::new(&prepared, limits)?,
+                    )?;
                     for row in 0..16 {
                         for column in 0..16 {
                             for (first, second) in cpu
-                                .pixel(column, row)
+                                .linear_pixel(column, row)
                                 .unwrap()
                                 .into_iter()
-                                .zip(output.pixel(column, row).unwrap())
+                                .zip(output.linear_pixel(column, row).unwrap())
                             {
                                 maximum = maximum.max((first - second).abs());
                             }
                         }
                     }
-                    let cpu = cpu.to_srgb_rgba8(false, limits)?;
-                    let output = output.to_srgb_rgba8(false, limits)?;
-                    for (first, second) in cpu.pixels().iter().zip(output.pixels()) {
-                        for (first, second) in first.iter().zip(second) {
-                            assert!(first.abs_diff(*second) <= 1);
-                        }
+                    let cpu = cpu.to_format(
+                        motion_render::PixelFormat::SrgbRgba8 {
+                            premultiplied: false,
+                        },
+                        limits,
+                    )?;
+                    let output = output.to_format(
+                        motion_render::PixelFormat::SrgbRgba8 {
+                            premultiplied: false,
+                        },
+                        limits,
+                    )?;
+                    for (first, second) in cpu.bytes().iter().zip(output.bytes()) {
+                        assert!(first.abs_diff(*second) <= 1);
                     }
                     let replay = gpu
-                        .render(&prepared, motion_render::gpu::Plan::new(&prepared, limits)?)?
-                        .to_srgb_rgba8(false, limits)?;
-                    assert_eq!(output.pixels(), replay.pixels());
+                        .render_linear(
+                            &prepared,
+                            motion_render::gpu::Plan::new(&prepared, limits)?,
+                        )?
+                        .to_format(
+                            motion_render::PixelFormat::SrgbRgba8 {
+                                premultiplied: false,
+                            },
+                            limits,
+                        )?;
+                    assert_eq!(output, replay);
                     cases += 1;
                 }
             }
@@ -611,13 +629,13 @@ mod tests {
         std::fs::remove_file(path)?;
         assert!(Arc::ptr_eq(&loaded, &handle.get()?));
         assert_eq!(
-            render(Image::new(handle).size(1.0, 1.0), 1)?.pixel(0, 0),
+            render(Image::new(handle).size(1.0, 1.0), 1)?.linear_pixel(0, 0),
             Some([1.0, 0.0, 0.0, 1.0])
         );
         Ok(())
     }
 
-    fn render(image: Image, size: u32) -> motion_core::Result<motion_render::LinearFrame> {
+    fn render(image: Image, size: u32) -> motion_core::Result<motion_render::FrameBuffer> {
         Ok(motion_core::Node::from(image)
             .compile(
                 motion_core::Size::new(f64::from(size), f64::from(size)),
@@ -690,18 +708,18 @@ mod tests {
             .size(8.0, 8.0)
             .sampling(Sampling::Nearest);
         let contain = render(image.clone().fit(Fit::Contain), 8)?;
-        assert_eq!(contain.pixel(4, 0), Some([0.0; 4]));
-        assert_eq!(contain.pixel(4, 3), Some([0.0, 1.0, 0.0, 1.0]));
+        assert_eq!(contain.linear_pixel(4, 0), Some([0.0; 4]));
+        assert_eq!(contain.linear_pixel(4, 3), Some([0.0, 1.0, 0.0, 1.0]));
         let cover = render(image.clone().fit(Fit::Cover), 8)?;
-        assert_eq!(cover.pixel(0, 0), Some([0.0, 1.0, 0.0, 1.0]));
+        assert_eq!(cover.linear_pixel(0, 0), Some([0.0, 1.0, 0.0, 1.0]));
         let fill = render(image.clone().fit(Fit::Fill), 8)?;
-        assert_eq!(fill.pixel(0, 0), Some([1.0, 0.0, 0.0, 1.0]));
+        assert_eq!(fill.linear_pixel(0, 0), Some([1.0, 0.0, 0.0, 1.0]));
         let original = render(image.clone().fit(Fit::None), 8)?;
-        assert_eq!(original.pixel(0, 0), Some([0.0; 4]));
-        assert_eq!(original.pixel(3, 3), Some([0.0, 1.0, 0.0, 1.0]));
+        assert_eq!(original.linear_pixel(0, 0), Some([0.0; 4]));
+        assert_eq!(original.linear_pixel(3, 3), Some([0.0, 1.0, 0.0, 1.0]));
         let rounded = render(image.fit(Fit::Fill).corner_radius(4.0), 8)?;
-        assert_eq!(rounded.pixel(0, 0), Some([0.0; 4]));
-        assert!(rounded.pixel(4, 4).unwrap()[3] > 0.9);
+        assert_eq!(rounded.linear_pixel(0, 0), Some([0.0; 4]));
+        assert!(rounded.linear_pixel(4, 4).unwrap()[3] > 0.9);
         let mut pixels = vec![[0.0, 0.0, 0.0, 1.0]; 64];
         pixels[0] = [1.0; 4];
         let asset = Arc::new(ImageAsset::from_rgba_float(8, 8, pixels)?);
@@ -717,8 +735,8 @@ mod tests {
                 .sampling(Sampling::Trilinear),
             1,
         )?;
-        assert_eq!(nearest.pixel(0, 0).unwrap()[0], 0.0);
-        assert_eq!(trilinear.pixel(0, 0).unwrap()[0], 1.0 / 64.0);
+        assert_eq!(nearest.linear_pixel(0, 0).unwrap()[0], 0.0);
+        assert_eq!(trilinear.linear_pixel(0, 0).unwrap()[0], 1.0 / 64.0);
         Ok(())
     }
 

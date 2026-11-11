@@ -35,7 +35,7 @@ pub(super) fn record_frame(
             if let Some(timings) = timings {
                 observations.push(timings);
             }
-            checksum(snapshot.pixels())
+            checksum(&snapshot.packed_rgb())
         },
         settings,
         settings.iterations,
@@ -76,7 +76,6 @@ pub(super) fn record_frame(
                         "output": timings.output.as_secs_f64() * 1e6,
                         "fused_output": timings.fused_output,
                         "readback": timings.readback.as_secs_f64() * 1e6,
-                        "snapshot": timings.snapshot.as_secs_f64() * 1e6,
                         "upload": timings.upload.as_secs_f64() * 1e6,
                         "submission": timings.submission.as_secs_f64() * 1e6,
                         "gpu": gpu,
@@ -117,24 +116,18 @@ pub(super) fn record_memory_frame(
         .as_chunks::<4>()
         .0
         .iter()
-        .zip(snapshot.pixels())
+        .zip(snapshot.bytes().as_chunks::<4>().0)
     {
-        let expected = [
-            (*expected >> 16) as u8,
-            (*expected >> 8) as u8,
-            *expected as u8,
-            255,
-        ];
         let difference = pixel
             .iter()
             .zip(expected)
-            .map(|(value, expected)| value.abs_diff(expected))
+            .map(|(value, expected)| value.abs_diff(*expected))
             .max()
             .unwrap();
         maximum = maximum.max(difference);
         over_one += usize::from(difference > 1);
     }
-    let pixels = snapshot.pixels().len();
+    let pixels = snapshot.bytes().len() / 4;
     let exact = renderer == Renderer::Cpu;
     if (exact && maximum != 0) || (!exact && (maximum > 2 || over_one * 1000 >= pixels)) {
         return Err(invalid(format!(
@@ -189,7 +182,7 @@ pub(super) fn record_sequences(
         let measured = support::measure_frames(
             &order,
             |frame| playback.render_frame(frame, |context| artwork(case, context)),
-            |snapshot| checksum(snapshot.pixels()),
+            |snapshot| checksum(&snapshot.packed_rgb()),
             settings,
         )?;
         report.record(
@@ -294,7 +287,7 @@ pub(super) fn cpu_stages(
     let linear_timing = support::measure_output(
         || Ok(prepared.render_linear(limits())?),
         |linear| {
-            linear.pixels().iter().step_by(64).fold(0, |state, pixel| {
+            linear.linear_pixels().step_by(64).fold(0, |state, pixel| {
                 support::fold_checksum(state, u64::from(pixel[3].to_bits()))
             })
         },
@@ -305,11 +298,18 @@ pub(super) fn cpu_stages(
     report.record(
         label("linear"),
         linear_timing,
-        json!({"peak_bytes": linear.stats().peak_bytes, "work": linear.stats().work}),
+        json!({"peak_bytes": linear.byte_len(), "work": linear.linear_pixels().len()}),
     )?;
 
     let output_timing = support::measure_output(
-        || Ok(linear.to_srgb_rgba8(false, limits())?),
+        || {
+            Ok(linear.to_format(
+                motion::render::PixelFormat::SrgbRgba8 {
+                    premultiplied: false,
+                },
+                limits(),
+            )?)
+        },
         |output| {
             output.bytes().iter().step_by(256).fold(0, |state, value| {
                 support::fold_checksum(state, u64::from(*value))

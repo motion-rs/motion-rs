@@ -35,7 +35,7 @@ pub(crate) use textures::FrameTexture;
 #[cfg(test)]
 use crate::AudioOptions;
 #[cfg(test)]
-use motion_render::Snapshot;
+use motion_render::FrameBuffer;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct PreviewKey {
@@ -261,7 +261,11 @@ impl PreviewRenderer {
     }
 
     #[cfg(test)]
-    fn render_frame(&mut self, scene: &StudioScene, index: u32) -> motion_core::Result<Snapshot> {
+    fn render_frame(
+        &mut self,
+        scene: &StudioScene,
+        index: u32,
+    ) -> motion_core::Result<FrameBuffer> {
         self.renderer
             .render_frame_sampled(index, |context| (scene.definition.build_scene)(context))
     }

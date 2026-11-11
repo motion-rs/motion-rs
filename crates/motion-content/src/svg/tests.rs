@@ -3,7 +3,7 @@ use crate::asset::AssetsExt;
 use motion_core::{Asset, NodeModifiers};
 use motion_render::RenderPrepare;
 
-fn pixels(asset: &SvgAsset) -> motion_core::Result<motion_render::LinearFrame> {
+fn pixels(asset: &SvgAsset) -> motion_core::Result<motion_render::FrameBuffer> {
     Ok(asset
         .tree
         .node()
@@ -40,7 +40,7 @@ fn svg_paths_ids_viewbox_and_transforms_enter_vectors() -> motion_core::Result<(
             motion_core::RasterLimits::default(),
         )?
         .render_linear(motion_core::RasterLimits::default())?;
-    assert_eq!(frame.pixel(2, 2), Some([0.0, 0.0, 1.0, 1.0]));
+    assert_eq!(frame.linear_pixel(2, 2), Some([0.0, 0.0, 1.0, 1.0]));
     assert!(SvgAsset::from_bytes(br#"<svg xmlns="http://www.w3.org/2000/svg"><image href="file:///tmp/other.png"/></svg>"#).is_err());
     Ok(())
 }
@@ -49,26 +49,32 @@ fn svg_paths_ids_viewbox_and_transforms_enter_vectors() -> motion_core::Result<(
 fn svg_gradients_strokes_clips_masks_filters_and_diagnostics_are() -> motion_core::Result<()> {
     let asset=SvgAsset::from_bytes(br##"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="8"><defs><linearGradient id="g"><stop stop-color="red"/><stop offset="1" stop-color="blue"/></linearGradient><clipPath id="c"><rect width="14" height="8"/></clipPath><mask id="m" maskUnits="userSpaceOnUse" x="0" y="0" width="16" height="8"><rect width="8" height="8" fill="white"/></mask></defs><g clip-path="url(#c)" mask="url(#m)"><rect id="art" width="16" height="8" fill="url(#g)" stroke="green" stroke-width="1" paint-order="stroke fill"/></g></svg>"##)?;
     let frame = pixels(&asset)?;
-    assert!(frame.pixel(1, 3).unwrap()[0] > frame.pixel(1, 3).unwrap()[2]);
-    assert_eq!(frame.pixel(10, 3), Some([0.0; 4]));
+    assert!(frame.linear_pixel(1, 3).unwrap()[0] > frame.linear_pixel(1, 3).unwrap()[2]);
+    assert_eq!(frame.linear_pixel(10, 3), Some([0.0; 4]));
     assert!(asset.tree.get("art").is_some());
     assert!(asset.diagnostics().is_empty());
     let blur=SvgAsset::from_bytes(br##"<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12"><defs><filter id="b" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="1"/></filter></defs><rect x="4" y="4" width="4" height="4" fill="red" filter="url(#b)"/></svg>"##)?;
     assert!(blur.diagnostics().is_empty());
     let frame = pixels(&blur)?;
-    assert!(frame.pixel(5, 3).unwrap()[3] > 0.0);
-    assert!(frame.pixel(5, 5).unwrap()[3] > frame.pixel(5, 3).unwrap()[3]);
+    assert!(frame.linear_pixel(5, 3).unwrap()[3] > 0.0);
+    assert!(frame.linear_pixel(5, 5).unwrap()[3] > frame.linear_pixel(5, 3).unwrap()[3]);
     let matrix=SvgAsset::from_bytes(br##"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><defs><filter id="f"><feColorMatrix values="0 0 1 0 0 0 1 0 0 0 1 0 0 0 0 0 0 0 1 0"/></filter></defs><rect width="4" height="4" fill="red" filter="url(#f)"/></svg>"##)?;
-    assert_eq!(pixels(&matrix)?.pixel(2, 2), Some([0.0, 0.0, 1.0, 1.0]));
+    assert_eq!(
+        pixels(&matrix)?.linear_pixel(2, 2),
+        Some([0.0, 0.0, 1.0, 1.0])
+    );
     let unsupported=SvgAsset::from_bytes(br##"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><defs><filter id="f"><feTurbulence/></filter></defs><rect width="4" height="4" fill="red" filter="url(#f)"/></svg>"##)?;
     assert_eq!(unsupported.diagnostics().len(), 1);
     assert_eq!(
-        pixels(&unsupported)?.pixel(2, 2),
+        pixels(&unsupported)?.linear_pixel(2, 2),
         Some([1.0, 0.0, 0.0, 1.0])
     );
     let clip=SvgAsset::from_bytes(br##"<svg xmlns="http://www.w3.org/2000/svg" width="12" height="4"><defs><clipPath id="c"><rect width="4" height="4"/><rect x="8" width="4" height="4" visibility="hidden"/></clipPath></defs><rect width="12" height="4" fill="red" clip-path="url(#c)"/></svg>"##)?;
-    assert_eq!(pixels(&clip)?.pixel(2, 2), Some([1.0, 0.0, 0.0, 1.0]));
-    assert_eq!(pixels(&clip)?.pixel(10, 2), Some([0.0; 4]));
+    assert_eq!(
+        pixels(&clip)?.linear_pixel(2, 2),
+        Some([1.0, 0.0, 0.0, 1.0])
+    );
+    assert_eq!(pixels(&clip)?.linear_pixel(10, 2), Some([0.0; 4]));
     Ok(())
 }
 
@@ -81,14 +87,13 @@ fn svg_lazy_selection_writing_images_and_security_keep_original_resources()
         motion_render::Composition::new(8, 8, motion_render::FrameClock::new(30, 150));
     let error = composition
         .render_frame(0, Size::new(8.0, 8.0), |_| captured.clone())
-        .err()
-        .expect("strict SVG resource failure");
+        .expect_err("strict SVG resource failure");
     assert_eq!(error.kind(), motion_core::ErrorKind::Asset);
     assert_eq!(error.frame(), Some(0));
     let placeholder = composition
         .configure(|options| options.allow_missing_assets(true))
         .render_frame(0, Size::new(8.0, 8.0), |_| captured.clone())?;
-    assert!(placeholder.pixels().contains(&0xff00ff));
+    assert!(placeholder.packed_rgb().contains(&0xff00ff));
     let directory = tempfile::tempdir()?;
     let path = directory.path().join("art.svg");
     std::fs::write(&path,br#"<svg xmlns="http://www.w3.org/2000/svg" width="8" height="4"><rect id="art" width="8" height="4" fill="blue"/></svg>"#)?;
@@ -112,8 +117,8 @@ fn svg_lazy_selection_writing_images_and_security_keep_original_resources()
             motion_core::RasterLimits::default(),
         )?
         .render_linear(motion_core::RasterLimits::default())?;
-    assert_eq!(frame.pixel(2, 0), Some([0.0; 4]));
-    assert_eq!(frame.pixel(2, 3), Some([0.0, 0.0, 0.5, 0.5]));
+    assert_eq!(frame.linear_pixel(2, 0), Some([0.0; 4]));
+    assert_eq!(frame.linear_pixel(2, 3), Some([0.0, 0.0, 0.5, 0.5]));
     assert!(
         Svg::from_asset(asset)
             .select("missing", |node| node)
@@ -136,11 +141,14 @@ fn svg_lazy_selection_writing_images_and_security_keep_original_resources()
     let image = SvgAsset::from_bytes(source.as_bytes())?;
     assert!(image.retained_bytes() > 0);
     assert_eq!(
-        motion_render::FrameBuffer::from_linear_rgba8(
-            &pixels(&image)?,
-            motion_core::RasterLimits::default()
-        )?
-        .bytes(),
+        pixels(&image)?
+            .to_format(
+                motion_render::PixelFormat::SrgbRgba8 {
+                    premultiplied: false
+                },
+                motion_core::RasterLimits::default()
+            )?
+            .bytes(),
         [255, 0, 0, 128]
     );
     for body in [
@@ -177,7 +185,10 @@ fn nested_svg_retains_vector_content_without_raster_fallback() -> motion_core::R
             .iter()
             .all(|leaf| matches!(leaf.item, VectorItem::Path(_)))
     );
-    assert_eq!(pixels(&asset)?.pixel(0, 0), Some([0.0, 1.0, 0.0, 1.0]));
+    assert_eq!(
+        pixels(&asset)?.linear_pixel(0, 0),
+        Some([0.0, 1.0, 0.0, 1.0])
+    );
     Ok(())
 }
 
@@ -200,12 +211,15 @@ fn svg_isolation_nested_ids_and_alpha_filter_inputs_preserve_semantics() -> moti
             motion_core::RasterLimits::default(),
         )?
         .render_linear(motion_core::RasterLimits::default())?;
-    assert_eq!(selected.pixel(1, 1), Some([0.0, 0.0, 0.5, 0.5]));
+    assert_eq!(selected.linear_pixel(1, 1), Some([0.0, 0.0, 0.5, 0.5]));
     let isolated=SvgAsset::from_bytes(br#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="blue"/><g style="isolation:isolate"><rect width="4" height="4" fill="red" style="mix-blend-mode:multiply"/></g></svg>"#)?;
-    assert_eq!(pixels(&isolated)?.pixel(1, 1), Some([1.0, 0.0, 0.0, 1.0]));
+    assert_eq!(
+        pixels(&isolated)?.linear_pixel(1, 1),
+        Some([1.0, 0.0, 0.0, 1.0])
+    );
     let alpha=SvgAsset::from_bytes(br##"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><defs><filter id="a"><feGaussianBlur in="SourceAlpha" stdDeviation="0"/></filter></defs><rect width="4" height="4" fill="red" opacity=".5" filter="url(#a)"/></svg>"##)?;
     assert!(alpha.diagnostics().is_empty());
-    let pixel = pixels(&alpha)?.pixel(2, 2).unwrap();
+    let pixel = pixels(&alpha)?.linear_pixel(2, 2).unwrap();
     assert_eq!(&pixel[..3], &[0.0; 3]);
     assert!((pixel[3] - 0.5).abs() < 0.01);
     let nested = "<svg xmlns='http://www.w3.org/2000/svg' width='2' height='2'><rect id='inside' width='2' height='2' fill='lime'/></svg>";
@@ -234,7 +248,7 @@ fn svg_text_uses_shared_fonts_and_outlined_geometry() -> motion_core::Result<()>
     assert!(SvgAsset::from_bytes(source).is_err());
     let asset = SvgAsset::from_bytes_with_fonts(source, &fonts)?;
     assert!(asset.tree.get("label").is_some());
-    assert!(pixels(&asset)?.pixels().iter().any(|pixel| pixel[3] > 0.5));
+    assert!(pixels(&asset)?.linear_pixels().any(|pixel| pixel[3] > 0.5));
     assert!(
         asset
             .tree
@@ -281,15 +295,27 @@ fn svg_effects_operations_and_focal_paints_match_cpu_gpu() -> motion_core::Resul
                     .prepare(motion_core::ValidationLimits::default(), limits)?
                     .blend_space(space);
                 let cpu = prepared.render_linear(limits)?;
-                let actual =
-                    gpu.render(&prepared, motion_render::gpu::Plan::new(&prepared, limits)?)?;
+                let actual = gpu
+                    .render_linear(&prepared, motion_render::gpu::Plan::new(&prepared, limits)?)?;
                 assert_eq!(
-                    actual.pixels(),
-                    gpu.render(&prepared, motion_render::gpu::Plan::new(&prepared, limits)?)?
-                        .pixels()
+                    actual,
+                    gpu.render_linear(
+                        &prepared,
+                        motion_render::gpu::Plan::new(&prepared, limits)?
+                    )?
                 );
-                let cpu = cpu.to_srgb_rgba8(false, limits)?;
-                let actual = actual.to_srgb_rgba8(false, limits)?;
+                let cpu = cpu.to_format(
+                    motion_render::PixelFormat::SrgbRgba8 {
+                        premultiplied: false,
+                    },
+                    limits,
+                )?;
+                let actual = actual.to_format(
+                    motion_render::PixelFormat::SrgbRgba8 {
+                        premultiplied: false,
+                    },
+                    limits,
+                )?;
                 for (cpu, actual) in cpu.bytes().iter().zip(actual.bytes()) {
                     maximum = maximum.max(cpu.abs_diff(*actual));
                 }

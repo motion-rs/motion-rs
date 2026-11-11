@@ -3,7 +3,7 @@
 
 use motion::extend::RenderPrepare;
 use motion::prelude::*;
-use motion::render::{LinearFrame, RasterLimits, ValidationLimits};
+use motion::render::{FrameBuffer, RasterLimits, ValidationLimits};
 use serde_json::{Value, json};
 
 /// Translation step used by every sub-pixel sweep (1/16 px).
@@ -16,7 +16,7 @@ fn render(
     width: u32,
     height: u32,
     fonts: Option<FontLibrary>,
-) -> motion::Result<LinearFrame> {
+) -> motion::Result<FrameBuffer> {
     let limits = RasterLimits::default();
     let size = Size::new(f64::from(width), f64::from(height));
     let compiled = match fonts {
@@ -37,18 +37,17 @@ fn render(
         .render_linear(limits)?)
 }
 
-fn alpha_sum(frame: &LinearFrame) -> f64 {
-    frame.pixels().iter().map(|pixel| f64::from(pixel[3])).sum()
+fn alpha_sum(frame: &FrameBuffer) -> f64 {
+    frame.linear_pixels().map(|pixel| f64::from(pixel[3])).sum()
 }
 
-fn mean_adjacent_difference(first: &LinearFrame, second: &LinearFrame) -> f64 {
+fn mean_adjacent_difference(first: &FrameBuffer, second: &FrameBuffer) -> f64 {
     first
-        .pixels()
-        .iter()
-        .zip(second.pixels())
+        .linear_pixels()
+        .zip(second.linear_pixels())
         .map(|(first, second)| f64::from((first[3] - second[3]).abs()))
         .sum::<f64>()
-        / first.pixels().len() as f64
+        / first.linear_pixels().len() as f64
 }
 
 /// Exact overlap of `[start, end]` with the unit pixel `[column, column + 1]`.
@@ -66,7 +65,7 @@ pub fn fine_lines() -> motion::Result<Vec<Value>> {
         let mut energies = Vec::new();
         let mut errors = Vec::new();
         for horizontal in [false, true] {
-            let mut previous: Option<LinearFrame> = None;
+            let mut previous: Option<FrameBuffer> = None;
             let mut max_error = 0.0_f64;
             let mut sum_error = 0.0;
             let mut samples = 0.0;
@@ -85,7 +84,7 @@ pub fn fine_lines() -> motion::Result<Vec<Value>> {
                     } else {
                         (coordinate, 32)
                     };
-                    let actual = f64::from(current.pixels()[(y * 128 + x) as usize][3]);
+                    let actual = f64::from(current.linear_pixel(x, y).unwrap()[3]);
                     let error = (actual - overlap(start, start + width, coordinate)).abs();
                     max_error = max_error.max(error);
                     sum_error += error;
@@ -136,8 +135,7 @@ pub fn text_stability() -> motion::Result<Value> {
         energies.push(alpha_sum(&current));
         frames.push(
             current
-                .pixels()
-                .iter()
+                .linear_pixels()
                 .map(|pixel| pixel[3])
                 .collect::<Vec<_>>(),
         );
@@ -196,8 +194,9 @@ pub fn gradient_banding() -> motion::Result<Value> {
         )
         .into();
     let frame = render(gradient, 1024, 2, None)?;
-    let values = frame.pixels()[..1024]
-        .iter()
+    let values = frame
+        .linear_pixels()
+        .take(1024)
         .map(|pixel| pixel[0])
         .collect::<Vec<_>>();
     let unique = values

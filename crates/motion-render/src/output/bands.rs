@@ -92,6 +92,7 @@ impl FrameBuffer {
         let depth = match format {
             PixelFormat::SrgbRgba8 { .. } => 4,
             PixelFormat::LinearRgba16Float => 8,
+            PixelFormat::LinearRgba32Float => 16,
             PixelFormat::Yuv420 { bit_depth } => {
                 if !size.width.is_multiple_of(2)
                     || !size.height.is_multiple_of(2)

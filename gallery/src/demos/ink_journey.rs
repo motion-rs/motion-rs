@@ -388,7 +388,7 @@ mod tests {
         for index in [220, 180, 40, 90, 220, 40, 180] {
             let actual = actual.render_frame(index, |context| optimized.render(context))?;
             let expected = expected.render_frame(index, |context| reference.render(context))?;
-            assert_eq!(actual.pixels(), expected.pixels(), "frame {index}");
+            assert_eq!(actual.packed_rgb(), expected.packed_rgb(), "frame {index}");
         }
         Ok(())
     }

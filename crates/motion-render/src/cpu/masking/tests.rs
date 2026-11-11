@@ -97,7 +97,7 @@ fn node_content_mask_scales_overlapping_children_once_and_preserves_mode() {
         );
         assert_eq!(
             prepared
-                .render_linear(RasterLimits::default())
+                .compose_linear(RasterLimits::default())
                 .unwrap()
                 .pixels(),
             &[[expected; 4]; 2]
@@ -175,7 +175,7 @@ fn inverted_masks_preserve_only_source_in_empty_and_unpainted_regions() {
                 .unwrap();
             assert_eq!(
                 frame
-                    .render_linear(RasterLimits::default())
+                    .compose_linear(RasterLimits::default())
                     .unwrap()
                     .pixels(),
                 &[
@@ -203,7 +203,7 @@ fn inverted_masks_preserve_only_source_in_empty_and_unpainted_regions() {
         let partial = source.clone().mask(tile(1.0, 1.0, Color::WHITE), mode);
         assert_eq!(
             prepared(&partial, size)
-                .render_linear(RasterLimits::default())
+                .compose_linear(RasterLimits::default())
                 .unwrap()
                 .pixels(),
             &[[0.0; 4], [0.0; 4], [1.0; 4], [0.0; 4], [0.0; 4]]
@@ -212,7 +212,7 @@ fn inverted_masks_preserve_only_source_in_empty_and_unpainted_regions() {
         let coverage = (1.0_f64 - f64::from(128.0_f32 / 255.0)) as f32;
         assert_eq!(
             prepared(&edge, size)
-                .render_linear(RasterLimits::default())
+                .compose_linear(RasterLimits::default())
                 .unwrap()
                 .pixels(),
             &[[0.0; 4], [coverage; 4], [coverage; 4], [0.0; 4], [0.0; 4]]
@@ -224,13 +224,13 @@ fn inverted_masks_preserve_only_source_in_empty_and_unpainted_regions() {
         Color::from_rgb_float(2.0, -0.5, 0.25).with_alpha(0.75),
     );
     let reference = prepared(&source, PixelSize::new(2, 1))
-        .render_linear(RasterLimits::default())
+        .compose_linear(RasterLimits::default())
         .unwrap();
     for mode in [MaskMode::InvertedAlpha, MaskMode::InvertedLuminance] {
         let node = source.clone().mask(Node::empty(), mode);
         assert_eq!(
             prepared(&node, PixelSize::new(2, 1))
-                .render_linear(RasterLimits::default())
+                .compose_linear(RasterLimits::default())
                 .unwrap()
                 .pixels(),
             reference.pixels()
@@ -254,7 +254,7 @@ fn inverted_masks_resolve_artwork_before_source_clip_opacity_and_blending() {
         let node = source.mask(artwork, mode);
         assert_eq!(
             prepared(&node, size)
-                .render_linear(RasterLimits::default())
+                .compose_linear(RasterLimits::default())
                 .unwrap()
                 .pixels(),
             &[[expected; 4]; 2]
@@ -275,7 +275,7 @@ fn inverted_masks_resolve_artwork_before_source_clip_opacity_and_blending() {
         let value = (1.0 - f64::from(alpha)) as f32;
         assert_eq!(
             prepared(&scene, size)
-                .render_linear(RasterLimits::default())
+                .compose_linear(RasterLimits::default())
                 .unwrap()
                 .pixels(),
             &[[value, value, value, 1.0], [0.5, 0.5, 0.5, 1.0]]
@@ -284,7 +284,7 @@ fn inverted_masks_resolve_artwork_before_source_clip_opacity_and_blending() {
         let nested = tile(2.0, 1.0, Color::WHITE).mask(mask, mode);
         assert_eq!(
             prepared(&nested, size)
-                .render_linear(RasterLimits::default())
+                .compose_linear(RasterLimits::default())
                 .unwrap()
                 .pixels(),
             &[[0.0; 4]; 2]
@@ -297,7 +297,7 @@ fn inverted_masks_resolve_artwork_before_source_clip_opacity_and_blending() {
     );
     let node = tile(2.0, 1.0, Color::WHITE).mask(gray, MaskMode::InvertedLuminance);
     for pixel in prepared(&node, size)
-        .render_linear(RasterLimits::default())
+        .compose_linear(RasterLimits::default())
         .unwrap()
         .pixels()
     {
@@ -387,7 +387,7 @@ fn masks_follow_source_coordinates_without_changing_layout_or_snapshots() {
     let output = commands
         .prepare(ValidationLimits::default(), RasterLimits::default())
         .unwrap()
-        .render_linear(RasterLimits::default())
+        .compose_linear(RasterLimits::default())
         .unwrap();
     for (x, y) in [(4, 4), (5, 7)] {
         assert_eq!(output.pixel(x, y), Some([1.0; 4]));
@@ -426,7 +426,7 @@ fn nested_mask_artwork_clip_opacity_and_backdrop_order_are_isolated() {
     );
     assert_eq!(
         prepared(&nested, PixelSize::new(2, 1))
-            .render_linear(RasterLimits::default())
+            .compose_linear(RasterLimits::default())
             .unwrap()
             .pixels(),
         &[[0.25; 4]; 2]
@@ -435,7 +435,7 @@ fn nested_mask_artwork_clip_opacity_and_backdrop_order_are_isolated() {
     let grouped = tile(2.0, 1.0, Color::WHITE).mask(artwork, MaskMode::Alpha);
     assert_eq!(
         prepared(&grouped, PixelSize::new(2, 1))
-            .render_linear(RasterLimits::default())
+            .compose_linear(RasterLimits::default())
             .unwrap()
             .pixels(),
         &[[0.75; 4]; 2]
@@ -447,7 +447,7 @@ fn nested_mask_artwork_clip_opacity_and_backdrop_order_are_isolated() {
     let parent = Node::group([source]).translate(1.0, 0.0);
     assert_eq!(
         prepared(&parent, PixelSize::new(3, 1))
-            .render_linear(RasterLimits::default())
+            .compose_linear(RasterLimits::default())
             .unwrap()
             .pixels(),
         &[[0.0; 4], [0.5; 4], [0.0; 4]]
@@ -460,7 +460,7 @@ fn nested_mask_artwork_clip_opacity_and_backdrop_order_are_isolated() {
         .blend_mode(BlendMode::Multiply);
     let scene = Node::group([tile(2.0, 1.0, Color::WHITE), source]);
     let output = prepared(&scene, PixelSize::new(2, 1))
-        .render_linear(RasterLimits::default())
+        .compose_linear(RasterLimits::default())
         .unwrap();
     let alpha = (0.25_f64 * (128.0 / 255.0)) as f32;
     let value = (1.0 - f64::from(alpha)) as f32;
@@ -484,7 +484,7 @@ fn nested_mask_artwork_clip_opacity_and_backdrop_order_are_isolated() {
         let output = source
             .prepare(ValidationLimits::default(), RasterLimits::default())
             .unwrap()
-            .render_linear(RasterLimits::default())
+            .compose_linear(RasterLimits::default())
             .unwrap();
         assert_eq!(
             output.pixel(0, 0),
@@ -518,7 +518,7 @@ fn finite_mask_boundaries_and_mask_render_overflow_preserve_sources() {
         let node = tile(1.0, 1.0, Color::WHITE).mask(mask, MaskMode::Alpha);
         assert_eq!(
             prepared(&node, PixelSize::new(1, 1))
-                .render_linear(RasterLimits::default())
+                .compose_linear(RasterLimits::default())
                 .unwrap()
                 .pixel(0, 0),
             Some([alpha; 4])
@@ -531,7 +531,7 @@ fn finite_mask_boundaries_and_mask_render_overflow_preserve_sources() {
         let node = tile(1.0, 1.0, Color::WHITE).mask(tile(1.0, 1.0, color), MaskMode::Luminance);
         assert_eq!(
             prepared(&node, PixelSize::new(1, 1))
-                .render_linear(RasterLimits::default())
+                .compose_linear(RasterLimits::default())
                 .unwrap()
                 .pixel(0, 0),
             Some([expected; 4])
@@ -544,7 +544,7 @@ fn finite_mask_boundaries_and_mask_render_overflow_preserve_sources() {
     );
     let node = tile(1.0, 1.0, Color::WHITE).mask(gray, MaskMode::Luminance);
     let output = prepared(&node, PixelSize::new(1, 1))
-        .render_linear(RasterLimits::default())
+        .compose_linear(RasterLimits::default())
         .unwrap();
     for value in output.pixel(0, 0).unwrap() {
         assert!((value - 0.10702057).abs() < 1e-8);
@@ -554,7 +554,7 @@ fn finite_mask_boundaries_and_mask_render_overflow_preserve_sources() {
         MaskMode::Alpha,
     );
     let output = prepared(&extended, PixelSize::new(1, 1))
-        .render_linear(RasterLimits::default())
+        .compose_linear(RasterLimits::default())
         .unwrap();
     let pixel = output.pixel(0, 0).unwrap();
     assert!(pixel[0] > 1.0);
@@ -566,7 +566,7 @@ fn finite_mask_boundaries_and_mask_render_overflow_preserve_sources() {
         PixelSize::new(1, 1),
     );
     let original = frame.clone();
-    let error = frame.render_linear(RasterLimits::default()).unwrap_err();
+    let error = frame.compose_linear(RasterLimits::default()).unwrap_err();
     assert_eq!(
         (error.kind, error.field.as_str()),
         (ValidationErrorKind::InvalidValue, "color")
@@ -574,7 +574,7 @@ fn finite_mask_boundaries_and_mask_render_overflow_preserve_sources() {
     assert_eq!(frame, original);
     assert!(
         prepared(&hdr, PixelSize::new(1, 1))
-            .render_linear(RasterLimits::default())
+            .compose_linear(RasterLimits::default())
             .is_ok()
     );
 }
@@ -783,13 +783,13 @@ fn preparation_render_and_sibling_mask_lifetimes_obey_shared_budgets() {
             );
         }
         let original = frame.clone();
-        let output = frame.render_linear(RasterLimits::default()).unwrap();
+        let output = frame.compose_linear(RasterLimits::default()).unwrap();
         let exact = RasterLimits {
             max_pixels: 8,
             max_bytes: output.stats().peak_bytes,
             max_work: output.stats().work,
         };
-        assert_eq!(frame.render_linear(exact).unwrap(), output);
+        assert_eq!(frame.compose_linear(exact).unwrap(), output);
         for (limits, field) in [
             (
                 RasterLimits {
@@ -813,16 +813,16 @@ fn preparation_render_and_sibling_mask_lifetimes_obey_shared_budgets() {
                 "max_work",
             ),
         ] {
-            let error = frame.render_linear(limits).unwrap_err();
+            let error = frame.compose_linear(limits).unwrap_err();
             assert_eq!(
                 (error.kind, error.field.as_str()),
                 (ValidationErrorKind::StructuralLimit, field)
             );
             assert_eq!(frame, original);
-            assert_eq!(frame.render_linear(exact).unwrap(), output);
+            assert_eq!(frame.compose_linear(exact).unwrap(), output);
         }
         let siblings = prepared(&Node::group([node.clone(), node.clone()]), size);
-        let double = siblings.render_linear(RasterLimits::default()).unwrap();
+        let double = siblings.compose_linear(RasterLimits::default()).unwrap();
         assert_eq!(
             output.stats().peak_bytes - frame.stats().retained_bytes,
             double.stats().peak_bytes - siblings.stats().retained_bytes
@@ -857,7 +857,7 @@ fn mask_draw_callbacks_run_once_per_occurrence_and_not_during_measurement() {
     assert_eq!(calls.load(Ordering::SeqCst), 0);
     let frame = prepared(&node, PixelSize::new(2, 1));
     assert_eq!(calls.load(Ordering::SeqCst), 2);
-    frame.render_linear(RasterLimits::default()).unwrap();
+    frame.compose_linear(RasterLimits::default()).unwrap();
     assert_eq!(calls.load(Ordering::SeqCst), 2);
     let empty = Node::empty().mask(Node::from(Counted(calls.clone())), MaskMode::Alpha);
     assert!(list(&empty, PixelSize::new(2, 1)).commands.is_empty());

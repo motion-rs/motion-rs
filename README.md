@@ -31,8 +31,8 @@ bitmap.save_png("frame.png")?;
 `Rect::new` takes opposite corners, not origin/width/height. Geometry and
 animation progress use f64; time uses signed ticks and rational `FrameRate`.
 Colors retain finite extended sRGB channels; rendering uses linear-premultiplied
-working storage. Straight RGBA8 `FrameBuffer` preserves transparency. `Composition` and opaque
-`Snapshot` remain explicit low-level rendering APIs, outside the authoring prelude.
+working storage. Straight RGBA8 `FrameBuffer` preserves transparency. `Composition` and its opaque
+frame output remain explicit low-level rendering APIs, outside the authoring prelude.
 
 ```sh
 cargo run --example motion -- list

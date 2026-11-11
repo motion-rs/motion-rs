@@ -370,9 +370,22 @@ impl Gpu {
         &self.info
     }
 
+    /// Executes an admitted plan synchronously and returns the read-back pixels as
+    /// unquantized [`crate::PixelFormat::LinearRgba32Float`] output; convert them with
+    /// [`crate::FrameBuffer::to_format`]. The plan already admitted this storage.
+    /// Device loss, driver validation or nonfinite arithmetic fails the entire frame.
+    pub fn render_linear(
+        &mut self,
+        frame: &PreparedFrame,
+        plan: Plan,
+    ) -> motion_core::Result<crate::FrameBuffer> {
+        let linear = self.render(frame, plan)?;
+        crate::FrameBuffer::linear_unbounded(&linear).map_err(Into::into)
+    }
+
     /// Executes an admitted plan synchronously and returns finite linear-premultiplied pixels.
     /// Device loss, driver validation or nonfinite arithmetic fails the entire frame.
-    pub fn render(
+    pub(crate) fn render(
         &mut self,
         frame: &PreparedFrame,
         plan: Plan,

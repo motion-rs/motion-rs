@@ -603,16 +603,29 @@ mod tests {
                 motion_core::ValidationLimits::default(),
             )?
             .prepare(motion_core::ValidationLimits::default(), limits)?;
-        let expected = prepared
-            .render_linear(limits)?
-            .to_srgb_rgba8(false, limits)?;
+        let expected = prepared.render_linear(limits)?.to_format(
+            motion_render::PixelFormat::SrgbRgba8 {
+                premultiplied: false,
+            },
+            limits,
+        )?;
         let mut gpu = motion_render::gpu::Gpu::new()?;
         let actual = gpu
-            .render(&prepared, motion_render::gpu::Plan::new(&prepared, limits)?)?
-            .to_srgb_rgba8(false, limits)?;
+            .render_linear(&prepared, motion_render::gpu::Plan::new(&prepared, limits)?)?
+            .to_format(
+                motion_render::PixelFormat::SrgbRgba8 {
+                    premultiplied: false,
+                },
+                limits,
+            )?;
         let replay = gpu
-            .render(&prepared, motion_render::gpu::Plan::new(&prepared, limits)?)?
-            .to_srgb_rgba8(false, limits)?;
+            .render_linear(&prepared, motion_render::gpu::Plan::new(&prepared, limits)?)?
+            .to_format(
+                motion_render::PixelFormat::SrgbRgba8 {
+                    premultiplied: false,
+                },
+                limits,
+            )?;
         assert_eq!(actual.bytes(), replay.bytes());
         assert!(
             expected
@@ -642,9 +655,9 @@ mod tests {
                 motion_core::RasterLimits::default(),
             )?
             .render_linear(motion_core::RasterLimits::default())?;
-        assert_eq!(frame.pixel(16, 16).unwrap()[3], 0.0);
-        assert!(frame.pixel(6, 6).unwrap()[3] > 0.5);
-        assert_eq!(frame.pixel(0, 0).unwrap()[3], 0.0);
+        assert_eq!(frame.linear_pixel(16, 16).unwrap()[3], 0.0);
+        assert!(frame.linear_pixel(6, 6).unwrap()[3] > 0.5);
+        assert_eq!(frame.linear_pixel(0, 0).unwrap()[3], 0.0);
         let oversized = InkFill::new(
             Path2D::from_rect(Rect::new(0.0, 0.0, 2000.0, 2000.0))?,
             Color::BLACK,
@@ -729,11 +742,11 @@ mod tests {
         };
         let solid = render(Color::rgb(255, 0, 0).into(), Ink::new(1)).unwrap();
         let graded = render(gradient.into(), Ink::new(1)).unwrap();
-        assert!(graded.pixel(6, 16).unwrap()[0] > graded.pixel(26, 16).unwrap()[0]);
-        assert!(graded.pixel(6, 16).unwrap()[2] < graded.pixel(26, 16).unwrap()[2]);
-        assert_eq!(solid.pixel(6, 16).unwrap()[3], 1.0);
+        assert!(graded.linear_pixel(6, 16).unwrap()[0] > graded.linear_pixel(26, 16).unwrap()[0]);
+        assert!(graded.linear_pixel(6, 16).unwrap()[2] < graded.linear_pixel(26, 16).unwrap()[2]);
+        assert_eq!(solid.linear_pixel(6, 16).unwrap()[3], 1.0);
         let papered = render(Color::rgb(255, 0, 0).into(), ink).unwrap();
-        assert!(papered.pixel(16, 16).unwrap()[3] < 0.6);
+        assert!(papered.linear_pixel(16, 16).unwrap()[3] < 0.6);
         Ok(())
     }
 }

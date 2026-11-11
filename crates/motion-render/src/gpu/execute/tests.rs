@@ -98,7 +98,7 @@ fn bloom_pyramid_cpu_gpu_parity() -> motion_core::Result {
                 ValidationLimits::default(),
             )?
             .prepare(ValidationLimits::default(), limits)?;
-        let cpu = prepared.render_linear(limits)?;
+        let cpu = prepared.compose_linear(limits)?;
         let actual = gpu.render(&prepared, Plan::new(&prepared, limits)?)?;
         let mut glow = 0.0;
         for (cpu, actual) in cpu.pixels().iter().zip(actual.pixels()) {
@@ -230,7 +230,7 @@ fn cinematic_display_and_optics_cpu_gpu_parity() -> motion_core::Result {
                 ValidationLimits::default(),
             )?
             .prepare(ValidationLimits::default(), limits)?;
-        let cpu = prepared.render_linear(limits)?;
+        let cpu = prepared.compose_linear(limits)?;
         let actual = gpu.render(&prepared, Plan::new(&prepared, limits)?)?;
         for (cpu, actual) in cpu.pixels().iter().zip(actual.pixels()) {
             for channel in 0..4 {
@@ -248,7 +248,7 @@ fn cinematic_display_and_optics_cpu_gpu_parity() -> motion_core::Result {
             ValidationLimits::default(),
         )?
         .prepare(ValidationLimits::default(), limits)?;
-    let linear = prepared.render_linear(limits)?;
+    let linear = prepared.compose_linear(limits)?;
     for tone_map in [
         crate::ToneMap::PbrNeutral,
         crate::ToneMap::Aces,
@@ -342,7 +342,7 @@ fn shaper_input_encodings_cpu_gpu_parity() -> motion_core::Result {
                 ValidationLimits::default(),
             )?
             .prepare(ValidationLimits::default(), limits)?;
-        let cpu = prepared.render_linear(limits)?;
+        let cpu = prepared.compose_linear(limits)?;
         let actual = gpu.render(&prepared, Plan::new(&prepared, limits)?)?;
         for (cpu, actual) in cpu.pixels().iter().zip(actual.pixels()) {
             for channel in 0..4 {
@@ -693,9 +693,9 @@ fn direct_coverage_payloads_remain_independent_inflight() -> motion_core::Result
         premultiplied: false,
     };
     let expected_first =
-        crate::FrameBuffer::from_linear(&first.render_linear(limits)?, format, limits)?;
+        crate::FrameBuffer::from_linear(&first.compose_linear(limits)?, format, limits)?;
     let expected_second =
-        crate::FrameBuffer::from_linear(&second.render_linear(limits)?, format, limits)?;
+        crate::FrameBuffer::from_linear(&second.compose_linear(limits)?, format, limits)?;
     assert_ne!(
         expected_first.planes()[0].bytes(),
         expected_second.planes()[0].bytes()
@@ -1077,9 +1077,11 @@ fn texture_working_images_and_hardware_plus_preserve_frame_contracts() -> motion
             motion_core::ValidationLimits::default(),
         )?
         .prepare(motion_core::ValidationLimits::default(), limits)?;
-    let expected = frame.render_linear(limits)?.to_srgb_rgba8(false, limits)?;
+    let expected = frame
+        .compose_linear(limits)?
+        .to_rgba8_frame(false, limits)?;
     let actual = gpu.render(&frame, Plan::new(&frame, limits)?)?;
-    let output = actual.to_srgb_rgba8(false, limits)?;
+    let output = actual.to_rgba8_frame(false, limits)?;
     let mut maximum = 0;
     let mut over_one = 0;
     for (actual, expected) in output.pixels().iter().zip(expected.pixels()) {
@@ -1128,7 +1130,7 @@ fn texture_working_images_and_hardware_plus_preserve_frame_contracts() -> motion
     std::sync::Arc::make_mut(&mut compute.textures).blends = None;
     let mut fallback = Gpu::from_context(compute);
     let fallback_frame = fallback.render(&frame, Plan::new(&frame, limits)?)?;
-    let fallback_rgba = fallback_frame.to_srgb_rgba8(false, limits)?;
+    let fallback_rgba = fallback_frame.to_rgba8_frame(false, limits)?;
     let differences = fallback_rgba
         .pixels()
         .iter()
@@ -1204,9 +1206,11 @@ fn resident_batch_textures_skip_resolve_and_layer_recapture() -> motion_core::Re
             motion_core::ValidationLimits::default(),
         )?
         .prepare(motion_core::ValidationLimits::default(), limits)?;
-    let reference = frame.render_linear(limits)?.to_srgb_rgba8(false, limits)?;
+    let reference = frame
+        .compose_linear(limits)?
+        .to_rgba8_frame(false, limits)?;
     let actual = gpu.render(&frame, Plan::new(&frame, limits)?)?;
-    let rgba = actual.to_srgb_rgba8(false, limits)?;
+    let rgba = actual.to_rgba8_frame(false, limits)?;
     let mut maximum = 0_u8;
     let mut over_one = 0usize;
     for (actual, reference) in rgba.pixels().iter().zip(reference.pixels()) {
@@ -1287,10 +1291,10 @@ fn resident_batch_textures_skip_resolve_and_layer_recapture() -> motion_core::Re
         let batches_before = context.fill_batches_encoded.load(Ordering::Relaxed);
         let resolves_before = context.batch_resolves_encoded.load(Ordering::Relaxed);
         let captures_before = context.layer_captures_encoded.load(Ordering::Relaxed);
-        let expected = frame.render_linear(limits)?;
+        let expected = frame.compose_linear(limits)?;
         let actual = gpu.render(&frame, plan)?;
-        let output = actual.to_srgb_rgba8(false, limits)?;
-        let expected_rgba = expected.to_srgb_rgba8(false, limits)?;
+        let output = actual.to_rgba8_frame(false, limits)?;
+        let expected_rgba = expected.to_rgba8_frame(false, limits)?;
         let mut maximum = 0;
         let mut over_one = 0;
         for (pixel, reference) in output.pixels().iter().zip(expected_rgba.pixels()) {
@@ -1458,7 +1462,7 @@ fn hardware_fill_batches_preserve_rgba_tolerance_boundaries_and_pooling() -> mot
                 "Hardware layer accumulation did not activate"
             );
         }
-        let expected = frame.render_linear(limits)?;
+        let expected = frame.compose_linear(limits)?;
         let actual = gpu.render(frame, plan)?;
         assert!(
             context.fill_batches_encoded.load(Ordering::Relaxed) > before,
@@ -1473,8 +1477,8 @@ fn hardware_fill_batches_preserve_rgba_tolerance_boundaries_and_pooling() -> mot
                 );
             }
         }
-        let actual_rgba = actual.to_srgb_rgba8(false, limits)?;
-        let expected_rgba = expected.to_srgb_rgba8(false, limits)?;
+        let actual_rgba = actual.to_rgba8_frame(false, limits)?;
+        let expected_rgba = expected.to_rgba8_frame(false, limits)?;
         let mut maximum = 0;
         let mut over_one = 0;
         assert_eq!(actual_rgba.pixels().len(), expected_rgba.pixels().len());
@@ -1723,7 +1727,11 @@ fn hardware_fill_batches_preserve_rgba_tolerance_boundaries_and_pooling() -> mot
     }
     for index in [4, 0, 2] {
         assert_eq!(
-            queue.finish_next()?.unwrap().pixels(),
+            queue
+                .finish_next()?
+                .unwrap()
+                .linear_pixels()
+                .collect::<Vec<_>>(),
             outputs[index].pixels()
         );
     }
@@ -2505,7 +2513,14 @@ fn three_in_flight_frames_preserve_order_and_reject_before_submission() -> motio
             .is_err()
     );
     for expected in expected {
-        assert_eq!(queue.finish_next()?.unwrap(), expected);
+        assert_eq!(
+            queue.finish_next()?.unwrap(),
+            crate::FrameBuffer::from_linear(
+                &expected,
+                crate::PixelFormat::LinearRgba32Float,
+                limits
+            )?
+        );
     }
     assert!(queue.is_empty());
     assert_eq!(queue.in_flight_bytes(), 0);
@@ -2515,10 +2530,15 @@ fn three_in_flight_frames_preserve_order_and_reject_before_submission() -> motio
         if queue.len() == 3 {
             let expected = &frames[(index - 3) % 3];
             assert_eq!(
-                queue.finish_next()?.unwrap().pixels(),
+                queue
+                    .finish_next()?
+                    .unwrap()
+                    .linear_pixels()
+                    .collect::<Vec<_>>(),
                 serial
                     .render(expected, Plan::new(expected, limits)?)?
                     .pixels()
+                    .to_vec()
             );
         }
         let frame = &frames[index % 3];
@@ -2526,8 +2546,15 @@ fn three_in_flight_frames_preserve_order_and_reject_before_submission() -> motio
     }
     for frame in &frames {
         assert_eq!(
-            queue.finish_next()?.unwrap().pixels(),
-            serial.render(frame, Plan::new(frame, limits)?)?.pixels()
+            queue
+                .finish_next()?
+                .unwrap()
+                .linear_pixels()
+                .collect::<Vec<_>>(),
+            serial
+                .render(frame, Plan::new(frame, limits)?)?
+                .pixels()
+                .to_vec()
         );
     }
     let mut tiny = FrameQueue::new(serial.context().clone(), charge - 1)?;
@@ -2542,7 +2569,7 @@ fn three_in_flight_frames_preserve_order_and_reject_before_submission() -> motio
         serial
             .render(&frames[0], Plan::new(&frames[0], limits)?)?
             .pixels(),
-        frames[0].render_linear(limits)?.pixels()
+        frames[0].compose_linear(limits)?.pixels()
     );
     Ok(())
 }
@@ -2609,14 +2636,14 @@ fn strip_copy_rectangles_preserve_origins_gaps_and_unaligned_rows() -> motion_co
                 .iter()
                 .any(|quad| quad[0] > 0.0 && quad[1] > 0.0 && quad[3] - quad[1] > 1.0)
         }));
-        let expected = frame.render_linear(limits)?;
+        let expected = frame.compose_linear(limits)?;
         let actual = gpu.render(&frame, plan)?;
         assert_eq!(
             actual.pixels(),
             gpu.render(&frame, Plan::new(&frame, limits)?)?.pixels()
         );
-        let expected = expected.to_srgb_rgba8(false, limits)?;
-        let actual = actual.to_srgb_rgba8(false, limits)?;
+        let expected = expected.to_rgba8_frame(false, limits)?;
+        let actual = actual.to_rgba8_frame(false, limits)?;
         for (reference, result) in expected.bytes().iter().zip(actual.bytes()) {
             assert!(reference.abs_diff(*result) <= 1, "width={width}");
         }
@@ -2656,7 +2683,9 @@ fn hundreds_of_layers_complete_and_match_cpu() -> motion_core::Result {
             ValidationLimits::default(),
         )?
         .prepare(ValidationLimits::default(), limits)?;
-    let expected = frame.render_linear(limits)?.to_srgb_rgba8(false, limits)?;
+    let expected = frame
+        .compose_linear(limits)?
+        .to_rgba8_frame(false, limits)?;
     let mut gpu = Gpu::new()?;
     let plan = Plan::new(&frame, limits)?;
     assert!(plan.texture_data_sizes.iter().all(|bytes| *bytes == 0));
@@ -2687,7 +2716,7 @@ fn hundreds_of_layers_complete_and_match_cpu() -> motion_core::Result {
         ]
     };
     let before = counters(&gpu);
-    let actual = gpu.render(&frame, plan)?.to_srgb_rgba8(false, limits)?;
+    let actual = gpu.render(&frame, plan)?.to_rgba8_frame(false, limits)?;
     assert_eq!(
         std::array::from_fn::<_, 3, _>(|index| counters(&gpu)[index] - before[index]),
         [draws; 3]
@@ -2702,7 +2731,7 @@ fn hundreds_of_layers_complete_and_match_cpu() -> motion_core::Result {
     assert!(maximum <= 2, "maximum difference {maximum}");
     let replay = gpu
         .render(&frame, Plan::new(&frame, limits)?)?
-        .to_srgb_rgba8(false, limits)?;
+        .to_rgba8_frame(false, limits)?;
     assert_eq!(actual, replay);
     eprintln!(
         "short_batch_pairs={pairs} data_buffers={draws} data_copies={draws} bind_groups={draws} max_rgba_difference={maximum}"
@@ -2753,7 +2782,7 @@ fn depth_of_field_capture_cpu_gpu_parity() -> motion_core::Result {
             ValidationLimits::default(),
         )?
         .prepare(ValidationLimits::default(), limits)?;
-    let cpu = prepared.render_linear(limits)?;
+    let cpu = prepared.compose_linear(limits)?;
     let actual = gpu.render(&prepared, Plan::new(&prepared, limits)?)?;
     for (cpu, actual) in cpu.pixels().iter().zip(actual.pixels()) {
         for channel in 0..4 {
