@@ -37,6 +37,11 @@ GPU preparation owns device edge records separately from public CPU PreparedFram
 values. FrameRenderer's explicit GPU preparation and packed export workers do not
 construct a CPU prepared frame or initialize a device. Low-level APIs can still
 consume an explicitly prepared CPU frame and upload its coverage.
+CPU and GPU preparation share one scene walk through a backend interface that only
+decides how a fill produces coverage, which resources stay live and how particles
+are observed. FrameIr charges each distinct pattern image once by identity and leaves
+segment work to the backend that flattens; a CPU frame borrows immutable resources and
+releases their IR charge, while a GPU frame keeps it for upload.
 GPU planning rejects unsupported precision or budgets before initialization. Ordered
 draw/compute operations use finite linear-premultiplied pixels in RGBA32F working
 textures. Particle states and ordered tile metadata remain storage buffers, as do
