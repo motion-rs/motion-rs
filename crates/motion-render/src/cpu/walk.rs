@@ -169,7 +169,29 @@ impl<'a> LinearWalk<'a> {
             .expect("prepared layer has a parent");
         let output = layer.bounds.intersect(parent.bounds);
         self.budget.work(output.pixels(), path)?;
+        let masked = layer.clip.is_some() || layer.rect_clip != parent.rect_clip;
         for row in output.top..output.bottom {
+            if !masked {
+                // Without masks both coverage factors are exactly 1.0, so only opacity scales.
+                let width = (output.right - output.left) as usize;
+                let from = layer.index(output.left, row);
+                let to = parent.index(output.left, row);
+                let sources = &layer.pixels[from..from + width];
+                for (destination, pixel) in parent.pixels[to..to + width].iter_mut().zip(sources) {
+                    if *pixel == [0.0; 4] {
+                        continue;
+                    }
+                    let source = pixel.map(|value| (f64::from(value) * layer.opacity) as f32);
+                    blending::composite_in_space(
+                        destination,
+                        source,
+                        layer.blend_mode,
+                        frame.blend_space,
+                        path,
+                    )?;
+                }
+                continue;
+            }
             for column in output.left..output.right {
                 let pixel = layer.pixels[layer.index(column, row)];
                 // Transparent black scaled by any finite factor is still transparent black,
