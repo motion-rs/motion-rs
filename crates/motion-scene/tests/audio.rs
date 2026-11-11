@@ -1,7 +1,7 @@
 //! Audio buses, effects, ducking, pan and volume automation in declarative documents.
 #![cfg(feature = "audio")]
 
-use motion_core::{AudioSource, ErrorKind, ValidationError};
+use motion_core::{AudioSource, ErrorKind, Point, ValidationError};
 use motion_encode::audio::{MixOptions, MixedAudio};
 use motion_scene::*;
 use std::path::Path;
@@ -203,8 +203,8 @@ fn effects_and_spatialization_compile_and_mix() {
             },
         ],
         spatial: Some(SpatialSpec {
-            position: Animated::tween([0.0, 0.0], [8.0, 0.0], 2.0),
-            listener: [4.0, 4.0],
+            position: Animated::tween(Point::new(0.0, 0.0), Point::new(8.0, 0.0), 2.0),
+            listener: Point::new(4.0, 4.0),
             width: 4.0,
             rolloff: 0.5,
         }),

@@ -1,7 +1,8 @@
 //! Round-trip, schema, diagnostics and rendering tests for declarative documents.
 
 use motion_core::{
-    BlendMode, ClipMode, Color, ErrorKind, FillRule, LineCap, MaskMode, Time, ValidationError,
+    BlendMode, ClipMode, Color, ErrorKind, FillRule, LineCap, LineJoin, MaskMode, Pivot, Point,
+    Time, ValidationError,
 };
 use motion_render::{RenderOptions, render_still};
 use motion_scene::*;
@@ -30,14 +31,15 @@ fn errors(document: &Document) -> Vec<ValidationError> {
 fn showcase() -> Document {
     let orbit = Element::circle(
         Animated::keyframes([
-            KeyframeSpec::new(0.0, [20.0, 20.0]),
-            KeyframeSpec::new(1.0, [60.0, 20.0]).easing(EasingSpec::BackOut { overshoot: 1.2 }),
+            KeyframeSpec::new(0.0, Point::new(20.0, 20.0)),
+            KeyframeSpec::new(1.0, Point::new(60.0, 20.0))
+                .easing(EasingSpec::BackOut { overshoot: 1.2 }),
         ]),
         NoiseSpec::new(7).amplitude(2.0).offset(8.0),
     )
     .fill(Animated::tween(
-        ColorValue::from(Color::BLACK),
-        ColorValue::parse("hsl(120 50% 50%)").unwrap(),
+        Color::BLACK,
+        Color::parse("hsl(120 50% 50%)").unwrap(),
         1.0,
     ))
     .stroke(
@@ -54,7 +56,7 @@ fn showcase() -> Document {
     );
     let group = Element::group([
         Element::rect([0.0, 0.0, 80.0, 40.0]).fill(PaintSpec::Gradient(GradientSpec::Linear(
-            LinearGradientSpec::new([0.0, 0.0], [80.0, 0.0])
+            LinearGradientSpec::new(Point::new(0.0, 0.0), Point::new(80.0, 0.0))
                 .stop(0.0, Color::rgb(10, 20, 30))
                 .stop(1.0, Color::rgba(200, 100, 50, 128)),
         ))),
@@ -63,7 +65,7 @@ fn showcase() -> Document {
             .fill(Color::WHITE)
             .fill_rule(FillRule::EvenOdd)
             .rotate(TweenSpec::new(0.0, 90.0, 1.0).repeat(2).ping_pong())
-            .pivot(PivotSpec::Relative([0.5, 0.5]))
+            .pivot(Pivot::Relative(0.5, 0.5))
             .z_index(-1),
     ])
     .opacity(0.9)
@@ -168,6 +170,58 @@ fn concise_json_forms_parse() {
 }
 
 #[test]
+fn core_value_types_define_the_json_forms() {
+    let document = Document::from_json(
+        r##"{
+            "version": 1, "size": [100, 100], "fps": 24, "background": "#0a141e80",
+            "tracks": [{"items": [{"scene": {"duration": 1, "content": {
+                "line": {"from": [10, 10], "to": [90, 90]},
+                "stroke": {"width": 4, "paint": {"linear": {"start": [0, 0], "end": [100, 0],
+                    "stops": [{"offset": 0, "color": "white"}, {"offset": 1, "color": "#14a082"}]}},
+                    "join": {"miter": {"limit": 2}}},
+                "pivot": {"point": [5, 6]}
+            }}}]}]
+        }"##,
+    )
+    .unwrap();
+    let TrackItem::Scene(scene) = &document.tracks[0].items[0] else {
+        panic!("scene expected");
+    };
+    let element = &scene.content;
+    assert_eq!(element.pivot, Some(Pivot::Point(Point::new(5.0, 6.0))));
+    assert_eq!(
+        element.stroke.as_ref().unwrap().join,
+        Some(LineJoin::Miter { limit: 2.0 })
+    );
+    assert_eq!(document.background, Some(Color::rgba(10, 20, 30, 128)));
+    let json: serde_json::Value = serde_json::from_str(&document.to_json().unwrap()).unwrap();
+    let element = &json["tracks"][0]["items"][0]["scene"]["content"];
+    assert_eq!(element["pivot"], serde_json::json!({"point": [5.0, 6.0]}));
+    assert_eq!(element["line"]["from"], serde_json::json!([10.0, 10.0]));
+    assert_eq!(
+        element["stroke"]["paint"]["linear"]["stops"][0]["color"],
+        "#ffffff"
+    );
+    assert_eq!(
+        Document::from_json(&document.to_json().unwrap()).unwrap(),
+        document
+    );
+    document.compile(&CompileOptions::default()).unwrap();
+}
+
+#[test]
+fn stroke_joins_are_checked_by_the_core_stroke_style() {
+    let element = Element::line([0.0, 0.0], [10.0, 10.0])
+        .stroke(StrokeSpec::new(1.0, Color::WHITE).join(LineJoin::Miter { limit: 0.5 }));
+    let document =
+        Document::new([10.0, 10.0], 24).track(TrackSpec::new().scene(SceneSpec::new(1.0, element)));
+    let errors = errors(&document);
+    assert_eq!(errors.len(), 1);
+    assert_eq!(errors[0].path, "tracks[0].items[0].scene.content.stroke");
+    assert!(errors[0].message.contains("miter limit"));
+}
+
+#[test]
 fn parse_errors_report_json_paths() {
     let error = Document::from_json(
         r#"{"version": 1, "size": [1, 1], "fps": 1, "tracks": [{"items": [
@@ -199,7 +253,7 @@ fn parse_errors_report_json_paths() {
 #[test]
 fn compile_errors_are_collected_with_paths() {
     let signal =
-        Animated::<ColorValue>::Motion(Box::new(MotionSpec::Oscillate(OscillateSpec::new(1.0))));
+        Animated::<Color>::Motion(Box::new(MotionSpec::Oscillate(OscillateSpec::new(1.0))));
     let document = Document::new([10.0, 10.0], 0).track(
         TrackSpec::new().scene(SceneSpec::new(
             -1.0,

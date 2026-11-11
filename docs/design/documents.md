@@ -8,14 +8,17 @@ JSON Schema and compilation to a `Timeline`; the facade re-exports it as
 line entry points ([command line](../cli.md#declarative-documents)). Authoring
 guidance is in the [tutorial](../tutorial/16-declarative.md); Rustdoc lists the types.
 
-The document model reuses core value types where their serialized form is exactly the
-document form. Plain enumerations (`BlendMode`, `FillRule`, `MaskMode`, `ClipMode`,
-`LineCap`, `GradientSpace`, `GradientUnits`, `GradientExtend`, `Waveform`, `ArrowHead`,
-`Sampling`, `Direction`, `IrisShape`) derive snake_case serde and schema behind
-`motion-core`'s `serde` and `schema` features, so the spec layer has no mirror enums
-for them. Types that carry references, parameters, array shorthands, defaults or
-different shapes (`Pivot`, `LineJoin`, colors, paints, points, rectangles) keep
-spec types that the compiler translates.
+The document model reuses core value types. Plain enumerations (`BlendMode`, `FillRule`,
+`MaskMode`, `ClipMode`, `LineCap`, `LineJoin`, `GradientSpace`, `GradientUnits`,
+`GradientExtend`, `Waveform`, `ArrowHead`, `Sampling`, `Direction`, `IrisShape`, `Pivot`)
+and the value types `Color`, `Point` and `Rect` implement serde and schema behind
+`motion-core`'s `serde` and `schema` features, so the spec layer has no mirror types for
+them. The spec layer keeps only what the core types cannot express: animated wrappers
+(`Animated<Color>`, `Animated<Point>`, `Animated<Rect>`), parameter placeholders, gradients
+written as `start`/`end`/`stops` objects with degrees, strokes with an animated width and
+dashes, and vector shorthands such as sizes and offsets. Validation of the reused types
+(for example the stroke miter limit) belongs to core; the compiler calls it instead of
+repeating it.
 
 ## Data Model
 
@@ -28,8 +31,10 @@ spec types that the compiler translates.
 - Units are seconds for time, clockwise degrees for angles, design units for lengths,
   `[x, y]` for points and `[left, top, right, bottom]` for rectangles. Frame rates are
   an integer or a `"NUMERATOR/DENOMINATOR"` string. Colors are CSS-style strings
-  parsed by `Color::parse`; parsed colors keep their source text so writing a parsed
-  document reproduces it.
+  parsed by `Color::parse`; writing a document emits `#rrggbb[aa]`, or `rgb()` with
+  fractional channels when 8 bits cannot represent the color. Stroke joins are
+  `"round"`, `"bevel"` or `{"miter": {"limit": 4}}`, and a pivot is a name such as
+  `"top_left"`, `{"relative": [x, y]}` or `{"point": [x, y]}`.
 - An animated property is either a fixed value or an object with exactly one motion
   key: `tween`, `keyframes`, `oscillate` or `noise`. Fixed values are never JSON
   objects, so the two forms cannot be confused. Oscillators and noise apply to

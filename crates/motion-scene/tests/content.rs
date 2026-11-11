@@ -1,6 +1,6 @@
 //! Particles, diagrams, captions, formulas and morphs in declarative documents.
 
-use motion_core::{Color, Time, ValidationError};
+use motion_core::{Color, Pivot, Point, Rect, Time, ValidationError};
 use motion_render::{FrameBuffer, RenderOptions, render_still};
 use motion_scene::*;
 
@@ -66,7 +66,7 @@ fn burst_simulation() -> ParticlesSpec {
             EmitterSpec::new(EmitterShape::Burst {
                 time: 0.0,
                 count: 60,
-                position: [120.0, 60.0],
+                position: Point::new(120.0, 60.0),
             })
             .speed(40.0)
             .lifetime(1.5)
@@ -121,7 +121,7 @@ fn particle_documents_parse_round_trip_and_validate() {
                 EmitterSpec::new(EmitterShape::Burst {
                     time: 0.0,
                     count: 5,
-                    position: [0.0, 0.0],
+                    position: Point::new(0.0, 0.0),
                 })
                 .rate(3.0),
             )
@@ -147,7 +147,7 @@ fn particle_documents_parse_round_trip_and_validate() {
 fn trajectories_render_closed_form_bursts() {
     let element = Element::new(Content::Trajectory(TrajectorySpec {
         model: TrajectoryModelSpec::Ballistic {
-            center: [120.0, 60.0],
+            center: Point::new(120.0, 60.0),
             count: 80,
             gravity: Some([0.0, 60.0]),
             drag: Some(0.5),
@@ -169,7 +169,7 @@ fn rulers_callouts_and_charts_draw_with_document_fonts() {
         nice: true,
         font_size: Some(10.0),
         label_size: Some([30.0, 12.0]),
-        color: Some(Color::WHITE.into()),
+        color: Some(Color::WHITE),
         ..RulerSpec::horizontal(100.0, ScaleSpec::linear([0.0, 100.0]).range([20.0, 220.0]))
     }));
     let ruler_ink = ink(&render(&film(ruler), 0.0));
@@ -177,28 +177,28 @@ fn rulers_callouts_and_charts_draw_with_document_fonts() {
 
     let callout = Element::new(Content::Callout(CalloutSpec {
         text: "Peak".into(),
-        target: [120.0, 100.0],
-        bounds: [20.0, 10.0, 100.0, 40.0],
-        color: Some(Color::WHITE.into()),
+        target: Point::new(120.0, 100.0),
+        bounds: Rect::new(20.0, 10.0, 100.0, 40.0),
+        color: Some(Color::WHITE),
         font_size: Some(14.0),
         leader_width: Some(2.0),
     }));
     assert!(ink(&render(&film(callout), 0.0)) > 100);
 
     let chart = Element::new(Content::LineChart(LineChartSpec {
-        bounds: [20.0, 10.0, 220.0, 100.0],
+        bounds: Rect::new(20.0, 10.0, 220.0, 100.0),
         horizontal: ScaleSpec::linear([0.0, 10.0]),
         vertical: ScaleSpec::linear([0.0, 100.0]),
         ticks: Some(4),
         series: vec![SeriesSpec {
             points: vec![
-                Some([0.0, 10.0]),
-                Some([5.0, 80.0]),
+                Some(Point::new(0.0, 10.0)),
+                Some(Point::new(5.0, 80.0)),
                 None,
-                Some([9.0, 30.0]),
-                Some([10.0, 40.0]),
+                Some(Point::new(9.0, 30.0)),
+                Some(Point::new(10.0, 40.0)),
             ],
-            color: Color::rgb(255, 100, 100).into(),
+            color: Color::rgb(255, 100, 100),
             width: Some(2.0),
             cap: None,
             join: None,
@@ -226,7 +226,7 @@ fn captions_select_cues_by_scene_time() {
         font_size: Some(18.0),
         keywords: vec![KeywordSpec {
             word: "Rust".into(),
-            color: Color::rgb(255, 220, 0).into(),
+            color: Color::rgb(255, 220, 0),
         }],
         ..CaptionsSpec::new([
             CueSpec::new(0.5, 1.0, "Hello Rust"),
@@ -264,7 +264,7 @@ fn paths_morph_between_shapes() {
         samples: None,
     }))
     .fill(Color::WHITE)
-    .pivot(PivotSpec::TopLeft);
+    .pivot(Pivot::TopLeft);
     let film = film(element);
     let start = render(&film, 0.0);
     let end = render(&film, 1.99);

@@ -154,7 +154,7 @@ impl Document {
         let output = PixelSize::new(size.width.round() as u32, size.height.round() as u32);
         let mut timeline = Timeline::try_new(size, rate)?;
         if let Some(background) = &self.background {
-            timeline = timeline.background(background.color());
+            timeline = timeline.background(*background);
         }
         let mut scenes = scenes.into_iter();
         for (index, track) in self.tracks.iter().enumerate() {

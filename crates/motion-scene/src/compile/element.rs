@@ -1,14 +1,13 @@
 //! Compilation of elements into time-sampled scene nodes with transforms and effects.
 
 use super::Compiler;
-use super::style::point;
 use super::value::Lift;
 use super::value::Prop;
 use crate::effects::{ClipShapeSpec, FilterSpec, MaskSpec};
 use crate::element::Element;
 use motion_core::{
     BlendMode, Cdl, Circle, ClipMode, Color, Filter, MaskMode, Node, NodeModifiers, Path2D, Pivot,
-    Rect, SceneCache, SceneContext, Size, Time, Vector2,
+    Point, Rect, SceneCache, SceneContext, Size, Time, Vector2,
 };
 use std::sync::Arc;
 
@@ -109,7 +108,7 @@ impl Compiler<'_> {
             rotate: rotate?,
             scale: scale?,
             scale_xy: scale_xy?,
-            pivot: element.pivot.map(Pivot::from),
+            pivot: element.pivot,
             opacity: opacity?,
             blend: element.blend,
             z_index: element.z_index,
@@ -180,10 +179,7 @@ impl Compiler<'_> {
                 levels: bloom.levels.unwrap_or(5),
                 falloff: bloom.falloff.unwrap_or(0.5),
                 intensity: bloom.intensity.unwrap_or(0.15),
-                tint: bloom
-                    .tint
-                    .as_ref()
-                    .map_or(Color::WHITE, |tint| tint.color()),
+                tint: bloom.tint.as_ref().map_or(Color::WHITE, |tint| *tint),
             })),
             FilterSpec::ColorAdjust(adjust) => {
                 let path = format!("{path}.color_adjust");
@@ -256,7 +252,7 @@ impl Compiler<'_> {
 /// Compiled transforms, compositing and effects in their application order.
 struct Modifiers {
     name: Option<Arc<str>>,
-    position: Option<Prop<[f64; 2]>>,
+    position: Option<Prop<Point>>,
     translate: Option<Prop<[f64; 2]>>,
     rotate: Option<Prop<f64>>,
     scale: Option<Prop<f64>>,
@@ -290,7 +286,7 @@ impl Modifiers {
             node = node.pivot(pivot);
         }
         if let Some(position) = &self.position {
-            node = node.at(point(position.at(time)));
+            node = node.at(position.at(time));
         }
         if let Some(scale) = &self.scale {
             node = node.scale(scale.at(time));
@@ -384,8 +380,8 @@ impl FilterProp {
 }
 
 enum ClipProp {
-    Rect(Prop<[f64; 4]>),
-    Circle(Prop<[f64; 2]>, Prop<f64>),
+    Rect(Prop<Rect>),
+    Circle(Prop<Point>, Prop<f64>),
     Path(Path2D),
 }
 
@@ -400,16 +396,11 @@ impl ClipProp {
 
     fn apply(&self, node: Node, mode: ClipMode, time: Time) -> Node {
         match self {
-            Self::Rect(bounds) => {
-                let [left, top, right, bottom] = bounds.at(time);
-                node.clip_with(Rect::new(left, top, right, bottom), mode)
-            }
-            Self::Circle(center, radius) => {
-                match Circle::new(point(center.at(time)), radius.at(time)) {
-                    Ok(circle) => node.clip_with(circle, mode),
-                    Err(error) => super::failure::failure(error),
-                }
-            }
+            Self::Rect(bounds) => node.clip_with(bounds.at(time), mode),
+            Self::Circle(center, radius) => match Circle::new(center.at(time), radius.at(time)) {
+                Ok(circle) => node.clip_with(circle, mode),
+                Err(error) => super::failure::failure(error),
+            },
             Self::Path(path) => node.clip_with(path.clone(), mode),
         }
     }

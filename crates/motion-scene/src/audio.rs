@@ -1,6 +1,7 @@
 //! Audio occurrences, buses, effects, ducking and the master chain as plain data.
 
 use crate::value::Animated;
+use motion_core::Point;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -135,9 +136,9 @@ pub enum PanLawSpec {
 #[serde(deny_unknown_fields)]
 pub struct SpatialSpec {
     /// Source position `[x, y]` in design units.
-    pub position: Animated<[f64; 2]>,
+    pub position: Animated<Point>,
     /// Listener position `[x, y]`.
-    pub listener: [f64; 2],
+    pub listener: Point,
     /// Distance over which the source pans fully left or right; positive.
     pub width: f64,
     /// Distance attenuation in `0..=1000`.

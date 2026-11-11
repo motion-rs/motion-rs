@@ -3,7 +3,6 @@
 use super::Compiler;
 #[cfg(feature = "audio")]
 use super::binding::scalar;
-use super::style::point;
 use super::value::Prop;
 use crate::audio::{
     AudioSpec, BusSpec, DuckSpec, DuckTriggerSpec, EffectSpec, MasterSpec, PanLawSpec,
@@ -143,17 +142,13 @@ impl Compiler<'_> {
             match (position, clip.take()) {
                 (Some(position), Some(next)) => {
                     let animation: Arc<dyn Signal<Point>> = match position {
-                        Prop::Fixed(value) => Arc::new(move |_: Time| point(value)),
+                        Prop::Fixed(value) => Arc::new(move |_: Time| value),
                         Prop::Varying(animation) => {
-                            Arc::new(move |time: Time| point(animation.sample(time)))
+                            Arc::new(move |time: Time| animation.sample(time))
                         }
                     };
-                    match next.spatial(
-                        animation,
-                        point(spatial.listener),
-                        spatial.width,
-                        spatial.rolloff,
-                    ) {
+                    match next.spatial(animation, spatial.listener, spatial.width, spatial.rolloff)
+                    {
                         Ok(next) => clip = Some(next),
                         Err(error) => {
                             self.error(&here, "spatial", error.message);

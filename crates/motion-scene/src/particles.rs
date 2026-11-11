@@ -1,6 +1,6 @@
 //! Particle simulations and trajectories described as plain data.
 
-use crate::value::ColorValue;
+use motion_core::{Color, Point, Rect};
 use schemars::{JsonSchema, Schema, SchemaGenerator};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
@@ -76,16 +76,16 @@ impl ParticlesSpec {
 #[derive(Clone, Debug, PartialEq)]
 pub enum EmitterShape {
     /// A single point `[x, y]`.
-    Point([f64; 2]),
+    Point(Point),
     /// A disk.
     Disk {
         /// Center `[x, y]`.
-        center: [f64; 2],
+        center: Point,
         /// Radius.
         radius: f64,
     },
     /// A rectangle `[left, top, right, bottom]`.
-    Rect([f64; 4]),
+    Rect(Rect),
     /// Points along SVG path data.
     Path(String),
     /// One instantaneous burst.
@@ -95,7 +95,7 @@ pub enum EmitterShape {
         /// Number of particles.
         count: u32,
         /// Birth point `[x, y]`.
-        position: [f64; 2],
+        position: Point,
     },
 }
 
@@ -125,7 +125,7 @@ pub struct EmitterSpec {
     /// Added velocity `[x, y]`.
     pub velocity: Option<[f64; 2]>,
     /// Birth color.
-    pub color: Option<ColorValue>,
+    pub color: Option<Color>,
     /// Birth size in `0..=4096`.
     pub size: Option<f64>,
     /// Depth range `[near, far]`.
@@ -166,7 +166,7 @@ impl EmitterSpec {
     }
 
     /// Sets the birth color.
-    pub fn color(mut self, color: impl Into<ColorValue>) -> Self {
+    pub fn color(mut self, color: impl Into<Color>) -> Self {
         self.color = Some(color.into());
         self
     }
@@ -187,7 +187,7 @@ impl JsonSchema for EmitterSpec {
 #[serde(deny_unknown_fields)]
 pub struct DiskShape {
     /// Center `[x, y]`.
-    pub center: [f64; 2],
+    pub center: Point,
     /// Radius.
     pub radius: f64,
 }
@@ -201,7 +201,7 @@ pub struct BurstShape {
     /// Number of particles.
     pub count: u32,
     /// Birth point `[x, y]`.
-    pub position: [f64; 2],
+    pub position: Point,
 }
 
 #[derive(Default, Serialize, Deserialize, JsonSchema)]
@@ -209,13 +209,13 @@ pub struct BurstShape {
 struct RawEmitter {
     /// Point emitter `[x, y]`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    point: Option<[f64; 2]>,
+    point: Option<Point>,
     /// Disk emitter.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     disk: Option<DiskShape>,
     /// Rectangle emitter `[left, top, right, bottom]`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    rect: Option<[f64; 4]>,
+    rect: Option<Rect>,
     /// Path emitter, as SVG path data.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     path: Option<String>,
@@ -236,7 +236,7 @@ struct RawEmitter {
     velocity: Option<[f64; 2]>,
     /// Birth color.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    color: Option<ColorValue>,
+    color: Option<Color>,
     /// Birth size.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     size: Option<f64>,
@@ -344,14 +344,14 @@ pub enum ModifierSpec {
     /// Swirl around a center.
     Vortex {
         /// Center `[x, y]`.
-        center: [f64; 2],
+        center: Point,
         /// Signed strength.
         strength: f64,
     },
     /// Pull toward a center.
     Attractor {
         /// Center `[x, y]`.
-        center: [f64; 2],
+        center: Point,
         /// Signed strength.
         strength: f64,
     },
@@ -371,14 +371,14 @@ pub enum ModifierSpec {
     /// Pull toward the nearest of several points.
     Seek {
         /// Target points `[[x, y], ...]`, 1 to 65536.
-        targets: Vec<[f64; 2]>,
+        targets: Vec<Point>,
         /// Nonnegative strength.
         strength: f64,
     },
     /// Reflect particles inside a box `[left, top, right, bottom]`.
-    BounceBox([f64; 4]),
+    BounceBox(Rect),
     /// Color ramp over each particle's life, 1 to 256 stops.
-    ColorOverLifetime(Vec<ColorValue>),
+    ColorOverLifetime(Vec<Color>),
     /// Size ramp over each particle's life.
     SizeOverLifetime {
         /// Size at birth.
@@ -492,7 +492,7 @@ pub enum TrajectoryModelSpec {
     /// Particles flung from a point under gravity and drag.
     Ballistic {
         /// Launch point `[x, y]`.
-        center: [f64; 2],
+        center: Point,
         /// Number of particles.
         count: u32,
         /// Acceleration `[x, y]`.
@@ -514,7 +514,7 @@ pub enum TrajectoryModelSpec {
     /// Particles circling a center.
     Orbit {
         /// Center `[x, y]`.
-        center: [f64; 2],
+        center: Point,
         /// Orbit radius.
         radius: f64,
         /// Number of particles.
@@ -532,7 +532,7 @@ pub enum TrajectoryModelSpec {
     /// Particles drifting through noise.
     NoiseDrift {
         /// Start point `[x, y]`.
-        origin: [f64; 2],
+        origin: Point,
         /// Number of particles.
         count: u32,
         /// Base velocity `[x, y]`.

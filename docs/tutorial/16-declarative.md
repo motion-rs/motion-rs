@@ -97,9 +97,9 @@ such as `{"steps": 4}` or `{"cubic_bezier": {"x1": 0.2, "y1": 0, "x2": 0, "y2": 
 | Key | Meaning |
 | --- | --- |
 | `fill` | Animated color or `{"linear" \| "radial" \| "sweep": {…, "stops": […]}}` |
-| `stroke` | `{"width", "paint", "cap", "join", "miter_limit", "dash", "dash_offset"}` |
+| `stroke` | `{"width", "paint", "cap", "join", "dash", "dash_offset"}`; `join` is `{"miter": {"limit": 4}}`, `"round"` or `"bevel"` |
 | `trim`, `fill_rule` | Drawn arc-length range and interior rule for geometry |
-| `position`, `pivot` | Place the pivot (bounds center by default) at a parent point |
+| `position`, `pivot` | Place the pivot (bounds center by default) at a parent point; `pivot` is a name such as `"top_left"`, `{"relative": [0.5, 0.5]}` or `{"point": [x, y]}` |
 | `translate`, `rotate`, `scale`, `scale_xy` | Animated transforms; rotation in degrees |
 | `opacity`, `blend`, `z_index`, `hidden` | Compositing and sibling order |
 | `filters` | Ordered `blur`, `drop_shadow`, `glow`, `bloom`, `color_adjust`, `cdl`, `halation` |

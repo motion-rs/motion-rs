@@ -42,6 +42,12 @@ impl Size {
 /// Relative coordinates are not clamped; explicit points need not lie inside
 /// bounds. Baseline falls back to BottomLeft without text baseline metrics.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(rename_all = "snake_case")
+)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub enum Pivot {
     /// Upper-left corner.
     TopLeft,

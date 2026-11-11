@@ -11,7 +11,6 @@ use std::sync::Arc;
 #[cfg(feature = "particles")]
 use super::failure::failure;
 #[cfg(feature = "particles")]
-use super::style::point;
 #[cfg(feature = "particles")]
 use super::value::Lift;
 #[cfg(feature = "particles")]
@@ -27,7 +26,7 @@ use motion_content::particles::{
     SizeOverLifetime, Vortex, Wind,
 };
 #[cfg(feature = "particles")]
-use motion_core::{Duration, Rect, Vector2};
+use motion_core::{Duration, Vector2};
 
 /// Most simultaneously living particles a document may request.
 #[cfg(feature = "particles")]
@@ -165,7 +164,7 @@ impl Compiler<'_> {
                 let path = format!("{path_model}.ballistic");
                 let count = self.particle_count(*count, &path);
                 let lifetime = lifetime.map(|value| self.positive(value, &path, "lifetime"));
-                let mut model = Ballistic::burst(point(*center), u64::from(count?)).seed(*seed);
+                let mut model = Ballistic::burst(*center, u64::from(count?)).seed(*seed);
                 if let Some([x, y]) = gravity {
                     model = model.gravity(Vector2::new(*x, *y));
                 }
@@ -191,7 +190,7 @@ impl Compiler<'_> {
                 let path = format!("{path_model}.orbit");
                 let count = self.particle_count(*count, &path);
                 let lifetime = lifetime.map(|value| self.positive(value, &path, "lifetime"));
-                let mut model = Orbit::new(point(*center), *radius, u64::from(count?)).seed(*seed);
+                let mut model = Orbit::new(*center, *radius, u64::from(count?)).seed(*seed);
                 if let Some(velocity) = angular_velocity {
                     model = model.angular_velocity(*velocity);
                 }
@@ -211,7 +210,7 @@ impl Compiler<'_> {
                 let path = format!("{path_model}.noise_drift");
                 let count = self.particle_count(*count, &path);
                 let lifetime = lifetime.map(|value| self.positive(value, &path, "lifetime"));
-                let mut model = NoiseDrift::new(point(*origin), u64::from(count?)).seed(*seed);
+                let mut model = NoiseDrift::new(*origin, u64::from(count?)).seed(*seed);
                 if let Some([x, y]) = velocity {
                     model = model.velocity(Vector2::new(*x, *y));
                 }
@@ -257,16 +256,12 @@ impl Compiler<'_> {
         let birth = self.birth(spec, path)?;
         Some(match &spec.shape {
             EmitterShape::Point(position) => {
-                Emitter::Point(continuous!(PointEmitter::new(point(*position)), &birth))
+                Emitter::Point(continuous!(PointEmitter::new(*position), &birth))
             }
-            EmitterShape::Disk { center, radius } => Emitter::Disk(continuous!(
-                DiskEmitter::new(point(*center), *radius),
-                &birth
-            )),
-            EmitterShape::Rect([left, top, right, bottom]) => Emitter::Rect(continuous!(
-                RectEmitter::new(Rect::new(*left, *top, *right, *bottom)),
-                &birth
-            )),
+            EmitterShape::Disk { center, radius } => {
+                Emitter::Disk(continuous!(DiskEmitter::new(*center, *radius), &birth))
+            }
+            EmitterShape::Rect(rect) => Emitter::Rect(continuous!(RectEmitter::new(*rect), &birth)),
             EmitterShape::Path(data) => {
                 let geometry = self.svg_path(data, &format!("{path}.path"))?;
                 Emitter::Path(continuous!(PathEmitter::new(Arc::new(geometry)), &birth))
@@ -283,7 +278,7 @@ impl Compiler<'_> {
                 let time = self.seconds(*time, &format!("{path}.burst"), "time");
                 let count = self.particle_count(*count, &format!("{path}.burst"));
                 let mut emitter =
-                    BurstEmitter::new((time?).after_origin(), count? as usize, point(*position));
+                    BurstEmitter::new((time?).after_origin(), count? as usize, *position);
                 if let Some(lifetime) = birth.lifetime {
                     emitter = emitter.lifetime(lifetime);
                 }
@@ -336,10 +331,7 @@ impl Compiler<'_> {
             lifetime: lifetime.lift()?,
             speed: speed.lift()?,
             velocity: velocity.lift()?,
-            color: spec
-                .color
-                .as_ref()
-                .map(|color| premultiplied(color.color())),
+            color: spec.color.as_ref().map(|color| premultiplied(*color)),
             size: size.lift()?.map(|size| size as f32),
             depth: depth.lift()?,
         })
@@ -358,11 +350,11 @@ impl Compiler<'_> {
             ModifierSpec::Wind(value) => simulation.modifier(Wind::new(vector(*value))),
             ModifierSpec::Drag(value) => simulation.modifier(Drag::new(*value)),
             ModifierSpec::Vortex { center, strength } => simulation.modifier(Vortex {
-                center: point(*center),
+                center: *center,
                 strength: *strength,
             }),
             ModifierSpec::Attractor { center, strength } => simulation.modifier(Attractor {
-                center: point(*center),
+                center: *center,
                 strength: *strength,
             }),
             ModifierSpec::CurlNoise {
@@ -382,13 +374,11 @@ impl Compiler<'_> {
                     return None;
                 }
                 simulation.modifier(Seek {
-                    targets: targets.iter().copied().map(point).collect(),
+                    targets: targets.as_slice().into(),
                     strength: *strength,
                 })
             }
-            ModifierSpec::BounceBox([left, top, right, bottom]) => {
-                simulation.modifier(BounceBox::new(Rect::new(*left, *top, *right, *bottom)))
-            }
+            ModifierSpec::BounceBox(bounds) => simulation.modifier(BounceBox::new(*bounds)),
             ModifierSpec::ColorOverLifetime(stops) => {
                 if stops.is_empty() || stops.len() > 256 {
                     self.limit(
@@ -398,10 +388,7 @@ impl Compiler<'_> {
                     );
                     return None;
                 }
-                let stops: Vec<[f32; 4]> = stops
-                    .iter()
-                    .map(|stop| premultiplied(stop.color()))
-                    .collect();
+                let stops: Vec<[f32; 4]> = stops.iter().map(|stop| premultiplied(*stop)).collect();
                 simulation.modifier(ColorOverLifetime::new(stops))
             }
             ModifierSpec::SizeOverLifetime { start, end } => {

@@ -2,11 +2,11 @@
 
 use super::Compiler;
 use super::element::Built;
-use super::style::{Style, point};
+use super::style::Style;
 use super::value::Lift;
 use crate::content::{Content, ImageSpec, SvgSpec};
 use motion_core::{
-    ArcShape, Arrow, Circle, Ellipse, Line, Node, Polygon, Polyline, Rect, RegularPolygon, Ring,
+    ArcShape, Arrow, Circle, Ellipse, Line, Node, Point, Polygon, Polyline, RegularPolygon, Ring,
     RoundedRect, Spline, Star, Time, Vector2,
 };
 use std::sync::Arc;
@@ -58,8 +58,7 @@ impl Compiler<'_> {
                 let (bounds, radius) = (bounds?, radius.lift()?);
                 let varying = bounds.varying() || radius.as_ref().is_some_and(|r| r.varying());
                 shape(style?, varying, move |style, time| {
-                    let [left, top, right, bottom] = bounds.at(time);
-                    let rect = Rect::new(left, top, right, bottom);
+                    let rect = bounds.at(time);
                     match &radius {
                         Some(radius) => style.shape(RoundedRect::new(rect, radius.at(time)), time),
                         None => style.shape(Ok(rect), time),
@@ -73,7 +72,7 @@ impl Compiler<'_> {
                 let (center, radius) = (center?, radius?);
                 let varying = center.varying() || radius.varying();
                 shape(style?, varying, move |style, time| {
-                    style.shape(Circle::new(point(center.at(time)), radius.at(time)), time)
+                    style.shape(Circle::new(center.at(time), radius.at(time)), time)
                 })
             }
             Content::Ellipse(spec) => {
@@ -84,8 +83,7 @@ impl Compiler<'_> {
                 let varying = center.varying() || radii.varying();
                 shape(style?, varying, move |style, time| {
                     let [horizontal, vertical] = radii.at(time);
-                    let ellipse =
-                        Ellipse::new(point(center.at(time)), Vector2::new(horizontal, vertical));
+                    let ellipse = Ellipse::new(center.at(time), Vector2::new(horizontal, vertical));
                     style.shape(ellipse, time)
                 })
             }
@@ -96,7 +94,7 @@ impl Compiler<'_> {
                 let (from, to) = (from?, to?);
                 let varying = from.varying() || to.varying();
                 shape(style?, varying, move |style, time| {
-                    style.shape(Line::new(point(from.at(time)), point(to.at(time))), time)
+                    style.shape(Line::new(from.at(time), to.at(time)), time)
                 })
             }
             Content::Arc(spec) => {
@@ -110,7 +108,7 @@ impl Compiler<'_> {
                     center.varying() || radius.varying() || start.varying() || sweep.varying();
                 shape(style?, varying, move |style, time| {
                     let arc = ArcShape::new(
-                        point(center.at(time)),
+                        center.at(time),
                         radius.at(time),
                         start.at(time).to_radians(),
                         sweep.at(time).to_radians(),
@@ -148,8 +146,7 @@ impl Compiler<'_> {
                 let (center, radius, sides) = (center?, radius?, sides?);
                 let varying = center.varying() || radius.varying();
                 shape(style?, varying, move |style, time| {
-                    let polygon =
-                        RegularPolygon::new(point(center.at(time)), radius.at(time), sides);
+                    let polygon = RegularPolygon::new(center.at(time), radius.at(time), sides);
                     style.shape(polygon, time)
                 })
             }
@@ -162,12 +159,7 @@ impl Compiler<'_> {
                 let (center, outer, inner, count) = (center?, outer?, inner?, count?);
                 let varying = center.varying() || outer.varying() || inner.varying();
                 shape(style?, varying, move |style, time| {
-                    let star = Star::new(
-                        point(center.at(time)),
-                        count,
-                        outer.at(time),
-                        inner.at(time),
-                    );
+                    let star = Star::new(center.at(time), count, outer.at(time), inner.at(time));
                     style.shape(star, time)
                 })
             }
@@ -195,8 +187,7 @@ impl Compiler<'_> {
                     || start.varying()
                     || sweep.varying();
                 shape(style?, varying, move |style, time| {
-                    let mut ring =
-                        Ring::new(point(center.at(time)), inner.at(time), outer.at(time));
+                    let mut ring = Ring::new(center.at(time), inner.at(time), outer.at(time));
                     if sector {
                         ring = ring.sweep(start.at(time).to_radians(), sweep.at(time).to_radians());
                     }
@@ -222,7 +213,7 @@ impl Compiler<'_> {
                     || width.as_ref().is_some_and(|width| width.varying())
                     || size.as_ref().is_some_and(|size| size.varying());
                 shape(style?, varying, move |style, time| {
-                    let mut arrow = Arrow::new(point(from.at(time)), point(to.at(time)));
+                    let mut arrow = Arrow::new(from.at(time), to.at(time));
                     if let Some(head) = head {
                         arrow = arrow.head(head);
                     }
@@ -281,16 +272,19 @@ impl Compiler<'_> {
         }
     }
 
-    fn points(&mut self, points: &[[f64; 2]], path: &str) -> Option<Vec<motion_core::Point>> {
+    fn points(&mut self, points: &[Point], path: &str) -> Option<Vec<Point>> {
         if points.len() > MAX_POINTS {
             self.limit(path, "points", "Point lists are limited to 65536 entries");
             return None;
         }
-        if points.iter().flatten().any(|value| !value.is_finite()) {
+        if points
+            .iter()
+            .any(|point| !point.x.is_finite() || !point.y.is_finite())
+        {
             self.error(path, "points", "Every coordinate must be finite");
             return None;
         }
-        Some(points.iter().copied().map(point).collect())
+        Some(points.to_vec())
     }
 
     fn count(&mut self, count: u32, minimum: u32, path: &str, field: &str) -> Option<usize> {

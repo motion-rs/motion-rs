@@ -2,8 +2,8 @@
 
 use crate::content::CircleSpec;
 use crate::element::Element;
-use crate::value::{Animated, ColorValue};
-use motion_core::{ClipMode, MaskMode};
+use crate::value::Animated;
+use motion_core::{ClipMode, Color, MaskMode, Rect};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -23,7 +23,7 @@ pub enum FilterSpec {
         /// Nonnegative blur.
         sigma: Animated<f64>,
         /// Shadow color.
-        color: Animated<ColorValue>,
+        color: Animated<Color>,
     },
     /// Additive blurred highlights above a luminance threshold.
     Glow {
@@ -82,7 +82,7 @@ pub struct BloomSpec {
     pub intensity: Option<f64>,
     /// Bloom tint; white by default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub tint: Option<ColorValue>,
+    pub tint: Option<Color>,
 }
 
 /// Color adjustment; omitted values are neutral.
@@ -150,7 +150,7 @@ impl ClipSpec {
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub enum ClipShapeSpec {
     /// Rectangle `[left, top, right, bottom]`.
-    Rect(Animated<[f64; 4]>),
+    Rect(Animated<Rect>),
     /// Circle.
     Circle(CircleSpec),
     /// SVG path data.

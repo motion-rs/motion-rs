@@ -2,8 +2,8 @@
 
 use crate::audio::{AudioSpec, BusSpec, MasterSpec};
 use crate::element::Element;
-use crate::value::ColorValue;
 use crate::{FORMAT_VERSION, MAX_DOCUMENT_BYTES, diagnostics, params};
+use motion_core::Color;
 use motion_core::{Direction, IrisShape};
 use motion_core::{FrameRate, ValidationError};
 use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
@@ -46,7 +46,7 @@ pub struct Document {
     pub fps: FrameRateSpec,
     /// Opaque background color behind every track.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub background: Option<ColorValue>,
+    pub background: Option<Color>,
     /// Explicit film duration in seconds; the latest track or audio end by default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub duration: Option<f64>,
@@ -176,7 +176,7 @@ impl Document {
     }
 
     /// Sets the background color.
-    pub fn background(mut self, color: impl Into<ColorValue>) -> Self {
+    pub fn background(mut self, color: impl Into<Color>) -> Self {
         self.background = Some(color.into());
         self
     }

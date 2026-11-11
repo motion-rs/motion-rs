@@ -7,7 +7,6 @@ use crate::diagram::{CalloutSpec, LineChartSpec, RulerSpec};
 #[cfg(feature = "diagram")]
 use super::failure::failure;
 #[cfg(feature = "diagram")]
-use super::style::point;
 #[cfg(feature = "diagram")]
 use crate::diagram::{OrientationSpec, ScaleKind, ScaleSpec};
 #[cfg(feature = "diagram")]
@@ -49,7 +48,7 @@ impl Compiler<'_> {
             ruler = ruler.label_size(Size::new(width, height));
         }
         if let Some(color) = &spec.color {
-            ruler = ruler.color(color.color());
+            ruler = ruler.color(*color);
         }
         if let Some(unit) = &spec.unit {
             ruler = ruler.unit(unit.as_str());
@@ -60,14 +59,9 @@ impl Compiler<'_> {
     /// Compiles a callout into a static node.
     #[cfg(feature = "diagram")]
     pub(crate) fn callout(&mut self, spec: &CalloutSpec, path: &str) -> Option<Built> {
-        let [left, top, right, bottom] = spec.bounds;
-        let mut callout = Callout::new(
-            spec.text.as_str(),
-            point(spec.target),
-            Rect::new(left, top, right, bottom),
-        );
+        let mut callout = Callout::new(spec.text.as_str(), spec.target, spec.bounds);
         if let Some(color) = &spec.color {
-            callout = callout.color(color.color());
+            callout = callout.color(*color);
         }
         if let Some(size) = spec.font_size {
             callout = callout.font_size(size);
@@ -81,7 +75,12 @@ impl Compiler<'_> {
     /// Compiles a line chart; it is laid out per frame against the render fonts.
     #[cfg(feature = "diagram")]
     pub(crate) fn line_chart(&mut self, spec: &LineChartSpec, path: &str) -> Option<Built> {
-        let [left, top, right, bottom] = spec.bounds;
+        let Rect {
+            left,
+            top,
+            right,
+            bottom,
+        } = spec.bounds;
         let horizontal = self.scale(
             &spec.horizontal,
             Some([left, right]),
@@ -111,15 +110,14 @@ impl Compiler<'_> {
             let stroke = StrokeStyle {
                 width: series.width.unwrap_or(2.0),
                 cap: series.cap.unwrap_or(LineCap::Round),
-                join: match series.join.unwrap_or(crate::options::LineJoinSpec::Round) {
-                    crate::options::LineJoinSpec::Miter => LineJoin::Miter { limit: 4.0 },
-                    crate::options::LineJoinSpec::Round => LineJoin::Round,
-                    crate::options::LineJoinSpec::Bevel => LineJoin::Bevel,
-                },
+                join: series.join.unwrap_or(LineJoin::Round),
             };
-            let points = series.points.iter().map(|entry| entry.map(|[x, y]| (x, y)));
+            let points = series
+                .points
+                .iter()
+                .map(|entry| entry.map(|point| (point.x, point.y)));
             chart = chart
-                .gapped_series(points, series.color.color(), stroke)
+                .gapped_series(points, series.color, stroke)
                 .map_err(|error| self.error(&here, "points", error.message))
                 .ok()?;
         }

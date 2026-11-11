@@ -5,6 +5,8 @@ use std::ops::{Add, Div, Mul, Neg, Sub};
 pub mod bounds;
 pub mod flatten;
 mod transform;
+#[cfg(feature = "serde")]
+mod wire;
 
 pub use transform::{Transform, TransformComponents};
 

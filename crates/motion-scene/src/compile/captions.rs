@@ -28,18 +28,18 @@ impl Compiler<'_> {
             return None;
         };
         let track = self.caption_track(spec, path)?;
-        let [left, top, right, bottom] =
-            spec.safe
-                .unwrap_or([0.0, 0.0, self.canvas.width, self.canvas.height]);
-        let mut style = CaptionStyle::new(Rect::new(left, top, right, bottom));
+        let safe = spec
+            .safe
+            .unwrap_or(Rect::new(0.0, 0.0, self.canvas.width, self.canvas.height));
+        let mut style = CaptionStyle::new(safe);
         if let Some(size) = spec.font_size {
             style = style.font_size(size);
         }
         if let Some(color) = &spec.color {
-            style = style.color(color.color());
+            style = style.color(*color);
         }
         if let Some(color) = &spec.background {
-            style = style.background(color.color());
+            style = style.background(*color);
         }
         if let Some([horizontal, vertical]) = spec.padding {
             style = style.padding(horizontal, vertical);
@@ -51,7 +51,7 @@ impl Compiler<'_> {
             style = style.max_lines(lines as usize);
         }
         for keyword in &spec.keywords {
-            style = style.keyword(keyword.word.as_str(), keyword.color.color());
+            style = style.keyword(keyword.word.as_str(), keyword.color);
         }
         let canvas = Size::new(self.canvas.width, self.canvas.height);
         let layout = style

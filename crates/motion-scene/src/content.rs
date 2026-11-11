@@ -6,8 +6,8 @@ use crate::element::Element;
 use crate::formula::{FormulaSpec, MorphSpec, SvgMorphSpec};
 use crate::options::{FitSpec, TextAlignmentSpec};
 use crate::particles::{ParticlesSpec, TrajectorySpec};
-use crate::value::{Animated, ColorValue};
-use motion_core::{ArrowHead, Sampling};
+use crate::value::Animated;
+use motion_core::{ArrowHead, Color, Point, Rect, Sampling};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -104,7 +104,7 @@ impl Content {
 #[serde(deny_unknown_fields)]
 pub struct RectSpec {
     /// Opposite corners `[left, top, right, bottom]`.
-    pub bounds: Animated<[f64; 4]>,
+    pub bounds: Animated<Rect>,
     /// Corner radius; square corners by default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub corner_radius: Option<Animated<f64>>,
@@ -112,7 +112,7 @@ pub struct RectSpec {
 
 impl RectSpec {
     /// Creates a square-cornered rectangle.
-    pub fn new(bounds: impl Into<Animated<[f64; 4]>>) -> Self {
+    pub fn new(bounds: impl Into<Animated<Rect>>) -> Self {
         Self {
             bounds: bounds.into(),
             corner_radius: None,
@@ -131,7 +131,7 @@ impl RectSpec {
 #[serde(deny_unknown_fields)]
 pub struct CircleSpec {
     /// Center `[x, y]`.
-    pub center: Animated<[f64; 2]>,
+    pub center: Animated<Point>,
     /// Nonnegative radius.
     pub radius: Animated<f64>,
 }
@@ -141,7 +141,7 @@ pub struct CircleSpec {
 #[serde(deny_unknown_fields)]
 pub struct EllipseSpec {
     /// Center `[x, y]`.
-    pub center: Animated<[f64; 2]>,
+    pub center: Animated<Point>,
     /// Radii `[horizontal, vertical]`.
     pub radii: Animated<[f64; 2]>,
 }
@@ -151,9 +151,9 @@ pub struct EllipseSpec {
 #[serde(deny_unknown_fields)]
 pub struct LineSpec {
     /// Start point `[x, y]`.
-    pub from: Animated<[f64; 2]>,
+    pub from: Animated<Point>,
     /// End point `[x, y]`.
-    pub to: Animated<[f64; 2]>,
+    pub to: Animated<Point>,
 }
 
 /// An open circular arc; angles are clockwise degrees from +X.
@@ -161,7 +161,7 @@ pub struct LineSpec {
 #[serde(deny_unknown_fields)]
 pub struct ArcSpec {
     /// Center `[x, y]`.
-    pub center: Animated<[f64; 2]>,
+    pub center: Animated<Point>,
     /// Radius.
     pub radius: Animated<f64>,
     /// Start angle in degrees.
@@ -175,7 +175,7 @@ pub struct ArcSpec {
 #[serde(deny_unknown_fields)]
 pub struct PointsSpec {
     /// Points `[[x, y], ...]` in drawing order.
-    pub points: Vec<[f64; 2]>,
+    pub points: Vec<Point>,
 }
 
 /// A regular polygon with one vertex pointing up.
@@ -183,7 +183,7 @@ pub struct PointsSpec {
 #[serde(deny_unknown_fields)]
 pub struct RegularPolygonSpec {
     /// Center `[x, y]`.
-    pub center: Animated<[f64; 2]>,
+    pub center: Animated<Point>,
     /// Circumradius.
     pub radius: Animated<f64>,
     /// Side count, at least three.
@@ -195,7 +195,7 @@ pub struct RegularPolygonSpec {
 #[serde(deny_unknown_fields)]
 pub struct StarSpec {
     /// Center `[x, y]`.
-    pub center: Animated<[f64; 2]>,
+    pub center: Animated<Point>,
     /// Number of outer points.
     pub points: u32,
     /// Outer radius.
@@ -209,7 +209,7 @@ pub struct StarSpec {
 #[serde(deny_unknown_fields)]
 pub struct RingSpec {
     /// Center `[x, y]`.
-    pub center: Animated<[f64; 2]>,
+    pub center: Animated<Point>,
     /// Inner radius.
     pub inner_radius: Animated<f64>,
     /// Outer radius.
@@ -227,9 +227,9 @@ pub struct RingSpec {
 #[serde(deny_unknown_fields)]
 pub struct ArrowSpec {
     /// Tail point `[x, y]`.
-    pub from: Animated<[f64; 2]>,
+    pub from: Animated<Point>,
     /// Head tip `[x, y]`.
-    pub to: Animated<[f64; 2]>,
+    pub to: Animated<Point>,
     /// Shaft width.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub width: Option<Animated<f64>>,
@@ -246,7 +246,7 @@ pub struct ArrowSpec {
 #[serde(deny_unknown_fields)]
 pub struct SplineSpec {
     /// Knots `[[x, y], ...]`.
-    pub points: Vec<[f64; 2]>,
+    pub points: Vec<Point>,
     /// Curve tension.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tension: Option<f64>,
@@ -400,7 +400,7 @@ pub struct TextSpanSpec {
     pub italic: bool,
     /// Fixed run color.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub fill: Option<ColorValue>,
+    pub fill: Option<Color>,
 }
 
 impl TextSpanSpec {
@@ -435,7 +435,7 @@ impl TextSpanSpec {
     }
 
     /// Colors the run.
-    pub fn fill(mut self, color: impl Into<ColorValue>) -> Self {
+    pub fn fill(mut self, color: impl Into<Color>) -> Self {
         self.fill = Some(color.into());
         self
     }

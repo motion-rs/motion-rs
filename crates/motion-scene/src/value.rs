@@ -1,7 +1,7 @@
 //! Animated property values, motion sources, easing curves and serialized colors.
 
 use motion_core::Waveform;
-use motion_core::{Color, Easing};
+use motion_core::{Easing, Point, Rect};
 use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use serde::de::{DeserializeOwned, Error as _};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -93,9 +93,15 @@ impl From<NoiseSpec> for Animated<f64> {
     }
 }
 
-impl From<Color> for Animated<ColorValue> {
-    fn from(color: Color) -> Self {
-        Self::Fixed(color.into())
+impl From<[f64; 2]> for Animated<Point> {
+    fn from([x, y]: [f64; 2]) -> Self {
+        Self::Fixed(Point::new(x, y))
+    }
+}
+
+impl From<[f64; 4]> for Animated<Rect> {
+    fn from([left, top, right, bottom]: [f64; 4]) -> Self {
+        Self::Fixed(Rect::new(left, top, right, bottom))
     }
 }
 
@@ -567,84 +573,6 @@ impl TryFrom<EasingSpec> for Easing {
             EasingSpec::BounceOut => Self::BounceOut,
             EasingSpec::Steps(count) => Self::steps(count)?,
             EasingSpec::CubicBezier { x1, y1, x2, y2 } => Self::cubic_bezier(x1, y1, x2, y2)?,
-        })
-    }
-}
-
-/// A CSS-style color string, parsed with [`Color::parse`] and kept verbatim.
-///
-/// Documents accept named, hexadecimal, `rgb()`, `hsl()` and `oklch()` syntax.
-/// Colors built from [`Color`] serialize as `#rrggbb[aa]` when exactly
-/// representable in 8 bits, and as `rgb()` with fractional channels otherwise.
-#[derive(Clone, Debug, PartialEq)]
-pub struct ColorValue {
-    text: String,
-    color: Color,
-}
-
-impl ColorValue {
-    /// Parses and retains color syntax.
-    pub fn parse(text: impl Into<String>) -> motion_core::Result<Self> {
-        let text = text.into();
-        let color = Color::parse(&text)?;
-        Ok(Self { text, color })
-    }
-
-    /// Returns the retained source text.
-    pub fn as_str(&self) -> &str {
-        &self.text
-    }
-
-    /// Returns the parsed color.
-    pub fn color(&self) -> Color {
-        self.color
-    }
-}
-
-impl From<Color> for ColorValue {
-    fn from(color: Color) -> Self {
-        let [red, green, blue, alpha] = color.to_rgba8();
-        let text = if Color::rgba(red, green, blue, alpha) == color {
-            if alpha == u8::MAX {
-                format!("#{red:02x}{green:02x}{blue:02x}")
-            } else {
-                format!("#{red:02x}{green:02x}{blue:02x}{alpha:02x}")
-            }
-        } else {
-            let [red, green, blue, alpha] = color.to_rgba_float();
-            format!(
-                "rgb({} {} {} / {alpha})",
-                red * 255.0,
-                green * 255.0,
-                blue * 255.0
-            )
-        };
-        Self { text, color }
-    }
-}
-
-impl Serialize for ColorValue {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(&self.text)
-    }
-}
-
-impl<'de> Deserialize<'de> for ColorValue {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::parse(String::deserialize(deserializer)?).map_err(D::Error::custom)
-    }
-}
-
-impl JsonSchema for ColorValue {
-    fn schema_name() -> Cow<'static, str> {
-        "Color".into()
-    }
-
-    fn json_schema(_: &mut SchemaGenerator) -> Schema {
-        json_schema!({
-            "type": "string",
-            "description": "Named, #hex, rgb(), hsl() or oklch() color syntax.",
-            "examples": ["#14a082", "rgb(20 160 130 / 50%)", "white"]
         })
     }
 }

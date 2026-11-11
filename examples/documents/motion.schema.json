@@ -21,38 +21,7 @@
               "type": "array"
             },
             {
-              "$ref": "#/$defs/MotionSpec3"
-            }
-          ],
-          "description": "A fixed value, or an object selecting one time-varying motion."
-        },
-        {
-          "$ref": "#/$defs/ParamRef"
-        }
-      ]
-    },
-    "Animated_Array_size_4_of_double": {
-      "anyOf": [
-        {
-          "anyOf": [
-            {
-              "items": {
-                "anyOf": [
-                  {
-                    "format": "double",
-                    "type": "number"
-                  },
-                  {
-                    "$ref": "#/$defs/ParamRef"
-                  }
-                ]
-              },
-              "maxItems": 4,
-              "minItems": 4,
-              "type": "array"
-            },
-            {
-              "$ref": "#/$defs/MotionSpec"
+              "$ref": "#/$defs/MotionSpec4"
             }
           ],
           "description": "A fixed value, or an object selecting one time-varying motion."
@@ -70,7 +39,43 @@
               "$ref": "#/$defs/Color"
             },
             {
-              "$ref": "#/$defs/MotionSpec4"
+              "$ref": "#/$defs/MotionSpec5"
+            }
+          ],
+          "description": "A fixed value, or an object selecting one time-varying motion."
+        },
+        {
+          "$ref": "#/$defs/ParamRef"
+        }
+      ]
+    },
+    "Animated_Point": {
+      "anyOf": [
+        {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Point"
+            },
+            {
+              "$ref": "#/$defs/MotionSpec3"
+            }
+          ],
+          "description": "A fixed value, or an object selecting one time-varying motion."
+        },
+        {
+          "$ref": "#/$defs/ParamRef"
+        }
+      ]
+    },
+    "Animated_Rect": {
+      "anyOf": [
+        {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Rect"
+            },
+            {
+              "$ref": "#/$defs/MotionSpec"
             }
           ],
           "description": "A fixed value, or an object selecting one time-varying motion."
@@ -108,7 +113,7 @@
             "center": {
               "anyOf": [
                 {
-                  "$ref": "#/$defs/Animated_Array_size_2_of_double",
+                  "$ref": "#/$defs/Animated_Point",
                   "description": "Center `[x, y]`."
                 },
                 {
@@ -199,7 +204,7 @@
             "from": {
               "anyOf": [
                 {
-                  "$ref": "#/$defs/Animated_Array_size_2_of_double",
+                  "$ref": "#/$defs/Animated_Point",
                   "description": "Tail point `[x, y]`."
                 },
                 {
@@ -246,7 +251,7 @@
             "to": {
               "anyOf": [
                 {
-                  "$ref": "#/$defs/Animated_Array_size_2_of_double",
+                  "$ref": "#/$defs/Animated_Point",
                   "description": "Head tip `[x, y]`."
                 },
                 {
@@ -792,21 +797,8 @@
             "position": {
               "anyOf": [
                 {
-                  "description": "Birth point `[x, y]`.",
-                  "items": {
-                    "anyOf": [
-                      {
-                        "format": "double",
-                        "type": "number"
-                      },
-                      {
-                        "$ref": "#/$defs/ParamRef"
-                      }
-                    ]
-                  },
-                  "maxItems": 2,
-                  "minItems": 2,
-                  "type": "array"
+                  "$ref": "#/$defs/Point",
+                  "description": "Birth point `[x, y]`."
                 },
                 {
                   "$ref": "#/$defs/ParamRef"
@@ -932,21 +924,8 @@
             "bounds": {
               "anyOf": [
                 {
-                  "description": "Label box `[left, top, right, bottom]`.",
-                  "items": {
-                    "anyOf": [
-                      {
-                        "format": "double",
-                        "type": "number"
-                      },
-                      {
-                        "$ref": "#/$defs/ParamRef"
-                      }
-                    ]
-                  },
-                  "maxItems": 4,
-                  "minItems": 4,
-                  "type": "array"
+                  "$ref": "#/$defs/Rect",
+                  "description": "Label box `[left, top, right, bottom]`."
                 },
                 {
                   "$ref": "#/$defs/ParamRef"
@@ -1004,21 +983,8 @@
             "target": {
               "anyOf": [
                 {
-                  "description": "Annotated point `[x, y]`.",
-                  "items": {
-                    "anyOf": [
-                      {
-                        "format": "double",
-                        "type": "number"
-                      },
-                      {
-                        "$ref": "#/$defs/ParamRef"
-                      }
-                    ]
-                  },
-                  "maxItems": 2,
-                  "minItems": 2,
-                  "type": "array"
+                  "$ref": "#/$defs/Point",
+                  "description": "Annotated point `[x, y]`."
                 },
                 {
                   "$ref": "#/$defs/ParamRef"
@@ -1209,24 +1175,15 @@
             "safe": {
               "anyOf": [
                 {
-                  "description": "Safe area `[left, top, right, bottom]`; the whole canvas by default.",
-                  "items": {
-                    "anyOf": [
-                      {
-                        "format": "double",
-                        "type": "number"
-                      },
-                      {
-                        "$ref": "#/$defs/ParamRef"
-                      }
-                    ]
-                  },
-                  "maxItems": 4,
-                  "minItems": 4,
-                  "type": [
-                    "array",
-                    "null"
-                  ]
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/Rect"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Safe area `[left, top, right, bottom]`; the whole canvas by default."
                 },
                 {
                   "$ref": "#/$defs/ParamRef"
@@ -1374,7 +1331,7 @@
             "center": {
               "anyOf": [
                 {
-                  "$ref": "#/$defs/Animated_Array_size_2_of_double",
+                  "$ref": "#/$defs/Animated_Point",
                   "description": "Center `[x, y]`."
                 },
                 {
@@ -1439,7 +1396,7 @@
                 "rect": {
                   "anyOf": [
                     {
-                      "$ref": "#/$defs/Animated_Array_size_4_of_double"
+                      "$ref": "#/$defs/Animated_Rect"
                     },
                     {
                       "$ref": "#/$defs/ParamRef"
@@ -1742,21 +1699,8 @@
             "center": {
               "anyOf": [
                 {
-                  "description": "Center `[x, y]`.",
-                  "items": {
-                    "anyOf": [
-                      {
-                        "format": "double",
-                        "type": "number"
-                      },
-                      {
-                        "$ref": "#/$defs/ParamRef"
-                      }
-                    ]
-                  },
-                  "maxItems": 2,
-                  "minItems": 2,
-                  "type": "array"
+                  "$ref": "#/$defs/Point",
+                  "description": "Center `[x, y]`."
                 },
                 {
                   "$ref": "#/$defs/ParamRef"
@@ -3228,7 +3172,7 @@
                 {
                   "anyOf": [
                     {
-                      "$ref": "#/$defs/PivotSpec"
+                      "$ref": "#/$defs/Pivot"
                     },
                     {
                       "type": "null"
@@ -3282,7 +3226,7 @@
                 {
                   "anyOf": [
                     {
-                      "$ref": "#/$defs/Animated_Array_size_2_of_double"
+                      "$ref": "#/$defs/Animated_Point"
                     },
                     {
                       "type": "null"
@@ -3615,7 +3559,7 @@
             "center": {
               "anyOf": [
                 {
-                  "$ref": "#/$defs/Animated_Array_size_2_of_double",
+                  "$ref": "#/$defs/Animated_Point",
                   "description": "Center `[x, y]`."
                 },
                 {
@@ -3764,24 +3708,15 @@
             "point": {
               "anyOf": [
                 {
-                  "description": "Point emitter `[x, y]`.",
-                  "items": {
-                    "anyOf": [
-                      {
-                        "format": "double",
-                        "type": "number"
-                      },
-                      {
-                        "$ref": "#/$defs/ParamRef"
-                      }
-                    ]
-                  },
-                  "maxItems": 2,
-                  "minItems": 2,
-                  "type": [
-                    "array",
-                    "null"
-                  ]
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/Point"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Point emitter `[x, y]`."
                 },
                 {
                   "$ref": "#/$defs/ParamRef"
@@ -3806,24 +3741,15 @@
             "rect": {
               "anyOf": [
                 {
-                  "description": "Rectangle emitter `[left, top, right, bottom]`.",
-                  "items": {
-                    "anyOf": [
-                      {
-                        "format": "double",
-                        "type": "number"
-                      },
-                      {
-                        "$ref": "#/$defs/ParamRef"
-                      }
-                    ]
-                  },
-                  "maxItems": 4,
-                  "minItems": 4,
-                  "type": [
-                    "array",
-                    "null"
-                  ]
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/Rect"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Rectangle emitter `[left, top, right, bottom]`."
                 },
                 {
                   "$ref": "#/$defs/ParamRef"
@@ -4866,21 +4792,8 @@
             "value": {
               "anyOf": [
                 {
-                  "description": "Value exactly at `time`.",
-                  "items": {
-                    "anyOf": [
-                      {
-                        "format": "double",
-                        "type": "number"
-                      },
-                      {
-                        "$ref": "#/$defs/ParamRef"
-                      }
-                    ]
-                  },
-                  "maxItems": 4,
-                  "minItems": 4,
-                  "type": "array"
+                  "$ref": "#/$defs/Rect",
+                  "description": "Value exactly at `time`."
                 },
                 {
                   "$ref": "#/$defs/ParamRef"
@@ -4984,6 +4897,58 @@
             "value": {
               "anyOf": [
                 {
+                  "$ref": "#/$defs/Point",
+                  "description": "Value exactly at `time`."
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            }
+          },
+          "required": [
+            "time",
+            "value"
+          ],
+          "type": "object"
+        },
+        {
+          "$ref": "#/$defs/ParamRef"
+        }
+      ]
+    },
+    "KeyframeSpec4": {
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "description": "One key of a [`KeyframesSpec`].",
+          "properties": {
+            "easing": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/EasingSpec",
+                  "description": "Curve of the segment arriving at this key; ignored on the first key."
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            },
+            "time": {
+              "anyOf": [
+                {
+                  "description": "Scene-local time in seconds.",
+                  "format": "double",
+                  "type": "number"
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            },
+            "value": {
+              "anyOf": [
+                {
                   "description": "Value exactly at `time`.",
                   "items": {
                     "anyOf": [
@@ -5017,7 +4982,7 @@
         }
       ]
     },
-    "KeyframeSpec4": {
+    "KeyframeSpec5": {
       "anyOf": [
         {
           "additionalProperties": false,
@@ -5389,6 +5354,86 @@
         }
       ]
     },
+    "KeyframesSpec5": {
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "description": "A key track whose segments use the easing of the key they arrive at.\n\nA first key later than zero holds its value from zero until that time.",
+          "properties": {
+            "delay": {
+              "anyOf": [
+                {
+                  "description": "Nonnegative start offset in seconds.",
+                  "format": "double",
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            },
+            "keys": {
+              "anyOf": [
+                {
+                  "description": "Nonempty keys with nonnegative, strictly increasing times.",
+                  "items": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/KeyframeSpec5"
+                      },
+                      {
+                        "$ref": "#/$defs/ParamRef"
+                      }
+                    ]
+                  },
+                  "type": "array"
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            },
+            "ping_pong": {
+              "anyOf": [
+                {
+                  "description": "Plays forward then backward, ending at the first value.",
+                  "type": "boolean"
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            },
+            "repeat": {
+              "anyOf": [
+                {
+                  "description": "Total number of plays; the final play holds its end value.",
+                  "format": "uint32",
+                  "minimum": 0,
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            }
+          },
+          "required": [
+            "keys"
+          ],
+          "type": "object"
+        },
+        {
+          "$ref": "#/$defs/ParamRef"
+        }
+      ]
+    },
     "KeywordSpec": {
       "anyOf": [
         {
@@ -5524,21 +5569,8 @@
             "bounds": {
               "anyOf": [
                 {
-                  "description": "Plot rectangle `[left, top, right, bottom]`.",
-                  "items": {
-                    "anyOf": [
-                      {
-                        "format": "double",
-                        "type": "number"
-                      },
-                      {
-                        "$ref": "#/$defs/ParamRef"
-                      }
-                    ]
-                  },
-                  "maxItems": 4,
-                  "minItems": 4,
-                  "type": "array"
+                  "$ref": "#/$defs/Rect",
+                  "description": "Plot rectangle `[left, top, right, bottom]`."
                 },
                 {
                   "$ref": "#/$defs/ParamRef"
@@ -5618,24 +5650,56 @@
         }
       ]
     },
-    "LineJoinSpec": {
+    "LineJoin": {
       "anyOf": [
         {
-          "description": "Stroke corner shape; the miter limit is a separate stroke field.",
+          "description": "Connection between adjacent stroke segments.",
           "oneOf": [
             {
-              "const": "miter",
-              "description": "Sharp corner, beveled beyond the miter limit.",
-              "type": "string"
+              "additionalProperties": false,
+              "description": "Extend edges to their intersection, beveling beyond the radius ratio.",
+              "properties": {
+                "miter": {
+                  "anyOf": [
+                    {
+                      "properties": {
+                        "limit": {
+                          "anyOf": [
+                            {
+                              "description": "Finite miter-length to half-width ratio in 1..=1024.",
+                              "format": "double",
+                              "type": "number"
+                            },
+                            {
+                              "$ref": "#/$defs/ParamRef"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "limit"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "$ref": "#/$defs/ParamRef"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "miter"
+              ],
+              "type": "object"
             },
             {
               "const": "round",
-              "description": "Circular corner.",
+              "description": "Connect outer edges with a circular arc.",
               "type": "string"
             },
             {
               "const": "bevel",
-              "description": "Straight cut corner.",
+              "description": "Connect outer edges with a straight segment.",
               "type": "string"
             }
           ]
@@ -5654,7 +5718,7 @@
             "from": {
               "anyOf": [
                 {
-                  "$ref": "#/$defs/Animated_Array_size_2_of_double",
+                  "$ref": "#/$defs/Animated_Point",
                   "description": "Start point `[x, y]`."
                 },
                 {
@@ -5665,7 +5729,7 @@
             "to": {
               "anyOf": [
                 {
-                  "$ref": "#/$defs/Animated_Array_size_2_of_double",
+                  "$ref": "#/$defs/Animated_Point",
                   "description": "End point `[x, y]`."
                 },
                 {
@@ -5694,21 +5758,8 @@
             "end": {
               "anyOf": [
                 {
-                  "description": "Point at offset one, `[x, y]`.",
-                  "items": {
-                    "anyOf": [
-                      {
-                        "format": "double",
-                        "type": "number"
-                      },
-                      {
-                        "$ref": "#/$defs/ParamRef"
-                      }
-                    ]
-                  },
-                  "maxItems": 2,
-                  "minItems": 2,
-                  "type": "array"
+                  "$ref": "#/$defs/Point",
+                  "description": "Point at offset one, `[x, y]`."
                 },
                 {
                   "$ref": "#/$defs/ParamRef"
@@ -5729,21 +5780,8 @@
             "start": {
               "anyOf": [
                 {
-                  "description": "Point at offset zero, `[x, y]`.",
-                  "items": {
-                    "anyOf": [
-                      {
-                        "format": "double",
-                        "type": "number"
-                      },
-                      {
-                        "$ref": "#/$defs/ParamRef"
-                      }
-                    ]
-                  },
-                  "maxItems": 2,
-                  "minItems": 2,
-                  "type": "array"
+                  "$ref": "#/$defs/Point",
+                  "description": "Point at offset zero, `[x, y]`."
                 },
                 {
                   "$ref": "#/$defs/ParamRef"
@@ -6134,21 +6172,8 @@
                         "center": {
                           "anyOf": [
                             {
-                              "description": "Center `[x, y]`.",
-                              "items": {
-                                "anyOf": [
-                                  {
-                                    "format": "double",
-                                    "type": "number"
-                                  },
-                                  {
-                                    "$ref": "#/$defs/ParamRef"
-                                  }
-                                ]
-                              },
-                              "maxItems": 2,
-                              "minItems": 2,
-                              "type": "array"
+                              "$ref": "#/$defs/Point",
+                              "description": "Center `[x, y]`."
                             },
                             {
                               "$ref": "#/$defs/ParamRef"
@@ -6197,21 +6222,8 @@
                         "center": {
                           "anyOf": [
                             {
-                              "description": "Center `[x, y]`.",
-                              "items": {
-                                "anyOf": [
-                                  {
-                                    "format": "double",
-                                    "type": "number"
-                                  },
-                                  {
-                                    "$ref": "#/$defs/ParamRef"
-                                  }
-                                ]
-                              },
-                              "maxItems": 2,
-                              "minItems": 2,
-                              "type": "array"
+                              "$ref": "#/$defs/Point",
+                              "description": "Center `[x, y]`."
                             },
                             {
                               "$ref": "#/$defs/ParamRef"
@@ -6354,20 +6366,7 @@
                               "items": {
                                 "anyOf": [
                                   {
-                                    "items": {
-                                      "anyOf": [
-                                        {
-                                          "format": "double",
-                                          "type": "number"
-                                        },
-                                        {
-                                          "$ref": "#/$defs/ParamRef"
-                                        }
-                                      ]
-                                    },
-                                    "maxItems": 2,
-                                    "minItems": 2,
-                                    "type": "array"
+                                    "$ref": "#/$defs/Point"
                                   },
                                   {
                                     "$ref": "#/$defs/ParamRef"
@@ -6406,20 +6405,7 @@
                 "bounce_box": {
                   "anyOf": [
                     {
-                      "items": {
-                        "anyOf": [
-                          {
-                            "format": "double",
-                            "type": "number"
-                          },
-                          {
-                            "$ref": "#/$defs/ParamRef"
-                          }
-                        ]
-                      },
-                      "maxItems": 4,
-                      "minItems": 4,
-                      "type": "array"
+                      "$ref": "#/$defs/Rect"
                     },
                     {
                       "$ref": "#/$defs/ParamRef"
@@ -6957,6 +6943,118 @@
                   "anyOf": [
                     {
                       "$ref": "#/$defs/KeyframesSpec4"
+                    },
+                    {
+                      "$ref": "#/$defs/ParamRef"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "keyframes"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "description": "A periodic numeric waveform; numeric properties only.",
+              "properties": {
+                "oscillate": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/OscillateSpec"
+                    },
+                    {
+                      "$ref": "#/$defs/ParamRef"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "oscillate"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "description": "Deterministic fractal value noise; numeric properties only.",
+              "properties": {
+                "noise": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/NoiseSpec"
+                    },
+                    {
+                      "$ref": "#/$defs/ParamRef"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "noise"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "description": "An arithmetic expression of scene-local time, parameters and other elements.",
+              "properties": {
+                "expr": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/ExprSpec"
+                    },
+                    {
+                      "$ref": "#/$defs/ParamRef"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "expr"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        {
+          "$ref": "#/$defs/ParamRef"
+        }
+      ]
+    },
+    "MotionSpec5": {
+      "anyOf": [
+        {
+          "description": "A time-varying source for an [`Animated`] property.",
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "description": "Two-value interpolation.",
+              "properties": {
+                "tween": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/TweenSpec5"
+                    },
+                    {
+                      "$ref": "#/$defs/ParamRef"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "tween"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "description": "Multi-key interpolation.",
+              "properties": {
+                "keyframes": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/KeyframesSpec5"
                     },
                     {
                       "$ref": "#/$defs/ParamRef"
@@ -8082,10 +8180,10 @@
         }
       ]
     },
-    "PivotSpec": {
+    "Pivot": {
       "anyOf": [
         {
-          "description": "Local anchor for placement, rotation and scale; mirrors [`Pivot`].",
+          "description": "A local-space anchor used by authoring placement and transforms.\n\nRelative coordinates are not clamped; explicit points need not lie inside\nbounds. Baseline falls back to BottomLeft without text baseline metrics.",
           "oneOf": [
             {
               "const": "top_left",
@@ -8109,7 +8207,7 @@
             },
             {
               "const": "center",
-              "description": "Bounds midpoint.",
+              "description": "Bounds midpoint; the default authoring pivot.",
               "type": "string"
             },
             {
@@ -8134,29 +8232,28 @@
             },
             {
               "const": "baseline",
-              "description": "Text baseline origin, or bottom-left without baseline metrics.",
+              "description": "Text baseline origin, or BottomLeft without baseline metrics.",
               "type": "string"
             },
             {
               "additionalProperties": false,
-              "description": "Fractions `[x, y]` of the bounds, without clamping.",
+              "description": "Fractions of the horizontal and vertical bounds, without clamping.",
               "properties": {
                 "relative": {
                   "anyOf": [
                     {
-                      "items": {
-                        "anyOf": [
-                          {
-                            "format": "double",
-                            "type": "number"
-                          },
-                          {
-                            "$ref": "#/$defs/ParamRef"
-                          }
-                        ]
-                      },
                       "maxItems": 2,
                       "minItems": 2,
+                      "prefixItems": [
+                        {
+                          "format": "double",
+                          "type": "number"
+                        },
+                        {
+                          "format": "double",
+                          "type": "number"
+                        }
+                      ],
                       "type": "array"
                     },
                     {
@@ -8172,25 +8269,12 @@
             },
             {
               "additionalProperties": false,
-              "description": "Explicit local point `[x, y]`.",
+              "description": "An explicit point in local coordinates.",
               "properties": {
                 "point": {
                   "anyOf": [
                     {
-                      "items": {
-                        "anyOf": [
-                          {
-                            "format": "double",
-                            "type": "number"
-                          },
-                          {
-                            "$ref": "#/$defs/ParamRef"
-                          }
-                        ]
-                      },
-                      "maxItems": 2,
-                      "minItems": 2,
-                      "type": "array"
+                      "$ref": "#/$defs/Point"
                     },
                     {
                       "$ref": "#/$defs/ParamRef"
@@ -8210,6 +8294,29 @@
         }
       ]
     },
+    "Point": {
+      "anyOf": [
+        {
+          "items": {
+            "anyOf": [
+              {
+                "format": "double",
+                "type": "number"
+              },
+              {
+                "$ref": "#/$defs/ParamRef"
+              }
+            ]
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        },
+        {
+          "$ref": "#/$defs/ParamRef"
+        }
+      ]
+    },
     "PointsSpec": {
       "anyOf": [
         {
@@ -8223,20 +8330,7 @@
                   "items": {
                     "anyOf": [
                       {
-                        "items": {
-                          "anyOf": [
-                            {
-                              "format": "double",
-                              "type": "number"
-                            },
-                            {
-                              "$ref": "#/$defs/ParamRef"
-                            }
-                          ]
-                        },
-                        "maxItems": 2,
-                        "minItems": 2,
-                        "type": "array"
+                        "$ref": "#/$defs/Point"
                       },
                       {
                         "$ref": "#/$defs/ParamRef"
@@ -8270,21 +8364,8 @@
             "center": {
               "anyOf": [
                 {
-                  "description": "End-circle center `[x, y]`.",
-                  "items": {
-                    "anyOf": [
-                      {
-                        "format": "double",
-                        "type": "number"
-                      },
-                      {
-                        "$ref": "#/$defs/ParamRef"
-                      }
-                    ]
-                  },
-                  "maxItems": 2,
-                  "minItems": 2,
-                  "type": "array"
+                  "$ref": "#/$defs/Point",
+                  "description": "End-circle center `[x, y]`."
                 },
                 {
                   "$ref": "#/$defs/ParamRef"
@@ -8294,24 +8375,15 @@
             "focal": {
               "anyOf": [
                 {
-                  "description": "Optional start point `[x, y]` inside the end circle.",
-                  "items": {
-                    "anyOf": [
-                      {
-                        "format": "double",
-                        "type": "number"
-                      },
-                      {
-                        "$ref": "#/$defs/ParamRef"
-                      }
-                    ]
-                  },
-                  "maxItems": 2,
-                  "minItems": 2,
-                  "type": [
-                    "array",
-                    "null"
-                  ]
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/Point"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Optional start point `[x, y]` inside the end circle."
                 },
                 {
                   "$ref": "#/$defs/ParamRef"
@@ -8375,6 +8447,29 @@
         }
       ]
     },
+    "Rect": {
+      "anyOf": [
+        {
+          "items": {
+            "anyOf": [
+              {
+                "format": "double",
+                "type": "number"
+              },
+              {
+                "$ref": "#/$defs/ParamRef"
+              }
+            ]
+          },
+          "maxItems": 4,
+          "minItems": 4,
+          "type": "array"
+        },
+        {
+          "$ref": "#/$defs/ParamRef"
+        }
+      ]
+    },
     "RectSpec": {
       "anyOf": [
         {
@@ -8384,7 +8479,7 @@
             "bounds": {
               "anyOf": [
                 {
-                  "$ref": "#/$defs/Animated_Array_size_4_of_double",
+                  "$ref": "#/$defs/Animated_Rect",
                   "description": "Opposite corners `[left, top, right, bottom]`."
                 },
                 {
@@ -8430,7 +8525,7 @@
             "center": {
               "anyOf": [
                 {
-                  "$ref": "#/$defs/Animated_Array_size_2_of_double",
+                  "$ref": "#/$defs/Animated_Point",
                   "description": "Center `[x, y]`."
                 },
                 {
@@ -8484,7 +8579,7 @@
             "center": {
               "anyOf": [
                 {
-                  "$ref": "#/$defs/Animated_Array_size_2_of_double",
+                  "$ref": "#/$defs/Animated_Point",
                   "description": "Center `[x, y]`."
                 },
                 {
@@ -8995,7 +9090,7 @@
                 {
                   "anyOf": [
                     {
-                      "$ref": "#/$defs/LineJoinSpec"
+                      "$ref": "#/$defs/LineJoin"
                     },
                     {
                       "type": "null"
@@ -9015,22 +9110,13 @@
                   "items": {
                     "anyOf": [
                       {
-                        "items": {
-                          "anyOf": [
-                            {
-                              "format": "double",
-                              "type": "number"
-                            },
-                            {
-                              "$ref": "#/$defs/ParamRef"
-                            }
-                          ]
-                        },
-                        "maxItems": 2,
-                        "minItems": 2,
-                        "type": [
-                          "array",
-                          "null"
+                        "anyOf": [
+                          {
+                            "$ref": "#/$defs/Point"
+                          },
+                          {
+                            "type": "null"
+                          }
                         ]
                       },
                       {
@@ -9081,21 +9167,8 @@
             "listener": {
               "anyOf": [
                 {
-                  "description": "Listener position `[x, y]`.",
-                  "items": {
-                    "anyOf": [
-                      {
-                        "format": "double",
-                        "type": "number"
-                      },
-                      {
-                        "$ref": "#/$defs/ParamRef"
-                      }
-                    ]
-                  },
-                  "maxItems": 2,
-                  "minItems": 2,
-                  "type": "array"
+                  "$ref": "#/$defs/Point",
+                  "description": "Listener position `[x, y]`."
                 },
                 {
                   "$ref": "#/$defs/ParamRef"
@@ -9105,7 +9178,7 @@
             "position": {
               "anyOf": [
                 {
-                  "$ref": "#/$defs/Animated_Array_size_2_of_double",
+                  "$ref": "#/$defs/Animated_Point",
                   "description": "Source position `[x, y]` in design units."
                 },
                 {
@@ -9164,20 +9237,7 @@
                   "items": {
                     "anyOf": [
                       {
-                        "items": {
-                          "anyOf": [
-                            {
-                              "format": "double",
-                              "type": "number"
-                            },
-                            {
-                              "$ref": "#/$defs/ParamRef"
-                            }
-                          ]
-                        },
-                        "maxItems": 2,
-                        "minItems": 2,
-                        "type": "array"
+                        "$ref": "#/$defs/Point"
                       },
                       {
                         "$ref": "#/$defs/ParamRef"
@@ -9226,7 +9286,7 @@
             "center": {
               "anyOf": [
                 {
-                  "$ref": "#/$defs/Animated_Array_size_2_of_double",
+                  "$ref": "#/$defs/Animated_Point",
                   "description": "Center `[x, y]`."
                 },
                 {
@@ -9352,28 +9412,13 @@
                 {
                   "anyOf": [
                     {
-                      "$ref": "#/$defs/LineJoinSpec"
+                      "$ref": "#/$defs/LineJoin"
                     },
                     {
                       "type": "null"
                     }
                   ],
-                  "description": "Corner join; miter by default."
-                },
-                {
-                  "$ref": "#/$defs/ParamRef"
-                }
-              ]
-            },
-            "miter_limit": {
-              "anyOf": [
-                {
-                  "description": "Miter-length to half-width ratio in `1..=1024`; four by default.",
-                  "format": "double",
-                  "type": [
-                    "number",
-                    "null"
-                  ]
+                  "description": "Corner join, with the miter limit inside `miter`; a miter limited to four by default."
                 },
                 {
                   "$ref": "#/$defs/ParamRef"
@@ -9548,21 +9593,8 @@
             "center": {
               "anyOf": [
                 {
-                  "description": "Rotation center `[x, y]`.",
-                  "items": {
-                    "anyOf": [
-                      {
-                        "format": "double",
-                        "type": "number"
-                      },
-                      {
-                        "$ref": "#/$defs/ParamRef"
-                      }
-                    ]
-                  },
-                  "maxItems": 2,
-                  "minItems": 2,
-                  "type": "array"
+                  "$ref": "#/$defs/Point",
+                  "description": "Rotation center `[x, y]`."
                 },
                 {
                   "$ref": "#/$defs/ParamRef"
@@ -10171,21 +10203,8 @@
                         "center": {
                           "anyOf": [
                             {
-                              "description": "Launch point `[x, y]`.",
-                              "items": {
-                                "anyOf": [
-                                  {
-                                    "format": "double",
-                                    "type": "number"
-                                  },
-                                  {
-                                    "$ref": "#/$defs/ParamRef"
-                                  }
-                                ]
-                              },
-                              "maxItems": 2,
-                              "minItems": 2,
-                              "type": "array"
+                              "$ref": "#/$defs/Point",
+                              "description": "Launch point `[x, y]`."
                             },
                             {
                               "$ref": "#/$defs/ParamRef"
@@ -10348,21 +10367,8 @@
                         "center": {
                           "anyOf": [
                             {
-                              "description": "Center `[x, y]`.",
-                              "items": {
-                                "anyOf": [
-                                  {
-                                    "format": "double",
-                                    "type": "number"
-                                  },
-                                  {
-                                    "$ref": "#/$defs/ParamRef"
-                                  }
-                                ]
-                              },
-                              "maxItems": 2,
-                              "minItems": 2,
-                              "type": "array"
+                              "$ref": "#/$defs/Point",
+                              "description": "Center `[x, y]`."
                             },
                             {
                               "$ref": "#/$defs/ParamRef"
@@ -10509,21 +10515,8 @@
                         "origin": {
                           "anyOf": [
                             {
-                              "description": "Start point `[x, y]`.",
-                              "items": {
-                                "anyOf": [
-                                  {
-                                    "format": "double",
-                                    "type": "number"
-                                  },
-                                  {
-                                    "$ref": "#/$defs/ParamRef"
-                                  }
-                                ]
-                              },
-                              "maxItems": 2,
-                              "minItems": 2,
-                              "type": "array"
+                              "$ref": "#/$defs/Point",
+                              "description": "Start point `[x, y]`."
                             },
                             {
                               "$ref": "#/$defs/ParamRef"
@@ -10964,21 +10957,8 @@
             "from": {
               "anyOf": [
                 {
-                  "description": "Value at and before the start.",
-                  "items": {
-                    "anyOf": [
-                      {
-                        "format": "double",
-                        "type": "number"
-                      },
-                      {
-                        "$ref": "#/$defs/ParamRef"
-                      }
-                    ]
-                  },
-                  "maxItems": 4,
-                  "minItems": 4,
-                  "type": "array"
+                  "$ref": "#/$defs/Rect",
+                  "description": "Value at and before the start."
                 },
                 {
                   "$ref": "#/$defs/ParamRef"
@@ -11015,21 +10995,8 @@
             "to": {
               "anyOf": [
                 {
-                  "description": "Value at and after the end.",
-                  "items": {
-                    "anyOf": [
-                      {
-                        "format": "double",
-                        "type": "number"
-                      },
-                      {
-                        "$ref": "#/$defs/ParamRef"
-                      }
-                    ]
-                  },
-                  "maxItems": 4,
-                  "minItems": 4,
-                  "type": "array"
+                  "$ref": "#/$defs/Rect",
+                  "description": "Value at and after the end."
                 },
                 {
                   "$ref": "#/$defs/ParamRef"
@@ -11204,6 +11171,112 @@
             "from": {
               "anyOf": [
                 {
+                  "$ref": "#/$defs/Point",
+                  "description": "Value at and before the start."
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            },
+            "ping_pong": {
+              "anyOf": [
+                {
+                  "description": "Plays forward then backward, ending at `from`.",
+                  "type": "boolean"
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            },
+            "repeat": {
+              "anyOf": [
+                {
+                  "description": "Total number of plays; the final play holds its end value.",
+                  "format": "uint32",
+                  "minimum": 0,
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            },
+            "to": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Point",
+                  "description": "Value at and after the end."
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            }
+          },
+          "required": [
+            "from",
+            "to",
+            "duration"
+          ],
+          "type": "object"
+        },
+        {
+          "$ref": "#/$defs/ParamRef"
+        }
+      ]
+    },
+    "TweenSpec4": {
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "description": "Interpolation between two values starting at scene-local time zero.",
+          "properties": {
+            "delay": {
+              "anyOf": [
+                {
+                  "description": "Nonnegative start offset in seconds, holding `from` before it.",
+                  "format": "double",
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            },
+            "duration": {
+              "anyOf": [
+                {
+                  "description": "Nonnegative duration in seconds.",
+                  "format": "double",
+                  "type": "number"
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            },
+            "easing": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/EasingSpec",
+                  "description": "Progress curve; linear by default."
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            },
+            "from": {
+              "anyOf": [
+                {
                   "description": "Value at and before the start.",
                   "items": {
                     "anyOf": [
@@ -11289,7 +11362,7 @@
         }
       ]
     },
-    "TweenSpec4": {
+    "TweenSpec5": {
       "anyOf": [
         {
           "additionalProperties": false,

@@ -2,11 +2,11 @@
 
 use super::Compiler;
 use crate::value::{
-    Animated, ColorValue, EasingSpec, ExprSpec, KeyframesSpec, MotionSpec, NoiseSpec,
-    OscillateSpec, TweenSpec,
+    Animated, EasingSpec, ExprSpec, KeyframesSpec, MotionSpec, NoiseSpec, OscillateSpec, TweenSpec,
 };
 use motion_core::{
-    Color, Easing, FiniteAnimation, Interpolate, Keyframes, Noise, Oscillator, Signal, Time, Tween,
+    Color, Easing, FiniteAnimation, Interpolate, Keyframes, Noise, Oscillator, Point, Rect, Signal,
+    Time, Tween,
 };
 use std::sync::Arc;
 
@@ -104,11 +104,67 @@ impl<const COUNT: usize> Value for [f64; COUNT] {
     }
 }
 
-impl Value for ColorValue {
+impl Value for Point {
+    type Engine = Self;
+
+    const ARITY: usize = 2;
+
+    fn from_signals(signals: &[Arc<dyn Signal<f64>>]) -> Option<Arc<dyn Signal<Self>>> {
+        let [x, y] = signals else {
+            return None;
+        };
+        let (x, y) = (x.clone(), y.clone());
+        Some(Arc::new(move |time: Time| {
+            Point::new(x.sample(time), y.sample(time))
+        }))
+    }
+
+    fn engine(&self) -> Result<Self, &'static str> {
+        if self.x.is_finite() && self.y.is_finite() {
+            Ok(*self)
+        } else {
+            Err("Every component must be finite")
+        }
+    }
+}
+
+impl Value for Rect {
+    type Engine = Self;
+
+    const ARITY: usize = 4;
+
+    fn from_signals(signals: &[Arc<dyn Signal<f64>>]) -> Option<Arc<dyn Signal<Self>>> {
+        let [left, top, right, bottom] = signals else {
+            return None;
+        };
+        let (left, top, right, bottom) = (left.clone(), top.clone(), right.clone(), bottom.clone());
+        Some(Arc::new(move |time: Time| {
+            Rect::new(
+                left.sample(time),
+                top.sample(time),
+                right.sample(time),
+                bottom.sample(time),
+            )
+        }))
+    }
+
+    fn engine(&self) -> Result<Self, &'static str> {
+        if [self.left, self.top, self.right, self.bottom]
+            .iter()
+            .all(|value| value.is_finite())
+        {
+            Ok(*self)
+        } else {
+            Err("Every component must be finite")
+        }
+    }
+}
+
+impl Value for Color {
     type Engine = Color;
 
     fn engine(&self) -> Result<Color, &'static str> {
-        Ok(self.color())
+        Ok(*self)
     }
 }
 

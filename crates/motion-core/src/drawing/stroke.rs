@@ -25,6 +25,12 @@ pub enum LineCap {
 
 /// Connection between adjacent stroke segments.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(rename_all = "snake_case")
+)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub enum LineJoin {
     /// Extend edges to their intersection, beveling beyond the radius ratio.
     Miter {

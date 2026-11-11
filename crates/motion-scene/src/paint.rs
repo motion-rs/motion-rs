@@ -1,8 +1,7 @@
 //! Fill/stroke paint, gradients, stroke geometry and trim ranges.
 
-use crate::options::LineJoinSpec;
-use crate::value::{Animated, ColorValue};
-use motion_core::{Color, GradientExtend, GradientSpace, GradientUnits, LineCap};
+use crate::value::Animated;
+use motion_core::{Color, GradientExtend, GradientSpace, GradientUnits, LineCap, LineJoin, Point};
 use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use serde::de::Error as _;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -19,7 +18,7 @@ const GRADIENT_TAGS: [&str; 3] = ["linear", "radial", "sweep"];
 #[derive(Clone, Debug, PartialEq)]
 pub enum PaintSpec {
     /// A fixed or animated color.
-    Solid(Animated<ColorValue>),
+    Solid(Animated<Color>),
     /// A static gradient.
     Gradient(GradientSpec),
 }
@@ -30,14 +29,8 @@ impl From<Color> for PaintSpec {
     }
 }
 
-impl From<ColorValue> for PaintSpec {
-    fn from(color: ColorValue) -> Self {
-        Self::Solid(color.into())
-    }
-}
-
-impl From<Animated<ColorValue>> for PaintSpec {
-    fn from(color: Animated<ColorValue>) -> Self {
+impl From<Animated<Color>> for PaintSpec {
+    fn from(color: Animated<Color>) -> Self {
         Self::Solid(color)
     }
 }
@@ -81,7 +74,7 @@ impl JsonSchema for PaintSpec {
     }
 
     fn json_schema(generator: &mut SchemaGenerator) -> Schema {
-        let solid = generator.subschema_for::<Animated<ColorValue>>();
+        let solid = generator.subschema_for::<Animated<Color>>();
         let gradient = generator.subschema_for::<GradientSpec>();
         json_schema!({
             "description": "A fixed or animated color, or a gradient.",
@@ -107,9 +100,9 @@ pub enum GradientSpec {
 #[serde(deny_unknown_fields)]
 pub struct LinearGradientSpec {
     /// Point at offset zero, `[x, y]`.
-    pub start: [f64; 2],
+    pub start: Point,
     /// Point at offset one, `[x, y]`.
-    pub end: [f64; 2],
+    pub end: Point,
     /// Stops ordered by offset.
     pub stops: Vec<GradientStop>,
     /// Shared interpolation, coordinate and extension options.
@@ -119,7 +112,7 @@ pub struct LinearGradientSpec {
 
 impl LinearGradientSpec {
     /// Creates a gradient from `start` to `end`.
-    pub fn new(start: [f64; 2], end: [f64; 2]) -> Self {
+    pub fn new(start: Point, end: Point) -> Self {
         Self {
             start,
             end,
@@ -129,7 +122,7 @@ impl LinearGradientSpec {
     }
 
     /// Appends a stop.
-    pub fn stop(mut self, offset: f64, color: impl Into<ColorValue>) -> Self {
+    pub fn stop(mut self, offset: f64, color: impl Into<Color>) -> Self {
         self.stops.push(GradientStop {
             offset,
             color: color.into(),
@@ -143,12 +136,12 @@ impl LinearGradientSpec {
 #[serde(deny_unknown_fields)]
 pub struct RadialGradientSpec {
     /// End-circle center `[x, y]`.
-    pub center: [f64; 2],
+    pub center: Point,
     /// End-circle radius.
     pub radius: f64,
     /// Optional start point `[x, y]` inside the end circle.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub focal: Option<[f64; 2]>,
+    pub focal: Option<Point>,
     /// Stops ordered by offset.
     pub stops: Vec<GradientStop>,
     /// Shared interpolation, coordinate and extension options.
@@ -158,7 +151,7 @@ pub struct RadialGradientSpec {
 
 impl RadialGradientSpec {
     /// Creates a centered radial gradient.
-    pub fn new(center: [f64; 2], radius: f64) -> Self {
+    pub fn new(center: Point, radius: f64) -> Self {
         Self {
             center,
             radius,
@@ -169,7 +162,7 @@ impl RadialGradientSpec {
     }
 
     /// Appends a stop.
-    pub fn stop(mut self, offset: f64, color: impl Into<ColorValue>) -> Self {
+    pub fn stop(mut self, offset: f64, color: impl Into<Color>) -> Self {
         self.stops.push(GradientStop {
             offset,
             color: color.into(),
@@ -183,7 +176,7 @@ impl RadialGradientSpec {
 #[serde(deny_unknown_fields)]
 pub struct SweepGradientSpec {
     /// Rotation center `[x, y]`.
-    pub center: [f64; 2],
+    pub center: Point,
     /// Angle of offset zero, in degrees.
     pub start_angle: f64,
     /// Angle of offset one, in degrees.
@@ -197,7 +190,7 @@ pub struct SweepGradientSpec {
 
 impl SweepGradientSpec {
     /// Creates a sweep between two angles in degrees.
-    pub fn new(center: [f64; 2], start_angle: f64, end_angle: f64) -> Self {
+    pub fn new(center: Point, start_angle: f64, end_angle: f64) -> Self {
         Self {
             center,
             start_angle,
@@ -208,7 +201,7 @@ impl SweepGradientSpec {
     }
 
     /// Appends a stop.
-    pub fn stop(mut self, offset: f64, color: impl Into<ColorValue>) -> Self {
+    pub fn stop(mut self, offset: f64, color: impl Into<Color>) -> Self {
         self.stops.push(GradientStop {
             offset,
             color: color.into(),
@@ -224,7 +217,7 @@ pub struct GradientStop {
     /// Position in `0..=1`.
     pub offset: f64,
     /// Stop color.
-    pub color: ColorValue,
+    pub color: Color,
 }
 
 /// Optional gradient settings; omitted values keep engine defaults.
@@ -260,12 +253,9 @@ pub struct StrokeSpec {
     /// End cap; butt by default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cap: Option<LineCap>,
-    /// Corner join; miter by default.
+    /// Corner join, with the miter limit inside `miter`; a miter limited to four by default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub join: Option<LineJoinSpec>,
-    /// Miter-length to half-width ratio in `1..=1024`; four by default.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub miter_limit: Option<f64>,
+    pub join: Option<LineJoin>,
     /// Alternating dash and gap lengths.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub dash: Vec<f64>,
@@ -282,7 +272,6 @@ impl StrokeSpec {
             paint: paint.into(),
             cap: None,
             join: None,
-            miter_limit: None,
             dash: Vec::new(),
             dash_offset: None,
         }
@@ -295,7 +284,7 @@ impl StrokeSpec {
     }
 
     /// Selects the corner join.
-    pub fn join(mut self, join: LineJoinSpec) -> Self {
+    pub fn join(mut self, join: LineJoin) -> Self {
         self.join = Some(join);
         self
     }

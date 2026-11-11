@@ -1,6 +1,8 @@
 //! Floating straight-alpha sRGB values and perceptual Oklab calculations.
 
 pub mod math;
+#[cfg(feature = "serde")]
+mod wire;
 
 use crate::ValidationError;
 

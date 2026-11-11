@@ -1,8 +1,6 @@
 //! Rulers, callouts and line charts described as plain data.
 
-use crate::options::LineJoinSpec;
-use crate::value::ColorValue;
-use motion_core::LineCap;
+use motion_core::{Color, LineCap, LineJoin, Point, Rect};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -99,7 +97,7 @@ pub struct RulerSpec {
     pub label_size: Option<[f64; 2]>,
     /// Line and label color.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub color: Option<ColorValue>,
+    pub color: Option<Color>,
     /// Unit suffix appended to labels.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub unit: Option<String>,
@@ -135,12 +133,12 @@ pub struct CalloutSpec {
     /// Label text.
     pub text: String,
     /// Annotated point `[x, y]`.
-    pub target: [f64; 2],
+    pub target: Point,
     /// Label box `[left, top, right, bottom]`.
-    pub bounds: [f64; 4],
+    pub bounds: Rect,
     /// Text and leader color.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub color: Option<ColorValue>,
+    pub color: Option<Color>,
     /// Font size in `(0, 4096]`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub font_size: Option<f64>,
@@ -155,7 +153,7 @@ pub struct CalloutSpec {
 #[serde(deny_unknown_fields)]
 pub struct LineChartSpec {
     /// Plot rectangle `[left, top, right, bottom]`.
-    pub bounds: [f64; 4],
+    pub bounds: Rect,
     /// Horizontal data scale; its `range` is derived.
     pub horizontal: ScaleSpec,
     /// Vertical data scale; its `range` is derived.
@@ -172,9 +170,9 @@ pub struct LineChartSpec {
 #[serde(deny_unknown_fields)]
 pub struct SeriesSpec {
     /// Points `[[x, y], ...]`; `null` entries break the curve.
-    pub points: Vec<Option<[f64; 2]>>,
+    pub points: Vec<Option<Point>>,
     /// Curve color.
-    pub color: ColorValue,
+    pub color: Color,
     /// Curve width; 2 by default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub width: Option<f64>,
@@ -183,5 +181,5 @@ pub struct SeriesSpec {
     pub cap: Option<LineCap>,
     /// Corner join; round by default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub join: Option<LineJoinSpec>,
+    pub join: Option<LineJoin>,
 }

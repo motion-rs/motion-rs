@@ -1,6 +1,6 @@
 //! Timed caption tracks described as plain data.
 
-use crate::value::ColorValue;
+use motion_core::{Color, Rect};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -19,16 +19,16 @@ pub struct CaptionsSpec {
     pub srt: Option<String>,
     /// Safe area `[left, top, right, bottom]`; the whole canvas by default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub safe: Option<[f64; 4]>,
+    pub safe: Option<Rect>,
     /// Font size in `(0, 4096]`; 30 by default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub font_size: Option<f64>,
     /// Text color; white by default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub color: Option<ColorValue>,
+    pub color: Option<Color>,
     /// Box color; translucent black by default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub background: Option<ColorValue>,
+    pub background: Option<Color>,
     /// Box padding `[horizontal, vertical]`; `[12, 8]` by default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub padding: Option<[f64; 2]>,
@@ -83,5 +83,5 @@ pub struct KeywordSpec {
     /// Word to match, longest first.
     pub word: String,
     /// Replacement color.
-    pub color: ColorValue,
+    pub color: Color,
 }

@@ -1,6 +1,7 @@
 //! Math formulas and shape morphs described as plain data.
 
-use crate::value::{Animated, ColorValue};
+use crate::value::Animated;
+use motion_core::Color;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -18,7 +19,7 @@ pub struct FormulaSpec {
     pub size: Option<f64>,
     /// Fill color; white by default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub color: Option<ColorValue>,
+    pub color: Option<Color>,
     /// Math font family.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub family: Option<String>,

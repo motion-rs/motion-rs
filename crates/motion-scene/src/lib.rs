@@ -96,7 +96,7 @@ pub use effects::{
 };
 pub use element::Element;
 pub use formula::{FormulaSpec, MorphSpec, SvgMorphSpec};
-pub use options::{FitSpec, LineJoinSpec, PivotSpec, TextAlignmentSpec};
+pub use options::{FitSpec, TextAlignmentSpec};
 pub use paint::{
     GradientOptions, GradientSpec, GradientStop, LinearGradientSpec, PaintSpec, RadialGradientSpec,
     StrokeSpec, SweepGradientSpec, TrimSpec,
@@ -106,7 +106,7 @@ pub use particles::{
     ParticleShapeSpec, ParticleStyleSpec, ParticlesSpec, TrajectoryModelSpec, TrajectorySpec,
 };
 pub use value::{
-    Animated, ColorValue, EasingSpec, ExprSpec, KeyframeSpec, KeyframesSpec, MotionSpec, NoiseSpec,
+    Animated, EasingSpec, ExprSpec, KeyframeSpec, KeyframesSpec, MotionSpec, NoiseSpec,
     OscillateSpec, TweenSpec,
 };
 

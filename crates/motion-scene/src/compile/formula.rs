@@ -45,7 +45,7 @@ impl Compiler<'_> {
             options.size = size;
         }
         if let Some(color) = &spec.color {
-            options.fill = color.color();
+            options.fill = *color;
         }
         if let Some(family) = &spec.family {
             options.family = family.as_str().into();

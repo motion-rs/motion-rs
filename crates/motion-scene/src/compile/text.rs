@@ -90,7 +90,7 @@ impl Compiler<'_> {
                     run = run.italic(true);
                 }
                 if let Some(fill) = &span.fill {
-                    run = run.fill(fill.color());
+                    run = run.fill(*fill);
                 }
                 run
             }))

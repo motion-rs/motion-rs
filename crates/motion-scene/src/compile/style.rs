@@ -3,19 +3,12 @@
 use super::Compiler;
 use super::value::{Lift, Prop};
 use crate::element::Element;
-use crate::options::LineJoinSpec;
 use crate::paint::{GradientOptions, GradientSpec, PaintSpec, StrokeSpec};
 use motion_core::{
-    Color, FillRule, LineCap, LineJoin, LinearGradient, Node, Paint, Point, RadialGradient, Shape,
+    Color, FillRule, LineCap, LineJoin, LinearGradient, Node, Paint, RadialGradient, Shape,
     StrokeStyle, SweepGradient, Time, ValidationError,
 };
 use std::sync::Arc;
-
-/// Default stroke miter limit, matching [`StrokeStyle::default`].
-const DEFAULT_MITER_LIMIT: f64 = 4.0;
-
-/// Largest accepted miter limit.
-const MAX_MITER_LIMIT: f64 = 1024.0;
 
 /// Applies optional space, units and extension to any gradient builder.
 macro_rules! with_options {
@@ -203,13 +196,16 @@ impl Compiler<'_> {
     fn stroke(&mut self, stroke: &StrokeSpec, path: &str) -> Option<StrokeProp> {
         let width = self.animated(&stroke.width, &format!("{path}.width"));
         let paint = self.paint(&stroke.paint, &format!("{path}.paint"));
-        let limit = self.bounded(
-            stroke.miter_limit.unwrap_or(DEFAULT_MITER_LIMIT),
-            1.0,
-            MAX_MITER_LIMIT,
-            path,
-            "miter_limit",
-        );
+        let join = stroke.join.unwrap_or(StrokeStyle::default().join);
+        let cap = stroke.cap.unwrap_or_default();
+        let checked = StrokeStyle {
+            width: 1.0,
+            cap,
+            join,
+        }
+        .validate(path)
+        .map_err(|error| self.error(path, "join", error.message))
+        .is_ok();
         let dash = if stroke.dash.is_empty() {
             Some(None)
         } else {
@@ -230,15 +226,13 @@ impl Compiler<'_> {
                 .and(offset)
                 .map(|offset| Some((Arc::from(stroke.dash.as_slice()), offset)))
         };
-        let join = match stroke.join.unwrap_or_default() {
-            LineJoinSpec::Miter => LineJoin::Miter { limit: limit? },
-            LineJoinSpec::Round => LineJoin::Round,
-            LineJoinSpec::Bevel => LineJoin::Bevel,
-        };
+        if !checked {
+            return None;
+        }
         Some(StrokeProp {
             width: width?,
             paint: paint?,
-            cap: stroke.cap.unwrap_or_default(),
+            cap,
             join,
             dash: dash?,
         })
@@ -254,30 +248,30 @@ impl Compiler<'_> {
     fn gradient(&mut self, gradient: &GradientSpec, path: &str) -> Option<Paint> {
         let paint = match gradient {
             GradientSpec::Linear(spec) => {
-                let mut gradient = LinearGradient::new(point(spec.start), point(spec.end));
+                let mut gradient = LinearGradient::new(spec.start, spec.end);
                 for stop in &spec.stops {
-                    gradient = gradient.stop(stop.offset, stop.color.color());
+                    gradient = gradient.stop(stop.offset, stop.color);
                 }
                 Paint::Linear(with_options!(gradient, spec.options))
             }
             GradientSpec::Radial(spec) => {
-                let mut gradient = RadialGradient::new(point(spec.center), spec.radius);
+                let mut gradient = RadialGradient::new(spec.center, spec.radius);
                 if let Some(focal) = spec.focal {
-                    gradient = gradient.focal(point(focal));
+                    gradient = gradient.focal(focal);
                 }
                 for stop in &spec.stops {
-                    gradient = gradient.stop(stop.offset, stop.color.color());
+                    gradient = gradient.stop(stop.offset, stop.color);
                 }
                 Paint::Radial(with_options!(gradient, spec.options))
             }
             GradientSpec::Sweep(spec) => {
                 let mut gradient = SweepGradient::new(
-                    point(spec.center),
+                    spec.center,
                     spec.start_angle.to_radians(),
                     spec.end_angle.to_radians(),
                 );
                 for stop in &spec.stops {
-                    gradient = gradient.stop(stop.offset, stop.color.color());
+                    gradient = gradient.stop(stop.offset, stop.color);
                 }
                 Paint::Sweep(with_options!(gradient, spec.options))
             }
@@ -290,9 +284,4 @@ impl Compiler<'_> {
             }
         }
     }
-}
-
-/// Converts a document point.
-pub(crate) fn point([x, y]: [f64; 2]) -> Point {
-    Point::new(x, y)
 }

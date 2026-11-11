@@ -8,11 +8,10 @@ use crate::content::{
 use crate::diagram::{CalloutSpec, LineChartSpec, RulerSpec};
 use crate::effects::{ClipSpec, FilterSpec, MaskSpec};
 use crate::formula::{FormulaSpec, MorphSpec, SvgMorphSpec};
-use crate::options::PivotSpec;
 use crate::paint::{PaintSpec, StrokeSpec, TrimSpec};
 use crate::particles::{ParticlesSpec, TrajectorySpec};
 use crate::value::{Animated, is_false};
-use motion_core::{BlendMode, FillRule, MaskMode};
+use motion_core::{BlendMode, FillRule, MaskMode, Pivot, Point, Rect};
 use schemars::{JsonSchema, Schema, SchemaGenerator};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
@@ -53,7 +52,7 @@ pub struct Element {
     /// Drawn arc-length range of geometry.
     pub trim: Option<TrimSpec>,
     /// Parent-space point receiving the pivot, `[x, y]`.
-    pub position: Option<Animated<[f64; 2]>>,
+    pub position: Option<Animated<Point>>,
     /// Parent-space translation `[x, y]`, after scale and rotation.
     pub translate: Option<Animated<[f64; 2]>>,
     /// Clockwise rotation in degrees about the pivot.
@@ -63,7 +62,7 @@ pub struct Element {
     /// Per-axis scale `[x, y]` about the pivot, multiplied with `scale`.
     pub scale_xy: Option<Animated<[f64; 2]>>,
     /// Local transform anchor; the bounds center by default.
-    pub pivot: Option<PivotSpec>,
+    pub pivot: Option<Pivot>,
     /// Subtree opacity in `0..=1`.
     pub opacity: Option<Animated<f64>>,
     /// Subtree blend mode.
@@ -95,12 +94,12 @@ impl Element {
     }
 
     /// Creates a rectangle from `[left, top, right, bottom]`.
-    pub fn rect(bounds: impl Into<Animated<[f64; 4]>>) -> Self {
+    pub fn rect(bounds: impl Into<Animated<Rect>>) -> Self {
         Self::new(RectSpec::new(bounds))
     }
 
     /// Creates a circle.
-    pub fn circle(center: impl Into<Animated<[f64; 2]>>, radius: impl Into<Animated<f64>>) -> Self {
+    pub fn circle(center: impl Into<Animated<Point>>, radius: impl Into<Animated<f64>>) -> Self {
         Self::new(CircleSpec {
             center: center.into(),
             radius: radius.into(),
@@ -109,7 +108,7 @@ impl Element {
 
     /// Creates an ellipse.
     pub fn ellipse(
-        center: impl Into<Animated<[f64; 2]>>,
+        center: impl Into<Animated<Point>>,
         radii: impl Into<Animated<[f64; 2]>>,
     ) -> Self {
         Self::new(EllipseSpec {
@@ -119,7 +118,7 @@ impl Element {
     }
 
     /// Creates a straight segment.
-    pub fn line(from: impl Into<Animated<[f64; 2]>>, to: impl Into<Animated<[f64; 2]>>) -> Self {
+    pub fn line(from: impl Into<Animated<Point>>, to: impl Into<Animated<Point>>) -> Self {
         Self::new(LineSpec {
             from: from.into(),
             to: to.into(),
@@ -173,7 +172,7 @@ impl Element {
     }
 
     /// Places the pivot at a parent-space point.
-    pub fn position(mut self, position: impl Into<Animated<[f64; 2]>>) -> Self {
+    pub fn position(mut self, position: impl Into<Animated<Point>>) -> Self {
         self.position = Some(position.into());
         self
     }
@@ -203,7 +202,7 @@ impl Element {
     }
 
     /// Selects the transform anchor.
-    pub fn pivot(mut self, pivot: PivotSpec) -> Self {
+    pub fn pivot(mut self, pivot: Pivot) -> Self {
         self.pivot = Some(pivot);
         self
     }
@@ -409,7 +408,7 @@ struct RawElement {
     trim: Option<TrimSpec>,
     /// Parent-space point receiving the pivot.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    position: Option<Animated<[f64; 2]>>,
+    position: Option<Animated<Point>>,
     /// Parent-space translation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     translate: Option<Animated<[f64; 2]>>,
@@ -424,7 +423,7 @@ struct RawElement {
     scale_xy: Option<Animated<[f64; 2]>>,
     /// Transform anchor.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pivot: Option<PivotSpec>,
+    pivot: Option<Pivot>,
     /// Subtree opacity.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     opacity: Option<Animated<f64>>,
