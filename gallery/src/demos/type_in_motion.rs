@@ -140,9 +140,12 @@ fn cover_art(context: &SceneContext<'_>, settle: f64) -> motion::Result<Node> {
 
 fn cover(context: &SceneContext<'_>) -> motion::Result<Node> {
     let progress = context.progress();
-    let spring = context.cache("masthead-spring", || {
-        Spring::new(0.0, 1.0).stiffness(170.0).damping(22.0)
-    });
+    let spring = context.try_cache("masthead-spring", || {
+        Spring::builder(0.0, 1.0)
+            .stiffness(170.0)
+            .damping(22.0)
+            .build()
+    })?;
     let settle = spring.sample(context.seconds().seconds() - 250.milliseconds());
     let masthead = rising(
         label("ROOM", DISPLAY, 176.0, 0.0, FontWeight::BOLD, color(INK)),

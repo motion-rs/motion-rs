@@ -153,8 +153,10 @@ mod values {
 
         #[test]
         fn generic_springs_share_frame_and_dynamic_sampling_contracts() -> motion::Result {
-            let scalar = Spring::default().damping(20.0);
-            let movement = Spring::new(Point::ORIGIN, Point::new(100.0, 40.0)).damping(20.0);
+            let scalar = Spring::builder(0.0, 1.0).damping(20.0).build()?;
+            let movement = Spring::builder(Point::ORIGIN, Point::new(100.0, 40.0))
+                .damping(20.0)
+                .build()?;
             let cache = motion::render::SceneCache::new(0);
             let frame = motion::SceneContext::new(
                 1250.milliseconds().after_origin(),
@@ -170,8 +172,9 @@ mod values {
             let end = movement.settle_duration();
             assert_eq!(movement.sample(end), Point::new(100.0, 40.0));
             let transforms =
-                Spring::new([Transform::IDENTITY], [Transform::translate(100.0, 40.0)])
-                    .damping(20.0);
+                Spring::builder([Transform::IDENTITY], [Transform::translate(100.0, 40.0)])
+                    .damping(20.0)
+                    .build()?;
             close(frame.sample(&transforms)[0].apply(Point::ORIGIN).x, point.x);
             let boxed = movement.map(|point| point.x).boxed();
             close(frame.sample(boxed.as_ref()), point.x);

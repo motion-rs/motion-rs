@@ -73,44 +73,90 @@ impl Color {
     }
 
     /// Creates opaque HSL with finite degree hue and saturation/lightness in 0..=1.
-    /// Hue wraps; invalid inputs panic rather than being silently normalized.
+    /// Hue wraps; invalid inputs are rejected rather than silently normalized.
+    ///
+    /// # Panics
+    /// Panics for invalid inputs; see [`Self::try_hsl`].
     pub fn hsl(hue_degrees: f64, saturation: f64, lightness: f64) -> Self {
-        assert!(
-            hue_degrees.is_finite()
-                && saturation.is_finite()
-                && lightness.is_finite()
-                && (0.0..=1.0).contains(&saturation)
-                && (0.0..=1.0).contains(&lightness),
-            "HSL requires finite hue and unit saturation/lightness"
-        );
-        Self::from_channels(hsl_rgb(hue_degrees, saturation, lightness), 1.0)
+        Self::try_hsl(hue_degrees, saturation, lightness)
+            .unwrap_or_else(|error| panic!("{}", error.message))
+    }
+
+    /// Creates opaque HSL like [`Self::hsl`], reporting invalid inputs.
+    pub fn try_hsl(
+        hue_degrees: f64,
+        saturation: f64,
+        lightness: f64,
+    ) -> Result<Self, ValidationError> {
+        if !(hue_degrees.is_finite()
+            && (0.0..=1.0).contains(&saturation)
+            && (0.0..=1.0).contains(&lightness))
+        {
+            return Err(ValidationError::invalid(
+                "color",
+                "hsl",
+                "HSL requires finite hue and unit saturation/lightness",
+            ));
+        }
+        Self::checked_channels(hsl_rgb(hue_degrees, saturation, lightness), 1.0)
     }
 
     /// Creates opaque OKLCH with lightness in 0..=1, nonnegative chroma and degree hue.
-    /// Hue wraps; finite out-of-gamut RGB is retained. Invalid/unrepresentable inputs panic.
+    /// Hue wraps; finite out-of-gamut RGB is retained.
+    ///
+    /// # Panics
+    /// Panics for invalid or unrepresentable inputs; see [`Self::try_oklch`].
     pub fn oklch(lightness: f64, chroma: f64, hue_degrees: f64) -> Self {
-        assert!(
-            lightness.is_finite()
-                && (0.0..=1.0).contains(&lightness)
-                && chroma.is_finite()
-                && chroma >= 0.0
-                && hue_degrees.is_finite(),
-            "OKLCH requires unit lightness, finite nonnegative chroma and finite hue"
-        );
-        Self::from_channels(oklch_rgb(lightness, chroma, hue_degrees), 1.0)
+        Self::try_oklch(lightness, chroma, hue_degrees)
+            .unwrap_or_else(|error| panic!("{}", error.message))
+    }
+
+    /// Creates opaque OKLCH like [`Self::oklch`], reporting invalid or unrepresentable inputs.
+    pub fn try_oklch(
+        lightness: f64,
+        chroma: f64,
+        hue_degrees: f64,
+    ) -> Result<Self, ValidationError> {
+        if !((0.0..=1.0).contains(&lightness)
+            && chroma.is_finite()
+            && chroma >= 0.0
+            && hue_degrees.is_finite())
+        {
+            return Err(ValidationError::invalid(
+                "color",
+                "oklch",
+                "OKLCH requires unit lightness, finite nonnegative chroma and finite hue",
+            ));
+        }
+        Self::checked_channels(oklch_rgb(lightness, chroma, hue_degrees), 1.0)
     }
 
     /// Adjusts Oklab lightness, clamping it to 0..=1 and retaining chromatic axes/alpha.
-    /// Signed amounts are allowed. Nonfinite amounts or unrepresentable RGB panic.
+    /// Signed amounts are allowed.
+    ///
+    /// # Panics
+    /// Panics for a nonfinite amount or unrepresentable RGB; see [`Self::try_lighten`].
     pub fn lighten(self, amount: f64) -> Self {
-        assert!(amount.is_finite(), "lightness adjustment must be finite");
+        self.try_lighten(amount)
+            .unwrap_or_else(|error| panic!("{}", error.message))
+    }
+
+    /// Adjusts lightness like [`Self::lighten`], reporting invalid results.
+    pub fn try_lighten(self, amount: f64) -> Result<Self, ValidationError> {
+        if !amount.is_finite() {
+            return Err(ValidationError::invalid(
+                "color",
+                "amount",
+                "lightness adjustment must be finite",
+            ));
+        }
         if amount == 0.0 {
-            return self;
+            return Ok(self);
         }
         let [red, green, blue, alpha] = self.to_rgba_float();
         let mut lab = srgb_to_oklab([red, green, blue]);
         lab[0] = (lab[0] + amount).clamp(0.0, 1.0);
-        Self::from_channels(oklab_to_srgb(lab), alpha)
+        Self::checked_channels(oklab_to_srgb(lab), alpha)
     }
 
     /// Subtracts a signed amount from Oklab lightness, retaining chromatic axes/alpha.
@@ -176,26 +222,41 @@ impl Color {
 
     /// Interpolates/extrapolates straight Oklab coordinates and linear alpha.
     /// Finite progress may overshoot RGB; resulting alpha is clamped to 0..=1.
-    /// Exact endpoints and equal values bypass conversion. Nonfinite progress or
-    /// unrepresentable RGB results panic.
+    /// Exact endpoints and equal values bypass conversion.
+    ///
+    /// # Panics
+    /// Panics for nonfinite progress or unrepresentable RGB results; see
+    /// [`Self::try_interpolate`].
     pub fn interpolate(&self, target: &Self, progress: f64) -> Self {
-        assert!(progress.is_finite(), "color progress must be finite");
+        self.try_interpolate(target, progress)
+            .unwrap_or_else(|error| panic!("{}", error.message))
+    }
+
+    /// Interpolates like [`Self::interpolate`], reporting invalid progress or results.
+    pub fn try_interpolate(&self, target: &Self, progress: f64) -> Result<Self, ValidationError> {
+        if !progress.is_finite() {
+            return Err(ValidationError::invalid(
+                "color",
+                "progress",
+                "color progress must be finite",
+            ));
+        }
         if progress == 0.0 || self == target {
-            return *self;
+            return Ok(*self);
         }
         if progress == 1.0 {
-            return *target;
+            return Ok(*target);
         }
         let [red, green, blue, alpha] = self.to_rgba_float();
         let [target_red, target_green, target_blue, target_alpha] = target.to_rgba_float();
         let alpha = (alpha + (target_alpha - alpha) * progress).clamp(0.0, 1.0);
         if self.channels[..3] == target.channels[..3] {
-            return self.with_alpha(alpha);
+            return Ok(self.with_alpha(alpha));
         }
         let from = srgb_to_oklab([red, green, blue]);
         let to = srgb_to_oklab([target_red, target_green, target_blue]);
         let lab = std::array::from_fn(|index| from[index] + (to[index] - from[index]) * progress);
-        Self::from_channels(oklab_to_srgb(lab), alpha)
+        Self::checked_channels(oklab_to_srgb(lab), alpha)
     }
 
     fn from_channels(rgb: [f64; 3], alpha: f64) -> Self {

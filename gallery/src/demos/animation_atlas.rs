@@ -221,7 +221,7 @@ const fn page(title: &'static str, lines: [&'static str; 3]) -> Page {
 
 pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
     let curves = easing_curves();
-    let signals = signal_studies(parameters.seed);
+    let signals = signal_studies(parameters.seed)?;
     let compositions = composition_studies();
     let path = flight_path()?;
     let flight = FollowPath::new(path.clone(), 2.5.seconds())
@@ -298,10 +298,13 @@ fn easing_curves() -> Vec<(&'static str, Easing)> {
     ]
 }
 
-fn signal_studies(seed: u64) -> Vec<Arc<dyn Signal<f64>>> {
+fn signal_studies(seed: u64) -> motion::Result<Vec<Arc<dyn Signal<f64>>>> {
     let mut studies = Vec::new();
     for damping in [9.0, 22.0, 38.0] {
-        let spring = Spring::new(0.0, 1.0).stiffness(121.0).damping(damping);
+        let spring = Spring::builder(0.0, 1.0)
+            .stiffness(121.0)
+            .damping(damping)
+            .build()?;
         studies.push((move |time: Duration| spring.sample(time - 0.2.seconds())).boxed());
     }
     for waveform in [
@@ -310,10 +313,16 @@ fn signal_studies(seed: u64) -> Vec<Arc<dyn Signal<f64>>> {
         Waveform::Square,
         Waveform::Sawtooth,
     ] {
-        studies.push(Oscillator::new(waveform, 0.85).boxed());
+        studies.push(Oscillator::builder(waveform, 0.85).build()?.boxed());
     }
-    studies.push(Noise::new(seed).frequency(1.3).octaves(3).boxed());
-    studies
+    studies.push(
+        Noise::builder(seed)
+            .frequency(1.3)
+            .octaves(3)
+            .build()?
+            .boxed(),
+    );
+    Ok(studies)
 }
 
 fn animation_plot(
@@ -522,8 +531,8 @@ mod tests {
     }
 
     #[test]
-    fn signals_and_compositions_replay_without_sampling_history() {
-        let signals = signal_studies(17);
+    fn signals_and_compositions_replay_without_sampling_history() -> motion::Result {
+        let signals = signal_studies(17)?;
         let compositions = composition_studies();
         assert_eq!(signals.len(), 8);
         assert_eq!(compositions.len(), 9);
@@ -542,8 +551,9 @@ mod tests {
         assert_eq!(compositions[8].sample(3.seconds()), 1.0);
         assert_ne!(
             signals[7].sample(1.seconds()),
-            signal_studies(18)[7].sample(1.seconds())
+            signal_studies(18)?[7].sample(1.seconds())
         );
+        Ok(())
     }
 
     #[test]

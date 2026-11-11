@@ -198,7 +198,8 @@ pub use motion_core::{
     AudioBus, AudioChapter, AudioEffect, AudioMetadata, Limiter, Loudness, Master, PanLaw,
 };
 pub use motion_core::{
-    Extrapolate, FollowPath, Noise, Oscillator, PathSample, Waveform, piecewise, remap,
+    Extrapolate, FollowPath, Noise, NoiseBuilder, Oscillator, OscillatorBuilder, PathSample,
+    SpringBuilder, Waveform, piecewise, remap, try_piecewise, try_remap,
 };
 pub use motion_core::{camera, group, scene};
 pub use motion_core::{key, math};

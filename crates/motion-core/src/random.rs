@@ -66,16 +66,29 @@ impl Random {
 
     /// Samples a finite half-open interval, including adjacent float endpoints.
     ///
-    /// Panics for empty, reversed or nonfinite ranges. Rounding is clamped below
-    /// the upper endpoint; no overflowing endpoint subtraction is performed.
+    /// Rounding is clamped below the upper endpoint; no overflowing endpoint
+    /// subtraction is performed.
+    ///
+    /// # Panics
+    /// Panics for an empty, reversed or nonfinite range; see [`Self::try_range`].
     pub fn range(&mut self, range: Range<f64>) -> f64 {
-        assert!(
-            range.start.is_finite() && range.end.is_finite() && range.start < range.end,
-            "random range must have finite, strictly increasing endpoints"
-        );
+        self.try_range(range)
+            .unwrap_or_else(|error| panic!("{}", error.message))
+    }
+
+    /// Samples like [`Self::range`], reporting an invalid range without
+    /// advancing the stream.
+    pub fn try_range(&mut self, range: Range<f64>) -> Result<f64, crate::ValidationError> {
+        if !(range.start.is_finite() && range.end.is_finite() && range.start < range.end) {
+            return Err(crate::ValidationError::invalid(
+                "random",
+                "range",
+                "random range must have finite, strictly increasing endpoints",
+            ));
+        }
         let progress = self.next_float();
         let value = range.start * (1.0 - progress) + range.end * progress;
-        value.max(range.start).min(range.end.next_down())
+        Ok(value.max(range.start).min(range.end.next_down()))
     }
 
     /// Samples a uniform angle using deterministic libm trigonometry.

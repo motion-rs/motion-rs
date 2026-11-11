@@ -38,10 +38,12 @@ pub mod time;
 pub mod validation;
 
 pub use animation::{
-    Constant, Easing, FiniteAnimation, Interpolate, Interval, Keyframes, Signal, Spring, Tween,
+    Constant, Easing, FiniteAnimation, Interpolate, Interval, Keyframes, Signal, Spring,
+    SpringBuilder, Tween,
 };
 pub use animation::{
-    Extrapolate, FollowPath, Noise, Oscillator, PathSample, Waveform, piecewise, remap,
+    Extrapolate, FollowPath, Noise, NoiseBuilder, Oscillator, OscillatorBuilder, PathSample,
+    Waveform, piecewise, remap, try_piecewise, try_remap,
 };
 pub use asset::environment::FontEnvironment;
 pub use asset::environment::{FontIdentity, FontUsage};

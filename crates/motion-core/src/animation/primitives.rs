@@ -1,8 +1,14 @@
 //! Clock-free analytic oscillators, seeded noise, path motion and mappings.
 
 use super::{Easing, FiniteAnimation, Interpolate, Signal};
-use crate::{Duration, Path2D, Point, Vector2};
+use crate::{Duration, Path2D, Point, ValidationError, Vector2};
 use std::sync::Arc;
+
+/// Upper bound for oscillator frequency and phase so cycle counts stay finite.
+const MAX_MAGNITUDE: f64 = 1.0e290;
+
+/// Rounded-up bound on the seconds a signed tick count can express.
+const MAX_SECONDS: f64 = 2.0e10;
 
 /// Periodic waveform evaluated in turns.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -35,13 +41,9 @@ pub struct Oscillator {
 }
 
 impl Oscillator {
-    /// Creates a waveform with finite nonnegative frequency in hertz.
-    pub fn new(waveform: Waveform, frequency_hertz: f64) -> Self {
-        assert!(
-            frequency_hertz.is_finite() && frequency_hertz >= 0.0,
-            "Frequency must be finite and nonnegative"
-        );
-        Self {
+    /// Starts a builder for a waveform with the given frequency in hertz.
+    pub fn builder(waveform: Waveform, frequency_hertz: f64) -> OscillatorBuilder {
+        OscillatorBuilder {
             waveform,
             frequency: frequency_hertz,
             amplitude: 1.0,
@@ -49,33 +51,77 @@ impl Oscillator {
             offset: 0.0,
         }
     }
+}
 
-    /// Sets finite peak amplitude.
+/// Unvalidated oscillator configuration; [`OscillatorBuilder::build`] reports invalid values.
+#[derive(Clone, Debug)]
+pub struct OscillatorBuilder {
+    waveform: Waveform,
+    frequency: f64,
+    amplitude: f64,
+    phase: f64,
+    offset: f64,
+}
+
+impl OscillatorBuilder {
+    /// Sets peak amplitude, which must be finite.
     pub fn amplitude(mut self, amplitude: f64) -> Self {
-        assert!(amplitude.is_finite());
         self.amplitude = amplitude;
         self
     }
 
-    /// Sets a finite cycle offset in turns.
+    /// Sets a cycle offset in turns, which must be finite and at most 1e290.
     pub fn phase(mut self, turns: f64) -> Self {
-        assert!(turns.is_finite());
         self.phase = turns;
         self
     }
 
-    /// Sets a finite output offset.
+    /// Sets an output offset, which must be finite.
     pub fn offset(mut self, offset: f64) -> Self {
-        assert!(offset.is_finite());
         self.offset = offset;
         self
+    }
+
+    /// Validates the configuration. Frequency must be finite, nonnegative and at
+    /// most 1e290; the output range `amplitude * ±1 + offset` must
+    /// be finite, so sampling can never overflow.
+    pub fn build(self) -> Result<Oscillator, ValidationError> {
+        let error = |field, message| ValidationError::invalid("oscillator", field, message);
+        if !(self.frequency.is_finite() && (0.0..=MAX_MAGNITUDE).contains(&self.frequency)) {
+            return Err(error(
+                "frequency",
+                "frequency must be finite, nonnegative and bounded",
+            ));
+        }
+        if !(self.phase.is_finite() && self.phase.abs() <= MAX_MAGNITUDE) {
+            return Err(error("phase", "phase must be finite and bounded"));
+        }
+        if !(self.amplitude.is_finite()
+            && self.offset.is_finite()
+            && (self.amplitude.abs() + self.offset.abs()).is_finite())
+        {
+            return Err(error(
+                "amplitude",
+                "amplitude and offset must be finite and keep the output finite",
+            ));
+        }
+        Ok(Oscillator {
+            waveform: self.waveform,
+            frequency: self.frequency,
+            amplitude: self.amplitude,
+            phase: self.phase,
+            offset: self.offset,
+        })
     }
 }
 
 impl Signal<f64> for Oscillator {
     fn sample(&self, time: Duration) -> f64 {
         let cycles = time.as_seconds() * self.frequency + self.phase;
-        assert!(cycles.is_finite(), "Oscillator phase overflow");
+        debug_assert!(
+            cycles.is_finite(),
+            "bounded parameters keep the phase finite"
+        );
         let turns = cycles - libm::floor(cycles);
         let value = match self.waveform {
             Waveform::Sine => libm::sin(turns * std::f64::consts::TAU),
@@ -92,16 +138,33 @@ impl Signal<f64> for Oscillator {
             Waveform::Sawtooth => turns * 2.0 - 1.0,
         };
         let output = value * self.amplitude + self.offset;
-        assert!(output.is_finite(), "Oscillator output overflow");
+        debug_assert!(
+            output.is_finite(),
+            "validated range keeps the output finite"
+        );
         output
     }
 }
 
 /// One-dimensional slice of [`crate::noise::value2_d`] along `y = 0`, with its derivative.
+///
+/// # Panics
+/// Panics for a nonfinite position; see [`try_value_noise`].
 pub fn value_noise(position: f64, seed: u32) -> (f64, f64) {
-    assert!(position.is_finite(), "Noise position must be finite");
+    try_value_noise(position, seed).unwrap_or_else(|error| panic!("{}", error.message))
+}
+
+/// Evaluates [`value_noise`], reporting a nonfinite position.
+pub fn try_value_noise(position: f64, seed: u32) -> Result<(f64, f64), ValidationError> {
+    if !position.is_finite() {
+        return Err(ValidationError::invalid(
+            "noise",
+            "position",
+            "noise position must be finite",
+        ));
+    }
     let (value, gradient) = crate::noise::value2_d([position, 0.0], seed);
-    (value, gradient[0])
+    Ok((value, gradient[0]))
 }
 
 /// Infinite deterministic multi-octave noise animation in minus one to one.
@@ -117,7 +180,14 @@ pub struct Noise {
 impl Noise {
     /// Creates seeded one-octave noise with one lattice cell per second.
     pub fn new(seed: u64) -> Self {
-        Self {
+        Self::builder(seed)
+            .build()
+            .unwrap_or_else(|error| unreachable!("default noise parameters are valid: {error}"))
+    }
+
+    /// Starts a builder with one octave and one lattice cell per second.
+    pub fn builder(seed: u64) -> NoiseBuilder {
+        NoiseBuilder {
             seed,
             frequency: 1.0,
             octaves: 1,
@@ -126,39 +196,86 @@ impl Noise {
         }
     }
 
-    /// Sets finite nonnegative lattice frequency.
-    pub fn frequency(mut self, hertz: f64) -> Self {
-        assert!(hertz.is_finite() && hertz >= 0.0);
-        self.frequency = hertz;
-        self
-    }
-
-    /// Sets the bounded octave count, from one through 32.
-    pub fn octaves(mut self, octaves: u32) -> Self {
-        assert!((1..=32).contains(&octaves));
-        self.octaves = octaves;
-        self
-    }
-
-    /// Sets finite positive octave frequency multiplication.
-    pub fn lacunarity(mut self, lacunarity: f64) -> Self {
-        assert!(lacunarity.is_finite() && lacunarity > 0.0);
-        self.lacunarity = lacunarity;
-        self
-    }
-
-    /// Sets finite octave amplitude multiplication in zero to one.
-    pub fn gain(mut self, gain: f64) -> Self {
-        assert!(gain.is_finite() && (0.0..=1.0).contains(&gain));
-        self.gain = gain;
-        self
-    }
-
     /// Creates independently seeded X/Y noise with the same spectral settings.
     pub fn vector(self) -> impl Signal<Vector2> {
         let mut vertical = self.clone();
         vertical.seed ^= 0x9e3779b97f4a7c15;
         move |time| Vector2::new(self.sample(time), vertical.sample(time))
+    }
+}
+
+/// Unvalidated noise configuration; [`NoiseBuilder::build`] reports invalid values.
+#[derive(Clone, Debug)]
+pub struct NoiseBuilder {
+    seed: u64,
+    frequency: f64,
+    octaves: u32,
+    lacunarity: f64,
+    gain: f64,
+}
+
+impl NoiseBuilder {
+    /// Sets lattice frequency, which must be finite and nonnegative.
+    pub fn frequency(mut self, hertz: f64) -> Self {
+        self.frequency = hertz;
+        self
+    }
+
+    /// Sets the octave count, from one through 32.
+    pub fn octaves(mut self, octaves: u32) -> Self {
+        self.octaves = octaves;
+        self
+    }
+
+    /// Sets octave frequency multiplication, which must be finite and positive.
+    pub fn lacunarity(mut self, lacunarity: f64) -> Self {
+        self.lacunarity = lacunarity;
+        self
+    }
+
+    /// Sets octave amplitude multiplication in zero to one.
+    pub fn gain(mut self, gain: f64) -> Self {
+        self.gain = gain;
+        self
+    }
+
+    /// Validates every setting at once. Beyond the individual ranges, the
+    /// highest octave position over the full time range must stay finite, so
+    /// sampling can never overflow.
+    pub fn build(self) -> Result<Noise, ValidationError> {
+        let error = |field, message| ValidationError::invalid("noise", field, message);
+        if !(self.frequency.is_finite() && self.frequency >= 0.0) {
+            return Err(error(
+                "frequency",
+                "frequency must be finite and nonnegative",
+            ));
+        }
+        if !(1..=32).contains(&self.octaves) {
+            return Err(error("octaves", "octaves must be from 1 through 32"));
+        }
+        if !(self.lacunarity.is_finite() && self.lacunarity > 0.0) {
+            return Err(error(
+                "lacunarity",
+                "lacunarity must be finite and positive",
+            ));
+        }
+        if !(self.gain.is_finite() && (0.0..=1.0).contains(&self.gain)) {
+            return Err(error("gain", "gain must be finite and in 0..=1"));
+        }
+        let reach = MAX_SECONDS * self.frequency * self.lacunarity.powi(self.octaves as i32 - 1);
+        if !reach.is_finite() {
+            return Err(error(
+                "frequency",
+                "frequency and lacunarity must keep octave positions finite",
+            ));
+        }
+        Ok(Noise {
+            seed: self.seed,
+            frequency: self.frequency,
+            octaves: self.octaves,
+            lacunarity: self.lacunarity,
+            gain: self.gain,
+        })
     }
 }
 
@@ -254,11 +371,17 @@ pub enum Extrapolate {
     Wrap,
 }
 
-fn progress(value: f64, from: [f64; 2], extrapolate: Extrapolate) -> f64 {
-    assert!(
-        value.is_finite() && from.iter().all(|value| value.is_finite()) && from[0] != from[1],
-        "Mapping inputs must be finite with distinct endpoints"
-    );
+fn mapping_error(field: &'static str, message: &'static str) -> ValidationError {
+    ValidationError::invalid("mapping", field, message)
+}
+
+fn progress(value: f64, from: [f64; 2], extrapolate: Extrapolate) -> Result<f64, ValidationError> {
+    if !(value.is_finite() && from.iter().all(|value| value.is_finite()) && from[0] != from[1]) {
+        return Err(mapping_error(
+            "from",
+            "mapping inputs must be finite with distinct endpoints",
+        ));
+    }
     let scale = value
         .abs()
         .max(from[0].abs())
@@ -271,22 +394,42 @@ fn progress(value: f64, from: [f64; 2], extrapolate: Extrapolate) -> f64 {
     } else {
         (value / scale - from[0] / scale) / (from[1] / scale - from[0] / scale)
     };
-    match extrapolate {
+    Ok(match extrapolate {
         Extrapolate::Clamp => amount.clamp(0.0, 1.0),
         Extrapolate::Extend => amount,
         Extrapolate::Wrap => amount - libm::floor(amount),
-    }
+    })
 }
 
 /// Maps one finite scalar interval; reversed endpoints are supported.
+///
+/// # Panics
+/// Panics for invalid inputs or an overflowing output; see [`try_remap`].
 pub fn remap(value: f64, from: [f64; 2], to: [f64; 2], extrapolate: Extrapolate) -> f64 {
-    assert!(to.iter().all(|value| value.is_finite()));
-    let output = to[0].interpolate(&to[1], progress(value, from, extrapolate));
-    assert!(output.is_finite(), "Mapping output overflow");
-    output
+    try_remap(value, from, to, extrapolate).unwrap_or_else(|error| panic!("{}", error.message))
+}
+
+/// Maps like [`remap`], reporting nonfinite inputs, equal input endpoints and overflow.
+pub fn try_remap(
+    value: f64,
+    from: [f64; 2],
+    to: [f64; 2],
+    extrapolate: Extrapolate,
+) -> Result<f64, ValidationError> {
+    if !to.iter().all(|value| value.is_finite()) {
+        return Err(mapping_error("to", "mapping outputs must be finite"));
+    }
+    let output = to[0].interpolate(&to[1], progress(value, from, extrapolate)?);
+    if !output.is_finite() {
+        return Err(mapping_error("output", "mapping output overflows"));
+    }
+    Ok(output)
 }
 
 /// Interpolates matching samples with finite strictly increasing input knots.
+///
+/// # Panics
+/// Panics for invalid knots or an invalid mapping; see [`try_piecewise`].
 pub fn piecewise<Value: Interpolate>(
     value: f64,
     inputs: &[f64],
@@ -294,17 +437,38 @@ pub fn piecewise<Value: Interpolate>(
     easing: Easing,
     extrapolate: Extrapolate,
 ) -> Value {
-    assert!(inputs.len() >= 2 && inputs.len() == outputs.len());
-    assert!(
-        inputs.iter().all(|value| value.is_finite())
-            && inputs.windows(2).all(|pair| pair[0] < pair[1])
-    );
-    let mapped = remap(
+    try_piecewise(value, inputs, outputs, easing, extrapolate)
+        .unwrap_or_else(|error| panic!("{}", error.message))
+}
+
+/// Interpolates like [`piecewise`], reporting invalid knots, easing and mapping errors.
+pub fn try_piecewise<Value: Interpolate>(
+    value: f64,
+    inputs: &[f64],
+    outputs: &[Value],
+    easing: Easing,
+    extrapolate: Extrapolate,
+) -> Result<Value, ValidationError> {
+    if inputs.len() < 2 || inputs.len() != outputs.len() {
+        return Err(mapping_error(
+            "inputs",
+            "piecewise needs at least two knots and one output per knot",
+        ));
+    }
+    if !(inputs.iter().all(|value| value.is_finite())
+        && inputs.windows(2).all(|pair| pair[0] < pair[1]))
+    {
+        return Err(mapping_error(
+            "inputs",
+            "piecewise knots must be finite and strictly increasing",
+        ));
+    }
+    let mapped = try_remap(
         value,
         [inputs[0], inputs[inputs.len() - 1]],
         [inputs[0], inputs[inputs.len() - 1]],
         extrapolate,
-    );
+    )?;
     let index = inputs
         .partition_point(|input| *input <= mapped)
         .saturating_sub(1)
@@ -313,13 +477,13 @@ pub fn piecewise<Value: Interpolate>(
         mapped,
         [inputs[index], inputs[index + 1]],
         Extrapolate::Extend,
-    );
+    )?;
     let amount = if !(0.0..=1.0).contains(&amount) && extrapolate == Extrapolate::Extend {
         amount
     } else {
-        easing.apply(amount)
+        easing.try_apply(amount)?
     };
-    outputs[index].interpolate(&outputs[index + 1], amount)
+    Ok(outputs[index].interpolate(&outputs[index + 1], amount))
 }
 
 #[cfg(test)]
@@ -335,7 +499,11 @@ mod tests {
             Waveform::Square,
             Waveform::Sawtooth,
         ] {
-            let value = Oscillator::new(waveform, 2.0).amplitude(3.0).offset(7.0);
+            let value = Oscillator::builder(waveform, 2.0)
+                .amplitude(3.0)
+                .offset(7.0)
+                .build()
+                .unwrap();
             assert_eq!(
                 value.sample(125.milliseconds()),
                 value.sample(625.milliseconds())
@@ -346,7 +514,10 @@ mod tests {
             );
         }
         assert_eq!(
-            Oscillator::new(Waveform::Triangle, 1.0).sample(250.milliseconds()),
+            Oscillator::builder(Waveform::Triangle, 1.0)
+                .build()
+                .unwrap()
+                .sample(250.milliseconds()),
             1.0
         );
     }
@@ -361,7 +532,9 @@ mod tests {
             500.milliseconds(),
         ] {
             assert_eq!(noise.sample(time), value_noise(time.as_seconds(), 17).0);
-            assert!((-1.0..=1.0).contains(&noise.clone().octaves(5).sample(time)));
+            assert!(
+                (-1.0..=1.0).contains(&Noise::builder(17).octaves(5).build().unwrap().sample(time))
+            );
         }
         let vector = noise.vector();
         assert_eq!(
@@ -417,14 +590,51 @@ mod tests {
             50.0
         );
         assert!(
-            std::panic::catch_unwind(|| piecewise(
+            try_piecewise(
                 0.0,
                 &[0.0, 0.0],
                 &[0.0, 1.0],
                 Easing::Linear,
                 Extrapolate::Clamp
-            ))
+            )
             .is_err()
         );
+        assert!(try_remap(0.0, [1.0, 1.0], [0.0, 1.0], Extrapolate::Clamp).is_err());
+        assert!(
+            try_remap(
+                f64::MAX,
+                [0.0, 1.0],
+                [-f64::MAX, f64::MAX],
+                Extrapolate::Extend
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn builders_report_invalid_and_overflowing_parameters() {
+        let oscillator = |frequency| Oscillator::builder(Waveform::Sine, frequency);
+        assert!(oscillator(f64::NAN).build().is_err());
+        assert!(oscillator(-1.0).build().is_err());
+        assert!(oscillator(f64::MAX).build().is_err());
+        assert!(oscillator(1.0).phase(f64::INFINITY).build().is_err());
+        assert!(
+            oscillator(1.0)
+                .amplitude(f64::MAX)
+                .offset(f64::MAX)
+                .build()
+                .is_err()
+        );
+        let extreme = oscillator(1.0e290).build().unwrap();
+        assert!(extreme.sample(Duration::from_ticks(i64::MAX)).is_finite());
+        let noise = Noise::builder(1);
+        assert!(noise.clone().frequency(-1.0).build().is_err());
+        assert!(noise.clone().octaves(0).build().is_err());
+        assert!(noise.clone().octaves(33).build().is_err());
+        assert!(noise.clone().lacunarity(0.0).build().is_err());
+        assert!(noise.clone().gain(1.5).build().is_err());
+        assert!(noise.clone().frequency(1.0e300).build().is_err());
+        assert!(noise.octaves(32).lacunarity(1.0e10).build().is_err());
+        assert!(try_value_noise(f64::NAN, 0).is_err());
     }
 }

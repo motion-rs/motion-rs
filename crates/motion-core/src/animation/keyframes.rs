@@ -1,7 +1,7 @@
 //! Finite tick-addressed keyframe tracks with explicit interpolation and holds.
 
 use super::{Easing, FiniteAnimation, Signal};
-use crate::{Duration, Interpolate};
+use crate::{Duration, Interpolate, ValidationError};
 
 #[derive(Clone, Debug)]
 struct Keyframe<Value> {
@@ -58,17 +58,33 @@ impl<Value> Keyframes<Value> {
     /// Panics unless `at` is strictly later than the previous point, including
     /// any appended hold, or for invalid easing parameters. Equal, negative
     /// and descending times are not sorted or converted into instantaneous jumps.
-    pub fn to(mut self, at: Duration, value: Value, easing: Easing) -> Self {
-        assert!(
-            at > self.last().at,
-            "keyframe times must be strictly increasing"
-        );
+    pub fn to(self, at: Duration, value: Value, easing: Easing) -> Self {
+        self.try_to(at, value, easing)
+            .unwrap_or_else(|error| panic!("{}", error.message))
+    }
+
+    /// Appends a destination like [`Self::to`], reporting non-increasing times
+    /// and invalid easing parameters.
+    pub fn try_to(
+        mut self,
+        at: Duration,
+        value: Value,
+        easing: Easing,
+    ) -> Result<Self, ValidationError> {
+        if at <= self.last().at {
+            return Err(ValidationError::invalid(
+                "keyframes",
+                "at",
+                "keyframe times must be strictly increasing",
+            ));
+        }
+        easing.try_validate()?;
         self.points.push(Keyframe {
             at,
             value,
-            easing: Some(easing.validated()),
+            easing: Some(easing),
         });
-        self
+        Ok(self)
     }
 
     fn last(&self) -> &Keyframe<Value> {
@@ -83,23 +99,44 @@ impl<Value: Clone> Keyframes<Value> {
     /// Zero is a no-op, leaving the last timestamp unchanged.
     ///
     /// # Panics
-    /// Panics for a negative duration or signed tick overflow.
-    pub fn hold(mut self, duration: Duration) -> Self {
-        assert!(
-            duration >= Duration::ZERO,
-            "keyframe hold must be nonnegative"
-        );
+    /// Panics for a negative duration or signed tick overflow; see [`Self::try_hold`].
+    pub fn hold(self, duration: Duration) -> Self {
+        self.try_hold(duration)
+            .unwrap_or_else(|error| panic!("{}", error.message))
+    }
+
+    /// Holds like [`Self::hold`], reporting a negative duration or tick overflow.
+    pub fn try_hold(mut self, duration: Duration) -> Result<Self, ValidationError> {
+        if duration < Duration::ZERO {
+            return Err(ValidationError::invalid(
+                "keyframes",
+                "hold",
+                "keyframe hold must be nonnegative",
+            ));
+        }
         if duration == Duration::ZERO {
-            return self;
+            return Ok(self);
         }
         let last = self.last();
+        let at = last
+            .at
+            .ticks()
+            .checked_add(duration.ticks())
+            .map(Duration::from_ticks)
+            .ok_or_else(|| {
+                ValidationError::invalid(
+                    "keyframes",
+                    "hold",
+                    "keyframe hold overflows the tick range",
+                )
+            })?;
         let point = Keyframe {
-            at: last.at + duration,
+            at,
             value: last.value.clone(),
             easing: None,
         };
         self.points.push(point);
-        self
+        Ok(self)
     }
 }
 

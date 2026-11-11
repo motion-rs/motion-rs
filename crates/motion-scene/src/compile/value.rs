@@ -349,11 +349,18 @@ impl Compiler<'_> {
         let amplitude = self.signal(oscillate.amplitude.unwrap_or(1.0), path, "amplitude");
         let phase = self.signal(oscillate.phase.unwrap_or(0.0), path, "phase");
         let offset = self.signal(oscillate.offset.unwrap_or(0.0), path, "offset");
-        let oscillator = Oscillator::new(oscillate.waveform, frequency?)
+        let oscillator = Oscillator::builder(oscillate.waveform, frequency?)
             .amplitude(amplitude?)
             .phase(phase?)
-            .offset(offset?);
-        Some(Arc::new(oscillator))
+            .offset(offset?)
+            .build();
+        match oscillator {
+            Ok(oscillator) => Some(Arc::new(oscillator)),
+            Err(error) => {
+                self.error(path, "oscillate", &error.message);
+                None
+            }
+        }
     }
 
     fn noise(&mut self, noise: &NoiseSpec, path: &str) -> Option<Arc<dyn Signal<f64>>> {
@@ -382,14 +389,21 @@ impl Compiler<'_> {
         let amplitude = self.signal(noise.amplitude.unwrap_or(1.0), path, "amplitude");
         let offset = self.signal(noise.offset.unwrap_or(0.0), path, "offset");
         let (amplitude, offset) = (amplitude?, offset?);
-        let source = Noise::new(noise.seed)
+        let source = Noise::builder(noise.seed)
             .frequency(frequency?)
             .octaves(octaves? as u32)
             .lacunarity(lacunarity?)
-            .gain(gain?);
-        Some(Arc::new(
-            source.map(move |value| offset + amplitude * value),
-        ))
+            .gain(gain?)
+            .build();
+        match source {
+            Ok(source) => Some(Arc::new(
+                source.map(move |value| offset + amplitude * value),
+            )),
+            Err(error) => {
+                self.error(path, "noise", &error.message);
+                None
+            }
+        }
     }
 
     fn signal(&mut self, value: f64, path: &str, field: &str) -> Option<f64> {

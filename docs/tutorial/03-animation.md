@@ -80,12 +80,14 @@ panic.
 `delay`, `speed`, `then`, `reverse`, `repeat` and `ping_pong` exist only on `FiniteAnimation`, so applying them to an infinite signal does not compile. A zero-duration Tween still has explicit endpoint semantics before and after its boundary; it is not a deleted animation.
 
 Repeat counts total plays; zero holds the initial value. Negative delays, invalid
-speed factors and duration overflow are rejected. For dynamic input, use checked
-Tween construction/easing and `Easing::try_validate` or `try_apply` rather than
-assuming every convenience method returns a Result.
+speed factors and duration overflow are rejected. For dynamic input, use the checked
+forms (`try_delay`, `try_speed`, `Keyframes::try_to` and `try_hold`, `Tween::try_new`,
+`Easing::try_validate` and `try_apply`, `Duration::try_div`) rather than the
+convenience methods, which panic with a `# Panics` contract.
 
 `remap` and `piecewise` support Clamp, Extend and Wrap. Input knots must be finite
-and strictly increasing; malformed mappings panic instead of sorting the knots.
+and strictly increasing; malformed mappings are rejected by `try_remap` and
+`try_piecewise` (the plain forms panic) instead of sorting the knots.
 `FollowPath` returns position, tangent and angle using the existing arc-length
 geometry. Noise shares its deterministic primitive with particle NoiseDrift.
 
@@ -94,22 +96,25 @@ geometry. Noise shares its deterministic primitive with particle NoiseDrift.
 ```rust,no_run
 use motion::prelude::*;
 
-fn main() {
-    let spring = Spring::new(0.0_f64, 100.0)
+fn main() -> Result<(), ValidationError> {
+    let spring = Spring::builder(0.0_f64, 100.0)
         .mass(1.0)
         .stiffness(120.0)
         .damping(18.0)
-        .settling_threshold(0.0001);
-    let pulse = Oscillator::new(Waveform::Sine, 1.0)
+        .settling_threshold(0.0001)
+        .build()?;
+    let pulse = Oscillator::builder(Waveform::Sine, 1.0)
         .amplitude(0.25)
-        .offset(0.75);
-    let drift = Noise::new(42).frequency(0.5).octaves(3);
+        .offset(0.75)
+        .build()?;
+    let drift = Noise::builder(42).frequency(0.5).octaves(3).build()?;
     let time = 500.milliseconds();
     let _ = (spring.sample(time), pulse.sample(time), drift.sample(time));
+    Ok(())
 }
 ```
 
-Spring mass, stiffness and damping are positive. A conservative settling envelope determines `settle_duration()`; the value is exactly the target from then on. `settling_threshold` is a relative displacement-envelope threshold, not a pixel error. `initial_velocity` is measured in endpoint distances per second, not pixels per second.
+`Spring`, `Oscillator` and `Noise` are configured through builders; setters never panic, and `build()` reports every invalid or overflowing parameter as a `ValidationError`. Spring mass, stiffness and damping are positive. A conservative settling envelope determines `settle_duration()`; the value is exactly the target from then on. `settling_threshold` is a relative displacement-envelope threshold, not a pixel error. `initial_velocity` is measured in endpoint distances per second, not pixels per second.
 
 The conservative duration is rounded to ticks; it is not inferred from a previous
 frame's displacement.

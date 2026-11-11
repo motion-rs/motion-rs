@@ -46,8 +46,10 @@ callback output. Springs use a conservative settling envelope rounded to ticks
 `Signal` only. Path following is a finite animation.
 
 Combinators keep timing independent of seek order and thread scheduling. Finite-only
-operations, invalid factors and overflow have checked boundaries, but convenience
-methods may panic. A checked input/output contract is not a custom-callback sandbox.
+operations, invalid factors and overflow have checked `try_*` boundaries; the
+convenience methods delegate to them and document `# Panics`. Springs, oscillators and
+noise validate once in a builder's `build()`, which bounds parameters so that sampling
+cannot overflow. A checked input/output contract is not a custom-callback sandbox.
 See [animation](../tutorial/03-animation.md) for composition and dynamic-input use.
 
 ## Scenes and Snapshots

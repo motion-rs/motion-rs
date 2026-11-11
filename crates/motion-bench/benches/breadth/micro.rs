@@ -146,7 +146,7 @@ pub(super) fn microbenchmarks(
     )?;
     report.record("micro/random/next-float-8192", measured, json!({}))?;
 
-    let noise = Noise::new(11).frequency(3.0);
+    let noise = Noise::builder(11).frequency(3.0).build()?;
     let measured = support::measure(
         || {
             counter += 1;

@@ -16,9 +16,10 @@ pub use easing::Easing;
 pub use interval::Interval;
 pub use keyframes::Keyframes;
 pub use primitives::{
-    Extrapolate, FollowPath, Noise, Oscillator, PathSample, Waveform, piecewise, remap, value_noise,
+    Extrapolate, FollowPath, Noise, NoiseBuilder, Oscillator, OscillatorBuilder, PathSample,
+    Waveform, piecewise, remap, try_piecewise, try_remap, try_value_noise, value_noise,
 };
-pub use spring::Spring;
+pub use spring::{Spring, SpringBuilder};
 
 const BEFORE_START: Duration = Duration::from_ticks(-1);
 
@@ -160,42 +161,82 @@ pub trait FiniteAnimation<Value>: Signal<Value> {
     fn duration(&self) -> Duration;
 
     /// Delays the animation, holding its initial value before the offset.
-    /// Negative offsets and duration overflow panic at construction.
+    ///
+    /// # Panics
+    /// Panics for a negative offset or duration overflow; see [`Self::try_delay`].
     fn delay(self, offset: Duration) -> Delay<Self>
     where
         Self: Sized,
     {
-        assert!(
-            offset >= Duration::ZERO,
-            "animation delay must be nonnegative"
-        );
-        let duration = checked_duration(self.duration()) + offset;
-        Delay {
+        self.try_delay(offset)
+            .unwrap_or_else(|error| panic!("{}", error.message))
+    }
+
+    /// Delays like [`Self::delay`], reporting a negative offset or duration overflow.
+    fn try_delay(self, offset: Duration) -> Result<Delay<Self>, crate::ValidationError>
+    where
+        Self: Sized,
+    {
+        if offset < Duration::ZERO {
+            return Err(crate::ValidationError::invalid(
+                "animation",
+                "delay",
+                "animation delay must be nonnegative",
+            ));
+        }
+        let duration = checked_duration(self.duration())
+            .ticks()
+            .checked_add(offset.ticks())
+            .map(Duration::from_ticks)
+            .ok_or_else(|| {
+                crate::ValidationError::invalid(
+                    "animation",
+                    "delay",
+                    "animation delay overflows the tick range",
+                )
+            })?;
+        Ok(Delay {
             source: self,
             offset,
             duration,
-        }
+        })
     }
 
     /// Changes playback speed by a finite, strictly positive factor.
     /// Durations round to the nearest tick; a collapsed animation becomes
-    /// instantaneous. Invalid factors and unrepresentable durations panic.
+    /// instantaneous.
+    ///
+    /// # Panics
+    /// Panics for an invalid factor or unrepresentable duration; see [`Self::try_speed`].
     fn speed(self, factor: f64) -> Speed<Self>
     where
         Self: Sized,
     {
-        assert!(
-            factor.is_finite() && factor > 0.0,
-            "animation speed must be finite and positive"
-        );
+        self.try_speed(factor)
+            .unwrap_or_else(|error| panic!("{}", error.message))
+    }
+
+    /// Changes speed like [`Self::speed`], reporting an invalid factor or
+    /// unrepresentable duration.
+    fn try_speed(self, factor: f64) -> Result<Speed<Self>, crate::ValidationError>
+    where
+        Self: Sized,
+    {
+        if !(factor.is_finite() && factor > 0.0) {
+            return Err(crate::ValidationError::invalid(
+                "animation",
+                "speed",
+                "animation speed must be finite and positive",
+            ));
+        }
         let source_duration = checked_duration(self.duration());
-        let duration = source_duration / factor;
-        Speed {
+        let duration = source_duration.try_div(factor)?;
+        Ok(Speed {
             source: self,
             factor,
             source_duration,
             duration,
-        }
+        })
     }
 
     /// Runs two animations in sequence. The second owns their shared

@@ -58,7 +58,10 @@ pub(super) fn timeline(parameters: DemoParameters) -> motion::Result<Timeline> {
     let mark_tree: Arc<VectorTree> = mark.tree.clone();
 
     // Each primitive lands on a stiff spring, sampled in design seconds.
-    let pop = Spring::new(0.0, 1.0).stiffness(220.0).damping(11.0);
+    let pop = Spring::builder(0.0, 1.0)
+        .stiffness(220.0)
+        .damping(11.0)
+        .build()?;
     let at = move |fraction: f64| (seconds * fraction).seconds();
     let lockup_scale = Keyframes::new(1.0)
         .to(at(0.5), 1.0, Easing::Linear)

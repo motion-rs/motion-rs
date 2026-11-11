@@ -39,6 +39,11 @@ impl Time {
         Self(rounded_ticks(seconds * TICKS_PER_SECOND as f64))
     }
 
+    /// Rounds seconds like [`Self::from_seconds`], reporting nonfinite or out-of-range input.
+    pub fn try_from_seconds(seconds: f64) -> Result<Self, crate::ValidationError> {
+        try_rounded_ticks(seconds * TICKS_PER_SECOND as f64).map(Self)
+    }
+
     /// Returns the first tick at or after the exact rational frame boundary.
     ///
     /// Common integer and NTSC rates have exact tick boundaries. Other rates
@@ -158,6 +163,11 @@ impl Duration {
         Self(rounded_ticks(seconds * TICKS_PER_SECOND as f64))
     }
 
+    /// Rounds seconds like [`Self::from_seconds`], reporting nonfinite or out-of-range input.
+    pub fn try_from_seconds(seconds: f64) -> Result<Self, crate::ValidationError> {
+        try_rounded_ticks(seconds * TICKS_PER_SECOND as f64).map(Self)
+    }
+
     /// Returns the duration from the origin to a frame boundary, as
     /// [`Time::from_frame`] does.
     ///
@@ -198,6 +208,37 @@ impl Duration {
     /// Returns the time point this far from the origin.
     pub const fn after_origin(self) -> Time {
         Time(self.0)
+    }
+
+    /// Divides like the `/ f64` operator, reporting a nonfinite or zero divisor and overflow.
+    pub fn try_div(self, divisor: f64) -> Result<Self, crate::ValidationError> {
+        if !divisor.is_finite() || divisor == 0.0 {
+            return Err(time_error(
+                "divisor",
+                "duration divisor must be finite and nonzero",
+            ));
+        }
+        match divisor {
+            1.0 => Ok(self),
+            -1.0 => self.0.checked_neg().map(Self).ok_or_else(|| {
+                time_error(
+                    "divisor",
+                    "duration negation overflows the signed tick range",
+                )
+            }),
+            _ => try_rounded_ticks(self.0 as f64 / divisor).map(Self),
+        }
+    }
+
+    /// Returns the dimensionless ratio, reporting a zero divisor.
+    pub fn try_ratio(self, divisor: Self) -> Result<f64, crate::ValidationError> {
+        if divisor.0 == 0 {
+            return Err(time_error(
+                "divisor",
+                "duration ratio requires a nonzero divisor",
+            ));
+        }
+        Ok(self.0 as f64 / divisor.0 as f64)
     }
 
     /// Multiplies ticks exactly, returning None on signed overflow.
@@ -291,27 +332,26 @@ impl Mul<Duration> for f64 {
 impl Div<f64> for Duration {
     type Output = Self;
 
-    /// Divides the duration; a nonfinite or zero divisor is rejected.
+    /// Divides the duration.
+    ///
+    /// # Panics
+    /// Panics for a nonfinite or zero divisor; see [`Duration::try_div`].
     fn div(self, divisor: f64) -> Self {
-        assert!(
-            divisor.is_finite() && divisor != 0.0,
-            "duration divisor must be finite and nonzero"
-        );
-        match divisor {
-            1.0 => self,
-            -1.0 => -self,
-            _ => Self(rounded_ticks(self.0 as f64 / divisor)),
-        }
+        self.try_div(divisor)
+            .unwrap_or_else(|error| panic!("{}", error.message))
     }
 }
 
 impl Div for Duration {
     type Output = f64;
 
-    /// Returns a dimensionless ratio; a zero divisor is rejected.
+    /// Returns a dimensionless ratio.
+    ///
+    /// # Panics
+    /// Panics for a zero divisor; see [`Duration::try_ratio`].
     fn div(self, divisor: Self) -> f64 {
-        assert!(divisor.0 != 0, "duration ratio requires a nonzero divisor");
-        self.0 as f64 / divisor.0 as f64
+        self.try_ratio(divisor)
+            .unwrap_or_else(|error| panic!("{}", error.message))
     }
 }
 
@@ -332,10 +372,24 @@ impl FrameRate {
     /// Double NTSC rate of exactly 60000/1001 frames per second.
     pub const NTSC_DOUBLE: Self = Self::new(60_000, 1_001);
 
+    /// Constructs and reduces a rational frame rate, reporting a zero component.
+    pub fn try_new(numerator: u32, denominator: u32) -> Result<Self, crate::ValidationError> {
+        if numerator == 0 || denominator == 0 {
+            return Err(crate::ValidationError::invalid(
+                "frame_rate",
+                "ratio",
+                "frame-rate numerator and denominator must be nonzero",
+            ));
+        }
+        Ok(Self::new(numerator, denominator))
+    }
+
     /// Constructs and reduces a rational frame rate.
     ///
+    /// Usable in constants, where a zero component fails compilation.
+    ///
     /// # Panics
-    /// Panics if either component is zero.
+    /// Panics if either component is zero; see [`Self::try_new`].
     pub const fn new(numerator: u32, denominator: u32) -> Self {
         assert!(numerator != 0, "frame-rate numerator must be nonzero");
         assert!(denominator != 0, "frame-rate denominator must be nonzero");
@@ -436,12 +490,23 @@ impl TimeLiteral for f64 {
 }
 
 fn rounded_ticks(ticks: f64) -> i64 {
+    try_rounded_ticks(ticks).unwrap_or_else(|error| panic!("{}", error.message))
+}
+
+fn try_rounded_ticks(ticks: f64) -> Result<i64, crate::ValidationError> {
     let rounded = ticks.round();
-    assert!(
-        rounded.is_finite() && rounded >= i64::MIN as f64 && rounded < -(i64::MIN as f64),
-        "time must be finite and fit the signed tick range"
-    );
-    rounded as i64
+    if rounded.is_finite() && rounded >= i64::MIN as f64 && rounded < -(i64::MIN as f64) {
+        Ok(rounded as i64)
+    } else {
+        Err(time_error(
+            "seconds",
+            "time must be finite and fit the signed tick range",
+        ))
+    }
+}
+
+fn time_error(field: &'static str, message: &'static str) -> crate::ValidationError {
+    crate::ValidationError::invalid("time", field, message)
 }
 
 #[cfg(test)]
