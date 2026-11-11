@@ -36,7 +36,6 @@ fn prepare(node: &Node) -> motion_core::Result<crate::raster::gpu_prepare::GpuFr
         RasterLimits::default(),
         1.0 / 256.0,
         None,
-        true,
     )?)
 }
 

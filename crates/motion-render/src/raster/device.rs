@@ -8,7 +8,7 @@ use super::{RasterScope, pixel_bounds};
 use crate::prepared::GpuPreparationStats;
 #[cfg(test)]
 use crate::prepared::PreparedItem;
-use crate::prepared::{DeviceFill, GpuFallbackCounts, PreparedScene, Strip};
+use crate::prepared::{DeviceFill, PreparedScene, Strip};
 #[cfg(test)]
 use motion_core::{Point, RasterLimits};
 use motion_core::{Transform, ValidationError};
@@ -45,6 +45,11 @@ const DEVICE_MAX_FILL_VISITS: u64 = 1 << 26;
 /// Most conservatively admitted tile coverage work units in one frame.
 const DEVICE_MAX_FRAME_VISITS: u64 = 1 << 28;
 
+/// A path the device coverage pipeline cannot admit; GPU preparation has no CPU coverage route.
+pub(super) fn unsupported(path: &str, reason: &str) -> ValidationError {
+    ValidationError::unsupported(path, "gpu.coverage", reason)
+}
+
 /// Frame-wide device coverage admitted so far.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct DeviceTotals {
@@ -56,12 +61,10 @@ pub(crate) struct DeviceTotals {
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct DeviceGeometry {
-    pub(crate) coverage_enabled: bool,
     pub(crate) device_fills: Vec<DeviceFill>,
     pub(crate) device_edges: Vec<[f64; 5]>,
     pub(crate) device_curves: Vec<DeviceCurve>,
     pub(crate) device_totals: DeviceTotals,
-    pub(crate) fallback_paths: GpuFallbackCounts,
     pub(crate) analytic_cpu_fallbacks: u64,
 }
 
@@ -76,7 +79,7 @@ impl DeviceGeometry {
         geometry: &super::frame_ir::IrPath<'_>,
         tolerance: f64,
         scope: &mut RasterScope<'_>,
-    ) -> Result<bool, ValidationError> {
+    ) -> Result<(), ValidationError> {
         if geometry.device_verbs.iter().any(|verb| {
             matches!(
                 verb,
@@ -99,7 +102,7 @@ impl DeviceGeometry {
         let pixels = pixel_bounds(bounds, scene.size);
         if edges.is_empty() || pixels.is_empty() {
             budget.release(charged);
-            return Ok(true);
+            return Ok(());
         }
         let area = pixels.pixels();
         let within = |value: f64| value.abs() <= DEVICE_COORDINATE_LIMIT;
@@ -110,25 +113,30 @@ impl DeviceGeometry {
                 && within(edge.top.y - f64::from(pixels.top))
                 && within(edge.bottom.y - f64::from(pixels.top))
         }) {
-            self.fallback_paths.coordinate_range += 1;
             budget.release(charged);
-            return Ok(false);
+            return Err(unsupported(path, "coordinates exceed the f32 device range"));
         }
         if self.device_fills.len() >= DEVICE_MAX_FILLS || used.pixels + area > DEVICE_MAX_PIXELS {
-            self.fallback_paths.frame_limit += 1;
             budget.release(charged);
-            return Ok(false);
+            return Err(unsupported(
+                path,
+                "device fill count or pixels exceed the frame ceiling",
+            ));
         }
         let Some(tiles) = TileLayout::admit(&edges, pixels, budget, path)? else {
-            self.fallback_paths.tile_capacity += 1;
             budget.release(charged);
-            return Ok(false);
+            return Err(unsupported(
+                path,
+                "tile edge density exceeds device capacity",
+            ));
         };
         let visits = tiles.work;
         if visits > DEVICE_MAX_FILL_VISITS || used.visits + visits > DEVICE_MAX_FRAME_VISITS {
-            self.fallback_paths.work_limit += 1;
             budget.release(charged);
-            return Ok(false);
+            return Err(unsupported(
+                path,
+                "device coverage work exceeds its ceiling",
+            ));
         }
         budget.work(edges.len() as u64, path)?;
         budget.bytes(charged, path)?;
@@ -174,7 +182,7 @@ impl DeviceGeometry {
             pixels: used.pixels + area,
             visits: used.visits + visits,
         };
-        Ok(true)
+        Ok(())
     }
 
     /// First sample after a device strip's f32 coverage block.
@@ -211,7 +219,6 @@ impl DeviceGeometry {
                     + COVERAGE_PARAMS_BYTES
             },
             analytic_cpu_fallbacks: self.analytic_cpu_fallbacks,
-            fallback_paths: self.fallback_paths,
         }
     }
 

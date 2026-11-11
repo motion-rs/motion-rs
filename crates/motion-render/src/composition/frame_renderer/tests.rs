@@ -785,7 +785,6 @@ fn gpu_output_preparation_is_independent_and_device_free() -> Result {
     assert_eq!(stats.preparation, gpu.stats());
     assert!(stats.segment_count > 0);
     assert_eq!(stats.tile_count, 1);
-    assert_eq!(stats.fallback_paths.total(), 0);
     assert_eq!(renderer.report().gpu_preparation, Some(stats));
     let plan = gpu.plan(limits, crate::PixelFormat::Yuv420 { bit_depth: 8 })?;
     assert!(plan.peak_bytes()? >= gpu.stats().retained_bytes);

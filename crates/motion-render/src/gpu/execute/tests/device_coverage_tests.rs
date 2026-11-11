@@ -79,16 +79,20 @@ fn scene(crossing: bool) -> motion_core::Result<Node> {
     ))
 }
 
-fn prepare(
-    device: bool,
-    crossing: bool,
-) -> motion_core::Result<crate::raster::gpu_prepare::GpuFrame> {
-    prepare_node(scene(crossing)?, device, PixelSize::new(240, 160))
+fn prepare(crossing: bool) -> motion_core::Result<crate::raster::gpu_prepare::GpuFrame> {
+    prepare_node(scene(crossing)?, PixelSize::new(240, 160))
+}
+
+/// CPU reference preparation of the same scene.
+fn prepare_cpu(crossing: bool) -> motion_core::Result<crate::PreparedFrame> {
+    let size = PixelSize::new(240, 160);
+    let validation = ValidationLimits::default();
+    let list = scene(crossing)?.compile(motion_core::Size::new(240.0, 160.0), size, validation)?;
+    Ok(list.prepare(validation, RasterLimits::default())?)
 }
 
 fn prepare_node(
     node: Node,
-    device: bool,
     size: PixelSize,
 ) -> motion_core::Result<crate::raster::gpu_prepare::GpuFrame> {
     let validation = ValidationLimits::default();
@@ -103,7 +107,6 @@ fn prepare_node(
         RasterLimits::default(),
         1.0 / 256.0,
         None,
-        device,
     )?)
 }
 
@@ -139,8 +142,8 @@ fn coverage_shader_validates_without_a_device() {
 #[test]
 fn device_fills_replace_cpu_coverage_and_materialize_back() -> motion_core::Result {
     let limits = RasterLimits::default();
-    let device = prepare(true, true)?;
-    let cpu = prepare(false, true)?;
+    let device = prepare(true)?;
+    let cpu = prepare_cpu(true)?;
     assert_eq!(device.geometry.device_fills.len(), 5);
     assert!(device.alphas.is_empty());
     let mut restored = device.clone();
@@ -150,13 +153,17 @@ fn device_fills_replace_cpu_coverage_and_materialize_back() -> motion_core::Resu
         restored
             .compose_linear(limits)?
             .to_rgba8_frame(false, limits)?,
-        cpu.compose_linear(limits)?.to_rgba8_frame(false, limits)?
+        cpu.scene
+            .compose_linear(limits)?
+            .to_rgba8_frame(false, limits)?
     );
     assert_eq!(
         device
             .compose_linear(limits)?
             .to_rgba8_frame(false, limits)?,
-        cpu.compose_linear(limits)?.to_rgba8_frame(false, limits)?
+        cpu.scene
+            .compose_linear(limits)?
+            .to_rgba8_frame(false, limits)?
     );
     Ok(())
 }
@@ -170,8 +177,9 @@ fn device_fill_coverage_matches_cpu_and_replays() -> motion_core::Result {
 
 fn assert_matches_cpu(crossing: bool) -> motion_core::Result {
     let limits = RasterLimits::default();
-    let device = prepare(true, crossing)?;
-    let expected = prepare(false, crossing)?
+    let device = prepare(crossing)?;
+    let expected = prepare_cpu(crossing)?
+        .scene
         .compose_linear(limits)?
         .to_rgba8_frame(false, limits)?;
     let mut gpu = Gpu::new()?;
@@ -205,7 +213,6 @@ fn triangle(left: f64) -> motion_core::Result<Node> {
 fn device_float_coverage_layout_and_admission() -> motion_core::Result {
     let frame = prepare_node(
         Node::group([triangle(0.0)?, triangle(1.0)?]),
-        true,
         PixelSize::new(3, 2),
     )?;
     assert_eq!(frame.geometry.device_fills.len(), 2);
@@ -249,7 +256,6 @@ fn device_float_coverage_survives_composition() -> motion_core::Result {
             triangle(1.0)?,
             Node::from(motion_core::Rect::new(2.0, 0.0, 2.5, 1.0).fill(Color::WHITE)),
         ]),
-        true,
         PixelSize::new(3, 2),
     )?;
     let limits = RasterLimits::default();

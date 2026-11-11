@@ -273,7 +273,6 @@ fn independent_procedural_paints_cpu_gpu_visual_and_replay() -> motion_core::Res
                     limits,
                     1.0 / 256.0,
                     None,
-                    true,
                 )?;
                 assert!(
                     device

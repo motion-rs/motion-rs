@@ -48,7 +48,6 @@ fn fixed_seed_random_curves_match_cpu_without_local_dropouts() -> motion_core::R
                 limits,
                 1.0 / 256.0,
                 None,
-                true,
             )?;
             assert!(
                 device.alphas.is_empty(),
@@ -91,14 +90,8 @@ fn render_device(path: Path2D, rule: FillRule) -> motion_core::Result<Vec<[f32; 
         PixelSize::new(32, 32),
         validation,
     )?;
-    let frame = crate::prepared::prepare_validated_device(
-        &list,
-        validation,
-        limits,
-        1.0 / 256.0,
-        None,
-        true,
-    )?;
+    let frame =
+        crate::prepared::prepare_validated_device(&list, validation, limits, 1.0 / 256.0, None)?;
     assert!(frame.alphas.is_empty());
     assert!(!frame.geometry.device_fills.is_empty());
     let actual = Gpu::new()?.render(&frame, Plan::new(&frame, limits)?)?;

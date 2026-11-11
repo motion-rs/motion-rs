@@ -195,7 +195,7 @@ fn cpu_reference_numeric_coverage_is_unchanged() -> Result<(), ValidationError> 
         cpu.render_linear(limits)?.linear_pixel(0, 0),
         Some([170.0 / 255.0; 4])
     );
-    let gpu = GpuFrame::prepare(&ir, limits, None, true)?;
+    let gpu = GpuFrame::prepare(&ir, limits, None)?;
     assert!(gpu.has_device_coverage());
     assert!(gpu.alphas.is_empty());
     // GPU preparation cannot mutate the IR or the independently owned CPU result.
@@ -214,7 +214,7 @@ fn warm_cpu_cache_does_not_make_gpu_preparation_depend_on_cpu_coverage()
     let limits = RasterLimits::default();
     let mut cache = CoverageCache::default();
     let cold = prepare_ir(&ir, limits, Some(&mut cache))?;
-    let gpu = GpuFrame::prepare(&ir, limits, Some(&mut cache), true)?;
+    let gpu = GpuFrame::prepare(&ir, limits, Some(&mut cache))?;
     assert_eq!(gpu.geometry.device_fills.len(), 1);
     assert!(gpu.alphas.is_empty());
     assert!(gpu.spans.is_empty());

@@ -3,7 +3,14 @@
 use super::*;
 use motion_core::{Color, FillRule, Node, Path2D, Point, Rect, Size};
 
-fn prepare(node: Node, device: bool) -> motion_core::Result<crate::raster::gpu_prepare::GpuFrame> {
+fn prepare_cpu(node: Node) -> motion_core::Result<crate::PreparedFrame> {
+    let size = PixelSize::new(193, 81);
+    let validation = ValidationLimits::default();
+    let list = node.compile(Size::new(193.0, 81.0), size, validation)?;
+    Ok(list.prepare(validation, RasterLimits::default())?)
+}
+
+fn prepare(node: Node) -> motion_core::Result<crate::raster::gpu_prepare::GpuFrame> {
     let size = PixelSize::new(193, 81);
     let validation = ValidationLimits::default();
     let list = node.compile(Size::new(193.0, 81.0), size, validation)?;
@@ -13,7 +20,6 @@ fn prepare(node: Node, device: bool) -> motion_core::Result<crate::raster::gpu_p
         RasterLimits::default(),
         1.0 / 256.0,
         None,
-        device,
     )?)
 }
 
@@ -35,12 +41,11 @@ fn ring(rule: FillRule) -> motion_core::Result<Node> {
 
 #[test]
 fn tile_descriptors_admit_scratch_and_report_geometry_uploads() -> motion_core::Result {
-    let frame = prepare(ring(FillRule::EvenOdd)?, true)?;
+    let frame = prepare(ring(FillRule::EvenOdd)?)?;
     let plan = Plan::new(&frame, RasterLimits::default())?;
     let stats = frame.geometry.stats(frame.stats());
     assert_eq!(stats.segment_count, 4);
     assert_eq!(stats.tile_count, 12 * 6);
-    assert_eq!(stats.fallback_paths.total(), 0);
     assert_eq!(stats.geometry_upload_bytes, 48 + 4 * 32 + 16);
     assert_eq!(u64::from(plan.device.tiles), stats.tile_count);
     assert_eq!(u64::from(plan.device.indices), stats.tile_index_capacity);
@@ -100,57 +105,22 @@ fn tile_descriptors_admit_scratch_and_report_geometry_uploads() -> motion_core::
 }
 
 #[test]
-fn gpu_fallbacks_are_classified_without_changing_cpu_preparation() -> motion_core::Result {
+fn unsupported_device_paths_are_validation_errors_not_cpu_coverage() -> motion_core::Result {
     let mut huge = Path2D::new();
     contour(&mut huge, Rect::new(-9000.0, 0.25, 100.0, 40.75))?;
-    let node = Node::group([
-        ring(FillRule::EvenOdd)?,
-        Node::from(huge.fill(Color::WHITE)),
-        Node::from(Rect::new(0.0, 0.0, 1.0, 1.0).fill(Color::WHITE)),
-    ]);
-    let gpu = prepare(node.clone(), true)?;
-    let stats = gpu.geometry.stats(gpu.stats());
-    assert_eq!(stats.fallback_paths.coordinate_range, 1);
-    assert_eq!(stats.fallback_paths.total(), 1);
-    assert_eq!(stats.segment_count, 4);
-    assert!(!gpu.alphas.is_empty());
-    let disabled = prepare(node.clone(), false)?;
-    let stats = disabled.geometry.stats(disabled.stats());
-    assert_eq!(stats.fallback_paths.coverage_disabled, 2);
-    assert_eq!(stats.fallback_paths.total(), 2);
-    assert_eq!(
-        (
-            stats.segment_count,
-            stats.tile_count,
-            stats.geometry_upload_bytes
-        ),
-        (0, 0, 0)
-    );
-    let cpu = node
-        .compile(
-            Size::new(193.0, 81.0),
-            PixelSize::new(193, 81),
-            ValidationLimits::default(),
-        )?
-        .prepare(ValidationLimits::default(), RasterLimits::default())?;
-    assert_eq!(disabled.scene.items, cpu.scene.items);
-    assert_eq!(disabled.scene.alphas, cpu.scene.alphas);
-    Ok(())
-}
-
-#[test]
-fn dense_tiles_take_one_explicit_cpu_path() -> motion_core::Result {
-    let mut path = Path2D::new();
+    let error = prepare(Node::from(huge.fill(Color::WHITE))).unwrap_err();
+    assert!(error.to_string().contains("f32 device range"), "{error}");
+    let mut dense = Path2D::new();
     for _ in 0..2049 {
-        contour(&mut path, Rect::new(0.1, 0.1, 0.9, 0.9))?;
+        contour(&mut dense, Rect::new(0.1, 0.1, 0.9, 0.9))?;
     }
-    let frame = prepare(Node::from(path.fill(Color::WHITE)), true)?;
-    let stats = frame.geometry.stats(frame.stats());
-    assert_eq!(stats.fallback_paths.tile_capacity, 1);
-    assert_eq!(stats.fallback_paths.total(), 1);
-    assert_eq!(stats.segment_count, 0);
-    assert_eq!(stats.tile_index_capacity, 0);
-    assert!(!frame.alphas.is_empty());
+    let error = prepare(Node::from(dense.fill(Color::WHITE))).unwrap_err();
+    assert!(error.to_string().contains("tile edge density"), "{error}");
+    let frame = prepare(Node::group([
+        ring(FillRule::EvenOdd)?,
+        Node::from(Rect::new(0.0, 0.0, 1.0, 1.0).fill(Color::WHITE)),
+    ]))?;
+    assert_eq!(frame.geometry.device_fills.len(), 1);
     Ok(())
 }
 
@@ -195,9 +165,9 @@ fn tile_interiors_fill_rules_and_reused_scratch_match_cpu() -> motion_core::Resu
     let limits = RasterLimits::default();
     let mut gpu = Gpu::new()?;
     for rule in [FillRule::NonZero, FillRule::EvenOdd, FillRule::NonZero] {
-        let frame = prepare(ring(rule)?, true)?;
+        let frame = prepare(ring(rule)?)?;
         assert_eq!(frame.geometry.device_fills.len(), 1);
-        let expected = prepare(ring(rule)?, false)?.compose_linear(limits)?;
+        let expected = prepare_cpu(ring(rule)?)?.scene.compose_linear(limits)?;
         let actual = gpu.render(&frame, Plan::new(&frame, limits)?)?;
         // Empty tile interiors need carries; global RMS alone would hide a missing hole.
         for (x, y) in [
@@ -240,9 +210,10 @@ fn sloping_tile_edges_match_cpu_with_explicit_tolerance() -> motion_core::Result
             .close()
             .build()?;
         let node = Node::from(path.fill(Color::WHITE));
-        let frame = prepare(node.clone(), true)?;
+        let frame = prepare(node.clone())?;
         assert_eq!(frame.geometry.device_fills.len(), 1);
-        let expected = prepare(node, false)?
+        let expected = prepare_cpu(node)?
+            .scene
             .compose_linear(limits)?
             .to_rgba8_frame(false, limits)?;
         let actual = gpu

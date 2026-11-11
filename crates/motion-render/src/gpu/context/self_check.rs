@@ -8,7 +8,7 @@ use motion_core::{
     Path2D, PixelSize, Point, Rect, Shape, Size, ValidationError, ValidationLimits,
 };
 
-/// RMS allowance for spatial paint and large-coordinate fixtures.
+/// RMS allowance for spatial paint fixtures.
 const PAINT_VISUAL_RMS: f64 = 0.005;
 
 /// Small self-intersecting contours permit localized differences in antialiasing area.
@@ -46,7 +46,6 @@ fn run(context: &GpuContext) -> motion_core::Result<()> {
             limits,
             1.0 / 256.0,
             None,
-            true,
         )?;
         if requires_device_coverage && !device.has_device_coverage() {
             return Err(ValidationError::invalid(
@@ -131,23 +130,10 @@ fn fixtures() -> Result<Vec<(&'static str, Node, bool, f64)>, ValidationError> {
             ClipMode::Geometric,
         )
         .filter(Filter::Blur { sigma: 0.6 });
-    let large = Path2D::builder()
-        .move_to(Point::new(-20000.0, 5.25))
-        .line_to(Point::new(20000.0, 5.25))
-        .line_to(Point::new(20000.0, 25.75))
-        .line_to(Point::new(-20000.0, 25.75))
-        .close()
-        .build()?;
     Ok(vec![
         ("paints", paints, false, PAINT_VISUAL_RMS),
         ("geometry", geometry, true, GEOMETRY_VISUAL_RMS),
         ("filtered_clips", filtered, true, FILTER_VISUAL_RMS),
-        (
-            "large_coordinates",
-            Node::from(large.fill(Color::rgb(70, 180, 120))),
-            false,
-            PAINT_VISUAL_RMS,
-        ),
     ])
 }
 
@@ -187,15 +173,11 @@ mod tests {
                 limits,
                 1.0 / 256.0,
                 None,
-                true,
             )?;
             assert!(!reference.has_device_coverage());
             if requires_device {
                 assert!(device.has_device_coverage(), "{label}");
                 device_cases += 1;
-            }
-            if label == "large_coordinates" {
-                assert!(!device.has_device_coverage());
             }
         }
         assert_eq!(device_cases, 2);

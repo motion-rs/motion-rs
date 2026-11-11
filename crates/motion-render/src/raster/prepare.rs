@@ -177,10 +177,9 @@ pub(crate) fn prepare_validated_device(
     limits: RasterLimits,
     tolerance: f64,
     cache: Option<&mut CoverageCache>,
-    device: bool,
 ) -> Result<GpuFrame, ValidationError> {
     let ir = FrameIr::build(source, validation, limits, tolerance)?;
-    GpuFrame::prepare(&ir, limits, cache, device)
+    GpuFrame::prepare(&ir, limits, cache)
 }
 
 pub(crate) fn prepare_ir(
@@ -281,22 +280,17 @@ impl SceneBackend for DeviceBackend<'_> {
         tolerance: f64,
         scope: &mut RasterScope<'_>,
     ) -> Result<(), ValidationError> {
-        let device = &mut *self.geometry;
-        let on_device = if !matches!(geometry.source, GeometrySource::Path(_)) {
-            false
-        } else if !device.coverage_enabled {
-            device.fallback_paths.coverage_disabled += 1;
-            false
-        } else if matches!(paint.source, motion_core::Paint::Pattern(pattern) if pattern.decal) {
-            device.fallback_paths.unsupported_paint += 1;
-            false
-        } else {
-            device.device_fill(frame, geometry, tolerance, scope)?
-        };
-        if on_device {
-            return Ok(());
+        // Rectangles stay analytic strips; every other fill is device coverage or an error.
+        if !matches!(geometry.source, GeometrySource::Path(_)) {
+            return prepare_geometry(frame, geometry, tolerance, self.cache.as_deref_mut(), scope);
         }
-        prepare_geometry(frame, geometry, tolerance, self.cache.as_deref_mut(), scope)
+        if matches!(paint.source, motion_core::Paint::Pattern(pattern) if pattern.decal) {
+            return Err(super::device::unsupported(
+                scope.path,
+                "decal image patterns have no device coverage",
+            ));
+        }
+        self.geometry.device_fill(frame, geometry, tolerance, scope)
     }
 }
 

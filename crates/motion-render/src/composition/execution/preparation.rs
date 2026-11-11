@@ -86,7 +86,6 @@ impl FrameExecution<'_> {
                         self.limits,
                         tolerance,
                         Some(&mut self.coverage_cache),
-                        blend_space == motion_core::drawing::BlendSpace::LinearRgb,
                     )?
                     .quality(quality)
                     .blend_space(blend_space);

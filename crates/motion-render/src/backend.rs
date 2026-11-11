@@ -177,7 +177,6 @@ mod tests {
         automatic.render_frame(0, |_| tiny.clone())?;
         let attempted = automatic.report().gpu_preparation.unwrap();
         assert!(attempted.segment_count > 0);
-        assert_eq!(attempted.fallback_paths.total(), 0);
         assert!(automatic.gpu_info().is_none());
         assert!(automatic.cached_coverage_bytes() > 0);
         assert_eq!(

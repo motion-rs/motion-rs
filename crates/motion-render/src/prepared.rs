@@ -14,7 +14,7 @@ use std::ops::Range;
 
 mod gpu_stats;
 
-pub use gpu_stats::{GpuFallbackCounts, GpuPreparationStats};
+pub use gpu_stats::GpuPreparationStats;
 
 /// Half-open device pixel bounds, clipped to the internal raster by preparation.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

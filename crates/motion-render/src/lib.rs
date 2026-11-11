@@ -29,8 +29,8 @@ pub use motion_core::{CachePartition, RenderCache, RenderQuality};
 pub use options::{RenderOptions, render_still};
 pub use output::{FrameBuffer, PixelFormat, PixelPlane, RenderTarget};
 pub use prepared::{
-    GpuFallbackCounts, GpuPreparationStats, PixelRect, PreparationStats, PreparedFrame,
-    RasterLimits, RenderPrepare, WorkStats,
+    GpuPreparationStats, PixelRect, PreparationStats, PreparedFrame, RasterLimits, RenderPrepare,
+    WorkStats,
 };
 
 /// Rendering contracts used alongside core authoring values.

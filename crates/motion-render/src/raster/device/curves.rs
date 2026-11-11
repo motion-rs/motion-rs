@@ -2,7 +2,7 @@
 
 use super::{
     DEVICE_COORDINATE_LIMIT, DEVICE_MAX_FILL_VISITS, DEVICE_MAX_FILLS, DEVICE_MAX_FRAME_VISITS,
-    DEVICE_MAX_PIXELS, DeviceGeometry, DeviceTotals, TileLayout,
+    DEVICE_MAX_PIXELS, DeviceGeometry, DeviceTotals, TileLayout, unsupported,
 };
 use crate::prepared::{DeviceFill, PreparedScene, Strip};
 use crate::raster::{RasterScope, frame_ir, pixel_bounds};
@@ -23,18 +23,20 @@ impl DeviceGeometry {
         geometry: &frame_ir::IrPath<'_>,
         tolerance: f64,
         scope: &mut RasterScope<'_>,
-    ) -> Result<bool, ValidationError> {
+    ) -> Result<(), ValidationError> {
         let (budget, path) = (&mut *scope.budget, scope.path);
         let pixels = pixel_bounds(geometry.bounds, scene.size);
         if pixels.is_empty() {
-            return Ok(true);
+            return Ok(());
         }
         let used = self.device_totals;
         if self.device_fills.len() >= DEVICE_MAX_FILLS
             || used.pixels + pixels.pixels() > DEVICE_MAX_PIXELS
         {
-            self.fallback_paths.frame_limit += 1;
-            return Ok(false);
+            return Err(unsupported(
+                path,
+                "device fill count or pixels exceed the frame ceiling",
+            ));
         }
         // Control hulls bound every generated point. Reject before allocating descriptors.
         let within = |point: Point| {
@@ -49,8 +51,7 @@ impl DeviceGeometry {
             PathVerb::CubicTo(a, b, c) => within(a) && within(b) && within(c),
             PathVerb::Close => true,
         }) {
-            self.fallback_paths.coordinate_range += 1;
-            return Ok(false);
+            return Err(unsupported(path, "coordinates exceed the f32 device range"));
         }
         let bytes =
             (geometry.device_verbs.len() as u64 + 1) * std::mem::size_of::<DeviceCurve>() as u64;
@@ -134,15 +135,19 @@ impl DeviceGeometry {
             .sum::<u64>();
         debug_assert!(segments <= geometry.segment_upper_bound);
         let Some(tiles) = TileLayout::admit_curves(&curves, pixels, budget, path)? else {
-            self.fallback_paths.tile_capacity += 1;
             budget.release(bytes);
-            return Ok(false);
+            return Err(unsupported(
+                path,
+                "tile edge density exceeds device capacity",
+            ));
         };
         if tiles.work > DEVICE_MAX_FILL_VISITS || used.visits + tiles.work > DEVICE_MAX_FRAME_VISITS
         {
-            self.fallback_paths.work_limit += 1;
             budget.release(bytes);
-            return Ok(false);
+            return Err(unsupported(
+                path,
+                "device coverage work exceeds its ceiling",
+            ));
         }
         let retained = curves.len() as u64 * std::mem::size_of::<DeviceCurve>() as u64;
         budget.bytes(retained, path)?;
@@ -183,6 +188,6 @@ impl DeviceGeometry {
             pixels: used.pixels + pixels.pixels(),
             visits: used.visits + tiles.work,
         };
-        Ok(true)
+        Ok(())
     }
 }

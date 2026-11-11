@@ -21,12 +21,8 @@ impl GpuFrame {
         ir: &FrameIr<'_>,
         limits: RasterLimits,
         cache: Option<&mut CoverageCache>,
-        device: bool,
     ) -> Result<Self, ValidationError> {
-        let mut geometry = DeviceGeometry {
-            coverage_enabled: device,
-            ..Default::default()
-        };
+        let mut geometry = DeviceGeometry::default();
         let scene = prepare_scene(
             ir,
             limits,
