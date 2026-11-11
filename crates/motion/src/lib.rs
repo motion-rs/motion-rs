@@ -218,14 +218,14 @@ pub use motion_core::{
     FiniteAnimation, FontEnvironment, FrameRate, FunctionGraph, GradientExtend, GradientSpace,
     GradientUnits, ImagePattern, Interpolate, Interval, Iris, IrisShape, Keyframes, Layout, Line,
     LineCap, LineJoin, LinearGradient, MaskMode, MeshGradient, MeshVertex, MotionBlur, Node,
-    NodeModifiers, Paint, Path2D, PathBooleanOp, PathBooleanOptions, PathBuilder, Pivot, PixelSize,
-    Point, Polygon, Polyline, Pose, Push, RadialGradient, Random, Rect, RegularPolygon,
-    RenderQuality, Ring, RoundedRect, Row, Sampling, Scene, SceneContext, Shape, Side, Signal,
-    Size, Skeleton, Slide, Soundtrack, Source, Spline, Spring, Star, StrokeStyle, Styled,
-    SweepGradient, Time, TimeLiteral, TimeOffset, Timeline, TimelineBuilder, TimelineWarning,
-    Track, TrackBuilder, Transform, TransformComponents, Tween, ValidationError, Vector2, Wipe,
-    ZoomBlur, animation, authoring, color, fps, geometry, noise, path2d, sample_offsets, shape,
-    time, try_camera,
+    NodeModifiers, Paint, Path2D, PathBooleanOp, PathBooleanOptions, PathBuilder, Perspective,
+    Pivot, PixelSize, Point, Polygon, Polyline, Pose, Push, RadialGradient, Random, Rect,
+    RegularPolygon, RenderQuality, Ring, RoundedRect, Row, Sampling, Scene, SceneContext, Shape,
+    Side, Signal, Size, Skeleton, Slide, Soundtrack, Source, Spline, Spring, Star, StrokeStyle,
+    Styled, SweepGradient, Time, TimeLiteral, TimeOffset, Timeline, TimelineBuilder,
+    TimelineWarning, Track, TrackBuilder, Transform, TransformComponents, Tween, ValidationError,
+    Vector2, Wipe, ZoomBlur, animation, authoring, color, fps, geometry, noise, path2d,
+    sample_offsets, shape, time, try_camera,
 };
 pub use motion_render::{BackendPreference, RenderOptions, render_still};
 

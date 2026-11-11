@@ -94,7 +94,10 @@ pub use drawing::{
 pub use error::{BoxedError, Error, ErrorKind};
 pub use filter::{Filter, FilterOperation};
 pub use geometry::bounds::{Pivot, Rect, Size};
-pub use geometry::{AngleLiteral, Point, Transform, TransformComponents, Vector2};
+pub use geometry::{
+    AngleLiteral, MAX_PERSPECTIVE_CURVE_PIECES, Perspective, Point, Transform, TransformComponents,
+    Vector2,
+};
 pub use grading::{Cdl, ColorWheels, Lut1d, Lut3d, LutInput};
 pub use optics::{ApertureShape, HeightFrom, Optics};
 pub use path2d::{
@@ -119,7 +122,8 @@ pub mod prelude {
     pub use crate::ClipMode;
     pub use crate::{Alignment, Column, Layout, Node, NodeModifiers, Row, Scene, Side};
     pub use crate::{
-        AngleLiteral, Color, Pivot, Point, Rect, Size, Transform, TransformComponents, Vector2,
+        AngleLiteral, Color, Perspective, Pivot, Point, Rect, Size, Transform, TransformComponents,
+        Vector2,
     };
     pub use crate::{
         ApertureShape, Cdl, ColorWheels, DepthOfField, DepthPlane, Elevation, HeightFrom, Lut1d,

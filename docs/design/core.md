@@ -125,6 +125,12 @@ linear-premultiplied `MeshImage` and reaches renderers as an ordinary `ImagePatt
 CPU path, GPU plan and WGSL shader need no mesh-specific code and cannot disagree. Colors blend
 in Oklab with smoothstep weights and alpha blends linearly; cells are bilinear patches.
 
+`Perspective` rotates a flat layer about a pivot and projects it through a pinhole camera.
+It maps path geometry, not pixels: lines stay lines, curves become subdivided cubics, and a
+point that reaches the camera plane is an error instead of being clipped. `faces_camera`
+reports backfacing so callers decide whether to draw. Because backends only see the projected
+path, CPU and GPU output agree without a new shader.
+
 Selected curve, stroke and arc operations use kurbo. Shared coverage remains
 Motion-owned, not a complete third-party raster backend. Arc-length lookup, curve
 splitting and geometric morphing operate before pixel execution; topology,

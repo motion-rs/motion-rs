@@ -61,8 +61,9 @@ There is no 3D asset renderer, browser runtime, general-purpose UI layout engine
 interactive keyframe editor. Studio previews compiled Rust scenes; source changes
 still require rebuilding, except that a declarative document reloads in place. It opens
 one scene per launch, with no in-window scene switching. Declarative [documents](documents.md) describe data-only timelines; they do not
-bind properties to Rust callbacks. Perspective transforms are proposals, not current
-authoring guarantees.
+bind properties to Rust callbacks. `Transform` stays affine. Planar 2.5D perspective is
+limited to `Perspective`, which projects path geometry; raster layers and images are not
+perspective-mapped.
 
 ## Design Principles
 

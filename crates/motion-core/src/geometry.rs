@@ -4,10 +4,12 @@ use std::ops::{Add, Div, Mul, Neg, Sub};
 
 pub mod bounds;
 pub mod flatten;
+mod perspective;
 mod transform;
 #[cfg(feature = "serde")]
 mod wire;
 
+pub use perspective::{MAX_PERSPECTIVE_CURVE_PIECES, Perspective};
 pub use transform::{Transform, TransformComponents};
 
 /// A position in two-dimensional design coordinates, without implicit narrowing.
