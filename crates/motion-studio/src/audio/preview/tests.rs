@@ -361,11 +361,3 @@ fn changing_device_latency_cannot_move_the_audio_clock_backwards() {
     output.write(&mut buffer, Some(Duration::ZERO));
     assert_eq!(output.shared.played.load(Ordering::Relaxed), 1440);
 }
-
-#[test]
-fn inactive_audio_never_starts_a_device_or_session() -> motion_core::Result {
-    let mut preview = AudioPreview::new(egui::Context::default())?;
-    preview.start_at_rate(&AudioForm::default(), motion_core::fps!(24), 24, 0)?;
-    assert!(preview.status().is_none());
-    Ok(())
-}

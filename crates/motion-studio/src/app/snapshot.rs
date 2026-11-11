@@ -175,7 +175,7 @@ fn dump_workbench_png() -> motion_core::Result<()> {
                 })
             })
             .build()?;
-        let scene = StudioScene::timeline(
+        let scene = StudioScene::new(
             "Demo",
             Composition::new(
                 960,

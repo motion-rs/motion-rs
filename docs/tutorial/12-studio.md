@@ -19,7 +19,7 @@ fn main() -> motion::Result {
                 .rotate(context.seconds() * 0.6))
         })
     }).build()?;
-    motion::studio::run(motion::studio::StudioScene::timeline(
+    motion::studio::run(motion::studio::StudioScene::new(
         "tutorial",
         Composition::new(640, 360, motion::render::FrameClock::new(fps!(30), 150)),
         timeline,

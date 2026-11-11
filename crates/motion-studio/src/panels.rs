@@ -129,13 +129,13 @@ impl StudioApp {
                 ui.end_row();
                 ui.weak("Format");
                 let audio = &self.audio;
-                ui.label(if !self.scene.supports_video_export() {
-                    "Preview only"
-                } else if audio.enabled && audio.clips.iter().any(|clip| clip.enabled) {
-                    "Video + audio"
-                } else {
-                    self.exports.export_format.label()
-                });
+                ui.label(
+                    if audio.enabled && audio.clips.iter().any(|clip| clip.enabled) {
+                        "Video + audio"
+                    } else {
+                        self.exports.export_format.label()
+                    },
+                );
                 ui.end_row();
             });
         ui.add_space(6.0);
@@ -269,9 +269,7 @@ impl StudioApp {
     fn export_destination_controls(&mut self, ui: &mut egui::Ui, context: &egui::Context) {
         let frame = self.clock;
         ui.add_enabled_ui(
-            !self.close_when_idle
-                && self.exports.export_queue.len() < 16
-                && self.scene.supports_video_export(),
+            !self.close_when_idle && self.exports.export_queue.len() < 16,
             |ui| {
                 theme::section(ui, "Destination");
                 ui.add(

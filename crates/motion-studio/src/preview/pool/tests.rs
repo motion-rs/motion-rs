@@ -18,7 +18,7 @@ fn seek_discards_inflight_thumbnail_before_new_thumbnail_completes() -> motion_c
     let (entered, waiting) = std::sync::mpsc::channel();
     let (release, gate) = std::sync::mpsc::channel();
     let gate = Mutex::new(gate);
-    let scene = StudioScene::preview_only(
+    let scene = StudioScene::from_render(
         "thumbnail seek",
         motion_render::Composition::new(
             16,
@@ -33,7 +33,8 @@ fn seek_discards_inflight_thumbnail_before_new_thumbnail_completes() -> motion_c
             }
             motion_core::Node::from(context.bounds().fill(motion_core::Color::WHITE))
         },
-    );
+    )
+    .unwrap();
     let (wake, updates) = std::sync::mpsc::channel();
     let context = Context::default();
     context.set_request_repaint_callback(move |_| {
@@ -63,7 +64,7 @@ fn seek_discards_inflight_thumbnail_before_new_thumbnail_completes() -> motion_c
 fn resource_failure_thumbnail_is_not_retained_as_healthy_artwork() -> motion_core::Result<()> {
     let directory = tempfile::tempdir()?;
     let (entered, waiting) = std::sync::mpsc::channel();
-    let scene = StudioScene::preview_only(
+    let scene = StudioScene::from_render(
         "thumbnail resource",
         motion_render::Composition::new(
             16,
@@ -84,7 +85,8 @@ fn resource_failure_thumbnail_is_not_retained_as_healthy_artwork() -> motion_cor
                 motion_core::Node::from(context.bounds().fill(motion_core::Color::WHITE))
             }
         },
-    );
+    )
+    .unwrap();
     let (wake, updates) = std::sync::mpsc::channel();
     let context = Context::default();
     context.set_request_repaint_callback(move |_| {
@@ -115,7 +117,7 @@ fn idle_prefetch_is_serial_and_thumbnails_never_replace_main_reply() -> motion_c
     let (built, builds) = std::sync::mpsc::channel();
     let observed = active.clone();
     let maximum = peak.clone();
-    let scene = StudioScene::preview_only(
+    let scene = StudioScene::from_render(
         "idle",
         motion_render::Composition::new(
             16,
@@ -135,7 +137,8 @@ fn idle_prefetch_is_serial_and_thumbnails_never_replace_main_reply() -> motion_c
             observed.fetch_sub(1, Ordering::SeqCst);
             node
         },
-    );
+    )
+    .unwrap();
     let (wake, updates) = std::sync::mpsc::channel();
     let context = Context::default();
     context.set_request_repaint_callback(move |_| {

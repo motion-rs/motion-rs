@@ -192,7 +192,7 @@ impl Project {
     ) -> Result<(crate::studio::StudioScene, Vec<std::path::PathBuf>)> {
         let film = self.film(name, parameters)?;
         let options = film.options(options);
-        let scene = crate::studio::StudioScene::timeline(
+        let scene = crate::studio::StudioScene::new(
             name,
             crate::export::composition(&film.timeline, &options)?,
             film.timeline,

@@ -57,12 +57,6 @@ impl ExportJob {
         codec
             .validate()
             .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
-        if !scene.supports_video_export() {
-            return Err(io::Error::new(
-                io::ErrorKind::Unsupported,
-                "Scene is registered for preview only",
-            ));
-        }
         let control = Cancellation::default();
         let state = Arc::new(Mutex::new(JobState::Running(None)));
         let worker_control = control.clone();
@@ -85,26 +79,7 @@ impl ExportJob {
                         )
                         .into());
                     }
-                    let mut timeline = if let Some(timeline) = scene.definition.audio_timeline {
-                        timeline
-                    } else {
-                        let rate = scene.composition.frame_rate();
-                        let duration = motion_core::Time::from_frame(
-                            i64::try_from(scene.composition.frame_count())
-                                .map_err(|error| motion_core::Error::Parameters(Box::new(error)))?,
-                            rate,
-                        );
-                        let build = scene.definition.build_scene;
-                        let source = motion_core::authoring::Scene::with_duration(
-                            move |context: &motion_core::SceneContext<'_>| build(context),
-                            duration.since_origin().magnitude(),
-                        );
-                        Arc::new(
-                            motion_core::Timeline::try_new(scene.definition.design_size, rate)?
-                                .try_track(|track| track.try_push(source))?
-                                .build()?,
-                        )
-                    };
+                    let mut timeline = scene.timeline;
                     let silent = matches!(
                         codec,
                         motion_encode::Codec::Gif { .. } | motion_encode::Codec::PngSequence

@@ -23,7 +23,7 @@ fn cached_frames_merge_into_runs_for_painting_and_lookup() {
     assert_eq!(merge_runs(&[]), Vec::<(u32, u32)>::new());
     assert_eq!(merge_runs(&[1, 2, 3, 7, 9, 10]), [(1, 4), (7, 8), (9, 11)]);
     let context = egui::Context::default();
-    let scene = StudioScene::new(
+    let scene = StudioScene::from_render(
         "runs",
         motion_render::Composition::new(
             16,
@@ -32,7 +32,8 @@ fn cached_frames_merge_into_runs_for_painting_and_lookup() {
         ),
         motion_core::Size::new(16.0, 8.0),
         |_| motion_core::Node::empty(),
-    );
+    )
+    .unwrap();
     let mut view = TimelineView::new(
         &scene,
         &context,

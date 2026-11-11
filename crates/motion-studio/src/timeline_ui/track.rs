@@ -52,7 +52,7 @@ impl StudioApp {
         .max(1.0) as u32;
         let colors = theme::palette_for(ui);
         let rows = self.inspection.timeline_view.tracks.len();
-        let has_audio = self.scene.definition.audio_timeline.is_some()
+        let has_audio = !self.scene.timeline.soundtrack().clips().is_empty()
             && !matches!(
                 self.inspection.timeline_view
                     .waveform_result
@@ -232,11 +232,7 @@ impl StudioApp {
                 painter.with_clip_rect(rect).text(
                     rect.left_center() + egui::vec2(8.0, 0.0),
                     egui::Align2::LEFT_CENTER,
-                    if self.inspection.timeline_view.single_scene {
-                        "Scene".to_string()
-                    } else {
-                        format!("Clip {id}")
-                    },
+                    format!("Clip {id}"),
                     egui::FontId::proportional(11.5),
                     Color32::WHITE,
                 );

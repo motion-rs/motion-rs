@@ -82,49 +82,6 @@ impl AudioPreview {
         })
     }
 
-    pub(crate) fn start_at_rate(
-        &mut self,
-        settings: &AudioForm,
-        rate: motion_core::FrameRate,
-        frames: u32,
-        position: u32,
-    ) -> io::Result<()> {
-        self.stop();
-        if position >= frames {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "Audio preview frame is out of range",
-            ));
-        }
-        let options = settings.apply(AudioOptions::default())?;
-        if options.audio_clips().is_empty() {
-            return Ok(());
-        }
-        let total = sample_at_frame(frames, rate);
-        let start = sample_at_frame(position, rate);
-        let shared = Arc::new(Shared::default());
-        let request = Request {
-            clips: options.audio_clips().to_vec(),
-            native: None,
-            start,
-            total,
-            shared: shared.clone(),
-        };
-        self.session = Some(Session {
-            shared,
-            start,
-            length: total - start,
-        });
-        let mut mailbox = self
-            .inbox
-            .0
-            .lock()
-            .unwrap_or_else(|error| error.into_inner());
-        mailbox.pending = Some(request);
-        self.inbox.1.notify_one();
-        Ok(())
-    }
-
     pub(crate) fn start_timeline(
         &mut self,
         settings: &AudioForm,

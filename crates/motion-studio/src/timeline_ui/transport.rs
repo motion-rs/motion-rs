@@ -191,14 +191,12 @@ impl StudioApp {
                                 .desired_width(180.0),
                         );
                     }
-                    if let Some(timeline) = &self.scene.definition.audio_timeline {
-                        let master = timeline.soundtrack().master();
-                        if let Some(normalize) = master.normalize {
-                            ui.label(format!("Target: {:.1} LUFS", normalize.target_lufs));
-                        }
-                        if let Some(limiter) = master.limiter {
-                            ui.label(format!("Limiter: {:.1} dBTP", limiter.ceiling_db));
-                        }
+                    let master = self.scene.timeline.soundtrack().master();
+                    if let Some(normalize) = master.normalize {
+                        ui.label(format!("Target: {:.1} LUFS", normalize.target_lufs));
+                    }
+                    if let Some(limiter) = master.limiter {
+                        ui.label(format!("Limiter: {:.1} dBTP", limiter.ceiling_db));
                     }
                     if let Some(error) = &overview.analysis_error {
                         ui.colored_label(colors.error, error);

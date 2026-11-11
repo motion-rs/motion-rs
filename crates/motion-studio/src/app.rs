@@ -36,7 +36,6 @@ mod state;
 mod tests;
 mod workers;
 
-pub(crate) use scene::SceneDefinition;
 pub use scene::StudioScene;
 pub(crate) use state::{DiagnosticsState, ExportState, InspectorState, PlaybackState};
 
@@ -86,7 +85,7 @@ pub(crate) struct StudioApp {
 type TextureRegistrar = dyn Fn(&wgpu::Texture) -> egui::TextureId;
 
 /// Opens the Studio on the main thread. The selected backend applies to
-/// preview and export. Explicit preview_only registrations opt out of export.
+/// preview and export.
 /// The UI itself is drawn by eframe, not by the scene renderer.
 ///
 /// Blocks in the event loop until the window closes. Preview coalesces seek
@@ -111,17 +110,24 @@ type TextureRegistrar = dyn Fn(&wgpu::Texture) -> egui::TextureId;
 /// use motion_render::{Composition, RenderPrepare, RenderOptions, Renderer, render_still};
 /// use motion_studio::{self as studio, StudioScene};
 /// # fn main() -> motion_core::Result {
+/// let timeline = Timeline::try_new(Size::new(640.0, 360.0), fps!(30))?
+///     .try_track(|track| {
+///         track.try_push(
+///             (|context: &SceneContext<'_>| {
+///                 Node::from(
+///                     Rect::new(20.0, 40.0, 20.0 + 400.0 * context.progress(), 52.0)
+///                         .fill(Color::rgb(20, 150, 125)),
+///                 )
+///             })
+///             .with_duration(3.seconds()),
+///         )
+///     })?
+///     .build()?;
 /// studio::run(StudioScene::new(
 ///     "Study",
 ///     Composition::new(640, 360, motion_render::FrameClock::new(fps!(30), 90)),
-///     Size::new(640.0, 360.0),
-///     |context| {
-///         Node::from(
-///             Rect::new(20.0, 40.0, 20.0 + 400.0 * context.progress(), 52.0)
-///                 .fill(Color::rgb(20, 150, 125)),
-///         )
-///     },
-/// ))
+///     timeline,
+/// )?)
 /// # }
 /// ```
 pub fn run(scene: StudioScene) -> Result {
@@ -153,42 +159,37 @@ pub(crate) fn validate_scene(scene: &StudioScene) -> Result<StudioClock> {
         );
     }
     motion_core::PixelSize::new(frame.width() as u32, frame.height() as u32)
-        .mapping(scene.definition.design_size)?;
+        .mapping(scene.timeline.size())?;
     Ok(frame)
 }
 
-/// Frame-boundary alignment notes of a scene's audio timeline.
+/// Frame-boundary alignment notes of a scene's timeline.
 pub(crate) fn alignment_diagnostics(
     scene: &StudioScene,
     clock: StudioClock,
 ) -> std::collections::VecDeque<(u32, String)> {
-    scene.definition.audio_timeline.as_ref().map_or_else(
-        std::collections::VecDeque::new,
-        |timeline| {
-            timeline
-                .diagnostics()
-                .boundary_adjustments()
-                .take(128)
-                .map(|adjustment| {
-                    let frame = adjustment
-                        .frame
-                        .clamp(0, i64::from(clock.frames.saturating_sub(1)))
-                        as u32;
-                    (
-                        frame,
-                        format!(
-                            "Frame-boundary alignment: track {:?}, clip {:?}, {:?}: {:?} -> {:?}",
-                            adjustment.track,
-                            adjustment.clip,
-                            adjustment.edge,
-                            adjustment.requested,
-                            adjustment.aligned
-                        ),
-                    )
-                })
-                .collect()
-        },
-    )
+    scene
+        .timeline
+        .diagnostics()
+        .boundary_adjustments()
+        .take(128)
+        .map(|adjustment| {
+            let frame = adjustment
+                .frame
+                .clamp(0, i64::from(clock.frames.saturating_sub(1))) as u32;
+            (
+                frame,
+                format!(
+                    "Frame-boundary alignment: track {:?}, clip {:?}, {:?}: {:?} -> {:?}",
+                    adjustment.track,
+                    adjustment.clip,
+                    adjustment.edge,
+                    adjustment.requested,
+                    adjustment.aligned
+                ),
+            )
+        })
+        .collect()
 }
 
 impl StudioApp {

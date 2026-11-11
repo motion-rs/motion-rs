@@ -1,7 +1,7 @@
 //! Playback clock and transport state, and the studio logic that advances frames and keeps
 //! audio preview in sync.
 
-use crate::app::{SceneDefinition, StudioApp};
+use crate::app::StudioApp;
 use crate::audio::preview::{self as playback, AudioStatus};
 use eframe::egui;
 use motion_core::Result;
@@ -129,22 +129,16 @@ impl StudioApp {
             self.audio_preview.stop();
             return;
         }
-        let result = match &self.scene.definition {
-            SceneDefinition {
-                audio_timeline: Some(timeline),
-                ..
-            } => self.audio_preview.start_timeline(
-                &self.audio,
-                timeline.clone(),
-                self.playback.transport.frame,
-            ),
-            SceneDefinition { .. } => self.audio_preview.start_at_rate(
-                &self.audio,
-                self.clock.rate,
-                self.clock.frame_count(),
-                self.playback.transport.frame,
-            ),
-        };
+        let form_has_audio = self.audio.enabled && self.audio.clips.iter().any(|clip| clip.enabled);
+        if self.scene.timeline.soundtrack().clips().is_empty() && !form_has_audio {
+            self.audio_preview.stop();
+            return;
+        }
+        let result = self.audio_preview.start_timeline(
+            &self.audio,
+            self.scene.timeline.clone(),
+            self.playback.transport.frame,
+        );
         if let Err(error) = result {
             self.playback.audio_error = Some(error.to_string());
             self.pause();

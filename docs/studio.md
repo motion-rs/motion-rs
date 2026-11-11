@@ -56,7 +56,7 @@ The Diagnostics tab retains at most 128 entries and seeks to the selected frame;
 matching occurrence paths are highlighted when the inspection reply arrives.
 
 The resizable timeline draws Timeline tracks, clip activation ranges and incoming
-transition overlaps; a closure scene has one synthetic clip. The ruler adapts its
+transition overlaps. The ruler adapts its
 tick spacing and shows frames or minutes:seconds, and the transport shows a
 `MM:SS.mmm` timecode. The playhead is a red line with a flag; hovering the ruler shows
 the time, frame and a thumbnail. In/Out controls share the export and loop interval,
@@ -218,10 +218,9 @@ snapshot of size/range/backend/shutter/codec/audio settings. Queued tasks can be
 removed; the current task can be cancelled. Up to 64 completion records retain
 typed-error messages and an Open folder action. Size, range,
 backend and shutter settings also apply when streamed file audio is configured.
-Selected ranges preserve clip-local audio fades. PNG ignores audio. Preview-only
-registrations reject export before starting work.
+Selected ranges preserve clip-local audio fades. PNG ignores audio.
 
-The Export form keeps only transient values (size, range, backend, shutter, codec choice); one conversion turns it into the encode `ExportOptions` that `export` consumes. A timeline scene registers a single `Timeline` that preview and export share, with audio files resolved by the mixer.
+The Export form keeps only transient values (size, range, backend, shutter, codec choice); one conversion turns it into the encode `ExportOptions` that `export` consumes. A `StudioScene` holds a single `Timeline` that preview, audio playback and export share, with audio files resolved by the mixer.
 
 Exports run separately, retain typed errors and observe cooperative cancellation.
 Closing discards queued work, cancels the active job and waits for cleanup. Existing output

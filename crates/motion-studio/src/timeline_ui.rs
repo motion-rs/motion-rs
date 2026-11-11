@@ -25,7 +25,6 @@ const MIN_TICK_SPACING: f32 = 72.0;
 
 pub(crate) struct TimelineView {
     tracks: Vec<Vec<(u32, u32, usize, u32)>>,
-    single_scene: bool,
     cache_runs: Vec<(u32, u32)>,
     pub cues: Vec<(u32, String)>,
     pub cue_name_draft: String,
@@ -43,38 +42,31 @@ impl TimelineView {
     ) -> Self {
         let rate = clock.rate;
         let tracks = scene
-            .definition
-            .audio_timeline
-            .as_ref()
-            .map(|timeline| {
-                timeline
-                    .tracks()
+            .timeline
+            .tracks()
+            .iter()
+            .map(|track| {
+                track
+                    .clips()
                     .iter()
-                    .map(|track| {
-                        track
-                            .clips()
-                            .iter()
-                            .map(|clip| {
-                                (
-                                    clip.start().to_frame(rate) as u32,
-                                    clip.end().to_frame(rate) as u32,
-                                    clip.id(),
-                                    clip.transition_in()
-                                        .map_or(0, |(_, duration)| duration.to_frame(rate) as u32),
-                                )
-                            })
-                            .collect()
+                    .map(|clip| {
+                        (
+                            clip.start().to_frame(rate) as u32,
+                            clip.end().to_frame(rate) as u32,
+                            clip.id(),
+                            clip.transition_in()
+                                .map_or(0, |(_, duration)| duration.to_frame(rate) as u32),
+                        )
                     })
                     .collect()
             })
-            .unwrap_or_else(|| vec![vec![(0, clock.frames, 0, 0)]]);
+            .collect();
         let waveform_result = Arc::new(Mutex::new(None));
-        if let Some(timeline) = scene.definition.audio_timeline.clone() {
-            waveform::spawn_analysis(&waveform_result, timeline, context);
+        if !scene.timeline.soundtrack().clips().is_empty() {
+            waveform::spawn_analysis(&waveform_result, scene.timeline.clone(), context);
         }
         Self {
             tracks,
-            single_scene: scene.definition.audio_timeline.is_none(),
             cache_runs: Vec::new(),
             cues: Vec::new(),
             cue_name_draft: "Cue".into(),
@@ -160,7 +152,7 @@ impl StudioApp {
     pub fn timeline_panel(&mut self, ui: &mut egui::Ui) {
         let context = &ui.ctx().clone();
         let rows = self.inspection.timeline_view.tracks.len() as f32;
-        let audio = if self.scene.definition.audio_timeline.is_some() {
+        let audio = if !self.scene.timeline.soundtrack().clips().is_empty() {
             WAVE_HEIGHT
         } else {
             0.0

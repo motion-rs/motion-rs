@@ -8,7 +8,7 @@ use motion_render::Composition;
 fn loop_shortcut_preserves_transport_and_respects_keyboard_focus() -> motion_core::Result<()> {
     let context = egui::Context::default();
     let creation = eframe::CreationContext::_new_kittest(context.clone());
-    let scene = StudioScene::new(
+    let scene = StudioScene::from_render(
         "Loop shortcut",
         Composition::new(
             16,
@@ -17,7 +17,8 @@ fn loop_shortcut_preserves_transport_and_respects_keyboard_focus() -> motion_cor
         ),
         Size::new(16.0, 8.0),
         |_| Node::empty(),
-    );
+    )
+    .unwrap();
     let clock = StudioClock::new(&scene.composition)?;
     let mut app = StudioApp::with_persistence(&creation, scene, clock, false)?;
     let loop_input = || egui::RawInput {
@@ -74,7 +75,7 @@ fn scene_status_and_sidebar_use_window_edges_without_preview_heading() -> motion
     for (width, height) in [(900.0, 620.0), (1240.0, 800.0), (1440.0, 900.0)] {
         let context = egui::Context::default();
         let creation = eframe::CreationContext::_new_kittest(context.clone());
-        let scene = StudioScene::new(
+        let scene = StudioScene::from_render(
             "scene",
             Composition::new(
                 16,
@@ -83,7 +84,8 @@ fn scene_status_and_sidebar_use_window_edges_without_preview_heading() -> motion
             ),
             Size::new(16.0, 8.0),
             |_| Node::empty(),
-        );
+        )
+        .unwrap();
         let clock = StudioClock::new(&scene.composition)?;
         let mut app = StudioApp::with_persistence(&creation, scene, clock, false)?;
         app.observations.backend_status = "GPU (Apple M3)".into();
@@ -163,7 +165,7 @@ fn timeline_boundary_warnings_are_visible_without_rendering_or_devices() -> moti
         })
         .build()?;
     assert!(!timeline.diagnostics().is_empty());
-    let scene = StudioScene::timeline(
+    let scene = StudioScene::new(
         "Alignment",
         Composition::new(
             16,
@@ -192,7 +194,7 @@ fn single_scene_workbench_layout_and_queue_are_bounded_without_devices() -> moti
     for (width, height) in [(900.0, 620.0), (1240.0, 800.0), (1440.0, 900.0)] {
         let context = egui::Context::default();
         let creation = eframe::CreationContext::_new_kittest(context.clone());
-        let scene = StudioScene::new(
+        let scene = StudioScene::from_render(
             "Single scene with a long descriptive title",
             Composition::new(
                 16,
@@ -205,7 +207,8 @@ fn single_scene_workbench_layout_and_queue_are_bounded_without_devices() -> moti
                     motion_core::Rect::new(0.0, 0.0, 8.0, 8.0).fill(motion_core::Color::WHITE),
                 )
             },
-        );
+        )
+        .unwrap();
         let clock = StudioClock::new(&scene.composition)?;
         let mut app = StudioApp::with_persistence(&creation, scene, clock, false)?;
         app.exports.export_destination = "fixture.mp4".into();
@@ -328,9 +331,9 @@ fn rational_transport_uses_wall_time_without_integer_fps_rounding() -> motion_co
 }
 
 #[test]
-fn invalid_design_dimensions_fail_before_window_or_evaluation() {
+fn invalid_design_dimensions_fail_at_registration_before_evaluation() {
     for size in [Size::new(0.0, 8.0), Size::new(f64::NAN, 8.0)] {
-        let scene = StudioScene::preview_only(
+        let error = StudioScene::from_render(
             "Invalid geometry",
             Composition::new(
                 16,
@@ -339,13 +342,10 @@ fn invalid_design_dimensions_fail_before_window_or_evaluation() {
             ),
             size,
             |_| panic!("invalid configuration must not evaluate"),
-        );
-        let error = run(scene).unwrap_err();
-        assert!(
-            error
-                .downcast_ref::<motion_core::ValidationError>()
-                .is_some()
-        );
+        )
+        .err()
+        .expect("invalid design size must be rejected");
+        assert_eq!(error.kind(), motion_core::ErrorKind::Timeline);
     }
 }
 
@@ -384,7 +384,7 @@ fn preview_keeps_aspect_ratio_in_wide_and_tall_panels() {
 fn play_holds_the_clock_until_its_first_frame_is_answered() -> motion_core::Result<()> {
     let context = egui::Context::default();
     let creation = eframe::CreationContext::_new_kittest(context);
-    let scene = StudioScene::new(
+    let scene = StudioScene::from_render(
         "Play start",
         Composition::new(
             16,
@@ -393,7 +393,8 @@ fn play_holds_the_clock_until_its_first_frame_is_answered() -> motion_core::Resu
         ),
         Size::new(16.0, 8.0),
         |_| Node::empty(),
-    );
+    )
+    .unwrap();
     let clock = StudioClock::new(&scene.composition)?;
     let mut app = StudioApp::with_persistence(&creation, scene, clock, false)?;
     app.playback.preview_muted = true;
@@ -444,7 +445,7 @@ fn reloadable(path: &std::path::Path) -> StudioScene {
                 format!("Not a frame count: {text}"),
             )
         })?;
-        Ok(StudioScene::new(
+        Ok(StudioScene::from_render(
             "Reloadable",
             Composition::new(
                 16,
@@ -453,7 +454,8 @@ fn reloadable(path: &std::path::Path) -> StudioScene {
             ),
             Size::new(16.0, 8.0),
             |_| Node::empty(),
-        ))
+        )
+        .unwrap())
     };
     load().unwrap().reloadable([path.to_owned()], load)
 }
@@ -559,7 +561,7 @@ fn failed_reloads_keep_the_previous_scene_and_report_the_error() -> motion_core:
 fn scenes_without_a_reload_source_are_never_watched() -> motion_core::Result<()> {
     let context = egui::Context::default();
     let creation = eframe::CreationContext::_new_kittest(context.clone());
-    let scene = StudioScene::new(
+    let scene = StudioScene::from_render(
         "Static",
         Composition::new(
             16,
@@ -568,7 +570,8 @@ fn scenes_without_a_reload_source_are_never_watched() -> motion_core::Result<()>
         ),
         Size::new(16.0, 8.0),
         |_| Node::empty(),
-    );
+    )
+    .unwrap();
     let clock = StudioClock::new(&scene.composition)?;
     let mut app = StudioApp::with_persistence(&creation, scene, clock, false)?;
     context

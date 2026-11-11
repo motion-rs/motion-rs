@@ -16,7 +16,7 @@ fn main() -> motion::Result {
         )),
     );
     let film = document.compile(&CompileOptions::default())?;
-    motion::studio::run(motion::studio::StudioScene::timeline(
+    motion::studio::run(motion::studio::StudioScene::new(
         "timeline",
         Composition::new(
             640,

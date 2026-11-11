@@ -277,7 +277,7 @@ fn studio_scenes_for_documents_are_reloadable() -> motion::Result {
     );
     let project = Project::new("motion").document("film", &path).build()?;
     let scene = project.studio_scene("film")?;
-    assert!(scene.supports_video_export() && scene.is_reloadable());
+    assert!(scene.is_reloadable());
     let code = Project::new("p")
         .timeline("code", || {
             Timeline::new(Size::new(4.0, 4.0), motion::fps!(2))

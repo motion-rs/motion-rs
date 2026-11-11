@@ -1,5 +1,4 @@
 use super::*;
-use crate::app::SceneDefinition;
 use motion_content::{AssetsExt, FontFace, Image, Text};
 use motion_core::Shape;
 
@@ -7,7 +6,7 @@ use motion_core::Shape;
 #[ignore = "requires native FFmpeg codecs; correctness only, no window or audio device"]
 fn studio_all_codecs_export_and_retain_transactions() -> motion_core::Result<()> {
     let directory = tempfile::tempdir()?;
-    let scene = StudioScene::new(
+    let scene = StudioScene::from_render(
         "Codecs",
         motion_render::Composition::new(
             32,
@@ -21,7 +20,8 @@ fn studio_all_codecs_export_and_retain_transactions() -> motion_core::Result<()>
                     .fill(motion_core::Color::WHITE),
             )
         },
-    );
+    )
+    .unwrap();
     let (wake, updates) = std::sync::mpsc::channel();
     let context = Context::default();
     context.set_request_repaint_callback(move |_| {
@@ -154,7 +154,7 @@ fn shared_texture_preview_and_automatic_export_loss_preserve_transactions()
 -> motion_core::Result<()> {
     use motion_core::NodeModifiers;
     let context = crate::GpuContext::new()?;
-    let scene = StudioScene::new(
+    let scene = StudioScene::from_render(
         "Shared",
         motion_render::Composition::new(
             16,
@@ -169,7 +169,8 @@ fn shared_texture_preview_and_automatic_export_loss_preserve_transactions()
             )
             .opacity(0.5)
         },
-    );
+    )
+    .unwrap();
     let (wake, updates) = std::sync::mpsc::channel();
     let egui = Context::default();
     egui.set_request_repaint_callback(move |_| {
@@ -237,7 +238,7 @@ fn scaled_transparent_preview_is_rational_and_cached_without_devices() -> motion
     use std::sync::atomic::{AtomicUsize, Ordering};
     let calls = Arc::new(AtomicUsize::new(0));
     let count = calls.clone();
-    let scene = StudioScene::new(
+    let scene = StudioScene::from_render(
         "Fractional",
         motion_render::Composition::new(
             16,
@@ -259,7 +260,8 @@ fn scaled_transparent_preview_is_rational_and_cached_without_devices() -> motion
             )
             .opacity(0.5)
         },
-    );
+    )
+    .unwrap();
     let (wake, updates) = std::sync::mpsc::channel();
     let context = Context::default();
     context.set_request_repaint_callback(move |_| {
@@ -302,7 +304,7 @@ fn automatic_preview_rejects_gpu_plan_without_rejecting_cpu_frame() -> motion_co
         max_bytes: 512 * 1024,
         ..motion_core::RasterLimits::default()
     };
-    let scene = StudioScene::preview_only(
+    let scene = StudioScene::from_render(
         "GPU admission",
         motion_render::Composition::new(
             64,
@@ -325,7 +327,8 @@ fn automatic_preview_rejects_gpu_plan_without_rejecting_cpu_frame() -> motion_co
                 )
             }))
         },
-    );
+    )
+    .unwrap();
     let settings = PreviewSettings {
         backend: Some(motion_render::BackendPreference::automatic()),
         ..PreviewSettings::default()
@@ -365,27 +368,26 @@ fn automatic_preview_rejects_gpu_plan_without_rejecting_cpu_frame() -> motion_co
             .pixels,
         expected.image.pixels
     );
-    let build = scene.definition.build_scene.clone();
-    let changing = StudioScene {
-        composition: scene
+    let timeline = scene.timeline.clone();
+    let changing = StudioScene::from_render(
+        "changing",
+        scene
             .composition
             .clone()
             .with_clock(motion_render::FrameClock::new(
                 scene.composition.frame_rate(),
                 2,
             )),
-        definition: SceneDefinition {
-            build_scene: Arc::new(move |sample| {
-                if sample.time() == motion_core::Time::ZERO {
-                    motion_core::Node::empty()
-                } else {
-                    build(sample)
-                }
-            }),
-            ..scene.definition.clone()
+        scene.timeline.size(),
+        move |sample| {
+            if sample.time() == motion_core::Time::ZERO {
+                motion_core::Node::empty()
+            } else {
+                timeline.render(sample)
+            }
         },
-        ..scene.clone()
-    };
+    )
+    .unwrap();
     let mut selected = PreviewRenderer::new(&changing, Renderer::Cpu)?;
     let first = selected.preview(&changing, 0, settings)?;
     assert!(first.texture.is_some(), "{}", first.backend);
@@ -506,7 +508,7 @@ fn preview_cache_retains_long_cycles_and_evicts_by_bytes() -> motion_core::Resul
     for (bytes, expected_calls) in [(0, 96), (bytes, 96), (48 * bytes, 48)] {
         let calls = Arc::new(AtomicUsize::new(0));
         let observed = calls.clone();
-        let scene = StudioScene::preview_only(
+        let scene = StudioScene::from_render(
             "cache",
             motion_render::Composition::new(
                 8,
@@ -518,7 +520,8 @@ fn preview_cache_retains_long_cycles_and_evicts_by_bytes() -> motion_core::Resul
                 observed.fetch_add(1, Ordering::SeqCst);
                 motion_core::Node::from(context.bounds().fill(motion_core::Color::WHITE))
             },
-        );
+        )
+        .unwrap();
         let (wake, updates) = std::sync::mpsc::channel();
         let context = Context::default();
         context.set_request_repaint_callback(move |_| {
@@ -555,7 +558,7 @@ fn preview_cache_retains_long_cycles_and_evicts_by_bytes() -> motion_core::Resul
 #[test]
 fn unified_png_is_transactional_and_range_errors_do_not_evaluate() -> motion_core::Result<()> {
     let directory = tempfile::tempdir()?;
-    let scene = StudioScene::new(
+    let scene = StudioScene::from_render(
         "PNG",
         motion_render::Composition::new(
             8,
@@ -568,7 +571,8 @@ fn unified_png_is_transactional_and_range_errors_do_not_evaluate() -> motion_cor
                 motion_core::Rect::new(0.0, 0.0, 4.0, 4.0).fill(motion_core::Color::WHITE),
             )
         },
-    );
+    )
+    .unwrap();
     let (wake, updates) = std::sync::mpsc::channel();
     let context = Context::default();
     context.set_request_repaint_callback(move |_| {
@@ -603,13 +607,13 @@ fn unified_png_is_transactional_and_range_errors_do_not_evaluate() -> motion_cor
     assert!(image.pixels().any(|pixel| pixel.0[3] == 0));
     draft.png = false;
     draft.range = (2, 1);
-    let mut invalid = scene;
-    invalid.definition = SceneDefinition {
-        design_size: motion_core::Size::new(8.0, 4.0),
-        build_scene: Arc::new(|_| panic!("invalid range must precede callback")),
-        video_export: true,
-        audio_timeline: None,
-    };
+    let invalid = StudioScene::from_render(
+        "invalid",
+        scene.composition.clone(),
+        motion_core::Size::new(8.0, 4.0),
+        |_| panic!("invalid range must precede callback"),
+    )
+    .unwrap();
     let job = ExportJob::start(
         invalid,
         directory.path().join("bad.mp4"),
@@ -628,7 +632,7 @@ fn unified_png_is_transactional_and_range_errors_do_not_evaluate() -> motion_cor
 #[test]
 fn playback_prefetch_is_bounded_cached_and_never_published() -> motion_core::Result<()> {
     let (built, builds) = std::sync::mpsc::channel();
-    let scene = StudioScene::preview_only(
+    let scene = StudioScene::from_render(
         "prefetch",
         motion_render::Composition::new(
             8,
@@ -642,7 +646,8 @@ fn playback_prefetch_is_bounded_cached_and_never_published() -> motion_core::Res
                 .unwrap();
             motion_core::Node::from(context.bounds().fill(motion_core::Color::WHITE))
         },
-    );
+    )
+    .unwrap();
     let (wake, updates) = std::sync::mpsc::channel();
     let context = Context::default();
     context.set_request_repaint_callback(move |_| {
@@ -680,7 +685,7 @@ fn playback_seek_preempts_inflight_prefetch_without_stale_reply() -> motion_core
     let gate = Mutex::new(gate);
     let observed = Arc::new(Mutex::new(Vec::new()));
     let builds = observed.clone();
-    let scene = StudioScene::preview_only(
+    let scene = StudioScene::from_render(
         "seek",
         motion_render::Composition::new(
             8,
@@ -697,7 +702,8 @@ fn playback_seek_preempts_inflight_prefetch_without_stale_reply() -> motion_core
             }
             motion_core::Node::from(context.bounds().fill(motion_core::Color::WHITE))
         },
-    );
+    )
+    .unwrap();
     let (wake, updates) = std::sync::mpsc::channel();
     let context = Context::default();
     context.set_request_repaint_callback(move |_| {
@@ -729,7 +735,7 @@ fn playback_seek_preempts_inflight_prefetch_without_stale_reply() -> motion_core
 #[test]
 fn preview_missing_asset_keeps_magenta_frame_and_typed_diagnostic() -> motion_core::Result {
     let directory = tempfile::tempdir()?;
-    let scene = StudioScene::preview_only(
+    let scene = StudioScene::from_render(
         "Resource failure",
         motion_render::Composition::new(
             8,
@@ -742,7 +748,8 @@ fn preview_missing_asset_keeps_magenta_frame_and_typed_diagnostic() -> motion_co
         )?,
         motion_core::Size::new(8.0, 8.0),
         |_| motion_core::Node::from(Image::open("missing.png").size(8.0, 8.0)),
-    );
+    )
+    .unwrap();
     let (wake, updates) = std::sync::mpsc::channel();
     let context = Context::default();
     context.set_request_repaint_callback(move |_| {
@@ -774,7 +781,7 @@ fn export_no_clobber_uses_branch_before_evaluation() -> motion_core::Result {
     let directory = tempfile::tempdir()?;
     let destination = directory.path().join("existing.mp4");
     std::fs::write(&destination, b"committed destination")?;
-    let scene = StudioScene::new(
+    let scene = StudioScene::from_render(
         "export",
         motion_render::Composition::new(
             8,
@@ -783,8 +790,8 @@ fn export_no_clobber_uses_branch_before_evaluation() -> motion_core::Result {
         ),
         motion_core::Size::new(8.0, 4.0),
         |_| panic!("No-clobber must precede scene evaluation"),
-    );
-    assert!(scene.supports_video_export());
+    )
+    .unwrap();
     let (wake, updates) = std::sync::mpsc::channel();
     let context = Context::default();
     context.set_request_repaint_callback(move |_| {
@@ -852,7 +859,7 @@ fn timeline_worker_keeps_preview_silent_and_exports_its_mix() -> motion_core::Re
             .try_audio(motion_core::AudioClip::source(Tone(calls.clone())))?
             .try_duration(100.milliseconds())?
             .build()?;
-    let scene = StudioScene::timeline(
+    let scene = StudioScene::new(
         "sound",
         motion_render::Composition::new(
             8,
@@ -916,7 +923,7 @@ fn timeline_worker_keeps_preview_silent_and_exports_its_mix() -> motion_core::Re
 fn export_missing_gpu_fails_before_evaluation_or_files() -> motion_core::Result {
     let directory = tempfile::tempdir()?;
     let destination = directory.path().join("native.mp4");
-    let scene = StudioScene::new(
+    let scene = StudioScene::from_render(
         "Native GPU unavailable",
         motion_render::Composition::new(
             8,
@@ -925,7 +932,8 @@ fn export_missing_gpu_fails_before_evaluation_or_files() -> motion_core::Result 
         ),
         motion_core::Size::new(8.0, 4.0),
         |_| panic!("Missing GPU feature must precede scene evaluation"),
-    );
+    )
+    .unwrap();
     let (wake, updates) = std::sync::mpsc::channel();
     let context = Context::default();
     context.set_request_repaint_callback(move |_| {
@@ -951,7 +959,7 @@ fn export_missing_gpu_fails_before_evaluation_or_files() -> motion_core::Result 
 fn preview_session_uses_linear_cpu_without_fonts() -> motion_core::Result {
     use motion_core::{Color, Node, NodeModifiers, Rect, Size};
     use motion_render::Composition;
-    let scene = StudioScene::preview_only(
+    let scene = StudioScene::from_render(
         "geometry",
         Composition::new(
             8,
@@ -961,7 +969,8 @@ fn preview_session_uses_linear_cpu_without_fonts() -> motion_core::Result {
         .with_options(motion_render::RenderOptions::default().background(Color::BLACK))?,
         Size::new(8.0, 4.0),
         |_| Node::from(Rect::new(0.0, 0.0, 8.0, 4.0).fill(Color::WHITE)).opacity(0.5),
-    );
+    )
+    .unwrap();
     let mut session = PreviewRenderer::new(&scene, Renderer::Cpu)?;
     let snapshot = session.render_frame(&scene, 0)?;
     assert_eq!(
@@ -1020,7 +1029,7 @@ fn preview_honors_global_shutter_and_replays_without_fonts() -> motion_core::Res
                 samples: 4,
             }),
     )?;
-    let scene = StudioScene::preview_only(
+    let scene = StudioScene::from_render(
         "shutter",
         composition,
         motion_core::Size::new(8.0, 4.0),
@@ -1032,7 +1041,8 @@ fn preview_honors_global_shutter_and_replays_without_fonts() -> motion_core::Res
                     .fill(motion_core::Color::WHITE.with_alpha(0.5)),
             )
         },
-    );
+    )
+    .unwrap();
     let mut renderer = PreviewRenderer::new(&scene, Renderer::Cpu)?;
     let first = renderer.render_frame(&scene, 1)?;
     assert_eq!(calls.load(std::sync::atomic::Ordering::Relaxed), 4);
@@ -1067,7 +1077,7 @@ pub(super) fn wait_for_preview(
 fn worker_scene(builds: Arc<std::sync::atomic::AtomicUsize>) -> StudioScene {
     use motion_core::{Color, Node, NodeModifiers, Rect, Size};
     use motion_render::Composition;
-    StudioScene::preview_only(
+    StudioScene::from_render(
         "worker",
         Composition::new(
             8,
@@ -1088,6 +1098,7 @@ fn worker_scene(builds: Arc<std::sync::atomic::AtomicUsize>) -> StudioScene {
             Node::from(Rect::new(left, 0.0, left + 2.0, 4.0).fill(*paint)).opacity(0.5)
         },
     )
+    .unwrap()
 }
 
 #[test]
@@ -1152,52 +1163,6 @@ fn preview_worker_seeks_and_recovers_with_session_cache() -> motion_core::Result
         );
     }
     assert_eq!(builds.load(Ordering::SeqCst), 2);
-    Ok(())
-}
-
-#[test]
-fn preview_export_is_rejected_before_builder_or_file_access() -> motion_core::Result {
-    use motion_core::{Node, Size};
-    use motion_render::Composition;
-    let exportable = StudioScene::new(
-        "Exportable",
-        Composition::new(
-            8,
-            4,
-            motion_render::FrameClock::new(motion_core::fps!(30), 150),
-        ),
-        Size::new(8.0, 4.0),
-        |_| Node::empty(),
-    );
-    assert!(exportable.supports_video_export());
-    let scene = StudioScene::preview_only(
-        "Native",
-        Composition::new(
-            8,
-            4,
-            motion_render::FrameClock::new(motion_core::fps!(30), 150),
-        ),
-        Size::new(8.0, 4.0),
-        |_| panic!("export must not evaluate scene"),
-    );
-    assert!(!scene.supports_video_export());
-    let directory = tempfile::tempdir()?;
-    let destination = directory.path().join("preview.mp4");
-    std::fs::write(&destination, b"existing destination")?;
-    for renderer in [Renderer::Cpu, Renderer::Gpu] {
-        let error = start_export_job(
-            scene.clone(),
-            renderer,
-            destination.clone(),
-            AudioOptions::default(),
-            Context::default(),
-        )
-        .err()
-        .expect("export must fail synchronously");
-        assert_eq!(error.kind(), io::ErrorKind::Unsupported);
-    }
-    assert_eq!(std::fs::read(&destination)?, b"existing destination");
-    assert_eq!(std::fs::read_dir(directory.path())?.count(), 1);
     Ok(())
 }
 
@@ -1319,12 +1284,13 @@ fn worker_export_acceptance(renderer: Renderer) -> motion_core::Result {
             ),
         ])
     }
-    let scene = StudioScene::new(
+    let scene = StudioScene::from_render(
         "acceptance",
         composition.clone(),
         Size::new(96.0, 48.0),
         build,
-    );
+    )
+    .unwrap();
     let (wake, updates) = std::sync::mpsc::channel();
     let context = Context::default();
     context.set_request_repaint_callback(move |_| {
@@ -1419,7 +1385,7 @@ fn worker_export_acceptance(renderer: Renderer) -> motion_core::Result {
     let gate = Arc::new((Mutex::new(false), Condvar::new()));
     let worker_gate = gate.clone();
     let (reached, waiting) = std::sync::mpsc::channel();
-    let cancellable = StudioScene::new(
+    let cancellable = StudioScene::from_render(
         "cancel",
         composition.clone(),
         Size::new(96.0, 48.0),
@@ -1441,7 +1407,8 @@ fn worker_export_acceptance(renderer: Renderer) -> motion_core::Result {
             }
             build(context)
         },
-    );
+    )
+    .unwrap();
     let cancelled = start_export_job(
         cancellable,
         renderer,
@@ -1463,7 +1430,7 @@ fn worker_export_acceptance(renderer: Renderer) -> motion_core::Result {
     ));
     assert_eq!(std::fs::read(&destination)?, committed);
     for panic in [false, true] {
-        let failing = StudioScene::new(
+        let failing = StudioScene::from_render(
             "failure",
             composition.clone(),
             Size::new(96.0, 48.0),
@@ -1474,7 +1441,8 @@ fn worker_export_acceptance(renderer: Renderer) -> motion_core::Result {
                 }
                 build(context)
             },
-        );
+        )
+        .unwrap();
         let failed = start_export_job(
             failing,
             renderer,
@@ -1559,7 +1527,8 @@ fn gpu_preview_seek_export_and_cancellation_preserve_worker_contracts() -> motio
         )
     };
     let size = Size::new(96.0, 64.0);
-    let scene = StudioScene::new("GPU worker acceptance", composition.clone(), size, build);
+    let scene = StudioScene::from_render("GPU worker acceptance", composition.clone(), size, build)
+        .unwrap();
     let mut software = composition.frame_renderer(size)?;
     let mut gpu = composition
         .clone()
@@ -1635,24 +1604,26 @@ fn gpu_preview_seek_export_and_cancellation_preserve_worker_contracts() -> motio
     let gate = Arc::new((Mutex::new(false), Condvar::new()));
     let worker_gate = gate.clone();
     let (reached, waiting) = std::sync::mpsc::channel();
-    let cancellable = StudioScene::new("GPU cancellation", composition, size, move |frame| {
-        if frame.time().to_frame(frame.frame_rate()) == 2 {
-            let _result = reached.send(());
-            let (released, timeout) = worker_gate
-                .1
-                .wait_timeout_while(
-                    worker_gate.0.lock().unwrap(),
-                    Duration::from_secs(30),
-                    |released| !*released,
-                )
-                .unwrap();
-            assert!(
-                *released && !timeout.timed_out(),
-                "Cancellation gate timed out"
-            );
-        }
-        build(frame)
-    });
+    let cancellable =
+        StudioScene::from_render("GPU cancellation", composition, size, move |frame| {
+            if frame.time().to_frame(frame.frame_rate()) == 2 {
+                let _result = reached.send(());
+                let (released, timeout) = worker_gate
+                    .1
+                    .wait_timeout_while(
+                        worker_gate.0.lock().unwrap(),
+                        Duration::from_secs(30),
+                        |released| !*released,
+                    )
+                    .unwrap();
+                assert!(
+                    *released && !timeout.timed_out(),
+                    "Cancellation gate timed out"
+                );
+            }
+            build(frame)
+        })
+        .unwrap();
     let cancelled = start_export_job(
         cancellable,
         Renderer::Gpu,
@@ -1739,7 +1710,7 @@ fn audio_drafts_round_trip_and_mix_through_the_export_worker() -> motion_core::R
     context.set_request_repaint_callback(move |_| {
         let _result = wake.send(());
     });
-    let scene = StudioScene::new(
+    let scene = StudioScene::from_render(
         "Audio acceptance",
         motion_render::Composition::new(
             64,
@@ -1748,7 +1719,8 @@ fn audio_drafts_round_trip_and_mix_through_the_export_worker() -> motion_core::R
         ),
         motion_core::Size::new(64.0, 64.0),
         |_| motion_core::Node::empty(),
-    );
+    )
+    .unwrap();
     let job = start_export_job(
         scene.clone(),
         Renderer::Cpu,

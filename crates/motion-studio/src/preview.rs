@@ -246,7 +246,7 @@ impl PreviewRenderer {
                     .allow_missing_assets(true)
                     .mark_invalid_geometry(true)
             })
-            .frame_renderer(scene.definition.design_size)?;
+            .frame_renderer(scene.timeline.size())?;
         frame_renderer.enable_timings(true);
         Ok(Self {
             automatic: false,
@@ -272,7 +272,7 @@ impl PreviewRenderer {
         index: u32,
     ) -> motion_core::Result<FrameBuffer> {
         self.renderer
-            .render_frame_sampled(index, |context| (scene.definition.build_scene)(context))
+            .render_frame_sampled(index, |context| scene.timeline.render(context))
     }
 
     fn diagnostics(&self) -> Vec<Arc<motion_core::Error>> {
@@ -298,7 +298,7 @@ impl PreviewRenderer {
         settings: PreviewSettings,
     ) -> motion_core::Result<PreviewSubmission> {
         self.inspection_error = None;
-        let build = &scene.definition.build_scene;
+        let timeline = &scene.timeline;
         let original = scene.composition.output_size();
         let width = ((u64::from(original.width) * u64::from(settings.scale)) / 100).max(1) as u32;
         let height = ((u64::from(original.height) * u64::from(settings.scale)) / 100).max(1) as u32;
@@ -311,7 +311,7 @@ impl PreviewRenderer {
         let nodes = std::cell::RefCell::new(Vec::new());
         let inspection_error = std::cell::RefCell::new(None);
         let inspect_build = |context: &motion_core::SceneContext<'_>| {
-            let node = build(context);
+            let node = timeline.render(context);
             if settings.inspect {
                 let drawing = motion_core::DrawContext::default()
                     .with_quality(settings.quality)
@@ -324,7 +324,7 @@ impl PreviewRenderer {
                     .with_assets(context.assets())
                     .with_time(context.time());
                 match node.inspect_with_context(
-                    scene.definition.design_size,
+                    scene.timeline.size(),
                     motion_core::PixelSize::new(width, height),
                     motion_core::ValidationLimits::default(),
                     &drawing,
@@ -398,7 +398,7 @@ impl PreviewRenderer {
                                 .allow_missing_assets(true)
                                 .mark_invalid_geometry(true)
                         });
-                    self.renderer = cpu.frame_renderer(scene.definition.design_size)?;
+                    self.renderer = cpu.frame_renderer(scene.timeline.size())?;
                     self.admission_fallback = Some(error.to_string());
                 }
                 Err(error) => return Err(error),

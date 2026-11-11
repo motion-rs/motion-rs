@@ -16,7 +16,7 @@ pub fn particle_presets(
     for preset in Preset::ALL {
         let simulation = preset.simulation(options.clone())?.build()?;
         let design = Size::new(options.bounds.width(), options.bounds.height());
-        scenes.push(StudioScene::new(
+        scenes.push(StudioScene::from_render(
             preset.name(),
             composition.clone(),
             design,
@@ -42,7 +42,7 @@ pub fn particle_presets(
                     particles,
                 ])
             },
-        ));
+        )?);
     }
     Ok(scenes)
 }
