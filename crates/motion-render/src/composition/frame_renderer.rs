@@ -156,7 +156,7 @@ impl FrameRenderer {
         let mut output = crate::FrameBuffer::vacant();
         self.session.render(
             FrameRequest {
-                time,
+                at: FrameAt::Time(time),
                 frame_rate: rate,
                 duration: self.duration.since_origin(),
                 background,
@@ -184,7 +184,7 @@ impl FrameRenderer {
         let rate = self.composition.clock.rate;
         self.session.render(
             FrameRequest {
-                time: Time::from_frame(i64::from(index), rate),
+                at: FrameAt::Index(index),
                 frame_rate: rate,
                 duration: self.duration.since_origin(),
                 background,

@@ -35,7 +35,6 @@ This is a complete standalone application:
 
 ```rust,no_run
 use motion::prelude::*;
-use motion::render::{Bitmap};
 
 fn main() -> motion::Result {
     let timeline = Timeline::new(Size::new(640.0, 360.0), 30).track(|track| {
@@ -136,7 +135,7 @@ Studio opens one scene at a time. See [12 Studio](12-studio.md) for preview and 
 | `track.scene(duration, callback)` | Add a scene to a track |
 | `context.sample(&animation)` | Sample at the current scene-local time |
 | `render_still` | Request a transparent image at one time point |
-| `Bitmap::save_png` | Save a PNG |
+| `FrameBuffer::save_png` | Save a PNG |
 | `Project::timeline` / `run` | Register a film and provide a CLI |
 
 ## Common Pitfalls

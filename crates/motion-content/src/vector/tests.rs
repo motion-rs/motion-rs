@@ -110,7 +110,7 @@ fn text_tree_preserves_actual_rich_paragraph_pixels_bounds_and_reading_order()
         tree.node().measure(ValidationLimits::default())?,
         text.local_bounds(&context)?
     );
-    let render = |node: Node| -> motion_core::Result<motion_render::Bitmap> {
+    let render = |node: Node| -> motion_core::Result<motion_render::FrameBuffer> {
         let frame = node
             .compile(
                 Size::new(80.0, 40.0),
@@ -119,7 +119,7 @@ fn text_tree_preserves_actual_rich_paragraph_pixels_bounds_and_reading_order()
             )?
             .prepare(ValidationLimits::default(), RasterLimits::default())?
             .render_linear(RasterLimits::default())?;
-        Ok(motion_render::Bitmap::from_linear(
+        Ok(motion_render::FrameBuffer::from_linear_rgba8(
             &frame,
             RasterLimits::default(),
         )?)

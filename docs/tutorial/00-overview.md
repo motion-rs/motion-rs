@@ -10,7 +10,7 @@ motion-rs is a programmable motion graphics library for Rust. Scene functions de
 
 ```rust,no_run
 use motion::prelude::*;
-use motion::render::{DisplayList, ValidatedDisplayList, Bitmap, FrameBuffer, PreparedFrame};
+use motion::render::{DisplayList, ValidatedDisplayList, FrameBuffer, PreparedFrame};
 use motion::extend::{Encoder};
 use motion::vector::{Morph};
 use motion::particles::{Particle};
@@ -36,7 +36,7 @@ From the application author's perspective:
 ```text
 SceneContext -> scene function -> Node
     -> record and validate drawing commands -> ValidatedDisplayList
-    -> PreparedFrame -> CPU/GPU -> Bitmap/FrameBuffer/texture/Encoder
+    -> PreparedFrame -> CPU/GPU -> FrameBuffer/texture/Encoder
 ```
 
 `DisplayList` is an editable low-level command container. Compiling an ordinary `Node` directly produces a `ValidatedDisplayList`; applications need not construct every intermediate object manually.
@@ -47,8 +47,7 @@ SceneContext -> scene function -> Node
 | `Node` | Scene structure, transforms, layers, content | Already-rendered pixels |
 | `ValidatedDisplayList` | Immutable, structurally validated drawing commands | GPU availability or sufficient budget |
 | `PreparedFrame` | Device-space coverage, paint sources, clip and filter data | A task already submitted to the GPU |
-| `Bitmap` | Transparent image output | A video encoder or opaque window frame |
-| `FrameBuffer` | Frame data with an explicit pixel format | Identical memory layouts for all formats |
+| `FrameBuffer` | Frame data with an explicit pixel format, including transparent straight RGBA8 stills and PNG output | Identical memory layouts for all formats |
 | `Encoder` | Consume ordered frames and complete the output transaction | Scene construction or user interface |
 
 ## Design Principles
@@ -67,7 +66,7 @@ CPU evaluation of identical inputs and GPU replay on the same device have their 
 
 ### Keep Output Boundaries Distinct
 
-GPU working images and Studio previews can remain on the GPU. Returning a `Bitmap` or CPU-readable frame involves a memory-output boundary; encoding also has format, synchronization and lifetime requirements. Using the GPU does not eliminate all CPU work from the application.
+GPU working images and Studio previews can remain on the GPU. Returning a `FrameBuffer` or CPU-readable frame involves a memory-output boundary; encoding also has format, synchronization and lifetime requirements. Using the GPU does not eliminate all CPU work from the application.
 
 ## Feature Selection
 

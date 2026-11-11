@@ -102,7 +102,7 @@ fn explicit_requests_preserve_exact_time_project_diagnostics_and_atomic_targets(
 
     fn request(target: &mut crate::FrameBuffer) -> FrameRequest<'_> {
         FrameRequest {
-            time: 1.milliseconds().after_origin(),
+            at: FrameAt::Time(1.milliseconds().after_origin()),
             frame_rate: motion_core::FrameRate::NTSC,
             duration: 1.seconds().after_origin().since_origin(),
             background: None,

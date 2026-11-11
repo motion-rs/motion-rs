@@ -6,7 +6,7 @@ use super::pixel_count;
 mod tests {
     use crate::image::MAX_ENCODED;
 
-    fn raster(bytes: &[u8]) -> motion_core::Result<motion_render::Bitmap> {
+    fn raster(bytes: &[u8]) -> motion_core::Result<motion_render::FrameBuffer> {
         let asset = crate::SvgAsset::from_bytes(bytes)?;
         raster_asset(
             asset.clone(),
@@ -19,7 +19,7 @@ mod tests {
         bytes: &[u8],
         width: u32,
         height: u32,
-    ) -> motion_core::Result<motion_render::Bitmap> {
+    ) -> motion_core::Result<motion_render::FrameBuffer> {
         raster_asset(crate::SvgAsset::from_bytes(bytes)?, width, height)
     }
 
@@ -27,7 +27,7 @@ mod tests {
         asset: crate::SvgAsset,
         width: u32,
         height: u32,
-    ) -> motion_core::Result<motion_render::Bitmap> {
+    ) -> motion_core::Result<motion_render::FrameBuffer> {
         super::pixel_count(width, height)?;
         let frame = motion_render::Composition::new(
             width as usize,
@@ -46,7 +46,7 @@ mod tests {
             },
             |_| asset.tree.node(),
         )?;
-        Ok(motion_render::Bitmap::from_frame(frame)?)
+        Ok(frame)
     }
 
     const MARK: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 4">

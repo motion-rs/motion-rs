@@ -4,6 +4,7 @@ use crate::{LinearFrame, RasterLimits};
 use motion_core::{PixelSize, ValidationError};
 
 mod bands;
+mod png;
 mod snapshot;
 #[cfg(test)]
 mod tests;
@@ -319,6 +320,20 @@ impl FrameBuffer {
         })
     }
 
+    /// Converts linear output into straight sRGB RGBA8; transparent pixels keep their alpha.
+    pub fn from_linear_rgba8(
+        frame: &LinearFrame,
+        limits: RasterLimits,
+    ) -> Result<Self, ValidationError> {
+        Self::from_linear(
+            frame,
+            PixelFormat::SrgbRgba8 {
+                premultiplied: false,
+            },
+            limits,
+        )
+    }
+
     /// Converts the same immutable linear pixels regardless of rendering backend.
     pub fn from_linear(
         frame: &LinearFrame,
@@ -584,6 +599,11 @@ impl FrameBuffer {
         &self.planes
     }
 
+    /// Bytes of the first plane: the whole image for packed formats.
+    pub fn bytes(&self) -> &[u8] {
+        &self.planes[0].bytes
+    }
+
     /// Logical payload bytes, excluding allocation overhead.
     pub fn byte_len(&self) -> usize {
         self.planes.iter().map(|plane| plane.bytes.len()).sum()
@@ -643,102 +663,6 @@ pub enum RenderTarget<'a> {
     /// External same-device color texture; use GpuContext::render for this target.
     #[cfg(feature = "gpu")]
     Texture(&'a wgpu::Texture),
-}
-
-/// Straight-alpha sRGB RGBA8 bitmap; transparent pixels keep their alpha.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Bitmap(FrameBuffer);
-
-impl Bitmap {
-    /// Converts existing linear output into straight encoded RGBA8.
-    pub fn from_linear(frame: &LinearFrame, limits: RasterLimits) -> Result<Self, ValidationError> {
-        Ok(Self(FrameBuffer::from_linear(
-            frame,
-            PixelFormat::SrgbRgba8 {
-                premultiplied: false,
-            },
-            limits,
-        )?))
-    }
-
-    /// Accepts only straight RGBA8; other formats cannot be silently reinterpreted.
-    pub fn from_frame(frame: FrameBuffer) -> Result<Self, ValidationError> {
-        if frame.format
-            != (PixelFormat::SrgbRgba8 {
-                premultiplied: false,
-            })
-        {
-            return Err(output_invalid(
-                "bitmap",
-                "Bitmap requires straight sRGB RGBA8",
-            ));
-        }
-        Ok(Self(frame))
-    }
-
-    /// Pixel dimensions.
-    pub fn size(&self) -> PixelSize {
-        self.0.size
-    }
-
-    /// Packed straight RGBA bytes.
-    pub fn bytes(&self) -> &[u8] {
-        &self.0.planes[0].bytes
-    }
-
-    /// Borrows the validated backing frame.
-    pub fn frame(&self) -> &FrameBuffer {
-        &self.0
-    }
-
-    /// Saves PNG transactionally without replacing an existing destination.
-    pub fn save_png(&self, path: impl AsRef<std::path::Path>) -> motion_core::Result {
-        self.save_png_with_overwrite(path, false)
-    }
-
-    /// Saves PNG atomically; failure preserves an existing destination.
-    pub fn save_png_with_overwrite(
-        &self,
-        path: impl AsRef<std::path::Path>,
-        overwrite: bool,
-    ) -> motion_core::Result {
-        use image::ImageEncoder;
-        let path = std::path::absolute(path)?;
-        if !overwrite && path.try_exists()? {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::AlreadyExists,
-                "PNG destination exists",
-            )
-            .into());
-        }
-        let mut builder = tempfile::Builder::new();
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            builder.permissions(std::fs::Permissions::from_mode(0o666));
-        }
-        let mut file = builder
-            .prefix(".motion-still-")
-            .suffix(".png")
-            .tempfile_in(
-                path.parent()
-                    .ok_or_else(|| output_invalid("path", "PNG path has no parent"))?,
-            )?;
-        image::codecs::png::PngEncoder::new(file.as_file_mut())
-            .write_image(
-                self.bytes(),
-                self.size().width,
-                self.size().height,
-                image::ExtendedColorType::Rgba8,
-            )
-            .map_err(|error| motion_core::Error::Other(Box::new(error)))?;
-        if overwrite {
-            file.persist(path).map_err(|error| error.error)?;
-        } else {
-            file.persist_noclobber(path).map_err(|error| error.error)?;
-        }
-        Ok(())
-    }
 }
 
 fn storage(count: usize, pool: &OutputPool) -> Result<Vec<u8>, ValidationError> {

@@ -638,8 +638,11 @@ mod tests {
             )?
             .render_linear(motion_core::RasterLimits::default())?;
         assert_eq!(
-            motion_render::Bitmap::from_linear(&frame, motion_core::RasterLimits::default())?
-                .bytes(),
+            motion_render::FrameBuffer::from_linear_rgba8(
+                &frame,
+                motion_core::RasterLimits::default()
+            )?
+            .bytes(),
             &[255, 0, 0, 255, 0, 0, 255, 255]
         );
         assert!(Arc::strong_count(&asset) >= 1);

@@ -5,7 +5,7 @@
 fn fresh_texts_reuse_actual_session_layouts_across_out_of_order_frames() -> motion::Result {
     use motion::prelude::*;
     use motion::render::{
-        FrameBuffer, FrameRequest, PixelFormat, RasterLimits, RenderSession, RenderTarget,
+        FrameAt, FrameBuffer, FrameRequest, PixelFormat, RasterLimits, RenderSession, RenderTarget,
     };
     let mut fonts = FontLibrary::new();
     fonts.load_file(
@@ -22,7 +22,7 @@ fn fresh_texts_reuse_actual_session_layouts_across_out_of_order_frames() -> moti
     for index in [0, 1, 0] {
         session.render(
             FrameRequest {
-                time: Time::from_frame(index, FrameRate::from(30)),
+                at: FrameAt::Index(index),
                 frame_rate: FrameRate::from(30),
                 duration: 1.seconds(),
                 background: None,

@@ -19,11 +19,11 @@ pixels; prepared frames have no deferred image-production phase.
 
 Preparation resolves device-space curves, coverage, paints, clipping and filter
 domains into shared bounded data. Both renderers consume the same commands and
-resource contracts. Outputs are transparent Bitmap, typed FrameBuffer, borrowed
+resource contracts. Outputs are typed FrameBuffer (straight RGBA8 for transparent PNG), borrowed
 external RenderTarget, opaque Snapshot or an ordered Encoder.
 
 RenderOptions stores policy; RenderSession owns reusable caches, backend state and
-request diagnostics. FrameRequest supplies exact time, rational rate, duration,
+request diagnostics. FrameRequest addresses a frame by index or exact time and supplies rational rate, duration,
 background, target and pixel format. FrameRenderer wraps a session with Composition's
 frame-index clock. Preview may coalesce requests and export may render every frame
 without defining separate scene/render pipelines.

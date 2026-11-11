@@ -110,7 +110,7 @@ impl Encoder for PngSequenceEncoder {
             .expect("opened sequence")
             .path()
             .join(format!("frame-{index:06}.png"));
-        motion_render::Bitmap::from_frame(frame.clone())?.save_png(&path)?;
+        frame.save_png(&path)?;
         self.bytes += std::fs::metadata(path)?.len();
         self.written += 1;
         Ok(())

@@ -16,10 +16,10 @@
 //!
 //! 1. Build a [`Scene`] from exact local/global ticks and a rational [`FrameRate`].
 //! 2. Return [`Node`] content, compiled to a [`DisplayList`] and [`PreparedFrame`].
-//! 3. Render a transparent [`Bitmap`], external texture or native encoder output.
+//! 3. Render a transparent [`FrameBuffer`], external texture or native encoder output.
 //!
 //! [`RenderOptions`] configures reusable [`RenderSession`] state; each
-//! [`FrameRequest`] supplies exact time, duration, destination, background and format.
+//! [`FrameRequest`] addresses a frame by index or exact time and supplies duration, destination, background and format.
 //! [`FrameRenderer`] adds Composition's frame-index clock. [`ValidatedDisplayList`]
 //! freezes checked commands without claiming device availability or raster admission.
 //!
@@ -31,7 +31,7 @@
 //! `ink::InkFill`; `ink::Paper` selects procedural or texture paper. Pressure and ink-load profiles
 //! are sampled in full arc length.
 //! [`Animation`] and [`Keyframes`] are analytic, clock-free samplers, not playback
-//! tasks. [`Snapshot`] is opaque RGB; [`Bitmap`] stills preserve alpha.
+//! tasks. [`Snapshot`] is opaque RGB; [`FrameBuffer`] stills preserve alpha.
 //! [`AudioClip`] supplies explicit timeline PCM, mixed into export or Studio Play.
 //! [`Skeleton`] solves 2D forward kinematics from timeline-compatible [`Pose`]
 //! values; [`BoneTransform`] positions artwork without changing either backend.
@@ -160,7 +160,7 @@
 //!
 //! [`DisplayList`]: render::DisplayList
 //! [`PreparedFrame`]: render::PreparedFrame
-//! [`Bitmap`]: render::Bitmap
+//! [`FrameBuffer`]: render::FrameBuffer
 //! [`Snapshot`]: render::Snapshot
 //! [`RenderSession`]: render::RenderSession
 //! [`FrameRequest`]: render::FrameRequest

@@ -10,7 +10,7 @@ The CPU example needs no optional features. Native GPU and external texture supp
 ```rust,no_run
 use motion::prelude::*;
 use motion::render::{
-    FrameBuffer, FrameRequest, PixelFormat, RasterLimits, RenderSession, RenderTarget,
+    FrameAt, FrameBuffer, FrameRequest, PixelFormat, RasterLimits, RenderSession, RenderTarget,
 };
 
 fn main() -> motion::Result {
@@ -20,7 +20,7 @@ fn main() -> motion::Result {
     let mut output = FrameBuffer::new(size, RasterLimits::default())?;
     session.render(
         FrameRequest {
-            time: 250.milliseconds().after_origin(),
+            at: FrameAt::Time(250.milliseconds().after_origin()),
             frame_rate: FrameRate::NTSC,
             duration: 2.seconds(),
             background: None,
@@ -46,7 +46,7 @@ Output is written to a memory target in the declared format. Another request can
 | `RenderPrepare` / `PreparedFrame` | Extensions controlling command preparation and low-level consumption |
 | `GpuContext` | Import or share native devices, queues and submission lifetimes |
 
-`FrameRequest.time` does not automatically snap to the frame grid. `FrameRenderer` converts indices using the composition's rational frame rate. Both use the same execution boundary, but their clocks must remain distinct.
+`FrameAt::Time` does not automatically snap to the frame grid; `FrameAt::Index` converts exactly with the request's rational frame rate. `FrameRenderer` wraps the same session for indices of one composition, so their clocks must remain distinct.
 
 ## Backend Selection
 
@@ -73,9 +73,9 @@ This only configures policy; it does not initialize a GPU. Actual GPU requests r
 
 `RenderContext` manages Assets and structural policy, not a GPU. `RenderOptions.gpu_context` explicitly shares a device but does not select the backend.
 
-## Bitmap and FrameBuffer
+## FrameBuffer
 
-`Bitmap` provides transparent images and PNG output. `Snapshot` is explicit low-level opaque RGB output. Its PPM writer writes directly to a file and does not provide the same protection contract as transactional exports.
+`FrameBuffer` is the single stored image type; in straight `SrgbRgba8` it provides transparent images and `save_png`. `Snapshot` is explicit low-level opaque RGB output. Its PPM writer writes directly to a file and does not provide the same protection contract as transactional exports.
 
 | `PixelFormat` | Key Requirements |
 | --- | --- |

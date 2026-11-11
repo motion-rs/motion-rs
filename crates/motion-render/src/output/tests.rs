@@ -253,7 +253,7 @@ fn linear(color: Color, alpha: f64) -> LinearFrame {
 fn output_formats_preserve_transparency_half_and_bt709_boundaries() -> motion_core::Result {
     let limits = RasterLimits::default();
     let red = linear(Color::rgb(255, 0, 0), 0.5);
-    let bitmap = Bitmap::from_linear(&red, limits)?;
+    let bitmap = FrameBuffer::from_linear_rgba8(&red, limits)?;
     assert_eq!(&bitmap.bytes()[..4], &[255, 0, 0, 128]);
     let half = FrameBuffer::from_linear(&red, PixelFormat::LinearRgba16Float, limits)?;
     assert_eq!(&half.planes()[0].bytes()[..8], &[0, 56, 0, 0, 0, 0, 0, 56]);

@@ -202,17 +202,21 @@ pub fn composition(timeline: &Timeline, options: &RenderOptions) -> Result<crate
 }
 
 /// Renders an arbitrary in-range tick to straight sRGB RGBA with preserved alpha.
-pub fn render_still(timeline: &Timeline, time: Time, options: &RenderOptions) -> Result<Bitmap> {
-    let mut renderer = composition(timeline, options)?.frame_renderer(timeline.size())?;
-    Bitmap::from_frame(renderer.render_output_at(
-        time,
-        options.background,
-        PixelFormat::SrgbRgba8 {
-            premultiplied: false,
-        },
-        |context| timeline.render(context),
-    )?)
-    .map_err(Into::into)
+pub fn render_still(
+    timeline: &Timeline,
+    time: Time,
+    options: &RenderOptions,
+) -> Result<FrameBuffer> {
+    composition(timeline, options)?
+        .frame_renderer(timeline.size())?
+        .render_output_at(
+            time,
+            options.background,
+            PixelFormat::SrgbRgba8 {
+                premultiplied: false,
+            },
+            |context| timeline.render(context),
+        )
 }
 
 #[cfg(test)]

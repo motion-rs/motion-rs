@@ -2,12 +2,12 @@
 #![cfg(feature = "text")]
 
 use motion_core::{Color, Time, ValidationError};
-use motion_render::{Bitmap, RenderOptions, render_still};
+use motion_render::{FrameBuffer, RenderOptions, render_still};
 use motion_scene::*;
 
 const FONTS: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/fixtures/fonts");
 
-fn render(element: Element, seconds: f64) -> Bitmap {
+fn render(element: Element, seconds: f64) -> FrameBuffer {
     let document = Document::new([240.0, 60.0], 10)
         .font("NotoSans-Regular.ttf")
         .track(TrackSpec::new().scene(SceneSpec::new(2.0, element)));
@@ -22,7 +22,7 @@ fn render(element: Element, seconds: f64) -> Bitmap {
     .unwrap()
 }
 
-fn ink(bitmap: &Bitmap) -> usize {
+fn ink(bitmap: &FrameBuffer) -> usize {
     bitmap
         .bytes()
         .chunks(4)

@@ -136,8 +136,11 @@ fn svg_lazy_selection_writing_images_and_security_keep_original_resources()
     let image = SvgAsset::from_bytes(source.as_bytes())?;
     assert!(image.retained_bytes() > 0);
     assert_eq!(
-        motion_render::Bitmap::from_linear(&pixels(&image)?, motion_core::RasterLimits::default())?
-            .bytes(),
+        motion_render::FrameBuffer::from_linear_rgba8(
+            &pixels(&image)?,
+            motion_core::RasterLimits::default()
+        )?
+        .bytes(),
         [255, 0, 0, 128]
     );
     for body in [

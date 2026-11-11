@@ -17,7 +17,7 @@ pub(crate) mod raster;
 
 pub use backend::{BackendDecision, BackendPreference, Renderer};
 pub use composition::{
-    Composition, FrameClock, FrameRenderer, FrameRequest, FrameStats, RenderSession,
+    Composition, FrameAt, FrameClock, FrameRenderer, FrameRequest, FrameStats, RenderSession,
 };
 pub use context::{GpuBackend, GpuInfo, RenderCapabilities, RenderContext};
 pub use display::{Cdl, DisplayTransform, FilmGrain, OutputTransfer, ToneMap};
@@ -26,7 +26,7 @@ pub use gpu::GpuContext;
 pub use look::{GateWeave, Look};
 pub use motion_core::{CachePartition, RenderCache, RenderQuality};
 pub use options::{RenderOptions, composition, render_still};
-pub use output::{Bitmap, FrameBuffer, PixelFormat, PixelPlane, RenderTarget, Snapshot};
+pub use output::{FrameBuffer, PixelFormat, PixelPlane, RenderTarget, Snapshot};
 pub use prepared::{
     ClipRecord, LinearFrame, LinearRenderStats, OutputStats, PaintRecord, PixelRect,
     PreparationStats, PreparedFilters, PreparedFrame, PreparedItem, PreparedLayer, RasterLimits,
@@ -36,12 +36,12 @@ pub use prepared::{
 /// Rendering contracts used alongside core authoring values.
 pub mod prelude {
     pub use crate::{
-        BackendPreference, FrameClock, FrameRenderer, FrameRequest, FrameStats, RenderOptions,
-        RenderQuality, RenderSession, render_still,
-    };
-    pub use crate::{
-        Bitmap, FrameBuffer, LinearFrame, PixelFormat, PixelPlane, PreparedFrame, PreparedItem,
-        RenderContext, RenderPrepare, RenderTarget, Renderer,
+        BackendPreference, FrameAt, FrameClock, FrameRenderer, FrameRequest, FrameStats,
+        RenderOptions, RenderQuality, RenderSession, render_still,
     };
     pub use crate::{Cdl, DisplayTransform, FilmGrain, OutputTransfer, ToneMap};
+    pub use crate::{
+        FrameBuffer, LinearFrame, PixelFormat, PixelPlane, PreparedFrame, PreparedItem,
+        RenderContext, RenderPrepare, RenderTarget, Renderer,
+    };
 }

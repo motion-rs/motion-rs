@@ -36,11 +36,21 @@ pub struct RenderSession {
     pub(super) diagnostics: motion_core::RequestDiagnostics,
 }
 
-/// One exact-time render with an explicit destination and output contract.
+/// How a request addresses its frame on the timeline.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FrameAt {
+    /// Exact root local/global time, with no frame-grid quantization.
+    Time(Time),
+    /// Frame index converted exactly with the request's rational frame rate.
+    Index(u32),
+}
+
+/// One render addressed by frame index or exact time, with an explicit destination
+/// and output contract.
 pub struct FrameRequest<'a> {
-    /// Exact root local/global time, required to lie in 0..duration.
+    /// Frame address; the resulting root time must lie in 0..duration.
     /// Nested scenes may derive different local clocks from this root time.
-    pub time: Time,
+    pub at: FrameAt,
     /// Rational timeline rate used by scene callbacks.
     pub frame_rate: motion_core::FrameRate,
     /// Positive exclusive timeline end, including shutter boundary handling.
@@ -115,8 +125,12 @@ impl RenderSession {
         self.last_stats = None;
         self.asset_diagnostics.clear();
         self.diagnostics = motion_core::RequestDiagnostics::default();
-        if request.time < Time::ZERO
-            || request.time >= request.duration.after_origin()
+        let time = match request.at {
+            FrameAt::Time(time) => time,
+            FrameAt::Index(index) => Time::from_frame(i64::from(index), request.frame_rate),
+        };
+        if time < Time::ZERO
+            || time >= request.duration.after_origin()
             || request.duration <= motion_core::Duration::ZERO
         {
             return Err(ValidationError::invalid(
@@ -172,18 +186,14 @@ impl RenderSession {
         let mut execution = FrameExecution {
             composition,
             duration: request.duration.after_origin(),
-            time: Some(request.time),
+            time: Some(time),
             limits,
             session: self,
         };
         match request.target {
             crate::RenderTarget::Memory(output) => {
-                let result = execution.render_output_at(
-                    request.time,
-                    request.background,
-                    request.format,
-                    build,
-                )?;
+                let result =
+                    execution.render_output_at(time, request.background, request.format, build)?;
                 if let Some(stats) = execution.last_stats.as_mut() {
                     stats.preparation.peak_bytes += retained;
                     stats.linear.peak_bytes += retained;
@@ -194,7 +204,7 @@ impl RenderSession {
             }
             #[cfg(feature = "gpu")]
             crate::RenderTarget::Texture(texture) => {
-                let index = u32::try_from(request.time.to_frame(request.frame_rate))
+                let index = u32::try_from(time.to_frame(request.frame_rate))
                     .map_err(|error| motion_core::Error::Parameters(Box::new(error)))?;
                 execution.render_to_texture(
                     index,

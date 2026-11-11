@@ -174,7 +174,7 @@ no per-option setters beyond `with_options` and `configure`. Reuse `frame_render
 its FrameRenderer wraps a RenderSession. For Timeline output, render_still/export
 apply the same RenderOptions policy.
 Snapshot is opaque RGB; its PPM writer truncates/replaces the selected file explicitly.
-Use `render_still` and Bitmap for transparent PNG with protected output destinations.
+Use `render_still` and a straight RGBA8 FrameBuffer for transparent PNG with protected output destinations.
 
 On Unix, transactional PNG, GIF and native video outputs request mode 0666;
 PNG sequence directories request 0777. The process umask is applied at creation
@@ -302,13 +302,13 @@ For explicit destinations and exact-time requests, reuse RenderSession directly:
 
 ```rust,no_run
 use motion::prelude::*;
-use motion::render::{FrameBuffer, FrameRequest, PixelFormat, RasterLimits, RenderSession, RenderTarget};
+use motion::render::{FrameAt, FrameBuffer, FrameRequest, PixelFormat, RasterLimits, RenderSession, RenderTarget};
 
 let size = PixelSize::new(320, 180);
 let mut session = RenderSession::new(Size::new(320.0, 180.0), RenderOptions::default().size(size))?;
 let mut output = FrameBuffer::new(size, RasterLimits::default())?;
 session.render(FrameRequest {
-    time: 250.milliseconds().after_origin(),
+    at: FrameAt::Time(250.milliseconds().after_origin()),
     frame_rate: FrameRate::NTSC,
     duration: 2.seconds(),
     background: None,
@@ -318,7 +318,8 @@ session.render(FrameRequest {
 # Ok::<(), motion::Error>(())
 ```
 
-Request time is not snapped to the frame grid. Motion blur may call the builder
+`FrameAt::Time` is not snapped to the frame grid; `FrameAt::Index` converts exactly with the request's rate.
+`FrameRenderer` and `render_still` are thin wrappers over this one request path. Motion blur may call the builder
 multiple times. A memory target is replaced only on success and its old retained
 payload is charged while rendering; an external texture has no rollback guarantee
 after a GPU failure. Each request installs new diagnostics and clears prior totals.

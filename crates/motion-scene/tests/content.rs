@@ -1,7 +1,7 @@
 //! Particles, diagrams, captions, formulas and morphs in declarative documents.
 
 use motion_core::{Color, Time, ValidationError};
-use motion_render::{Bitmap, RenderOptions, render_still};
+use motion_render::{FrameBuffer, RenderOptions, render_still};
 use motion_scene::*;
 
 const FONTS: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/fixtures/fonts");
@@ -22,7 +22,7 @@ fn document(element: Element) -> Document {
     }
 }
 
-fn render(film: &CompiledDocument, seconds: f64) -> Bitmap {
+fn render(film: &CompiledDocument, seconds: f64) -> FrameBuffer {
     render_still(
         film.timeline(),
         Time::from_seconds(seconds),
@@ -37,7 +37,7 @@ fn render(film: &CompiledDocument, seconds: f64) -> Bitmap {
     feature = "captions",
     feature = "formula"
 ))]
-fn ink(bitmap: &Bitmap) -> usize {
+fn ink(bitmap: &FrameBuffer) -> usize {
     bitmap
         .bytes()
         .chunks(4)
@@ -271,7 +271,7 @@ fn paths_morph_between_shapes() {
     let film = film(element);
     let start = render(&film, 0.0);
     let end = render(&film, 1.99);
-    let at = |bitmap: &Bitmap, x: usize, y: usize| bitmap.bytes()[(y * 240 + x) * 4 + 3];
+    let at = |bitmap: &FrameBuffer, x: usize, y: usize| bitmap.bytes()[(y * 240 + x) * 4 + 3];
     assert_eq!(at(&start, 30, 30), 255);
     assert_eq!(at(&start, 190, 30), 0);
     assert_eq!(at(&end, 190, 30), 255);
@@ -338,7 +338,7 @@ fn svgs_morph_between_files() {
         .track(TrackSpec::new().scene(SceneSpec::new(2.0, element)))
         .compile(&CompileOptions::default().base_dir(directory.path()))
         .unwrap();
-    let at = |bitmap: &Bitmap, x: usize, y: usize| bitmap.bytes()[(y * 240 + x) * 4 + 3];
+    let at = |bitmap: &FrameBuffer, x: usize, y: usize| bitmap.bytes()[(y * 240 + x) * 4 + 3];
     let start = render(&film, 0.0);
     let end = render(&film, 1.99);
     assert_eq!(at(&start, 30, 40), 255);

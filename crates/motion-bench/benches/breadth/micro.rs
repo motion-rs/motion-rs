@@ -222,7 +222,12 @@ pub(super) fn microbenchmarks(
             .render_linear(limits())?
     };
     let measured = support::measure_output(
-        || Ok(motion::render::Bitmap::from_linear(&frame, limits())?),
+        || {
+            Ok(motion::render::FrameBuffer::from_linear_rgba8(
+                &frame,
+                limits(),
+            )?)
+        },
         |bitmap| {
             bitmap.bytes().iter().step_by(4096).fold(0, |state, value| {
                 support::fold_checksum(state, u64::from(*value))
@@ -232,7 +237,7 @@ pub(super) fn microbenchmarks(
         settings.iterations,
     )?;
     report.record("micro/encode/bitmap-from-linear-1080p", measured, json!({}))?;
-    let bitmap = motion::render::Bitmap::from_linear(&frame, limits())?;
+    let bitmap = motion::render::FrameBuffer::from_linear_rgba8(&frame, limits())?;
     let png = report.directory.join("breadth-1080p.png");
     let measured = support::measure(
         || {

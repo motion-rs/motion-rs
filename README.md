@@ -4,7 +4,7 @@ Programmable motion graphics and deterministic video rendering in Rust.
 The Cargo package is `motion-rs`; the library import is `motion`.
 
 The pipeline is `SceneContext -> Scene -> Node -> DisplayList ->
-ValidatedDisplayList -> PreparedFrame -> CPU/GPU -> Bitmap/FrameBuffer/Encoder`. The headless core has
+ValidatedDisplayList -> PreparedFrame -> CPU/GPU -> FrameBuffer/Encoder`. The headless core has
 no browser, widget tree, playback clock or implicit font discovery. Optional
 Motion Studio provides a desktop preview/export workbench.
 
@@ -31,7 +31,7 @@ bitmap.save_png("frame.png")?;
 `Rect::new` takes opposite corners, not origin/width/height. Geometry and
 animation progress use f64; time uses signed ticks and rational `FrameRate`.
 Colors retain finite extended sRGB channels; rendering uses linear-premultiplied
-working storage. `Bitmap` preserves transparency. `Composition` and opaque
+working storage. Straight RGBA8 `FrameBuffer` preserves transparency. `Composition` and opaque
 `Snapshot` remain explicit low-level rendering APIs, outside the authoring prelude.
 
 ```sh

@@ -3,7 +3,7 @@
 use crate::*;
 
 use crate::extend::ProgressSink;
-use crate::render::Bitmap;
+use crate::render::FrameBuffer;
 use crate::{ExportOptions, ExportReport, RenderOptions, Result, Time, Timeline, TimelineBuilder};
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::Value;
@@ -122,7 +122,7 @@ impl Project {
         parameters: Option<Value>,
         time: Time,
         options: &RenderOptions,
-    ) -> Result<Bitmap> {
+    ) -> Result<FrameBuffer> {
         let (timeline, options) = self.film_options(name, parameters, options.clone())?;
         crate::render_still(&timeline, time, &options)
     }
