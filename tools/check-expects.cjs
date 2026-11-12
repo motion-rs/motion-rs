@@ -249,13 +249,7 @@ const policies = [
     "The same closure installs a renderer when absent; failed construction returns before the access.",
   ],
   [
-    "motion-render/src/composition/execution.rs",
-    ["selected native GPU"],
-    "invariant",
-    "Backend selection installs the GPU before recording a successful GPU decision; failed Automatic selection resets it before recording a CPU decision.",
-  ],
-  [
-    "motion-render/src/composition/execution/backend.rs",
+    "motion-render/src/composition/execution/gpu.rs",
     ["selected native GPU", "GPU initialized"],
     "invariant",
     "Backend selection installs the GPU before recording a successful GPU decision; failed Automatic selection resets it before recording a CPU decision.",
@@ -268,6 +262,12 @@ const policies = [
   ],
   [
     "motion-render/src/composition/execution/backend.rs",
+    ["enabled timings"],
+    "invariant",
+    "The local start instant is constructed only from Some(timings); the intervening stage does not disable timings.",
+  ],
+  [
+    "motion-render/src/composition/execution/gpu.rs",
     ["enabled timings"],
     "invariant",
     "The local start instant is constructed only from Some(timings); the intervening stage does not disable timings.",
