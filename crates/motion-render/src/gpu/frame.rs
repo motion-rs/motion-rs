@@ -1,8 +1,7 @@
 //! Borrowed planning views and opaque GPU preparation for worker-side planning.
 
 use super::OutputPlan;
-use crate::gpu::raster::device::DeviceFill;
-use crate::gpu::raster::device::DeviceGeometry;
+use crate::gpu::raster::device::{DeviceFill, DeviceGeometry};
 use crate::prepared::{FrameRecords, PreparationStats, PreparedCpuFrame};
 use motion_core::{PixelSize, RasterLimits, ValidationError};
 
@@ -10,20 +9,21 @@ use motion_core::{PixelSize, RasterLimits, ValidationError};
 ///
 /// Unlike [`crate::PreparedCpuFrame`], this is not CPU coverage and has no CPU rendering API.
 /// Preparing and planning it never initializes a device or submits work.
+#[derive(Debug)]
 pub struct PreparedGpuFrame {
-    pub(crate) scene: FrameRecords,
+    pub(crate) records: FrameRecords,
     pub(crate) geometry: DeviceGeometry,
 }
 
 impl PreparedGpuFrame {
     /// Final output dimensions, excluding filter guard bands.
     pub fn size(&self) -> PixelSize {
-        self.scene.size()
+        self.records.size()
     }
 
     /// Logical retained/peak storage and admitted preparation work.
     pub fn stats(&self) -> PreparationStats {
-        self.scene.stats()
+        self.records.stats()
     }
 
     /// Admitted geometry, tile capacity, geometry uploads and per-path CPU reasons.
@@ -51,12 +51,12 @@ impl PreparedGpuFrame {
     }
 
     pub(crate) fn quality(mut self, quality: motion_core::RenderQuality) -> Self {
-        self.scene.quality = quality;
+        self.records.quality = quality;
         self
     }
 
     pub(crate) fn blend_space(mut self, space: motion_core::drawing::BlendSpace) -> Self {
-        self.scene.blend_space = space;
+        self.records.blend_space = space;
         self
     }
 
@@ -68,7 +68,7 @@ impl PreparedGpuFrame {
 impl FrameInput for PreparedGpuFrame {
     fn gpu_view(&self) -> FrameView<'_> {
         FrameView {
-            scene: &self.scene,
+            scene: &self.records,
             device_fills: &self.geometry.device_fills,
             device_edges: &self.geometry.device_edges,
             device_curves: &self.geometry.device_curves,

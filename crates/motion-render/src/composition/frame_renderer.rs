@@ -239,9 +239,7 @@ impl FrameRenderer {
                 "GPU preparation returned a CPU frame",
             )
             .into()),
-            super::execution::PreparedOutput::Gpu(frame) => {
-                Ok((crate::gpu::PreparedGpuFrame::new(frame), limits))
-            }
+            super::execution::PreparedOutput::Gpu(frame) => Ok((frame, limits)),
         }
     }
 

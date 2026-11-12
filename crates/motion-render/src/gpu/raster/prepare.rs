@@ -1,6 +1,7 @@
 //! GPU-specific preparation results, independent of public CPU prepared frames.
 
 use super::device::DeviceGeometry;
+use crate::gpu::PreparedGpuFrame;
 use crate::prepared::FrameRecords;
 use crate::raster::frame_ir::{FrameIr, GeometrySource, IrPaint, IrPath};
 use crate::raster::paint::TableCache;
@@ -9,14 +10,7 @@ use crate::raster::{PreparationCache, RasterScope};
 use motion_core::{RasterLimits, ValidationError, ValidationLimits};
 use std::mem::size_of;
 
-/// GPU scene records and independently generated device geometry.
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct GpuFrame {
-    pub(crate) scene: FrameRecords,
-    pub(crate) geometry: DeviceGeometry,
-}
-
-impl GpuFrame {
+impl PreparedGpuFrame {
     pub(crate) fn prepare(
         ir: &FrameIr<'_>,
         limits: RasterLimits,
@@ -31,29 +25,7 @@ impl GpuFrame {
                 cache,
             },
         )?;
-        Ok(Self { scene, geometry })
-    }
-
-    pub(crate) fn quality(mut self, quality: motion_core::RenderQuality) -> Self {
-        self.scene.quality = quality;
-        self
-    }
-
-    pub(crate) fn blend_space(mut self, space: motion_core::drawing::BlendSpace) -> Self {
-        self.scene.blend_space = space;
-        self
-    }
-
-    pub(crate) fn has_device_coverage(&self) -> bool {
-        !self.geometry.device_fills.is_empty()
-    }
-}
-
-impl std::ops::Deref for GpuFrame {
-    type Target = FrameRecords;
-
-    fn deref(&self) -> &Self::Target {
-        &self.scene
+        Ok(Self { records: scene, geometry })
     }
 }
 
@@ -106,7 +78,7 @@ pub(crate) fn prepare_validated_device(
     limits: RasterLimits,
     tolerance: f64,
     cache: Option<&mut PreparationCache>,
-) -> Result<GpuFrame, ValidationError> {
+) -> Result<PreparedGpuFrame, ValidationError> {
     let ir = FrameIr::build(source, validation, limits, tolerance)?;
-    GpuFrame::prepare(&ir, limits, cache)
+    PreparedGpuFrame::prepare(&ir, limits, cache)
 }

@@ -27,7 +27,7 @@ fn curve(rule: FillRule) -> motion_core::Result<Node> {
     ))
 }
 
-fn prepare(node: &Node) -> motion_core::Result<crate::gpu::raster::prepare::GpuFrame> {
+fn prepare(node: &Node) -> motion_core::Result<PreparedGpuFrame> {
     let validation = ValidationLimits::default();
     let list = node.compile(Size::new(40.0, 40.0), PixelSize::new(40, 40), validation)?;
     Ok(crate::gpu::raster::prepare::prepare_validated_device(
@@ -44,7 +44,7 @@ fn gpu_curve_flattening_has_no_host_edges_and_exact_admission() -> motion_core::
     let frame = prepare(&curve(FillRule::EvenOdd)?)?;
     assert!(frame.geometry.device_edges.is_empty());
     assert!(!frame.geometry.device_curves.is_empty());
-    assert!(frame.alphas.is_empty());
+    assert!(frame.records.alphas.is_empty());
     let limits = RasterLimits::default();
     let plan = Plan::new(&frame, limits)?;
     assert!(plan.device.edges.is_empty());
@@ -69,7 +69,7 @@ fn gpu_curve_flattening_has_no_host_edges_and_exact_admission() -> motion_core::
         let mut planner = Planner {
             frame: frame.gpu_view(),
             steps: Vec::new(),
-            budget: Budget::new(frame.size, limits)?,
+            budget: Budget::new(frame.records.size, limits)?,
         };
         planner.device_coverage()?;
         Ok((planner.budget.peak_bytes(), planner.budget.work_done()))
@@ -162,10 +162,10 @@ fn gpu_curve_flattening_cpu_gpu_equivalence_and_replay() -> motion_core::Result 
             .compose_linear(limits)?
             .to_rgba8_frame(false, limits)?;
         let actual = gpu
-            .render(&device, Plan::new(&device, limits)?)?
+            .render(&device.records, Plan::new(&device, limits)?)?
             .to_rgba8_frame(false, limits)?;
         let replay = gpu
-            .render(&device, Plan::new(&device, limits)?)?
+            .render(&device.records, Plan::new(&device, limits)?)?
             .to_rgba8_frame(false, limits)?;
         crate::gpu::visual::compare_rgba8(actual.pixels(), reference.pixels(), 0.01).unwrap();
         assert_eq!(actual, replay);

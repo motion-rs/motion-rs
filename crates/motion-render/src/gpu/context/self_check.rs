@@ -80,7 +80,7 @@ fn render(
     limits: RasterLimits,
 ) -> motion_core::Result<crate::FrameBuffer> {
     Ok(crate::FrameBuffer::from_linear_rgba8(
-        &gpu.render(frame, Plan::new(frame, limits)?)?,
+        &gpu.render(&frame.records, Plan::new(frame, limits)?)?,
         limits,
     )?)
 }

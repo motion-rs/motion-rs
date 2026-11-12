@@ -48,7 +48,7 @@ impl std::ops::Deref for PreparedOutput {
         match self {
             Self::Cpu(frame) => &frame.0,
             #[cfg(feature = "gpu")]
-            Self::Gpu(frame) => &frame.scene,
+            Self::Gpu(frame) => &frame.records,
         }
     }
 }

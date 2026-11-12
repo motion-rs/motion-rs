@@ -50,13 +50,13 @@ fn fixed_seed_random_curves_match_cpu_without_local_dropouts() -> motion_core::R
                 None,
             )?;
             assert!(
-                device.alphas.is_empty(),
+                device.records.alphas.is_empty(),
                 "seed {seed}: unexpected CPU coverage"
             );
             assert!(!device.geometry.device_curves.is_empty());
             let expected = cpu.compose_linear(limits)?.to_rgba8_frame(false, limits)?;
             let actual = gpu
-                .render(&device, Plan::new(&device, limits)?)?
+                .render(&device.records, Plan::new(&device, limits)?)?
                 .to_rgba8_frame(false, limits)?;
             crate::gpu::visual::compare_rgba8(actual.pixels(), expected.pixels(), 0.05)
                 .unwrap_or_else(|error| panic!("seed {seed}, {rule:?}: {error}"));
@@ -97,9 +97,9 @@ fn render_device(path: Path2D, rule: FillRule) -> motion_core::Result<Vec<[f32; 
         1.0 / 256.0,
         None,
     )?;
-    assert!(frame.alphas.is_empty());
+    assert!(frame.records.alphas.is_empty());
     assert!(!frame.geometry.device_fills.is_empty());
-    let actual = Gpu::new()?.render(&frame, Plan::new(&frame, limits)?)?;
+    let actual = Gpu::new()?.render(&frame.records, Plan::new(&frame, limits)?)?;
     Ok(actual.pixels().to_vec())
 }
 

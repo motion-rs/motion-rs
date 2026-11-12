@@ -10,7 +10,7 @@ fn prepare_cpu(node: Node) -> motion_core::Result<crate::PreparedCpuFrame> {
     Ok(list.prepare(validation, RasterLimits::default())?)
 }
 
-fn prepare(node: Node) -> motion_core::Result<crate::gpu::raster::prepare::GpuFrame> {
+fn prepare(node: Node) -> motion_core::Result<PreparedGpuFrame> {
     let size = PixelSize::new(193, 81);
     let validation = ValidationLimits::default();
     let list = node.compile(Size::new(193.0, 81.0), size, validation)?;
@@ -61,7 +61,7 @@ fn tile_descriptors_admit_scratch_and_report_geometry_uploads() -> motion_core::
         let mut planner = Planner {
             frame: frame.gpu_view(),
             steps: Vec::new(),
-            budget: Budget::new(frame.size, limits)?,
+            budget: Budget::new(frame.records.size, limits)?,
         };
         planner.device_coverage()?;
         Ok((planner.budget.peak_bytes(), planner.budget.work_done()))
@@ -168,7 +168,7 @@ fn tile_interiors_fill_rules_and_reused_scratch_match_cpu() -> motion_core::Resu
         let frame = prepare(ring(rule)?)?;
         assert_eq!(frame.geometry.device_fills.len(), 1);
         let expected = prepare_cpu(ring(rule)?)?.0.compose_linear(limits)?;
-        let actual = gpu.render(&frame, Plan::new(&frame, limits)?)?;
+        let actual = gpu.render(&frame.records, Plan::new(&frame, limits)?)?;
         // Empty tile interiors need carries; global RMS alone would hide a missing hole.
         for (x, y) in [
             (16, 8),
@@ -217,7 +217,7 @@ fn sloping_tile_edges_match_cpu_with_explicit_tolerance() -> motion_core::Result
             .compose_linear(limits)?
             .to_rgba8_frame(false, limits)?;
         let actual = gpu
-            .render(&frame, Plan::new(&frame, limits)?)?
+            .render(&frame.records, Plan::new(&frame, limits)?)?
             .to_rgba8_frame(false, limits)?;
         super::device_coverage_tests::assert_visually_equivalent(
             actual.pixels(),

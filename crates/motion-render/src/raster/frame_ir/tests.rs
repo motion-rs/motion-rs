@@ -2,7 +2,7 @@
 
 use super::*;
 #[cfg(feature = "gpu")]
-use crate::gpu::raster::prepare::GpuFrame;
+use crate::gpu::PreparedGpuFrame;
 use crate::raster::{PreparationCache, prepare::prepare_ir};
 use motion_core::{
     Color, DisplayList, DrawCommand, Filter, Node, NodeModifiers, Point, Shape, Size,
@@ -198,9 +198,9 @@ fn cpu_reference_numeric_coverage_is_unchanged() -> Result<(), ValidationError> 
         cpu.render_linear(limits)?.linear_pixel(0, 0),
         Some([170.0 / 255.0; 4])
     );
-    let gpu = GpuFrame::prepare(&ir, limits, None)?;
+    let gpu = PreparedGpuFrame::prepare(&ir, limits, None)?;
     assert!(gpu.has_device_coverage());
-    assert!(gpu.alphas.is_empty());
+    assert!(gpu.records.alphas.is_empty());
     // GPU preparation cannot mutate the IR or the independently owned CPU result.
     assert_eq!(
         cpu.render_linear(limits)?.linear_pixel(0, 0),
@@ -218,10 +218,10 @@ fn warm_cpu_cache_does_not_make_gpu_preparation_depend_on_cpu_coverage()
     let limits = RasterLimits::default();
     let mut cache = PreparationCache::default();
     let cold = prepare_ir(&ir, limits, Some(&mut cache))?;
-    let gpu = GpuFrame::prepare(&ir, limits, Some(&mut cache))?;
+    let gpu = PreparedGpuFrame::prepare(&ir, limits, Some(&mut cache))?;
     assert_eq!(gpu.geometry.device_fills.len(), 1);
-    assert!(gpu.alphas.is_empty());
-    assert!(gpu.spans.is_empty());
+    assert!(gpu.records.alphas.is_empty());
+    assert!(gpu.records.spans.is_empty());
     let warm = prepare_ir(&ir, limits, Some(&mut cache))?;
     assert_eq!(warm.strips, cold.strips);
     assert_eq!(warm.spans, cold.spans);

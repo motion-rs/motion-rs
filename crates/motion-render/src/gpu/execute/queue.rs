@@ -131,7 +131,7 @@ impl FrameQueue {
         frame: &PreparedGpuFrame,
         plan: OutputPlan,
     ) -> motion_core::Result<()> {
-        self.submit_scene_output(&frame.frame.scene, plan)
+        self.submit_scene_output(&frame.records, plan)
     }
 
     fn submit_scene_output(

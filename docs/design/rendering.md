@@ -33,6 +33,10 @@ packed export workers use a separate preparation result and never build a CPU pr
 frame, while low-level GPU consumers can still explicitly upload one. GPU coverage is
 generated on the device for eligible fills; see [GPU rendering](#shared-data-and-output).
 
+`PreparedGpuFrame` directly owns shared `FrameRecords` and GPU-specific device geometry.
+Internal rendering and public output planning use the same prepared value, without a
+separate internal frame wrapper. Its records remain private and expose no CPU rendering API.
+
 ### CPU coverage
 
 CPU preparation flattens curves with a device-space tolerance, integrates polygon area and

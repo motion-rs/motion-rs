@@ -276,14 +276,15 @@ fn independent_procedural_paints_cpu_gpu_visual_and_replay() -> motion_core::Res
                 )?;
                 assert!(
                     device
+                        .records
                         .paint_sources
                         .iter()
                         .flatten()
                         .all(|source| !matches!(source.paint, Paint::Pattern(_)))
                 );
                 let cpu = prepared.compose_linear(limits)?;
-                let actual = gpu.render(&device, crate::gpu::Plan::new(&device, limits)?)?;
-                let replay = gpu.render(&device, crate::gpu::Plan::new(&device, limits)?)?;
+                let actual = gpu.render(&device.records, crate::gpu::Plan::new(&device, limits)?)?;
+                let replay = gpu.render(&device.records, crate::gpu::Plan::new(&device, limits)?)?;
                 for ((cpu, actual), replay) in cpu
                     .pixels()
                     .iter()
