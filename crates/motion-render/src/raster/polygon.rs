@@ -1,7 +1,7 @@
 //! Polygon path rasterization into sparse strips and spans using exact area coverage.
 
 use super::*;
-use motion_core::{FillRule, PathVerb, Point, Rect, Transform, ValidationError};
+use motion_core::{FillRule, PathVerb, Point, Transform, ValidationError};
 
 mod intersections;
 pub(crate) mod scratch;
@@ -10,7 +10,7 @@ mod sweep;
 #[cfg(test)]
 mod tests;
 
-pub use motion_core::geometry::flatten::{Edge, path_edges};
+pub use motion_core::geometry::flatten::{Edge, edge_bounds, path_edges};
 use scratch::{ColumnScratch, PolygonScratch, RowScratch};
 
 #[cfg(test)]
@@ -280,23 +280,6 @@ impl PreparedScene {
         }
         Ok(())
     }
-}
-
-/// Device-space bounds of flattened edges; infinite and inverted when there are none.
-pub(crate) fn edge_bounds(edges: &[Edge]) -> Rect {
-    let mut bounds = Rect::new(
-        f64::INFINITY,
-        f64::INFINITY,
-        f64::NEG_INFINITY,
-        f64::NEG_INFINITY,
-    );
-    for edge in edges {
-        bounds.left = bounds.left.min(edge.top.x).min(edge.bottom.x);
-        bounds.right = bounds.right.max(edge.top.x).max(edge.bottom.x);
-        bounds.top = bounds.top.min(edge.top.y);
-        bounds.bottom = bounds.bottom.max(edge.bottom.y);
-    }
-    bounds
 }
 
 fn scratch<Value>(

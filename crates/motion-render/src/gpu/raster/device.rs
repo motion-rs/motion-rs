@@ -2,8 +2,8 @@
 
 use crate::prepared::GpuPreparationStats;
 use crate::prepared::{PreparedScene, Strip};
-use crate::raster::polygon::{Edge, edge_bounds, path_edges};
 use crate::raster::{RasterScope, pixel_bounds};
+use motion_core::geometry::flatten::{Edge, edge_bounds, path_edges};
 use motion_core::{Transform, ValidationError};
 use std::mem::size_of;
 use std::ops::Range;

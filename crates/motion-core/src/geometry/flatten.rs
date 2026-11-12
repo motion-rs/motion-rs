@@ -1,6 +1,6 @@
 //! Shared bounded Bezier-to-edge geometry, independent of pixel composition.
 use crate::budget::{Budget, RasterLimits};
-use crate::{PathVerb, PixelSize, Point, Transform, ValidationError};
+use crate::{PathVerb, PixelSize, Point, Rect, Transform, ValidationError};
 use kurbo::{CubicBez, ParamCurve, QuadBez};
 use std::mem::size_of;
 
@@ -86,6 +86,23 @@ pub fn surface_edges(
         "vector_tree.surface",
     )?;
     Ok((edges, budget.work_done()))
+}
+
+/// Device-space bounds of flattened edges; infinite and inverted when there are none.
+pub fn edge_bounds(edges: &[Edge]) -> Rect {
+    let mut bounds = Rect::new(
+        f64::INFINITY,
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+        f64::NEG_INFINITY,
+    );
+    for edge in edges {
+        bounds.left = bounds.left.min(edge.top.x).min(edge.bottom.x);
+        bounds.right = bounds.right.max(edge.top.x).max(edge.bottom.x);
+        bounds.top = bounds.top.min(edge.top.y);
+        bounds.bottom = bounds.bottom.max(edge.bottom.y);
+    }
+    bounds
 }
 
 /// Transforms verbs into directed edges, implicitly closing each contour.

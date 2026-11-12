@@ -1,10 +1,10 @@
 //! Conservative tile storage and work admission before device coverage is selected.
 
 use crate::prepared::PixelRect;
-use crate::raster::polygon::Edge;
 use kurbo::ParamCurve;
 use motion_core::ValidationError;
 use motion_core::budget::Budget;
+use motion_core::geometry::flatten::Edge;
 
 /// Width and height of a coverage tile in pixels.
 pub(crate) const COVERAGE_TILE_SIZE: u32 = 16;
