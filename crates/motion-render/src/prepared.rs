@@ -213,7 +213,11 @@ impl AsRef<PreparedScene> for PreparedFrame {
     }
 }
 
-/// Common composition records; GPU coverage storage belongs to its own prepared frame.
+/// Common composition records shared by both backends.
+///
+/// `strips`, `spans` and `alphas` are analytic coverage: the CPU composes every fill from them,
+/// while the GPU reads them only for rectangles, decal patterns and clips. Device-generated fill
+/// coverage lives in the GPU frame's own geometry, never here.
 ///
 /// This type is exposed only as the dereference target of [`PreparedFrame`].
 /// Its storage cannot be constructed or edited outside this crate.
