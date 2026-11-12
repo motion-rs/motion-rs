@@ -10,23 +10,18 @@ use motion_core::budget::Budget;
 pub(crate) const COVERAGE_TILE_SIZE: u32 = 16;
 
 /// Signed row height carried into each tile row; mirrored in coverage.wgsl.
-#[cfg(feature = "gpu")]
 pub(crate) const COVERAGE_CARRY_STRIDE: u64 = 1;
 
 /// Bytes in the host/WGSL coverage fill descriptor.
-#[cfg(feature = "gpu")]
 pub(crate) const COVERAGE_FILL_BYTES: u64 = 48;
 
 /// Bytes in the host/WGSL coverage edge descriptor.
-#[cfg(feature = "gpu")]
 pub(crate) const COVERAGE_EDGE_BYTES: u64 = 32;
 
 /// Bytes in the host/WGSL coverage curve descriptor.
-#[cfg(feature = "gpu")]
 pub(crate) const COVERAGE_CURVE_BYTES: u64 = 48;
 
 /// Bytes in the host/WGSL coverage uniform.
-#[cfg(feature = "gpu")]
 pub(crate) const COVERAGE_PARAMS_BYTES: u64 = 16;
 
 /// Maximum conservatively admitted edge references in one tile. Every pixel scans this list
@@ -218,7 +213,6 @@ impl TileLayout {
         }))
     }
 
-    #[cfg(feature = "gpu")]
     pub(crate) fn tile_count(self) -> u64 {
         u64::from(self.columns) * u64::from(self.rows)
     }

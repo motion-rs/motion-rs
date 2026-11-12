@@ -71,12 +71,9 @@ impl FrameExecution<'_> {
                 }
             },
         )?;
-        #[cfg(feature = "gpu")]
         let started = self.timings.map(|_| std::time::Instant::now());
-        #[cfg(feature = "gpu")]
         let plan = crate::gpu::Plan::new(&prepared, limits)?
             .with_display(&self.composition.options.display, u64::from(index))?;
-        #[cfg(feature = "gpu")]
         if let Some(started) = started {
             self.timings.as_mut().expect("enabled timings").plan += started.elapsed();
         }

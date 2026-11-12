@@ -1,6 +1,5 @@
 //! GPU fill geometry and bounded curve uploads.
 
-#[cfg(feature = "gpu")]
 use crate::prepared::GpuPreparationStats;
 use crate::prepared::{PreparedScene, Strip};
 use crate::raster::polygon::{Edge, edge_bounds, path_edges};
@@ -15,14 +14,12 @@ mod tiles;
 pub(crate) use curves::DeviceCurve;
 
 pub(crate) use tiles::TileLayout;
-#[cfg(feature = "gpu")]
 pub(crate) use tiles::{
     COVERAGE_CARRY_STRIDE, COVERAGE_CURVE_BYTES, COVERAGE_EDGE_BYTES, COVERAGE_FILL_BYTES,
     COVERAGE_PARAMS_BYTES, COVERAGE_TILE_SIZE,
 };
 
 /// Conservative device work units for de Casteljau evaluation and one generated edge write.
-#[cfg(feature = "gpu")]
 pub(crate) const CURVE_FLATTEN_WORK_PER_SEGMENT: u64 = 32;
 
 /// Largest local coordinate magnitude that f32 edge records resolve to a small fraction of a byte.
@@ -211,7 +208,6 @@ impl DeviceGeometry {
         strip.alpha_offset + (strip.width * strip.height) as usize
     }
 
-    #[cfg(feature = "gpu")]
     pub(crate) fn stats(&self, preparation: crate::PreparationStats) -> GpuPreparationStats {
         GpuPreparationStats {
             preparation,

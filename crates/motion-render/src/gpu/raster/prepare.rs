@@ -34,13 +34,11 @@ impl GpuFrame {
         Ok(Self { scene, geometry })
     }
 
-    #[cfg(feature = "gpu")]
     pub(crate) fn quality(mut self, quality: motion_core::RenderQuality) -> Self {
         self.scene.quality = quality;
         self
     }
 
-    #[cfg(feature = "gpu")]
     pub(crate) fn blend_space(mut self, space: motion_core::drawing::BlendSpace) -> Self {
         self.scene.blend_space = space;
         self
@@ -105,7 +103,6 @@ impl SceneBackend for DeviceBackend<'_> {
 }
 
 /// GPU preparation has its own output and never constructs a CPU prepared frame.
-#[cfg(feature = "gpu")]
 pub(crate) fn prepare_validated_device(
     source: &motion_core::ValidatedDisplayList,
     validation: ValidationLimits,
