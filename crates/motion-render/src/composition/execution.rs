@@ -276,6 +276,10 @@ mod scene_output_tests {
     fn opt_in_timings_preserve_output_work_and_reset_attempts() {
         let mut renderer =
             Composition::new(8, 8, crate::FrameClock::new(motion_core::fps!(30), 150))
+                .with_options(
+                    crate::RenderOptions::default().backend(crate::BackendPreference::Cpu),
+                )
+                .unwrap()
                 .frame_renderer(Size::new(8.0, 8.0))
                 .unwrap();
         let build = |_: &SceneContext<'_>| {

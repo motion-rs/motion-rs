@@ -242,7 +242,11 @@ fn global_shutter_averages_complete_frames_and_preserves_old_once_contract() -> 
 
 fn composition() -> Composition {
     Composition::new(8, 4, crate::FrameClock::new(motion_core::fps!(24), 12))
-        .with_options(crate::RenderOptions::default().background(Color::rgb(20, 40, 60)))
+        .with_options(
+            crate::RenderOptions::default()
+                .backend(crate::BackendPreference::Cpu)
+                .background(Color::rgb(20, 40, 60)),
+        )
         .unwrap()
 }
 

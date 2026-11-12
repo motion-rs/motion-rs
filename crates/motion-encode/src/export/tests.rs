@@ -260,6 +260,10 @@ fn parallel_export_matches_serial_pixels_ntsc_ranges_and_progress() -> Result<()
     let mut options = ExportOptions::new("unused-later-large-frame")
         .range(Time::from_frame(2, rate)..Time::from_frame(10, rate))
         .workers(4);
+    #[cfg(feature = "gpu")]
+    {
+        options.render.backend = motion_render::BackendPreference::Cpu;
+    }
     #[cfg(not(feature = "gpu"))]
     {
         options.render.backend = motion_render::BackendPreference::gpu();
