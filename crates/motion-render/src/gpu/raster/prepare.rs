@@ -88,15 +88,11 @@ impl SceneBackend for DeviceBackend<'_> {
         tolerance: f64,
         scope: &mut RasterScope<'_>,
     ) -> Result<(), ValidationError> {
-        // Rectangles stay analytic strips; every other fill is device coverage or an error.
-        if !matches!(geometry.source, GeometrySource::Path(_)) {
+        // Rectangles and decal patterns keep analytic strips: decals reject samples in f64 against
+        // CPU coverage. Every other fill is device coverage or an error.
+        let decal = matches!(paint.source, motion_core::Paint::Pattern(pattern) if pattern.decal);
+        if decal || !matches!(geometry.source, GeometrySource::Path(_)) {
             return prepare_geometry(frame, geometry, tolerance, self.cache.as_deref_mut(), scope);
-        }
-        if matches!(paint.source, motion_core::Paint::Pattern(pattern) if pattern.decal) {
-            return Err(super::device::unsupported(
-                scope.path,
-                "decal image patterns have no device coverage",
-            ));
         }
         self.geometry.device_fill(frame, geometry, tolerance, scope)
     }

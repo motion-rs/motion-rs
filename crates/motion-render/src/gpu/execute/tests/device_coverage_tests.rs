@@ -228,14 +228,15 @@ fn device_float_coverage_layout_and_admission() -> motion_core::Result {
 #[test]
 #[ignore = "requires native GPU; verifies unquantized coverage and mixed CPU/GPU records"]
 fn device_float_coverage_survives_composition() -> motion_core::Result {
-    let frame = prepare_node(
-        Node::group([
+    let mixed = || -> motion_core::Result<Node> {
+        Ok(Node::group([
             triangle(0.0)?,
             triangle(1.0)?,
             Node::from(motion_core::Rect::new(2.0, 0.0, 2.5, 1.0).fill(Color::WHITE)),
-        ]),
-        PixelSize::new(3, 2),
-    )?;
+        ]))
+    };
+    let size = PixelSize::new(3, 2);
+    let frame = prepare_node(mixed()?, size)?;
     let limits = RasterLimits::default();
     assert_eq!(frame.geometry.device_fills.len(), 2);
     assert!(!frame.alphas.is_empty());
@@ -248,7 +249,9 @@ fn device_float_coverage_survives_composition() -> motion_core::Result {
             assert!((value * 255.0 - (value * 255.0).round()).abs() > 0.05);
         }
     }
-    let cpu = frame.compose_linear(limits)?;
+    let validation = ValidationLimits::default();
+    let list = mixed()?.compile(motion_core::Size::new(3.0, 2.0), size, validation)?;
+    let cpu = list.prepare(validation, limits)?.compose_linear(limits)?;
     assert_eq!(actual.pixel(2, 0), cpu.pixel(2, 0));
     assert_visually_equivalent(
         actual.to_rgba8_frame(false, limits)?.pixels(),

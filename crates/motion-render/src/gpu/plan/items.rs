@@ -160,20 +160,14 @@ impl<'a> ItemPlanner<'a> {
             |source| matches!(&source.paint, motion_core::Paint::Pattern(pattern) if pattern.decal),
         );
         let mut parameters = GpuUniforms::new(frame, GpuOp::Fill, layer_bounds);
+        let device = frame
+            .device_fills
+            .iter()
+            .any(|fill| strips.contains(&fill.strip));
         // Only drawn quads name their record; a compute pass would scan every record per pixel.
-        let direct = !decal && !strips.is_empty() && parameters.operation.blend_space == 0;
-        if !direct
-            && frame
-                .device_fills
-                .iter()
-                .any(|fill| strips.contains(&fill.strip))
-        {
-            return Err(ValidationError::unsupported(
-                "gpu.device_coverage",
-                "fill",
-                "Device coverage requires direct fill coverage",
-            ));
-        }
+        // Device samples exist only on the GPU, so their fills use direct records regardless.
+        let direct =
+            !decal && !strips.is_empty() && (parameters.operation.blend_space == 0 || device);
         let mut data = if direct {
             self.planner
                 .direct_coverage(strips.clone(), spans.clone(), layer_bounds)?
