@@ -138,7 +138,7 @@ global cache or a mechanism for discovering or decoding resources.
 | Deferred (retains source/options) | Eager (does the work now) |
 | --- | --- |
 | `Assets::load`, `Image::open`, `Svg::open`, `Svg::new(handle)` | `ImageAsset::from_bytes`, `SvgAsset::from_bytes_with_fonts`, `Assets::preload` |
-| `Formula::typst` | `Formula::compile`, `FormulaCompiler::compile` |
+| `Formula::typst` | `Formula::asset`, `FormulaCompiler::compile` |
 | `Text` shaping at compilation | `Text::layout(&fonts)` for inspection |
 
 `Handle::state()` returns an `AssetState` without loading; it moves `Unloaded` → `Loading` → `Ready(Arc<A>)` or `Failed(Arc<Error>)`. Failure is
