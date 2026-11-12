@@ -1,16 +1,10 @@
-//! GPU fill geometry, bounded curve uploads and explicit CPU reference materialization.
+//! GPU fill geometry and bounded curve uploads.
 
 #[cfg(feature = "gpu")]
 use crate::prepared::GpuPreparationStats;
-#[cfg(test)]
-use crate::prepared::PreparedItem;
 use crate::prepared::{PreparedScene, Strip};
-#[cfg(test)]
-use crate::raster::polygon::scratch::PolygonScratch;
 use crate::raster::polygon::{Edge, edge_bounds, path_edges};
 use crate::raster::{RasterScope, pixel_bounds};
-#[cfg(test)]
-use motion_core::{Point, RasterLimits};
 use motion_core::{Transform, ValidationError};
 use std::mem::size_of;
 use std::ops::Range;
@@ -247,96 +241,5 @@ impl DeviceGeometry {
             },
             analytic_cpu_fallbacks: self.analytic_cpu_fallbacks,
         }
-    }
-
-    /// Replaces every device fill with CPU strips, spans and alphas for CPU rendering.
-    ///
-    /// Strips are appended and the owning items repointed, so earlier indices stay valid.
-    #[cfg(test)]
-    pub(crate) fn materialize_device_coverage(
-        &mut self,
-        scene: &mut PreparedScene,
-        limits: RasterLimits,
-    ) -> Result<(), ValidationError> {
-        if self.device_fills.is_empty() {
-            return Ok(());
-        }
-        let fills = std::mem::take(&mut self.device_fills);
-        let device_edges = std::mem::take(&mut self.device_edges);
-        let mut budget = motion_core::budget::Budget::new(scene.size, limits)?;
-        budget.bytes(scene.stats.retained_bytes, "gpu.materialize")?;
-        let mut scratch = PolygonScratch::default();
-        let mut next = fills.iter().peekable();
-        for index in 0..scene.items.len() {
-            let PreparedItem::Fill { strips, spans, .. } = &scene.items[index] else {
-                continue;
-            };
-            let Some(fill) = next.next_if(|fill| strips.len() == 1 && strips.start == fill.strip)
-            else {
-                continue;
-            };
-            debug_assert!(spans.is_empty());
-            let mut edges = Vec::new();
-            if !fill.curves.is_empty() {
-                let mut verbs = Vec::new();
-                let curves = &self.device_curves[fill.curves.clone()];
-                let mut current = None;
-                for curve in curves {
-                    if current != Some(curve.points[0]) {
-                        budget.push(
-                            &mut verbs,
-                            motion_core::PathVerb::MoveTo(curve.points[0]),
-                            "gpu.materialize",
-                        )?;
-                    }
-                    let [_, first, second, end] = curve.points;
-                    budget.push(
-                        &mut verbs,
-                        if curve.segments == 1 {
-                            motion_core::PathVerb::LineTo(end)
-                        } else {
-                            motion_core::PathVerb::CubicTo(first, second, end)
-                        },
-                        "gpu.materialize",
-                    )?;
-                    current = Some(end);
-                }
-                edges = path_edges(
-                    verbs.iter().copied(),
-                    Transform::IDENTITY,
-                    curves[0].tolerance,
-                    &mut budget,
-                    "gpu.materialize",
-                )?;
-                budget.release(std::mem::size_of_val(verbs.as_slice()) as u64);
-            }
-            for edge in &device_edges[fill.edges.clone()] {
-                budget.push(
-                    &mut edges,
-                    Edge {
-                        top: Point::new(edge[0], edge[1]),
-                        bottom: Point::new(edge[2], edge[3]),
-                        winding: edge[4] as i32,
-                    },
-                    "gpu.materialize",
-                )?;
-            }
-            let (strip_start, span_start) = (scene.strips.len(), scene.spans.len());
-            scene.polygon_edges(
-                &edges,
-                fill.rule,
-                &mut scratch,
-                &mut RasterScope::new(&mut budget, "gpu.device_fill"),
-            )?;
-            budget.release((edges.len() * size_of::<Edge>()) as u64);
-            if let PreparedItem::Fill { strips, spans, .. } = &mut scene.items[index] {
-                *strips = strip_start..scene.strips.len();
-                *spans = span_start..scene.spans.len();
-            }
-        }
-        scene.stats.retained_bytes = budget.live_bytes();
-        scene.stats.peak_bytes = scene.stats.peak_bytes.max(budget.peak_bytes());
-        scene.stats.work += budget.work_done();
-        Ok(())
     }
 }

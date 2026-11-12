@@ -1,8 +1,6 @@
 //! GPU-specific preparation results, independent of public CPU prepared frames.
 
 use super::device::DeviceGeometry;
-#[cfg(test)]
-use crate::prepared::PreparedFrame;
 use crate::prepared::PreparedScene;
 use crate::raster::frame_ir::{FrameIr, GeometrySource, IrPaint, IrPath};
 use crate::raster::paint::TableCache;
@@ -50,34 +48,6 @@ impl GpuFrame {
 
     pub(crate) fn has_device_coverage(&self) -> bool {
         !self.geometry.device_fills.is_empty()
-    }
-
-    /// Explicit compatibility conversion, never needed by GPU submission.
-    #[cfg(test)]
-    pub(crate) fn into_cpu(
-        mut self,
-        limits: RasterLimits,
-    ) -> Result<PreparedFrame, ValidationError> {
-        self.geometry
-            .materialize_device_coverage(&mut self.scene, limits)?;
-        Ok(PreparedFrame { scene: self.scene })
-    }
-
-    #[cfg(test)]
-    pub(crate) fn materialize_device_coverage(
-        &mut self,
-        limits: RasterLimits,
-    ) -> Result<(), ValidationError> {
-        self.geometry
-            .materialize_device_coverage(&mut self.scene, limits)
-    }
-
-    #[cfg(test)]
-    pub(crate) fn compose_linear(
-        &self,
-        limits: RasterLimits,
-    ) -> Result<crate::cpu::LinearFrame, ValidationError> {
-        self.clone().into_cpu(limits)?.scene.compose_linear(limits)
     }
 }
 
