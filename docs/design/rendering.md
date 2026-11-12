@@ -661,7 +661,8 @@ accumulates signed area from its tile edges plus a per-row carry, then folds the
 the fill rule (non-zero clamps its magnitude, even-odd folds it). Contours that overlap
 inside one pixel are approximated, so duplicate even-odd edges and opposite windings
 sharing an edge within a pixel row can differ from the CPU sweep. Localized
-antialiasing differences are allowed. CPU rendering keeps its own reference arithmetic,
+antialiasing differences are allowed within the Overlap tier of
+[visual acceptance](reliability.md#visual-acceptance). CPU rendering keeps its own reference arithmetic,
 and a selected GPU never switches backends after a failure.
 
 Coverage uses 16-by-16 pixel tiles. The passes below produce f32 samples that
@@ -982,9 +983,10 @@ not change.
 
 GPU fixtures compare against the CPU backend for clipping, masks, blending, filters, text,
 image, vector and particle output, external textures and device failure, and check
-visually stable replay with declared tolerances. Comparisons require visual equivalence
-with fixture-specific tolerances, not a global LSB threshold or byte identity; missing
-geometry, clip leakage and visible replay flicker are defects. Stricter existing fixtures
+visually stable replay. Comparisons use the levels and named tiers in
+[visual acceptance](reliability.md#visual-acceptance): global RMS, 16x16 tile RMS and
+3x3 neighborhood outliers on black and white, not a global LSB threshold or byte
+identity; missing geometry, clip leakage and visible replay flicker are defects. Stricter existing fixtures
 are local regression checks, not restrictions on new GPU algorithms. CPU determinism
 checks stay exact. Native fixtures also cover linear and HDR output, packed RGBA and YUV,
 ordered three-frame completion, shared vertex and uniform buffers, all four mask modes,

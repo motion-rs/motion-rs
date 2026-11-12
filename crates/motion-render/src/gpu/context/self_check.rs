@@ -1,20 +1,28 @@
 //! Startup visual fixtures that prepare CPU and GPU coverage independently.
 
-use crate::gpu::{Gpu, GpuContext, Plan, PreparedGpuFrame, visual};
+use crate::gpu::visual::{self, VisualTolerance};
+use crate::gpu::{Gpu, GpuContext, Plan, PreparedGpuFrame};
 use crate::{RasterLimits, RenderPrepare};
 use motion_core::{
     BlendMode, Circle, ClipMode, Color, FillRule, Filter, LinearGradient, Node, NodeModifiers,
     Path2D, PixelSize, Point, Rect, Shape, Size, ValidationError, ValidationLimits,
 };
 
-/// RMS allowance for spatial paint fixtures.
-const PAINT_VISUAL_RMS: f64 = 0.005;
+/// Small self-intersecting contours permit localized differences in antialiasing area, but
+/// keep a tighter global RMS than the general overlap tier.
+const GEOMETRY_VISUAL: VisualTolerance = VisualTolerance {
+    rms: 0.02,
+    ..VisualTolerance::OVERLAP
+};
 
-/// Small self-intersecting contours permit localized differences in antialiasing area.
-const GEOMETRY_VISUAL_RMS: f64 = 0.02;
+/// Blur after nested clips spreads overlap differences, so tiles keep the overlap limits.
+const FILTER_VISUAL: VisualTolerance = VisualTolerance {
+    rms: 0.01,
+    ..VisualTolerance::OVERLAP
+};
 
-/// RMS allowance after filtering the clipped geometry fixture.
-const FILTER_VISUAL_RMS: f64 = 0.01;
+/// Edge length of the square fixture output, in pixels.
+const FIXTURE_PIXELS: u32 = 64;
 
 impl GpuContext {
     /// Checks independently prepared CPU/GPU geometry, alpha, paints, clipping and filters.
@@ -37,7 +45,11 @@ fn run(context: &GpuContext) -> motion_core::Result<()> {
     let validation = ValidationLimits::default();
     let mut gpu = Gpu::from_context(context.clone());
     for (label, node, requires_device_coverage, tolerance) in fixtures()? {
-        let list = node.compile(Size::new(64.0, 64.0), PixelSize::new(64, 64), validation)?;
+        let list = node.compile(
+            Size::new(f64::from(FIXTURE_PIXELS), f64::from(FIXTURE_PIXELS)),
+            PixelSize::new(FIXTURE_PIXELS, FIXTURE_PIXELS),
+            validation,
+        )?;
         let reference = list.prepare(validation, limits)?;
         let device = crate::gpu::raster::prepare::prepare_validated_device(
             &list,
@@ -60,6 +72,7 @@ fn run(context: &GpuContext) -> motion_core::Result<()> {
         visual::compare_rgba8(
             actual.bytes().as_chunks::<4>().0,
             expected.bytes().as_chunks::<4>().0,
+            FIXTURE_PIXELS as usize,
             tolerance,
         )
         .map_err(|error| ValidationError::invalid("gpu.self_check", label, error.to_string()))?;
@@ -67,7 +80,8 @@ fn run(context: &GpuContext) -> motion_core::Result<()> {
         visual::compare_rgba8(
             replay.bytes().as_chunks::<4>().0,
             actual.bytes().as_chunks::<4>().0,
-            tolerance,
+            FIXTURE_PIXELS as usize,
+            VisualTolerance::REPLAY,
         )
         .map_err(|error| ValidationError::invalid("gpu.self_check", label, error.to_string()))?;
     }
@@ -85,7 +99,7 @@ fn render(
     )?)
 }
 
-fn fixtures() -> Result<Vec<(&'static str, Node, bool, f64)>, ValidationError> {
+fn fixtures() -> Result<Vec<(&'static str, Node, bool, VisualTolerance)>, ValidationError> {
     let paints = Node::group([
         Node::from(
             Rect::new(0.25, 0.5, 12.75, 9.25).fill(
@@ -130,9 +144,9 @@ fn fixtures() -> Result<Vec<(&'static str, Node, bool, f64)>, ValidationError> {
         )
         .filter(Filter::Blur { sigma: 0.6 });
     Ok(vec![
-        ("paints", paints, false, PAINT_VISUAL_RMS),
-        ("geometry", geometry, true, GEOMETRY_VISUAL_RMS),
-        ("filtered_clips", filtered, true, FILTER_VISUAL_RMS),
+        ("paints", paints, false, VisualTolerance::PAINT),
+        ("geometry", geometry, true, GEOMETRY_VISUAL),
+        ("filtered_clips", filtered, true, FILTER_VISUAL),
     ])
 }
 

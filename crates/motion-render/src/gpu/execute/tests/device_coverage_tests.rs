@@ -1,6 +1,7 @@
 //! GPU-computed fill coverage against the CPU reference.
 
 use super::*;
+use crate::gpu::visual::VisualTolerance;
 use motion_core::{Color, FillRule, Node, Path2D, Point, Shape};
 
 fn star(center: Point, radius: f64, rule: FillRule, color: Color) -> motion_core::Result<Node> {
@@ -162,17 +163,23 @@ fn assert_matches_cpu(crossing: bool) -> motion_core::Result {
     let actual = gpu
         .render(&device.records, Plan::new(&device, limits)?)?
         .to_rgba8_frame(false, limits)?;
-    assert_visually_equivalent(actual.pixels(), expected.pixels());
+    assert_visually_equivalent(&actual, &expected, VisualTolerance::COVERAGE);
     let replay = gpu
         .render(&device.records, Plan::new(&device, limits)?)?
         .to_rgba8_frame(false, limits)?;
-    assert_visually_equivalent(actual.pixels(), replay.pixels());
+    assert_visually_equivalent(&replay, &actual, VisualTolerance::REPLAY);
     Ok(())
 }
 
-pub(super) fn assert_visually_equivalent(actual: &[[u8; 4]], expected: &[[u8; 4]]) {
-    // This scene permits localized antialiasing differences, including at crossing edges.
-    crate::gpu::visual::compare_rgba8(actual, expected, 0.01).unwrap();
+pub(super) fn assert_visually_equivalent(
+    actual: &crate::cpu::output::Rgba8Frame,
+    expected: &crate::cpu::output::Rgba8Frame,
+    tolerance: VisualTolerance,
+) {
+    assert_eq!(actual.size(), expected.size());
+    let width = actual.size().width as usize;
+    crate::gpu::visual::compare_rgba8(actual.pixels(), expected.pixels(), width, tolerance)
+        .unwrap_or_else(|error| panic!("{error}"));
 }
 
 fn triangle(left: f64) -> motion_core::Result<Node> {
@@ -251,8 +258,9 @@ fn device_float_coverage_survives_composition() -> motion_core::Result {
     let cpu = list.prepare(validation, limits)?.compose_linear(limits)?;
     assert_eq!(actual.pixel(2, 0), cpu.pixel(2, 0));
     assert_visually_equivalent(
-        actual.to_rgba8_frame(false, limits)?.pixels(),
-        cpu.to_rgba8_frame(false, limits)?.pixels(),
+        &actual.to_rgba8_frame(false, limits)?,
+        &cpu.to_rgba8_frame(false, limits)?,
+        VisualTolerance::COVERAGE,
     );
     Ok(())
 }

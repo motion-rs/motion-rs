@@ -1,6 +1,7 @@
 //! Tile interiors, seams, static admission and explicit CPU path diagnostics.
 
 use super::*;
+use crate::gpu::visual::VisualTolerance;
 use motion_core::{Color, FillRule, Node, Path2D, Point, Rect, Size};
 
 fn prepare_cpu(node: Node) -> motion_core::Result<crate::PreparedCpuFrame> {
@@ -189,8 +190,9 @@ fn tile_interiors_fill_rules_and_reused_scratch_match_cpu() -> motion_core::Resu
             }
         }
         super::device_coverage_tests::assert_visually_equivalent(
-            actual.to_rgba8_frame(false, limits)?.pixels(),
-            expected.to_rgba8_frame(false, limits)?.pixels(),
+            &actual.to_rgba8_frame(false, limits)?,
+            &expected.to_rgba8_frame(false, limits)?,
+            VisualTolerance::COVERAGE,
         );
     }
     Ok(())
@@ -220,8 +222,9 @@ fn sloping_tile_edges_match_cpu_with_explicit_tolerance() -> motion_core::Result
             .render(&frame.records, Plan::new(&frame, limits)?)?
             .to_rgba8_frame(false, limits)?;
         super::device_coverage_tests::assert_visually_equivalent(
-            actual.pixels(),
-            expected.pixels(),
+            &actual,
+            &expected,
+            VisualTolerance::COVERAGE,
         );
     }
     Ok(())

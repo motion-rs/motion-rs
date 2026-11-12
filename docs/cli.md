@@ -226,9 +226,8 @@ The gallery wraps the same CLI ([`gallery/src/lib.rs`](../gallery/src/lib.rs)):
 - `studio --demo NAME` selects one demo (once, valid names only), conflicting with a
   positional name or `--timeline`; bare `studio` selects the first catalog entry.
 
-The [`motion-video` skill](../.github/skills/motion-video/SKILL.md) drives
-`still` and `export` of a film binary with `--size`, `--time`, `--range`,
-`--output` and `--overwrite`, and relies on exit code `0`. `VisualCheckPolicy` in
+Automation can drive `still` and `export` of a film binary with `--size`, `--time`,
+`--range`, `--output` and `--overwrite`, and rely on exit code `0`. `VisualCheckPolicy` in
 [`visual_check.rs`](../crates/motion/src/visual_check.rs) is optional registration metadata:
 attach it with `ProjectBuilder::visual_check` and read it with `Project::visual_check`. It is exported
 from the crate root but not the prelude, and the CLI, rendering and export never read it.

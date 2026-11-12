@@ -1,6 +1,7 @@
 //! Fixed-seed crossing curves, winding rules and unrelated-frame scratch reuse.
 
 use super::*;
+use crate::gpu::visual::VisualTolerance;
 use motion_core::{Color, FillRule, Node, Path2D, Point, Size};
 
 fn path(seed: u64, rule: FillRule) -> motion_core::Result<Node> {
@@ -58,25 +59,13 @@ fn fixed_seed_random_curves_match_cpu_without_local_dropouts() -> motion_core::R
             let actual = gpu
                 .render(&device.records, Plan::new(&device, limits)?)?
                 .to_rgba8_frame(false, limits)?;
-            crate::gpu::visual::compare_rgba8(actual.pixels(), expected.pixels(), 0.05)
-                .unwrap_or_else(|error| panic!("seed {seed}, {rule:?}: {error}"));
-            for top in (0..64).step_by(16) {
-                for left in (0..64).step_by(16) {
-                    let region = |pixels: &[[u8; 4]]| {
-                        (top..top + 16)
-                            .flat_map(|y| pixels[y * 64 + left..y * 64 + left + 16].iter().copied())
-                            .collect::<Vec<_>>()
-                    };
-                    crate::gpu::visual::compare_rgba8(
-                        &region(actual.pixels()),
-                        &region(expected.pixels()),
-                        0.12,
-                    )
-                    .unwrap_or_else(|error| {
-                        panic!("seed {seed}, {rule:?}, tile {left},{top}: {error}")
-                    });
-                }
-            }
+            crate::gpu::visual::compare_rgba8(
+                actual.pixels(),
+                expected.pixels(),
+                64,
+                VisualTolerance::OVERLAP,
+            )
+            .unwrap_or_else(|error| panic!("seed {seed}, {rule:?}: {error}"));
         }
     }
     Ok(())

@@ -1,6 +1,7 @@
 //! Curve-only uploads, conservative generated storage and native curved-fill composition.
 
 use super::*;
+use crate::gpu::visual::VisualTolerance;
 use motion_core::{ClipMode, Color, FillRule, Filter, Node, Path2D, Point, Rect, Size};
 
 fn curve(rule: FillRule) -> motion_core::Result<Node> {
@@ -167,7 +168,11 @@ fn gpu_curve_flattening_cpu_gpu_equivalence_and_replay() -> motion_core::Result 
         let replay = gpu
             .render(&device.records, Plan::new(&device, limits)?)?
             .to_rgba8_frame(false, limits)?;
-        crate::gpu::visual::compare_rgba8(actual.pixels(), reference.pixels(), 0.01).unwrap();
+        super::device_coverage_tests::assert_visually_equivalent(
+            &actual,
+            &reference,
+            VisualTolerance::COVERAGE,
+        );
         assert_eq!(actual, replay);
     }
     Ok(())

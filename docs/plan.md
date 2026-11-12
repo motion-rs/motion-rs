@@ -100,9 +100,20 @@ Mesh and generated atmosphere paints retain descriptors and evaluate independent
 on CPU/GPU; explicit image-baking APIs preserve their existing behavior.
 Remaining acceptance:
 
-Validate complex text, SVG, clipping and filtered scenes at larger resolutions
-before claiming performance gains. Functional GPU flattening, procedural evaluation
-and residency do not establish throughput acceptance.
+1. Add a large-scene native fixture that shares the breadth benchmark scenes: text,
+   SVG paths with gradients, holes, clipping and filters, crossing paths under nested
+   clips, and analytic particles with blur, mesh paint and procedural atmosphere.
+   Render several frames at 640x360, 1920x1080 and 3840x2160, compare each with the
+   [visual acceptance](design/reliability.md#visual-acceptance) tiers, and precede
+   each replay with an unrelated seek. It needs an explicit logical byte allowance
+   without changing the breadth benchmark budget.
+2. Move the remaining CPU/GPU parity fixtures (Bloom, text, frame-renderer sessions,
+   particles and procedural paints) from their local per-channel or f32 checks to the
+   named levels and tiers, sharing the comparator across crates. Align
+   `VisualCheckPolicy::max_rgb_difference` with the tiers.
+3. Validate complex text, SVG, clipping and filtered scenes at larger resolutions
+   before claiming performance gains. Functional GPU flattening, procedural evaluation
+   and residency do not establish throughput acceptance.
 
 ### Additional capabilities
 
