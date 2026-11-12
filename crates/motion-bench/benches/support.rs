@@ -51,7 +51,7 @@ pub fn frame_timing_json(
                 "count": interval(gpu.coverage[1]),
                 "prefix": interval(gpu.coverage[2]),
                 "scatter": interval(gpu.coverage[3]),
-                "boundaries": interval(gpu.coverage[4]),
+                "carry": interval(gpu.coverage[4]),
                 "coverage": interval(gpu.coverage[5]),
             },
             "timestamp_period_ns": gpu.timestamp_period_ns,

@@ -111,7 +111,7 @@ pub(super) fn prepare_node(node: Node, size: PixelSize) -> motion_core::Result<P
 
 #[test]
 fn coverage_shader_constants_match_the_host_planner() {
-    use crate::gpu::raster::device::{COVERAGE_BOUNDARY_STRIDE, COVERAGE_TILE_SIZE};
+    use crate::gpu::raster::device::{COVERAGE_CARRY_STRIDE, COVERAGE_TILE_SIZE};
     let source = include_str!("../../shaders/coverage.wgsl");
     let constant = |name: &str| -> u64 {
         let prefix = format!("const {name} = ");
@@ -122,7 +122,8 @@ fn coverage_shader_constants_match_the_host_planner() {
         line.trim_end_matches("u;").parse().unwrap()
     };
     assert_eq!(constant("TILE_SIZE"), u64::from(COVERAGE_TILE_SIZE));
-    assert_eq!(constant("BOUNDARY_STRIDE"), COVERAGE_BOUNDARY_STRIDE);
+    assert_eq!(constant("CARRY_STRIDE"), COVERAGE_CARRY_STRIDE);
+    assert_eq!(constant("CARRY_STRIDE"), constant("WINDING_SAMPLES") + 1);
 }
 
 #[test]

@@ -1,4 +1,6 @@
-// GPU curve flattening and winding-selected analytic boundary integration.
+// GPU curve flattening, edge binning and f32 analytic area coverage: signed-area accumulation
+// folded by the fill rule, as in Skia's analytic AA and Vello's fine rasterizer, with 4 x 4
+// sampled refinement where contours overlap inside a pixel.
 // Host layouts are asserted in gpu/layout.rs.
 struct CoverageParams {
     fills: u32,
@@ -48,18 +50,23 @@ struct CoverageTile {
 @group(0) @binding(2) var<storage, read_write> edges: array<CoverageEdge>;
 @group(0) @binding(3) var<storage, read_write> tiles: array<CoverageTile>;
 @group(0) @binding(4) var<storage, read_write> indices: array<u32>;
-@group(0) @binding(5) var<storage, read_write> row_areas: array<f32>;
+@group(0) @binding(5) var<storage, read_write> carries: array<i32>;
 @group(0) @binding(6) var<storage, read_write> coverage: array<u32>;
 @group(0) @binding(7) var<storage, read> curves: array<CoverageCurve>;
 
 const TILE_SIZE = 16u;
-// Integrated column areas per tile row, mirrored by the host planner.
-const BOUNDARY_STRIDE = 16u;
+// Sample rows and columns per pixel in the overlap refinement.
+const WINDING_SAMPLES = 4u;
+// Signed row height plus one winding per sample row carried into each tile row;
+// mirrored by the host planner.
+const CARRY_STRIDE = 5u;
+// Areas are summed in wrapping fixed point, so totals do not depend on the atomic order
+// in which edges were scattered into a tile.
+const AREA_SCALE = 1048576.0;
 
 var<workgroup> prefix_values: array<u32, 64>;
 var<workgroup> prefix_fills: array<u32, 64>;
 var<workgroup> prefix_base: u32;
-var<workgroup> boundary_areas: array<f32, 1024>;
 
 fn curve_point(curve: CoverageCurve, time: f32) -> vec2f {
     let a = mix(curve.first.xy, curve.first.zw, time);
@@ -117,9 +124,7 @@ fn bin_edge(index: u32, scatter: bool) {
     let last = min(fill.tile_rows, u32(ceil(max(0.0, min(edge.w, f32(fill.size.y))) / f32(TILE_SIZE))));
     for (var row = first; row < last; row++) {
         let columns = tile_columns(record.points, row, fill.columns);
-        // Winding selection needs every crossing to the left, including
-        // offscreen contours, not just its integrated signed height.
-        for (var column = columns.x; column < fill.columns; column++) {
+        for (var column = columns.x; column <= columns.y; column++) {
             let tile = fill.first_tile + row * fill.columns + column;
             if scatter {
                 let slot = atomicAdd(&tiles[tile].cursor, 1u);
@@ -258,47 +263,65 @@ fn fill_tiles(@builtin(global_invocation_id) id: vec3u, @builtin(num_workgroups)
     }
 }
 
-fn edge_x(edge: vec4f, y: f32) -> f32 {
-    return edge.x + (edge.z - edge.x) * ((y - edge.y) / (edge.w - edge.y));
+fn fixed_area(area: f32) -> i32 {
+    return i32(round(area * AREA_SCALE));
 }
 
-// Winding along a boundary changes only at an intersection or an endpoint
-// of a coincident overlap. No subpixel sampling grid is involved.
-fn next_boundary_cut(edge: vec4f, other: vec4f, start: f32, end: f32) -> f32 {
-    // Evaluate each pair at fixed endpoints. Re-solving from the advancing
-    // start can rediscover one intersection a few ulps later on every iteration.
-    let top = max(edge.y, other.y);
-    let bottom = min(edge.w, other.w);
-    if top >= bottom {
-        return end;
-    }
-    let first = edge_x(edge, top) - edge_x(other, top);
-    let last = edge_x(edge, bottom) - edge_x(other, bottom);
-    if first == 0.0 && last == 0.0 {
-        if top > start {
-            return min(end, top);
-        }
-        return select(end, min(end, bottom), bottom > start);
-    }
-    if first == 0.0 && top > start {
-        return min(end, top);
-    }
-    if last == 0.0 && bottom > start {
-        return min(end, bottom);
-    }
-    if (first < 0.0 && last > 0.0) || (first > 0.0 && last < 0.0) {
-        let scale = max(abs(first), abs(last));
-        let fraction = (abs(first) / scale) / (abs(first) / scale + abs(last) / scale);
-        let crossing = top + (bottom - top) * fraction;
-        if crossing > start && crossing < end {
-            return crossing;
-        }
-    }
-    return end;
+fn row_height(points: vec4f, row: u32) -> f32 {
+    let edge = upper_lower(points);
+    let height = max(0.0, min(edge.w, f32(row + 1u)) - max(edge.y, f32(row)));
+    return select(-height, height, points.w > points.y);
 }
 
-fn inside(winding: i32, rule: u32) -> bool {
-    return select(winding != 0, winding % 2 != 0, rule != 0u);
+// Sample rows per pixel row used to refine pixels where contours overlap.
+fn sample_rows(row: u32) -> vec4f {
+    return f32(row) + (vec4f(0.0, 1.0, 2.0, 3.0) + 0.5) / f32(WINDING_SAMPLES);
+}
+
+// Signed row height and sample-row windings carried into each tile row. An edge is
+// carried only past its final column in the band; in its other tiles it is evaluated
+// locally, so long sloping edges are never doubled.
+@compute @workgroup_size(64)
+fn carry_rows(@builtin(global_invocation_id) id: vec3u, @builtin(num_workgroups) groups: vec3u) {
+    let index = id.x + id.y * groups.x * 64u;
+    if index >= params.rows {
+        return;
+    }
+    var low = 0u;
+    var high = params.fills - 1u;
+    while low < high {
+        let middle = low + (high - low + 1u) / 2u;
+        if fills[middle].first_row <= index {
+            low = middle;
+        } else {
+            high = middle - 1u;
+        }
+    }
+    let fill = fills[low];
+    let row = index - fill.first_row;
+    let band = row / TILE_SIZE;
+    let y = sample_rows(row);
+    var total = 0i;
+    var winding = vec4i(0i);
+    for (var column = 0u; column < fill.columns; column++) {
+        let tile = fill.first_tile + band * fill.columns + column;
+        let carry = (tile * TILE_SIZE + row % TILE_SIZE) * CARRY_STRIDE;
+        carries[carry] = total;
+        for (var sample = 0u; sample < WINDING_SAMPLES; sample++) {
+            carries[carry + 1u + sample] = winding[sample];
+        }
+        let first = tiles[tile].offset;
+        let last = first + atomicLoad(&tiles[tile].count);
+        for (var item = first; item < last; item++) {
+            let points = edges[indices[item]].points;
+            if tile_columns(points, band, fill.columns).y == column {
+                let edge = upper_lower(points);
+                let inside = vec4i((vec4f(edge.y) <= y) & (y < vec4f(edge.w)));
+                total += fixed_area(row_height(points, row));
+                winding += inside * select(-1i, 1i, points.w > points.y);
+            }
+        }
+    }
 }
 
 // Integral of clamp(right - x, 0, 1) along a linear edge, times its height.
@@ -323,107 +346,99 @@ fn column_area(xa: f32, xb: f32, left: f32, height: f32) -> f32 {
     return area * height;
 }
 
-fn integrate_boundary(tile: u32, row: u32, edge_index: u32, origin: vec2f, rule: u32) -> array<f32, 16> {
-    var areas: array<f32, 16>;
-    let points = edges[edge_index].points;
-    let edge = upper_lower(points) - origin.xyxy;
-    var start = max(edge.y, f32(row));
-    let bottom = min(edge.w, f32(row + 1u));
-    if edge.w <= edge.y || start >= bottom {
-        return areas;
-    }
+// Accumulated signed area and a conservative count of winding changes inside the pixel:
+// one per edge crossing it, two per edge that starts or ends inside the row at or left of it.
+fn signed_area(tile: u32, pixel: vec2u) -> vec2f {
+    let origin = vec2f((pixel / TILE_SIZE) * TILE_SIZE);
+    let top = f32(pixel.y % TILE_SIZE);
+    let column = f32(pixel.x % TILE_SIZE);
     let first = tiles[tile].offset;
     let last = first + atomicLoad(&tiles[tile].count);
-    // At most two events per other edge, plus the final interval. Host
-    // admission bounds candidate pairs and both scans before dispatch.
-    for (var event = 0u; event <= 2u * (last - first) && start < bottom; event++) {
-        var end = bottom;
-        for (var item = first; item < last; item++) {
-            let other_index = indices[item];
-            // A separately optimized projection of this same sloping edge
-            // need not round identically to the register-held boundary.
-            if other_index == edge_index {
-                continue;
-            }
-            let other = upper_lower(edges[other_index].points) - origin.xyxy;
-            end = min(end, next_boundary_cut(edge, other, start, bottom));
+    var total = carries[(tile * TILE_SIZE + pixel.y % TILE_SIZE) * CARRY_STRIDE];
+    var boundaries = 0.0;
+    for (var item = first; item < last; item++) {
+        let points = edges[indices[item]].points;
+        let edge = upper_lower(points) - origin.xyxy;
+        let y_top = max(edge.y, top);
+        let y_bottom = min(edge.w, top + 1.0);
+        if edge.w <= edge.y || y_bottom <= y_top {
+            continue;
         }
-        let middle = start + (end - start) * 0.5;
-        let horizontal = edge_x(edge, middle);
-        var winding = 0i;
-        for (var item = first; item < last; item++) {
-            let other_index = indices[item];
-            if other_index == edge_index {
-                continue;
-            }
-            let other_points = edges[other_index].points;
-            let other = upper_lower(other_points) - origin.xyxy;
-            if other.y <= middle && middle < other.w {
-                let x = edge_x(other, middle);
-                // Stable source-edge order resolves coincident boundaries,
-                // independently of the atomic scatter order.
-                let coincident = all(other == edge);
-                if select(x < horizontal, other_index < edge_index, coincident || x == horizontal) {
-                    winding += select(-1i, 1i, other_points.w > other_points.y);
-                }
-            }
+        let xa = edge.x + (edge.z - edge.x) * ((y_top - edge.y) / (edge.w - edge.y));
+        let xb = edge.x + (edge.z - edge.x) * ((y_bottom - edge.y) / (edge.w - edge.y));
+        if max(xa, xb) > column && min(xa, xb) < column + 1.0 {
+            boundaries += 1.0;
         }
-        let next = winding + select(-1i, 1i, points.w > points.y);
-        let direction = f32(i32(inside(next, rule)) - i32(inside(winding, rule)));
-        if direction != 0.0 {
-            let xa = edge_x(edge, start);
-            let xb = edge_x(edge, end);
-            for (var column = 0u; column < TILE_SIZE; column++) {
-                areas[column] += direction * column_area(xa, xb, f32(column), end - start);
-            }
+        if (edge.y > top || edge.w < top + 1.0) && min(xa, xb) < column + 1.0 {
+            boundaries += 2.0;
         }
-        start = end;
+        let area = column_area(xa, xb, column, y_bottom - y_top);
+        total += fixed_area(select(-area, area, points.w > points.y));
     }
-    return areas;
+    return vec2f(f32(total) / AREA_SCALE, boundaries);
 }
 
-// One workgroup owns a tile row. Fixed batches bound scratch independently
-// of the number of intersections, without materializing a crossing list.
-@compute @workgroup_size(64)
-fn boundary_rows(
-    @builtin(workgroup_id) group: vec3u,
-    @builtin(local_invocation_index) lane: u32,
-    @builtin(num_workgroups) groups: vec3u,
-) {
-    let index = group.x + group.y * groups.x;
-    let tile = index / TILE_SIZE;
-    let row = index % TILE_SIZE;
-    if tile >= params.tiles {
-        return;
+fn rule_coverage(total: f32, rule: u32) -> f32 {
+    let magnitude = abs(total);
+    if rule == 0u {
+        return min(magnitude, 1.0);
     }
-    let fill = fills[tile_fill(tile)];
-    let local_tile = tile - fill.first_tile;
-    if local_tile / fill.columns * TILE_SIZE + row >= fill.size.y {
-        return;
+    let folded = magnitude - 2.0 * floor(magnitude * 0.5);
+    return select(folded, 2.0 - folded, folded > 1.0);
+}
+
+// Folding the integrated winding equals integrating the fill rule only while the winding
+// varies by at most one inside the pixel. Otherwise, where contours overlap inside it, the
+// rule is applied to a 4 x 4 grid of sampled windings instead.
+fn refined_coverage(tile: u32, pixel: vec2u, rule: u32, area: vec2f) -> f32 {
+    let analytic = rule_coverage(area.x, rule);
+    let carry = (tile * TILE_SIZE + pixel.y % TILE_SIZE) * CARRY_STRIDE;
+    // Edges of earlier tiles: the winding left of this tile at each sample row.
+    let left = vec4f(vec4i(
+        carries[carry + 1u], carries[carry + 2u], carries[carry + 3u], carries[carry + 4u],
+    ));
+    let uniform_carry = all(left == vec4f(left.x));
+    if uniform_carry && abs(left.x) <= 1.0 && abs(area.x) <= 1.0 && area.y <= 1.0 {
+        return analytic;
     }
-    let origin = vec2f(vec2u(local_tile % fill.columns, local_tile / fill.columns)) * f32(TILE_SIZE);
+    let y = sample_rows(pixel.y);
+    let x = sample_rows(pixel.x);
+    // windings[row][column] for sample (x[column], y[row]).
+    var windings = mat4x4f(vec4f(left.x), vec4f(left.y), vec4f(left.z), vec4f(left.w));
     let first = tiles[tile].offset;
-    let count = atomicLoad(&tiles[tile].count);
-    var total = 0.0;
-    for (var batch = 0u; batch < count; batch += 64u) {
-        var areas: array<f32, 16>;
-        if batch + lane < count {
-            areas = integrate_boundary(tile, row, indices[first + batch + lane], origin, fill.rule);
+    let last = first + atomicLoad(&tiles[tile].count);
+    for (var item = first; item < last; item++) {
+        let points = edges[indices[item]].points;
+        let edge = upper_lower(points);
+        if edge.w <= edge.y || edge.w <= y.x || edge.y > y.w {
+            continue;
         }
-        for (var column = 0u; column < TILE_SIZE; column++) {
-            boundary_areas[lane * TILE_SIZE + column] = areas[column];
-        }
-        workgroupBarrier();
-        if lane < TILE_SIZE {
-            for (var item = 0u; item < min(64u, count - batch); item++) {
-                total += boundary_areas[item * TILE_SIZE + lane];
+        let direction = select(-1.0, 1.0, points.w > points.y);
+        let slope = (edge.z - edge.x) / (edge.w - edge.y);
+        for (var row = 0u; row < WINDING_SAMPLES; row++) {
+            if edge.y <= y[row] && y[row] < edge.w {
+                let crossing = edge.x + slope * (y[row] - edge.y);
+                windings[row] += vec4f(vec4f(crossing) <= x) * direction;
             }
         }
-        workgroupBarrier();
     }
-    if lane < TILE_SIZE {
-        row_areas[(tile * TILE_SIZE + row) * BOUNDARY_STRIDE + lane] = total;
+    var minimum = windings[0].x;
+    var maximum = windings[0].x;
+    var covered = 0.0;
+    for (var row = 0u; row < WINDING_SAMPLES; row++) {
+        let values = windings[row];
+        minimum = min(minimum, min(min(values.x, values.y), min(values.z, values.w)));
+        maximum = max(maximum, max(max(values.x, values.y), max(values.z, values.w)));
+        for (var column = 0u; column < WINDING_SAMPLES; column++) {
+            covered += rule_coverage(values[column], rule);
+        }
     }
+    // Only the two ranges adjacent to zero can reuse area without interpreting a
+    // potentially wrapped fixed-point total at high winding multiplicities.
+    if (minimum >= 0.0 && maximum <= 1.0) || (minimum >= -1.0 && maximum <= 0.0) {
+        return analytic;
+    }
+    return covered / f32(WINDING_SAMPLES * WINDING_SAMPLES);
 }
 
 @compute @workgroup_size(16, 16)
@@ -436,22 +451,12 @@ fn coverage_pass(
     if tile >= params.tiles {
         return;
     }
-    var low = 0u;
-    var high = params.fills - 1u;
-    while low < high {
-        let middle = low + (high - low + 1u) / 2u;
-        if fills[middle].first_tile <= tile {
-            low = middle;
-        } else {
-            high = middle - 1u;
-        }
-    }
-    let fill = fills[low];
+    let fill = fills[tile_fill(tile)];
     let index = tile - fill.first_tile;
     let pixel = vec2u(index % fill.columns, index / fill.columns) * TILE_SIZE + local.xy;
     if any(pixel >= fill.size) {
         return;
     }
-    let value = clamp(row_areas[(tile * TILE_SIZE + local.y) * BOUNDARY_STRIDE + local.x], 0.0, 1.0);
-    coverage[fill.coverage + pixel.y * fill.size.x + pixel.x] = bitcast<u32>(value);
+    let value = refined_coverage(tile, pixel, fill.rule, signed_area(tile, pixel));
+    coverage[fill.coverage + pixel.y * fill.size.x + pixel.x] = bitcast<u32>(clamp(value, 0.0, 1.0));
 }

@@ -51,7 +51,7 @@ pub struct GpuTimings {
     /// Device copies of frame output and finite status into readback storage.
     /// CPU mapping, waiting and output extraction are not included.
     pub readback_copy: GpuTimestamp,
-    /// Device stages: flatten, count, all prefix passes, scatter, boundaries and coverage.
+    /// Device stages: flatten, count, all prefix passes, scatter, carry and coverage.
     pub coverage: [GpuTimestamp; 6],
     /// Nanoseconds per raw timestamp tick.
     pub timestamp_period_ns: f32,

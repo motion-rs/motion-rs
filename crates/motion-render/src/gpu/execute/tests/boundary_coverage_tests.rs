@@ -1,4 +1,4 @@
-//! Analytic boundary selection at coincident, intersecting and offscreen contours.
+//! Sampled refinement at coincident, intersecting and offscreen contours.
 
 use super::*;
 use crate::gpu::visual::{self, VisualTolerance};
@@ -22,8 +22,8 @@ fn contour(path: &mut Path2D, points: &[[f64; 2]], reversed: bool) -> motion_cor
 }
 
 #[test]
-#[ignore = "requires native GPU; winding selection before analytic area integration"]
-fn analytic_boundaries_match_cpu_across_winding_rules() -> motion_core::Result {
+#[ignore = "requires native GPU; overlapping contours refined before the fill rule"]
+fn overlapping_contours_match_cpu_across_winding_rules() -> motion_core::Result {
     let rectangle = [[-4.25, 4.25], [35.25, 4.25], [35.25, 30.75], [-4.25, 30.75]];
     let triangle = [[2.3, 1.7], [41.2, 36.8], [-3.1, 25.4]];
     let crossing = [[0.2, 28.7], [43.5, 2.8], [39.6, 39.1]];
@@ -78,14 +78,6 @@ fn analytic_boundaries_match_cpu_across_winding_rules() -> motion_core::Result {
             assert!(frame.records.alphas.is_empty());
             assert!(frame.has_device_coverage());
             let actual = gpu.render(&frame.records, Plan::new(&frame, limits)?)?;
-            for (index, (a, b)) in actual.pixels().iter().zip(reference.pixels()).enumerate() {
-                for channel in 0..4 {
-                    assert!(
-                        (a[channel] - b[channel]).abs() <= 1.0 / 255.0 + 1e-5,
-                        "{rule:?}, case {case}, pixel {index}, channel {channel}: {a:?} != {b:?}"
-                    );
-                }
-            }
             if reference.pixels().iter().any(|pixel| pixel[3] > 0.0) {
                 let expected = reference.to_rgba8_frame(false, limits)?;
                 let actual = actual.to_rgba8_frame(false, limits)?;
@@ -93,7 +85,7 @@ fn analytic_boundaries_match_cpu_across_winding_rules() -> motion_core::Result {
                     actual.pixels(),
                     expected.pixels(),
                     48,
-                    VisualTolerance::COVERAGE,
+                    VisualTolerance::OVERLAP,
                 )?;
                 let replay = gpu
                     .render(&frame.records, Plan::new(&frame, limits)?)?
@@ -106,6 +98,28 @@ fn analytic_boundaries_match_cpu_across_winding_rules() -> motion_core::Result {
                 )?;
             }
         }
+    }
+    Ok(())
+}
+
+#[test]
+#[ignore = "requires native GPU; fixed-point area wrapping at high winding multiplicity"]
+fn high_winding_interiors_remain_covered() -> motion_core::Result {
+    let mut path = Path2D::new();
+    for _ in 0..4096 {
+        contour(
+            &mut path,
+            &[[-4.25, 0.25], [95.25, 0.25], [-4.25, 100.0]],
+            false,
+        )?;
+    }
+    let node = Node::from(path.fill(Color::WHITE));
+    let frame = super::device_coverage_tests::prepare_node(node, PixelSize::new(112, 16))?;
+    assert!(frame.has_device_coverage());
+    let limits = RasterLimits::default();
+    let actual = Gpu::new()?.render(&frame.records, Plan::new(&frame, limits)?)?;
+    for x in [16, 32, 48, 64, 80] {
+        assert_eq!(actual.pixel(x, 8).unwrap()[3], 1.0, "column {x}");
     }
     Ok(())
 }

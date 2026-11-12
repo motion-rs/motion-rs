@@ -1,7 +1,6 @@
 //! GPU context creation, device-limit validation of plans and render pipeline setup.
 
 use super::*;
-use crate::gpu::raster::device::COVERAGE_TILE_SIZE;
 use motion_core::sync::MutexExt;
 use motion_core::{PixelSize, ValidationError};
 
@@ -32,7 +31,7 @@ impl Plan {
                 u64::from(self.device.edge_count).div_ceil(64),
                 (self.device.curves.len() as u64).div_ceil(64),
                 self.device.fills.len() as u64,
-                u64::from(self.device.tiles) * u64::from(COVERAGE_TILE_SIZE),
+                u64::from(self.device.rows).div_ceil(64),
                 u64::from(self.device.tiles),
             ];
             if groups.iter().any(|count| *count > maximum_groups) {
@@ -659,7 +658,7 @@ impl GpuContext {
                 "prefix_block_sums",
                 "prefix_add_bases",
                 "fill_tiles",
-                "boundary_rows",
+                "carry_rows",
                 "coverage_pass",
             ]
             .map(|entry| {

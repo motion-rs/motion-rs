@@ -49,8 +49,9 @@ impl VisualTolerance {
         max_outlier_ratio: 0.0,
     };
 
-    /// Self-intersecting or crossing contours, whose f32 boundary intersections can differ
-    /// locally from the CPU's f64 sweep.
+    /// Self-intersecting or crossing contours. The GPU samples windings that overlap inside
+    /// one pixel on a 4 x 4 grid instead of integrating them exactly, so isolated pixels at
+    /// dense crossings may fall outside the reference neighborhood.
     pub(super) const OVERLAP: Self = Self {
         rms: 0.05,
         tile_rms: 0.12,

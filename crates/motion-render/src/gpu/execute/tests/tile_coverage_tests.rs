@@ -3,7 +3,6 @@
 use super::*;
 use crate::gpu::visual::VisualTolerance;
 use motion_core::{Color, FillRule, Node, Path2D, Point, Rect, Size};
-use wgpu::util::DeviceExt;
 
 fn prepare_cpu(node: Node) -> motion_core::Result<crate::PreparedCpuFrame> {
     let size = PixelSize::new(193, 81);
@@ -53,7 +52,7 @@ fn tile_descriptors_admit_scratch_and_report_geometry_uploads() -> motion_core::
     assert_eq!(u64::from(plan.device.indices), stats.tile_index_capacity);
     assert_eq!(
         plan.device.buffer_sizes()[2..5].iter().sum::<u64>(),
-        stats.tile_count * (16 + 16 * 16 * 4) + stats.tile_index_capacity.max(1) * 4
+        stats.tile_count * (16 + 16 * 5 * 4) + stats.tile_index_capacity.max(1) * 4
     );
     assert_eq!(plan.device.fills[0].columns, 12);
     assert_eq!(plan.device.fills[0].tile_rows, 6);
@@ -159,156 +158,6 @@ fn shader_coverage_structs_match_host_offsets() {
             "{name}"
         );
     }
-}
-
-#[test]
-#[ignore = "requires native GPU; boundary rows against analytic height reference"]
-fn boundary_rows_match_analytic_height_reference() -> motion_core::Result {
-    use crate::gpu::abi::{CoverageEdge, CoverageFill, CoverageParams, CoverageTile};
-    use crate::gpu::raster::device::COVERAGE_BOUNDARY_STRIDE;
-
-    let context = GpuContext::new()?;
-    let mut fills = Vec::new();
-    let mut edges = Vec::new();
-    let mut tiles = Vec::new();
-    let mut indices = Vec::new();
-    let mut expected = Vec::new();
-    let mut row_count = 0;
-    for columns in [1u32, 63, 64, 65, 129] {
-        let fill_index = fills.len() as u32;
-        let first_tile = tiles.len() as u32;
-        let first_row = row_count;
-        let tile_rows = 2;
-        fills.push(CoverageFill {
-            size: [columns * 16, 32],
-            first_tile,
-            columns,
-            first_row,
-            tile_rows,
-            ..Default::default()
-        });
-        row_count += tile_rows * 16;
-        for band in 0..tile_rows {
-            let offset = indices.len() as u32;
-            for column in 0..columns {
-                let x = if column == 0 {
-                    -3.0
-                } else {
-                    column as f32 * 16.0 + 1.0
-                };
-                let top = band as f32 * 16.0 + 0.125;
-                let bottom = band as f32 * 16.0 + 15.625;
-                for direction in [true, false, true] {
-                    let points = if direction {
-                        [x, top, x, bottom]
-                    } else {
-                        [x, bottom, x, top]
-                    };
-                    indices.push(edges.len() as u32);
-                    edges.push(CoverageEdge {
-                        points,
-                        fill: fill_index,
-                        ..Default::default()
-                    });
-                }
-                for lane in 0..16 {
-                    let y = (band * 16 + lane as u32) as f32;
-                    let height = (bottom.min(y + 1.0) - top.max(y)).max(0.0);
-                    expected.extend([height; 16]);
-                }
-                tiles.push(CoverageTile {
-                    count: indices.len() as u32 - offset,
-                    offset,
-                    ..Default::default()
-                });
-            }
-        }
-    }
-    let params = CoverageParams {
-        fills: fills.len() as u32,
-        edges: edges.len() as u32,
-        tiles: tiles.len() as u32,
-        rows: row_count,
-    };
-    let upload = |contents: &[u8], usage| {
-        context
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: None,
-                contents,
-                usage,
-            })
-    };
-    let uniforms = upload(bytemuck::bytes_of(&params), wgpu::BufferUsages::UNIFORM);
-    let fills = upload(bytemuck::cast_slice(&fills), wgpu::BufferUsages::STORAGE);
-    let edges = upload(bytemuck::cast_slice(&edges), wgpu::BufferUsages::STORAGE);
-    let tiles = upload(bytemuck::cast_slice(&tiles), wgpu::BufferUsages::STORAGE);
-    let indices = upload(bytemuck::cast_slice(&indices), wgpu::BufferUsages::STORAGE);
-    let bytes = u64::from(params.tiles) * 16 * COVERAGE_BOUNDARY_STRIDE * 4;
-    let carries = context.device.create_buffer(&wgpu::BufferDescriptor {
-        label: None,
-        size: bytes,
-        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
-        mapped_at_creation: false,
-    });
-    let coverage = upload(&[0; 48], wgpu::BufferUsages::STORAGE);
-    let curves = upload(&[0; 48], wgpu::BufferUsages::STORAGE);
-    let buffers = [
-        &uniforms, &fills, &edges, &tiles, &indices, &carries, &coverage, &curves,
-    ];
-    let pipelines = context.coverage_pipelines();
-    let entries: Vec<_> = buffers
-        .iter()
-        .enumerate()
-        .map(|(binding, buffer)| wgpu::BindGroupEntry {
-            binding: binding as u32,
-            resource: buffer.as_entire_binding(),
-        })
-        .collect();
-    let bindings = context
-        .device
-        .create_bind_group(&wgpu::BindGroupDescriptor {
-            label: None,
-            layout: &pipelines.layout,
-            entries: &entries,
-        });
-    let readback = context.device.create_buffer(&wgpu::BufferDescriptor {
-        label: None,
-        size: bytes,
-        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-        mapped_at_creation: false,
-    });
-    let mut encoder = context.device.create_command_encoder(&Default::default());
-    for (index, groups) in [(6, params.tiles * 16)] {
-        let mut pass = encoder.begin_compute_pass(&Default::default());
-        pass.set_pipeline(&pipelines.passes[index]);
-        pass.set_bind_group(0, &bindings, &[]);
-        let width = groups.min(7);
-        pass.dispatch_workgroups(width, groups.div_ceil(width), 1);
-    }
-    encoder.copy_buffer_to_buffer(&carries, 0, &readback, 0, bytes);
-    context.queue.submit([encoder.finish()]);
-    let (sender, receiver) = std::sync::mpsc::channel();
-    readback
-        .slice(..)
-        .map_async(wgpu::MapMode::Read, move |result| {
-            sender.send(result).unwrap();
-        });
-    wait_for_gpu(&context.device, None)?;
-    receiver.recv().unwrap().unwrap();
-    let mapped = readback.slice(..).get_mapped_range().unwrap();
-    let actual = bytemuck::cast_slice::<u8, f32>(&mapped);
-    for (index, expected) in expected.into_iter().enumerate() {
-        let actual = actual[index];
-        assert!(
-            (actual - expected).abs() <= 1e-4,
-            "tile row {index}: {actual} != {expected}"
-        );
-    }
-    drop(mapped);
-    readback.unmap();
-    context.check_device()?;
-    Ok(())
 }
 
 #[test]

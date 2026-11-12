@@ -656,21 +656,20 @@ and sampling. See [procedural paints](content.md#procedural-paints).
 
 #### Coverage model
 
-Coverage selects actual fill boundaries before integrating their areas. For each
-edge within a pixel row, intersections and coincident-overlap endpoints divide it
-into intervals of constant winding. Non-zero or even-odd winding on either side
-selects the signed boundary contribution. Trapezoid-column integration then produces
-analytic f32 coverage, without a subpixel sampling grid or u8 quantization.
-Duplicate contours therefore do not multiply non-zero coverage, and opposite
-windings in disjoint parts of one pixel do not cancel their areas. Source-edge
-indices break coincident-boundary ties independently of scatter order. An edge is
-explicitly excluded from its own winding calculation; intersections are solved
-from fixed pair endpoints, not from the advancing interval start.
-
-The CPU sweep retains its f64 reference arithmetic. GPU curve flattening and f32
-intersection arithmetic can still differ locally, subject to the unchanged
-[visual acceptance](reliability.md#visual-acceptance) tiers. A selected GPU never
-switches backends after a failure.
+Coverage follows the Skia analytic-AA and Vello fine-rasterizer model: each pixel
+accumulates signed area from its tile edges plus a per-row carry, then folds the total by
+the fill rule (non-zero clamps its magnitude, even-odd folds it). The analytic shortcut
+uses winding ranges contained in {0, 1} or {-1, 0}. Pixels with multiple crossing edges,
+edges starting or ending inside their row, differing carried windings or higher winding
+multiplicity are candidates for refinement. The fill rule is evaluated on a 4-by-4 grid
+of sampled windings; the sampled mean replaces the analytic area unless the sampled
+windings remain in one of those two ranges. Sampled coverage is quantized in steps of
+1/16; this is not a bound of 1/16 on its error against the CPU sweep's exact area.
+Areas are summed in wrapping fixed point so atomic scatter order cannot change the
+result; high winding multiplicities use sampled coverage instead. Localized
+antialiasing differences are allowed within the Overlap tier of
+[visual acceptance](reliability.md#visual-acceptance). CPU rendering keeps its own reference arithmetic,
+and a selected GPU never switches backends after a failure.
 
 Coverage uses 16-by-16 pixel tiles. The passes below produce f32 samples that
 composition consumes without u8 quantization:
@@ -681,23 +680,21 @@ flowchart LR
     Expand --> Count["Count edges per tile"]
     Count --> Prefix["Prefix counts per fill reservation"]
     Prefix --> Scatter["Scatter edge indices"]
-    Scatter --> Boundaries["Split edges and select winding boundaries"]
-    Boundaries --> Area["Integrate boundary areas in tile rows"]
-    Area --> Samples["Clamp and publish f32 coverage"]
+    Scatter --> Heights["Prefix signed row heights"]
+    Heights --> Area["Tile-local trapezoid area"]
+    Area --> Fold["Fold by fill rule"]
+    Fold --> Samples["Device coverage, f32 per pixel"]
 ```
 
-An edge enters every tile from its tile-band-clipped leftmost column to the fill's
-right edge. Retaining left crossings preserves pointwise winding in interior tiles,
-including holes and offscreen-left contours; one integrated row height is insufficient
-for this classification. Edge uploads are relative to the fill origin and boundary
-evaluation subtracts the tile origin.
+An edge enters every tile its tile-band-clipped x range touches. Signed heights
+propagate only after the edge's last tile, so empty interior tiles keep their winding,
+including holes and offscreen-left contours. Edge uploads are relative to the fill
+origin and area evaluation subtracts the tile origin.
 
 Before choosing GPU coverage, host preparation admits conservative tile counts, index
-capacity and work from line endpoints or one control-point hull per Wang subsegment,
-without generating curve chords on the host. Padded hulls and one extra left seam tile
-cover f32 interpolation rounding. Per-row active-edge and candidate-pair admission
-bounds the boundary scans and integration intervals; coincident pairs contribute at
-most two cuts to each edge. CPU admission scratch is byte/work-budgeted too. Limits:
+capacity and work from line endpoints or curve control-point hulls (up to eight subcurve
+hulls per curve, split at uniform segment boundaries) and Wang segment bounds. One extra
+tile on each horizontal side covers interpolation rounding at seams. Limits:
 
 | Quantity | Limit |
 | --- | --- |
@@ -714,18 +711,16 @@ there is no CPU coverage route. Exhausting the caller's byte or work allowance i
 validation error.
 
 Planning reserves host, upload and device descriptors, tile counters and offsets, the
-full conservative index capacity and 16 f32 column areas per tile row. Boundary
-workgroups use fixed 64-edge batches with 1024 shared f32 contribution slots instead
-of materializing an intersection list. The
+full conservative index capacity and five values per row: the integrated signed height
+and the winding at each of four sample rows. Refinement work is charged for all 16
+samples at every tile pixel against every edge reference. The
 integer prefix uses segmented 64-tile block scans, scans each fill's block sums in
 bounded batches, and adds the resulting bases in a separate dispatch. It reuses the
 tile records' reserved words for block sums; planning charges the additional scan and
 fill-lookup work. The count, prefix and scatter passes never grow a buffer or read back.
 Prefix diagnostics cover all three scan dispatches. Device buffer and
 two-dimensional dispatch limits are checked before encoding. Pooled counters are cleared
-before every count pass, and each boundary area and output sample has one writer. The
-boundary timestamp replaces the former carry stage; benchmark timing JSON names it
-`boundaries`. Packed
+before every count pass, and each row carry and output sample has one writer. Packed
 plans validate their actual packed buffer against device limits; linear readback plans
 keep the float buffer check, including filter padding.
 
