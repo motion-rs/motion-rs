@@ -77,7 +77,7 @@ var<storage, read_write> failure_status: FailureStatus;
 @group(0) @binding(6)
 var layer_texture: texture_2d<f32>;
 
-// One frame payload: counts and alpha base, six-word strips, four-word spans, packed alpha bytes.
+// One frame payload: counts and alpha base, five-word strips, four-word spans, packed alpha bytes.
 @group(0) @binding(10)
 var<storage, read> frame_coverage: FrameCoverage;
 
@@ -483,17 +483,18 @@ fn frame_record_coverage_at(base: u32, record: u32, coordinate: vec2u) -> f32 {
     let strip_start = bitcast<u32>(operation_data.values[base + 6u]);
     let strip_count = bitcast<u32>(operation_data.values[base + 7u]) - strip_start;
     if record < strip_count {
-        let offset = 4u + (strip_start + record) * 6u;
+        let offset = 4u + (strip_start + record) * 5u;
         let origin = vec2u(frame_coverage.values[offset], frame_coverage.values[offset + 1u]);
-        let size = vec2u(frame_coverage.values[offset + 2u], frame_coverage.values[offset + 3u]);
+        let height_word = frame_coverage.values[offset + 3u];
+        let size = vec2u(frame_coverage.values[offset + 2u], height_word & 0x7fffffffu);
         if any(coordinate < origin) || any(coordinate >= origin + size) {
             return 0.0;
         }
 
         let local = coordinate - origin;
         let index = frame_coverage.values[offset + 4u] + local.y * size.x + local.x;
-        // The sixth strip word selects generated device samples or packed CPU alpha bytes.
-        if frame_coverage.values[offset + 5u] != 0u {
+        // Bit 31 of the height word selects generated device samples or packed CPU alpha bytes.
+        if (height_word >> 31u) != 0u {
             return device_coverage[index];
         }
         let packed = frame_coverage.values[frame_coverage.values[3u] + index / 4u];
@@ -501,7 +502,7 @@ fn frame_record_coverage_at(base: u32, record: u32, coordinate: vec2u) -> f32 {
     }
 
     let span_start = bitcast<u32>(operation_data.values[base + 8u]);
-    let offset = 4u + frame_coverage.values[0u] * 6u + (span_start + record - strip_count) * 4u;
+    let offset = 4u + frame_coverage.values[0u] * 5u + (span_start + record - strip_count) * 4u;
     let origin = vec2u(frame_coverage.values[offset], frame_coverage.values[offset + 1u]);
     let end = vec2u(
             frame_coverage.values[offset + 2u],

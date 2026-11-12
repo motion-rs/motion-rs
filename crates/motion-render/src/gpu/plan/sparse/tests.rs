@@ -47,7 +47,7 @@ fn direct_descriptors_preserve_ranges_bounds_and_alpha_bits() -> motion_core::Re
     assert_eq!(decoded, frame.alphas);
     assert_eq!(
         shared.len(),
-        4 + 6 * frame.strips.len() + 4 * frame.spans.len() + frame.alphas.len().div_ceil(4)
+        4 + 5 * frame.strips.len() + 4 * frame.spans.len() + frame.alphas.len().div_ceil(4)
     );
     for clip in [
         PixelRect {

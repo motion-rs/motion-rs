@@ -144,7 +144,7 @@ budget. Fully opaque and span-only payloads
 retain compact constants or sparse/packed records. Decals retain CPU f64 rejection
 and compact local payloads. Decals keep CPU coverage; eligible GPU fills bypass
 the CPU coverage cache.
-Each six-word strip record includes a storage discriminator: CPU records address
+Each five-word strip record carries a storage discriminator in bit 31 of its height word: CPU records address
 packed u8 alpha bytes in the shared coverage buffer, while device records address f32
 words in a separate device coverage binding (`device_coverage`, binding 12) that the
 coverage passes write and composition reads. GPU coverage writes one sample per tile invocation; large frames use two-dimensional

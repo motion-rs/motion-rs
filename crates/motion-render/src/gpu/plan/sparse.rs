@@ -26,7 +26,7 @@ impl Planner<'_> {
         let words = frame
             .strips
             .len()
-            .checked_mul(6)
+            .checked_mul(5)
             .and_then(|words| {
                 frame
                     .spans
@@ -50,7 +50,7 @@ impl Planner<'_> {
             u64::from(words) * 2 + frame.alphas.len() as u64,
             "gpu.frame_coverage",
         )?;
-        let alpha_base = 4 + frame.strips.len() * 6 + frame.spans.len() * 4;
+        let alpha_base = 4 + frame.strips.len() * 5 + frame.spans.len() * 4;
         let mut data = Vec::new();
         data.try_reserve_exact(words as usize).map_err(|_| {
             ValidationError::limit(
@@ -79,9 +79,9 @@ impl Planner<'_> {
                 strip.x,
                 strip.y,
                 strip.width,
-                strip.height,
+                // Bit 31 of the height word selects generated device samples.
+                strip.height | (u32::from(strip.device) << 31),
                 checked(strip.alpha_offset)?,
-                u32::from(strip.device),
             ]);
         }
         for span in &frame.spans {
