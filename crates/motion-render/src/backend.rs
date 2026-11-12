@@ -92,19 +92,17 @@ impl BackendPreference {
         }
     }
 
-    /// Whether the GPU is requested.
-    pub const fn wants_gpu(self) -> bool {
-        !matches!(self, Self::Cpu)
-    }
-}
-
-impl From<Renderer> for BackendPreference {
-    /// Requests exactly `renderer`; the GPU is hardware-only.
-    fn from(renderer: Renderer) -> Self {
+    /// Preference requesting exactly `renderer`; the GPU is hardware-only.
+    pub const fn from_renderer(renderer: Renderer) -> Self {
         match renderer {
             Renderer::Cpu => Self::Cpu,
             Renderer::Gpu => Self::gpu(),
         }
+    }
+
+    /// Whether the GPU is requested.
+    pub const fn wants_gpu(self) -> bool {
+        !matches!(self, Self::Cpu)
     }
 }
 

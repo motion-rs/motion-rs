@@ -134,7 +134,7 @@ fn main() -> motion::Result {
         )
         .with_options(
             motion::render::RenderOptions::default()
-                .backend(renderer.into())
+                .backend(motion::render::BackendPreference::from_renderer(renderer))
                 .quality(motion::RenderQuality::Final)
                 .resources(resources.clone())
                 .limits(limits),

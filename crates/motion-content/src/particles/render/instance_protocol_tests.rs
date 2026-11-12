@@ -92,7 +92,7 @@ fn compare_batches(style: ParticleStyle, renderer: Renderer) -> motion_core::Res
     )
     .with_options(
         motion_render::RenderOptions::default()
-            .backend(renderer.into())
+            .backend(motion_render::BackendPreference::from_renderer(renderer))
             .background(Color::BLACK),
     )?
     .frame_renderer(Size::new(192.0, 144.0))?;

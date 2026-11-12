@@ -377,7 +377,10 @@ mod tests {
                 8,
                 motion_render::FrameClock::new(motion_core::fps!(30), 20),
             )
-            .with_options(motion_render::RenderOptions::default().backend(backend.into()))?;
+            .with_options(
+                motion_render::RenderOptions::default()
+                    .backend(motion_render::BackendPreference::from_renderer(backend)),
+            )?;
             let mut actual = composition.frame_renderer(Size::new(8.0, 8.0))?;
             let mut manual = composition.frame_renderer(Size::new(8.0, 8.0))?;
             for (mode, expected) in [

@@ -51,7 +51,7 @@ pub(super) fn composition(
     )
     .with_options(
         motion::render::RenderOptions::default()
-            .backend(renderer.into())
+            .backend(motion::render::BackendPreference::from_renderer(renderer))
             .quality(motion::RenderQuality::Final)
             .context(render_context()?)
             .resources(resources.clone())

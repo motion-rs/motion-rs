@@ -237,7 +237,7 @@ impl PreviewRenderer {
             .clone()
             .configure(|options| {
                 options
-                    .backend(renderer.into())
+                    .backend(motion_render::BackendPreference::from_renderer(renderer))
                     .allow_missing_assets(true)
                     .mark_invalid_geometry(true)
             })

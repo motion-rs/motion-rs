@@ -470,7 +470,10 @@ mod scenes {
                     48,
                     motion::render::FrameClock::new(motion::fps!(30), 24),
                 )
-                .with_options(motion::render::RenderOptions::default().backend(renderer.into()))?
+                .with_options(
+                    motion::render::RenderOptions::default()
+                        .backend(motion::render::BackendPreference::from_renderer(renderer)),
+                )?
                 .frame_renderer(size)?;
                 let mut replay = None;
                 let mut held = None;
@@ -1573,7 +1576,7 @@ mod scenes {
                 )
                 .with_options(
                     motion::render::RenderOptions::default()
-                        .backend(backend.into())
+                        .backend(motion::render::BackendPreference::from_renderer(backend))
                         .background(Color::WHITE),
                 )?;
                 let mut renderer = composition.frame_renderer(Size::new(64.0, 64.0))?;
