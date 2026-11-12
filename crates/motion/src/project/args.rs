@@ -33,7 +33,7 @@ pub struct ParameterArgs {
     #[arg(long, value_name = "JSON", conflicts_with = "params_file", value_parser = parse_parameters)]
     pub params: Option<Value>,
     /// Read parameter overrides from a JSON file
-    #[arg(long, alias = "parameters", value_name = "FILE", value_parser = read_parameters)]
+    #[arg(long, value_name = "FILE", value_parser = read_parameters)]
     pub params_file: Option<Value>,
 }
 

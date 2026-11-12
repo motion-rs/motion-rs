@@ -83,7 +83,7 @@ parser and call `Project::execute`, as the gallery does.
 | Flag | Applies to | Meaning |
 | --- | --- | --- |
 | `--params JSON` | all | Inline parameters; text over 1 MiB is rejected |
-| `--params-file PATH`, `--parameters PATH` | all | Parameters from a regular file of at most 1 MiB |
+| `--params-file PATH` | all | Parameters from a regular file of at most 1 MiB |
 | `--size WIDTHxHEIGHT` | all | Output pixel size (two `u32`, split on `x`) |
 | `--backend cpu\|gpu` | all | Backend preference |
 | `--allow-software-gpu` | all | Admits software adapters for `Gpu` in `RenderOptions::backend`; not in help text |
