@@ -14,7 +14,7 @@ pub(crate) const TABLE_STEPS: usize = 256;
 /// Conservative inverse-bilinear solve, Oklab interpolation and conversion work per patch.
 const MESH_PATCH_WORK: u64 = 512;
 
-pub(super) struct TableCache {
+pub(crate) struct TableCache {
     entries: std::sync::Arc<motion_core::SceneCache>,
 }
 

@@ -27,10 +27,10 @@ fn curve(rule: FillRule) -> motion_core::Result<Node> {
     ))
 }
 
-fn prepare(node: &Node) -> motion_core::Result<crate::raster::gpu_prepare::GpuFrame> {
+fn prepare(node: &Node) -> motion_core::Result<crate::gpu::raster::prepare::GpuFrame> {
     let validation = ValidationLimits::default();
     let list = node.compile(Size::new(40.0, 40.0), PixelSize::new(40, 40), validation)?;
-    Ok(crate::prepared::prepare_validated_device(
+    Ok(crate::gpu::raster::prepare::prepare_validated_device(
         &list,
         validation,
         RasterLimits::default(),

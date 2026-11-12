@@ -4,7 +4,7 @@ use super::{FrameHeader, GpuUniforms, OperationHeader, SourceFlags};
 use std::mem::{offset_of, size_of};
 
 use super::abi::{CoverageCurve, CoverageEdge, CoverageFill, CoverageParams, CoverageTile};
-use crate::raster::device::{COVERAGE_EDGE_BYTES, COVERAGE_FILL_BYTES, COVERAGE_PARAMS_BYTES};
+use crate::gpu::raster::device::{COVERAGE_EDGE_BYTES, COVERAGE_FILL_BYTES, COVERAGE_PARAMS_BYTES};
 
 const _: () = {
     assert!(size_of::<CoverageParams>() as u64 == COVERAGE_PARAMS_BYTES);

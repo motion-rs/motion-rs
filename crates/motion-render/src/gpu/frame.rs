@@ -1,15 +1,16 @@
 //! Borrowed planning views over independently prepared CPU and GPU results.
 
-use crate::prepared::{DeviceFill, PreparedFrame, PreparedScene};
-use crate::raster::gpu_prepare::GpuFrame;
+use crate::gpu::raster::device::DeviceFill;
+use crate::gpu::raster::prepare::GpuFrame;
+use crate::prepared::{PreparedFrame, PreparedScene};
 
 #[derive(Clone, Copy)]
 pub(crate) struct FrameView<'a> {
     scene: &'a PreparedScene,
     pub(super) device_fills: &'a [DeviceFill],
     pub(super) device_edges: &'a [[f64; 5]],
-    pub(super) device_curves: &'a [crate::raster::device::DeviceCurve],
-    pub(super) device_totals: crate::raster::device::DeviceTotals,
+    pub(super) device_curves: &'a [crate::gpu::raster::device::DeviceCurve],
+    pub(super) device_totals: crate::gpu::raster::device::DeviceTotals,
 }
 
 impl FrameView<'_> {

@@ -1,7 +1,9 @@
 //! Normalized geometry, admission and independent backend preparation regressions.
 
 use super::*;
-use crate::raster::{CoverageCache, gpu_prepare::GpuFrame, prepare::prepare_ir};
+#[cfg(feature = "gpu")]
+use crate::gpu::raster::prepare::GpuFrame;
+use crate::raster::{CoverageCache, prepare::prepare_ir};
 use motion_core::{
     Color, DisplayList, DrawCommand, Filter, Node, NodeModifiers, Point, Shape, Size,
 };
@@ -178,6 +180,7 @@ fn ir_rechecks_hidden_content_against_requested_structural_limits() -> Result<()
 }
 
 #[test]
+#[cfg(feature = "gpu")]
 fn cpu_reference_numeric_coverage_is_unchanged() -> Result<(), ValidationError> {
     let geometry = Path2D::builder()
         .move_to(Point::ORIGIN)
@@ -207,6 +210,7 @@ fn cpu_reference_numeric_coverage_is_unchanged() -> Result<(), ValidationError> 
 }
 
 #[test]
+#[cfg(feature = "gpu")]
 fn warm_cpu_cache_does_not_make_gpu_preparation_depend_on_cpu_coverage()
 -> Result<(), ValidationError> {
     let source = curved_list(Transform::translate(2.125, 1.0625))?;

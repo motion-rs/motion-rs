@@ -1,18 +1,19 @@
 //! GPU fill geometry, bounded curve uploads and explicit CPU reference materialization.
 
-#[cfg(test)]
-use super::polygon::scratch::PolygonScratch;
-use super::polygon::{Edge, edge_bounds, path_edges};
-use super::{RasterScope, pixel_bounds};
 #[cfg(feature = "gpu")]
 use crate::prepared::GpuPreparationStats;
 #[cfg(test)]
 use crate::prepared::PreparedItem;
-use crate::prepared::{DeviceFill, PreparedScene, Strip};
+use crate::prepared::{PreparedScene, Strip};
+#[cfg(test)]
+use crate::raster::polygon::scratch::PolygonScratch;
+use crate::raster::polygon::{Edge, edge_bounds, path_edges};
+use crate::raster::{RasterScope, pixel_bounds};
 #[cfg(test)]
 use motion_core::{Point, RasterLimits};
 use motion_core::{Transform, ValidationError};
 use std::mem::size_of;
+use std::ops::Range;
 
 mod curves;
 mod tiles;
@@ -50,6 +51,26 @@ const DEVICE_MAX_FILL_VISITS: u64 = 1 << 28;
 /// minutes, so larger frames are rejected instead.
 const DEVICE_MAX_FRAME_VISITS: u64 = 1 << 30;
 
+/// A fill whose coverage the GPU computes from lines or device-flattened curves.
+///
+/// The fill owns one dense strip covering its pixel bounds; the strip's `alpha_offset` addresses
+/// an f32 sample block after the packed CPU alphas, which the GPU writes before composition.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct DeviceFill {
+    /// Index of the dense strip in the GPU scene's common strip descriptors.
+    pub(crate) strip: usize,
+    /// Range in the GPU frame's independently owned device edges.
+    pub(crate) edges: Range<usize>,
+    /// Curve descriptors expanded by the GPU; empty when the fill is described by `edges` alone.
+    pub(crate) curves: Range<usize>,
+    /// Statically admitted generated edge slots.
+    pub(crate) segments: u32,
+    /// Winding rule that maps accumulated signed area to coverage.
+    pub(crate) rule: motion_core::FillRule,
+    /// Conservative GPU tile storage and work admission.
+    pub(crate) tiles: TileLayout,
+}
+
 /// A path the device coverage pipeline cannot admit; GPU preparation has no CPU coverage route.
 pub(super) fn unsupported(path: &str, reason: &str) -> ValidationError {
     ValidationError::unsupported(path, "gpu.coverage", reason)
@@ -81,7 +102,7 @@ impl DeviceGeometry {
     pub(super) fn device_fill(
         &mut self,
         scene: &mut PreparedScene,
-        geometry: &super::frame_ir::IrPath<'_>,
+        geometry: &crate::raster::frame_ir::IrPath<'_>,
         tolerance: f64,
         scope: &mut RasterScope<'_>,
     ) -> Result<(), ValidationError> {

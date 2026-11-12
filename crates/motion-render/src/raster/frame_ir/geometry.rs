@@ -122,7 +122,7 @@ pub(in crate::raster) fn rectangle_verbs(bounds: Rect) -> [PathVerb; 5] {
     ]
 }
 
-pub(in crate::raster) fn wang(
+pub(crate) fn wang(
     points: [kurbo::Point; 4],
     tolerance: f64,
     path: &str,

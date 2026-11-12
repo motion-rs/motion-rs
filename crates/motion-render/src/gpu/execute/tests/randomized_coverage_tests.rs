@@ -42,7 +42,7 @@ fn fixed_seed_random_curves_match_cpu_without_local_dropouts() -> motion_core::R
             let list =
                 path(seed * 0x9e37_79b9, rule)?.compile(Size::new(64.0, 64.0), size, validation)?;
             let cpu = list.prepare(validation, limits)?;
-            let device = crate::prepared::prepare_validated_device(
+            let device = crate::gpu::raster::prepare::prepare_validated_device(
                 &list,
                 validation,
                 limits,
@@ -90,8 +90,13 @@ fn render_device(path: Path2D, rule: FillRule) -> motion_core::Result<Vec<[f32; 
         PixelSize::new(32, 32),
         validation,
     )?;
-    let frame =
-        crate::prepared::prepare_validated_device(&list, validation, limits, 1.0 / 256.0, None)?;
+    let frame = crate::gpu::raster::prepare::prepare_validated_device(
+        &list,
+        validation,
+        limits,
+        1.0 / 256.0,
+        None,
+    )?;
     assert!(frame.alphas.is_empty());
     assert!(!frame.geometry.device_fills.is_empty());
     let actual = Gpu::new()?.render(&frame, Plan::new(&frame, limits)?)?;

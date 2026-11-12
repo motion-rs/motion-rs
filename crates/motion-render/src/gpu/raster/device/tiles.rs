@@ -1,7 +1,7 @@
 //! Conservative tile storage and work admission before device coverage is selected.
 
-use super::super::polygon::Edge;
 use crate::prepared::PixelRect;
+use crate::raster::polygon::Edge;
 use kurbo::ParamCurve;
 use motion_core::ValidationError;
 use motion_core::budget::Budget;

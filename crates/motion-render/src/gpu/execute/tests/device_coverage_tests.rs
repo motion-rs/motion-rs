@@ -79,7 +79,7 @@ fn scene(crossing: bool) -> motion_core::Result<Node> {
     ))
 }
 
-fn prepare(crossing: bool) -> motion_core::Result<crate::raster::gpu_prepare::GpuFrame> {
+fn prepare(crossing: bool) -> motion_core::Result<crate::gpu::raster::prepare::GpuFrame> {
     prepare_node(scene(crossing)?, PixelSize::new(240, 160))
 }
 
@@ -94,14 +94,14 @@ fn prepare_cpu(crossing: bool) -> motion_core::Result<crate::PreparedFrame> {
 fn prepare_node(
     node: Node,
     size: PixelSize,
-) -> motion_core::Result<crate::raster::gpu_prepare::GpuFrame> {
+) -> motion_core::Result<crate::gpu::raster::prepare::GpuFrame> {
     let validation = ValidationLimits::default();
     let list = node.compile(
         motion_core::Size::new(f64::from(size.width), f64::from(size.height)),
         size,
         validation,
     )?;
-    Ok(crate::prepared::prepare_validated_device(
+    Ok(crate::gpu::raster::prepare::prepare_validated_device(
         &list,
         validation,
         RasterLimits::default(),
@@ -112,7 +112,7 @@ fn prepare_node(
 
 #[test]
 fn coverage_shader_constants_match_the_host_planner() {
-    use crate::raster::device::{COVERAGE_CARRY_STRIDE, COVERAGE_TILE_SIZE};
+    use crate::gpu::raster::device::{COVERAGE_CARRY_STRIDE, COVERAGE_TILE_SIZE};
     let source = include_str!("../../shaders/coverage.wgsl");
     let constant = |name: &str| -> u64 {
         let prefix = format!("const {name} = ");

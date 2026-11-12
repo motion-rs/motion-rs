@@ -1,7 +1,7 @@
 //! Startup visual fixtures that prepare CPU and GPU coverage independently.
 
+use crate::gpu::raster::prepare::GpuFrame;
 use crate::gpu::{Gpu, GpuContext, Plan, visual};
-use crate::raster::gpu_prepare::GpuFrame;
 use crate::{RasterLimits, RenderPrepare};
 use motion_core::{
     BlendMode, Circle, ClipMode, Color, FillRule, Filter, LinearGradient, Node, NodeModifiers,
@@ -40,7 +40,7 @@ fn run(context: &GpuContext) -> motion_core::Result<()> {
     for (label, node, requires_device_coverage, tolerance) in fixtures()? {
         let list = node.compile(Size::new(64.0, 64.0), PixelSize::new(64, 64), validation)?;
         let reference = list.prepare(validation, limits)?;
-        let device = crate::prepared::prepare_validated_device(
+        let device = crate::gpu::raster::prepare::prepare_validated_device(
             &list,
             validation,
             limits,
@@ -167,7 +167,7 @@ mod tests {
         for (label, node, requires_device, _) in fixtures()? {
             let list = node.compile(Size::new(64.0, 64.0), PixelSize::new(64, 64), validation)?;
             let reference = list.prepare(validation, limits)?;
-            let device = crate::prepared::prepare_validated_device(
+            let device = crate::gpu::raster::prepare::prepare_validated_device(
                 &list,
                 validation,
                 limits,

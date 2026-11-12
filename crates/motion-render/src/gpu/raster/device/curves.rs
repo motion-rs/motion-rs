@@ -1,10 +1,11 @@
 //! Conservative curve descriptors and Wang-sized GPU edge storage without host flattening.
 
+use super::DeviceFill;
 use super::{
     DEVICE_COORDINATE_LIMIT, DEVICE_MAX_FILL_VISITS, DEVICE_MAX_FILLS, DEVICE_MAX_FRAME_VISITS,
     DEVICE_MAX_PIXELS, DeviceGeometry, DeviceTotals, TileLayout, unsupported,
 };
-use crate::prepared::{DeviceFill, PreparedScene, Strip};
+use crate::prepared::{PreparedScene, Strip};
 use crate::raster::{RasterScope, frame_ir, pixel_bounds};
 use motion_core::{PathVerb, Point, ValidationError};
 

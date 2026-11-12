@@ -71,7 +71,7 @@ impl Hash for ContentKey {
 
 pub(crate) struct CoverageCache {
     shared: Arc<motion_core::SceneCache>,
-    pub(super) paints: super::paint::TableCache,
+    pub(crate) paints: super::paint::TableCache,
     polygon_scratch: super::polygon::scratch::PolygonScratch,
 }
 

@@ -1,8 +1,8 @@
 //! Backend-specific session preparation results without implicit CPU materialization.
 
-use crate::prepared::{PreparedFrame, PreparedScene};
 #[cfg(feature = "gpu")]
-use crate::raster::gpu_prepare::GpuFrame;
+use crate::gpu::raster::prepare::GpuFrame;
+use crate::prepared::{PreparedFrame, PreparedScene};
 
 pub(in crate::composition) enum PreparedOutput {
     Cpu(PreparedFrame),

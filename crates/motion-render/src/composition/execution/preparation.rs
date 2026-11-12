@@ -80,7 +80,7 @@ impl FrameExecution<'_> {
             crate::Renderer::Gpu => {
                 #[cfg(feature = "gpu")]
                 {
-                    let frame = crate::raster::prepare::prepare_validated_device(
+                    let frame = crate::gpu::raster::prepare::prepare_validated_device(
                         &list,
                         validation,
                         self.limits,

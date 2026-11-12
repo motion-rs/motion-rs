@@ -10,11 +10,11 @@ fn prepare_cpu(node: Node) -> motion_core::Result<crate::PreparedFrame> {
     Ok(list.prepare(validation, RasterLimits::default())?)
 }
 
-fn prepare(node: Node) -> motion_core::Result<crate::raster::gpu_prepare::GpuFrame> {
+fn prepare(node: Node) -> motion_core::Result<crate::gpu::raster::prepare::GpuFrame> {
     let size = PixelSize::new(193, 81);
     let validation = ValidationLimits::default();
     let list = node.compile(Size::new(193.0, 81.0), size, validation)?;
-    Ok(crate::prepared::prepare_validated_device(
+    Ok(crate::gpu::raster::prepare::prepare_validated_device(
         &list,
         validation,
         RasterLimits::default(),

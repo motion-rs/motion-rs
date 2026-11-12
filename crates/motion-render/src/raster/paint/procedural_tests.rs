@@ -267,7 +267,7 @@ fn independent_procedural_paints_cpu_gpu_visual_and_replay() -> motion_core::Res
                     ValidationLimits::default(),
                 )?;
                 let prepared = validated.prepare(ValidationLimits::default(), limits)?;
-                let device = crate::prepared::prepare_validated_device(
+                let device = crate::gpu::raster::prepare::prepare_validated_device(
                     &validated,
                     ValidationLimits::default(),
                     limits,

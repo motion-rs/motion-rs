@@ -1,11 +1,8 @@
 //! CPU preparation APIs and shared consumption of normalized frame semantics.
 
-use super::device::DeviceGeometry;
 use super::frame_ir::{
     COMMAND_PATH_BYTES, FrameIr, GeometrySource, IrClip, IrItem, IrPaint, IrPath,
 };
-#[cfg(feature = "gpu")]
-use super::gpu_prepare::GpuFrame;
 use super::paint::TableCache;
 use super::{CoverageCache, RasterScope, rect_clip};
 use crate::prepared::{
@@ -169,19 +166,6 @@ pub(crate) fn prepare_validated_with_cache(
     prepare_ir(&ir, limits, cache)
 }
 
-/// GPU preparation has its own output and never constructs a CPU prepared frame.
-#[cfg(feature = "gpu")]
-pub(crate) fn prepare_validated_device(
-    source: &motion_core::ValidatedDisplayList,
-    validation: ValidationLimits,
-    limits: RasterLimits,
-    tolerance: f64,
-    cache: Option<&mut CoverageCache>,
-) -> Result<GpuFrame, ValidationError> {
-    let ir = FrameIr::build(source, validation, limits, tolerance)?;
-    GpuFrame::prepare(&ir, limits, cache)
-}
-
 pub(crate) fn prepare_ir(
     ir: &FrameIr<'_>,
     limits: RasterLimits,
@@ -193,7 +177,7 @@ pub(crate) fn prepare_ir(
 }
 
 /// The parts of a scene walk where CPU and GPU preparation differ.
-pub(super) trait SceneBackend {
+pub(crate) trait SceneBackend {
     /// Fixed result storage beyond the shared scene.
     fn fixed_bytes(&self) -> u64;
 
@@ -249,53 +233,8 @@ impl SceneBackend for CpuBackend<'_> {
     }
 }
 
-/// Preparation that keeps resources for upload and emits device coverage when admitted.
-pub(super) struct DeviceBackend<'a> {
-    pub(super) geometry: &'a mut DeviceGeometry,
-    pub(super) cache: Option<&'a mut CoverageCache>,
-}
-
-impl SceneBackend for DeviceBackend<'_> {
-    fn fixed_bytes(&self) -> u64 {
-        size_of::<DeviceGeometry>() as u64
-    }
-
-    fn kept_resource_bytes(&self, ir: &FrameIr<'_>) -> u64 {
-        ir.resource_bytes()
-    }
-
-    fn paint_cache(&mut self) -> Option<&mut TableCache> {
-        self.cache.as_deref_mut().map(|cache| &mut cache.paints)
-    }
-
-    fn particles(&mut self, analytic_fallback: bool) {
-        self.geometry.analytic_cpu_fallbacks += u64::from(analytic_fallback);
-    }
-
-    fn fill(
-        &mut self,
-        frame: &mut PreparedScene,
-        geometry: &IrPath<'_>,
-        paint: &IrPaint<'_>,
-        tolerance: f64,
-        scope: &mut RasterScope<'_>,
-    ) -> Result<(), ValidationError> {
-        // Rectangles stay analytic strips; every other fill is device coverage or an error.
-        if !matches!(geometry.source, GeometrySource::Path(_)) {
-            return prepare_geometry(frame, geometry, tolerance, self.cache.as_deref_mut(), scope);
-        }
-        if matches!(paint.source, motion_core::Paint::Pattern(pattern) if pattern.decal) {
-            return Err(super::device::unsupported(
-                scope.path,
-                "decal image patterns have no device coverage",
-            ));
-        }
-        self.geometry.device_fill(frame, geometry, tolerance, scope)
-    }
-}
-
 /// A single scope walk shares semantics, not backend preparation results.
-pub(super) fn prepare_scene(
+pub(crate) fn prepare_scene(
     ir: &FrameIr<'_>,
     limits: RasterLimits,
     backend: &mut impl SceneBackend,
@@ -516,7 +455,7 @@ fn copy_layer(
     })
 }
 
-fn prepare_geometry(
+pub(crate) fn prepare_geometry(
     frame: &mut PreparedScene,
     geometry: &super::frame_ir::IrPath<'_>,
     tolerance: f64,

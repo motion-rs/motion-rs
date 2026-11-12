@@ -155,7 +155,7 @@ impl PreparedScene {
     }
 
     /// Rasterizes already flattened edges; the caller owns their storage charge.
-    pub(super) fn polygon_edges(
+    pub(crate) fn polygon_edges(
         &mut self,
         edges: &[Edge],
         rule: FillRule,
@@ -282,7 +282,7 @@ impl PreparedScene {
 }
 
 /// Device-space bounds of flattened edges; infinite and inverted when there are none.
-pub(super) fn edge_bounds(edges: &[Edge]) -> Rect {
+pub(crate) fn edge_bounds(edges: &[Edge]) -> Rect {
     let mut bounds = Rect::new(
         f64::INFINITY,
         f64::INFINITY,

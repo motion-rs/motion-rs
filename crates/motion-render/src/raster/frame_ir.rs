@@ -18,7 +18,8 @@ mod normalize;
 mod tests;
 
 pub(super) use geometry::rectangle_verbs;
-pub(super) use geometry::wang;
+#[cfg(feature = "gpu")]
+pub(crate) use geometry::wang;
 
 /// Maximum scratch bytes for a command-index error path, including every usize digit.
 pub(super) const COMMAND_PATH_BYTES: u64 = 64;
@@ -154,25 +155,25 @@ impl<'a> FrameIr<'a> {
     }
 }
 
-pub(super) struct IrPath<'a> {
-    pub(super) source: GeometrySource<'a>,
-    pub(super) transform: Transform,
-    pub(super) rule: FillRule,
-    pub(super) bounds: Rect,
-    pub(super) device_verbs: Vec<PathVerb>,
-    pub(super) segment_upper_bound: u64,
+pub(crate) struct IrPath<'a> {
+    pub(crate) source: GeometrySource<'a>,
+    pub(crate) transform: Transform,
+    pub(crate) rule: FillRule,
+    pub(crate) bounds: Rect,
+    pub(crate) device_verbs: Vec<PathVerb>,
+    pub(crate) segment_upper_bound: u64,
 }
 
 #[derive(Clone, Copy)]
-pub(super) enum GeometrySource<'a> {
+pub(crate) enum GeometrySource<'a> {
     Rectangle(Rect),
     Path(&'a Path2D),
 }
 
-pub(super) struct IrPaint<'a> {
-    pub(super) source: &'a Paint,
-    pub(super) bounds: Rect,
-    pub(super) transform: Transform,
+pub(crate) struct IrPaint<'a> {
+    pub(crate) source: &'a Paint,
+    pub(crate) bounds: Rect,
+    pub(crate) transform: Transform,
 }
 
 pub(super) enum IrClip {

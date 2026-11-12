@@ -6,8 +6,6 @@ pub use crate::cpu::WorkStats;
 pub(crate) use crate::raster::coverage_cache::CoverageCache;
 use crate::raster::paint;
 pub use crate::raster::prepare::RenderPrepare;
-#[cfg(feature = "gpu")]
-pub(crate) use crate::raster::prepare::prepare_validated_device;
 pub use motion_core::RasterLimits;
 use motion_core::{PixelSize, Rect};
 use std::ops::Range;
@@ -170,26 +168,6 @@ pub(crate) enum PreparedItem {
         /// Solid paint record index.
         paint: usize,
     },
-}
-
-/// A fill whose coverage the GPU computes from lines or device-flattened curves.
-///
-/// The fill owns one dense strip covering its pixel bounds; the strip's `alpha_offset` addresses
-/// an f32 sample block after the packed CPU alphas, which the GPU writes before composition.
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct DeviceFill {
-    /// Index of the dense strip in the GPU scene's common strip descriptors.
-    pub(crate) strip: usize,
-    /// Range in the GPU frame's independently owned device edges.
-    pub(crate) edges: Range<usize>,
-    /// Curve descriptors expanded by the GPU; empty when the fill is described by `edges` alone.
-    pub(crate) curves: Range<usize>,
-    /// Statically admitted generated edge slots.
-    pub(crate) segments: u32,
-    /// Winding rule that maps accumulated signed area to coverage.
-    pub(crate) rule: motion_core::FillRule,
-    /// Conservative GPU tile storage and work admission.
-    pub(crate) tiles: crate::raster::device::TileLayout,
 }
 
 /// Logical preparation totals, excluding allocator capacity and source storage.

@@ -17,6 +17,7 @@ mod output_plan;
 mod particle_tiles;
 mod plan;
 mod prepared;
+pub(crate) mod raster;
 mod residency;
 #[cfg(test)]
 mod target_tests;

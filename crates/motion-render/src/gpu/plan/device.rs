@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::gpu::abi::{CoverageCurve, CoverageEdge, CoverageFill, CoverageParams, CoverageTile};
-use crate::raster::device::{
+use crate::gpu::raster::device::{
     COVERAGE_CARRY_STRIDE, COVERAGE_TILE_SIZE, CURVE_FLATTEN_WORK_PER_SEGMENT,
 };
 use motion_core::{FillRule, ValidationError};
@@ -43,7 +43,9 @@ impl Planner<'_> {
 
     pub(super) fn device_words(&self) -> usize {
         self.frame.device_fills.last().map_or(0, |fill| {
-            crate::raster::device::DeviceGeometry::device_sample_end(&self.frame.strips[fill.strip])
+            crate::gpu::raster::device::DeviceGeometry::device_sample_end(
+                &self.frame.strips[fill.strip],
+            )
         })
     }
 

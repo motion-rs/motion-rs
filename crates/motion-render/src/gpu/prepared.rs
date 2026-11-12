@@ -4,8 +4,8 @@ use super::{
     OutputPlan,
     frame::{FrameInput, FrameView},
 };
+use crate::gpu::raster::prepare::GpuFrame;
 use crate::prepared::PreparationStats;
-use crate::raster::gpu_prepare::GpuFrame;
 use motion_core::{PixelSize, RasterLimits, ValidationError};
 
 /// Independently prepared GPU geometry and composition records.

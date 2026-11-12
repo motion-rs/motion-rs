@@ -5,17 +5,15 @@ use motion_core::budget::Budget;
 use std::mem::size_of;
 
 pub(crate) mod coverage_cache;
-pub(crate) mod device;
 pub(crate) mod frame_ir;
-#[cfg(any(feature = "gpu", test))]
-pub(crate) mod gpu_prepare;
 pub(crate) mod paint;
 pub(crate) mod polygon;
 pub mod prepare;
 pub(crate) mod rect_clip;
 
 pub(crate) use coverage_cache::CoverageCache;
-use prepare::{paint_record, pixel_bounds};
+use prepare::paint_record;
+pub(crate) use prepare::pixel_bounds;
 
 #[cfg(test)]
 use crate::prepared::{PreparationStats, PreparedFrame, PreparedItem};
