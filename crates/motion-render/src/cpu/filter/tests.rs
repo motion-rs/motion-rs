@@ -9,7 +9,7 @@ fn tile(bounds: Rect, color: Color) -> Node {
     bounds.fill(color).into()
 }
 
-fn prepared(node: &Node) -> PreparedFrame {
+fn prepared(node: &Node) -> PreparedCpuFrame {
     node.compile(
         Size::new(8.0, 4.0),
         PixelSize::new(8, 4),
@@ -216,7 +216,7 @@ fn gpu_plus_capture_bounds_preserve_pixels_and_replay() {
     );
 }
 
-fn check_plus_capture_bounds(mut check: impl FnMut(&PreparedFrame, &PreparedFrame)) {
+fn check_plus_capture_bounds(mut check: impl FnMut(&PreparedCpuFrame, &PreparedCpuFrame)) {
     use motion_core::{BlendMode, BlendSpace, MaskMode, Path2D};
     let content = Node::group([
         tile(
@@ -1711,7 +1711,7 @@ fn filter_storage_work_and_guard_pixels_share_transactional_limits() {
     let neutral = white().filter(Filter::Blur { sigma: 0.0 });
     let single = self::prepared(&neutral);
     let siblings = self::prepared(&Node::group([neutral.clone(), neutral]));
-    let live_peak = |frame: &PreparedFrame| {
+    let live_peak = |frame: &PreparedCpuFrame| {
         frame
             .compose_linear(RasterLimits::default())
             .unwrap()

@@ -204,7 +204,7 @@ impl FrameRenderer {
         time: Time,
         background: Option<Color>,
         build: impl FnMut(&SceneContext<'_>) -> Node,
-    ) -> Result<(crate::PreparedFrame, RasterLimits)> {
+    ) -> Result<(crate::PreparedCpuFrame, RasterLimits)> {
         let mut execution = self.execution();
         execution.preparation_backend = Some(crate::BackendKind::Cpu);
         let (prepared, limits) = execution.prepare_output_at(time, background, build)?;

@@ -1,7 +1,7 @@
 use super::*;
 use crate::prepared::PreparedItem;
 use crate::raster::prepare::RenderPrepare;
-use crate::{PreparedFrame, RasterLimits};
+use crate::{PreparedCpuFrame, RasterLimits};
 use motion_core::Shape;
 use motion_core::{
     BlendMode, Canvas, Color, DisplayList, DrawCommand, DrawContext, Drawable, MaskMode, Node,
@@ -23,7 +23,7 @@ fn list(node: &Node, size: PixelSize) -> DisplayList {
     .into_editable()
 }
 
-fn prepared(node: &Node, size: PixelSize) -> PreparedFrame {
+fn prepared(node: &Node, size: PixelSize) -> PreparedCpuFrame {
     list(node, size)
         .prepare(ValidationLimits::default(), RasterLimits::default())
         .unwrap()

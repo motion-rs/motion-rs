@@ -4,7 +4,7 @@ Programmable motion graphics and deterministic video rendering in Rust.
 The Cargo package is `motion-rs`; the library import is `motion`.
 
 The pipeline is `SceneContext -> Scene -> Node -> DisplayList ->
-ValidatedDisplayList -> PreparedFrame -> CPU/GPU -> FrameBuffer/Encoder`. The headless core has
+ValidatedDisplayList -> PreparedCpuFrame -> CPU/GPU -> FrameBuffer/Encoder`. The headless core has
 no browser, widget tree, playback clock or implicit font discovery. Optional
 Motion Studio provides a desktop preview/export workbench.
 

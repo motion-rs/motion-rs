@@ -2,7 +2,7 @@
 
 The rendering path is `SceneContext -> Scene -> Node -> ValidatedDisplayList ->
 FrameIr -> backend preparation -> CPU/GPU -> output`. CPU preparation produces
-`PreparedFrame`; GPU preparation produces its own geometry and composition records.
+`PreparedCpuFrame`; GPU preparation produces its own geometry and composition records.
 A scene is a deterministic function of exact time and fixed
 resources, not an object advanced by a playback clock.
 

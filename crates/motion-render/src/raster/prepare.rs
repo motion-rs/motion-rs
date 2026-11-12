@@ -7,7 +7,7 @@ use super::paint::TableCache;
 use super::{CoverageCache, PreparationCache, RasterScope};
 use crate::cpu::rect_clip;
 use crate::prepared::{
-    PreparationStats, PreparedFilters, PreparedFrame, PreparedItem, PreparedLayer, PreparedScene,
+    PreparationStats, PreparedFilters, PreparedCpuFrame, PreparedItem, PreparedLayer, FrameRecords,
     RasterLimits,
 };
 use motion_core::budget::Budget;
@@ -31,10 +31,10 @@ pub trait RenderPrepare {
         &self,
         validation: ValidationLimits,
         limits: RasterLimits,
-    ) -> Result<PreparedFrame, ValidationError>;
+    ) -> Result<PreparedCpuFrame, ValidationError>;
 
     /// Prepares CPU coverage with combined structural and raster allowances.
-    fn prepare_within(&self, limits: SceneLimits) -> Result<PreparedFrame, ValidationError> {
+    fn prepare_within(&self, limits: SceneLimits) -> Result<PreparedCpuFrame, ValidationError> {
         self.prepare(limits.structure, limits.raster)
     }
 
@@ -49,7 +49,7 @@ pub trait RenderPrepare {
         validation: ValidationLimits,
         limits: RasterLimits,
         tolerance: f64,
-    ) -> Result<PreparedFrame, ValidationError>;
+    ) -> Result<PreparedCpuFrame, ValidationError>;
 }
 
 impl RenderPrepare for DisplayList {
@@ -84,7 +84,7 @@ impl RenderPrepare for DisplayList {
         &self,
         validation: ValidationLimits,
         limits: RasterLimits,
-    ) -> Result<PreparedFrame, ValidationError> {
+    ) -> Result<PreparedCpuFrame, ValidationError> {
         self.prepare_with_tolerance(validation, limits, 1.0 / 256.0)
     }
 
@@ -121,7 +121,7 @@ impl RenderPrepare for DisplayList {
         validation: ValidationLimits,
         limits: RasterLimits,
         tolerance: f64,
-    ) -> Result<PreparedFrame, ValidationError> {
+    ) -> Result<PreparedCpuFrame, ValidationError> {
         prepare_with_cache(self, validation, limits, tolerance, None)
     }
 }
@@ -132,7 +132,7 @@ pub(crate) fn prepare_with_cache(
     limits: RasterLimits,
     tolerance: f64,
     cache: Option<&mut PreparationCache>,
-) -> Result<PreparedFrame, ValidationError> {
+) -> Result<PreparedCpuFrame, ValidationError> {
     let source = source.clone().validate(validation)?;
     prepare_validated_with_cache(&source, validation, limits, tolerance, cache)
 }
@@ -142,7 +142,7 @@ impl RenderPrepare for motion_core::ValidatedDisplayList {
         &self,
         validation: ValidationLimits,
         limits: RasterLimits,
-    ) -> Result<PreparedFrame, ValidationError> {
+    ) -> Result<PreparedCpuFrame, ValidationError> {
         prepare_validated_with_cache(self, validation, limits, 1.0 / 256.0, None)
     }
 
@@ -151,7 +151,7 @@ impl RenderPrepare for motion_core::ValidatedDisplayList {
         validation: ValidationLimits,
         limits: RasterLimits,
         tolerance: f64,
-    ) -> Result<PreparedFrame, ValidationError> {
+    ) -> Result<PreparedCpuFrame, ValidationError> {
         prepare_validated_with_cache(self, validation, limits, tolerance, None)
     }
 }
@@ -162,7 +162,7 @@ pub(crate) fn prepare_validated_with_cache(
     limits: RasterLimits,
     tolerance: f64,
     cache: Option<&mut PreparationCache>,
-) -> Result<PreparedFrame, ValidationError> {
+) -> Result<PreparedCpuFrame, ValidationError> {
     let ir = FrameIr::build(source, validation, limits, tolerance)?;
     prepare_ir(&ir, limits, cache)
 }
@@ -171,10 +171,10 @@ pub(crate) fn prepare_ir(
     ir: &FrameIr<'_>,
     limits: RasterLimits,
     cache: Option<&mut PreparationCache>,
-) -> Result<PreparedFrame, ValidationError> {
-    Ok(PreparedFrame {
-        scene: prepare_scene(ir, limits, &mut CpuBackend { cache })?,
-    })
+) -> Result<PreparedCpuFrame, ValidationError> {
+    Ok(PreparedCpuFrame(
+        prepare_scene(ir, limits, &mut CpuBackend { cache })?,
+    ))
 }
 
 /// The parts of a scene walk where CPU and GPU preparation differ.
@@ -194,7 +194,7 @@ pub(crate) trait SceneBackend {
     /// Generates the coverage of one fill into `frame`.
     fn fill(
         &mut self,
-        frame: &mut PreparedScene,
+        frame: &mut FrameRecords,
         geometry: &IrPath<'_>,
         paint: &IrPaint<'_>,
         tolerance: f64,
@@ -224,7 +224,7 @@ impl SceneBackend for CpuBackend<'_> {
 
     fn fill(
         &mut self,
-        frame: &mut PreparedScene,
+        frame: &mut FrameRecords,
         geometry: &IrPath<'_>,
         _: &IrPaint<'_>,
         tolerance: f64,
@@ -245,17 +245,17 @@ pub(crate) fn prepare_scene(
     ir: &FrameIr<'_>,
     limits: RasterLimits,
     backend: &mut impl SceneBackend,
-) -> Result<PreparedScene, ValidationError> {
+) -> Result<FrameRecords, ValidationError> {
     let mut budget = Budget::new(ir.size(), limits)?;
     let ir_stats = ir.stats();
     budget.bytes(ir_stats.retained_bytes, "frame_ir")?;
     budget.work(ir_stats.work, "frame_ir")?;
     budget.merge_peak(ir_stats.peak_bytes);
-    budget.bytes(size_of::<PreparedFrame>() as u64, "prepared")?;
+    budget.bytes(size_of::<PreparedCpuFrame>() as u64, "prepared")?;
     if backend.fixed_bytes() > 0 {
         budget.bytes(backend.fixed_bytes(), "prepared.gpu")?;
     }
-    let mut frame = PreparedScene {
+    let mut frame = FrameRecords {
         quality: motion_core::RenderQuality::Final,
         blend_space: motion_core::drawing::BlendSpace::LinearRgb,
         size: ir.size(),
@@ -378,7 +378,7 @@ fn prepare_layer_clips(
     ir: &FrameIr<'_>,
     layer: &mut PreparedLayer,
     [alpha_clip, rectangle_clip, shape_clip]: [Option<usize>; 3],
-    frame: &mut PreparedScene,
+    frame: &mut FrameRecords,
     rectangles: &mut rect_clip::Preparation,
     budget: &mut Budget,
     path: &str,
@@ -463,7 +463,7 @@ fn copy_layer(
 }
 
 pub(crate) fn prepare_geometry(
-    frame: &mut PreparedScene,
+    frame: &mut FrameRecords,
     geometry: &super::frame_ir::IrPath<'_>,
     tolerance: f64,
     cache: Option<&mut CoverageCache>,

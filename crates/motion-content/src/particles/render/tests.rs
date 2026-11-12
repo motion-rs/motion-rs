@@ -555,7 +555,7 @@ fn cached_line_support_is_charged_without_changing_device_layout() {
     }
 }
 
-fn prepared(node: Node) -> Result<motion_render::PreparedFrame, ValidationError> {
+fn prepared(node: Node) -> Result<motion_render::PreparedCpuFrame, ValidationError> {
     node.compile(
         Size::new(32.0, 24.0),
         PixelSize::new(64, 48),

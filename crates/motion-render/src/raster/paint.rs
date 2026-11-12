@@ -473,7 +473,7 @@ fn sample_image(
     }))
 }
 
-impl PreparedScene {
+impl FrameRecords {
     pub(crate) fn paint_row(&self, index: usize, column: u32, row: u32) -> PaintRow<'_> {
         let source = self.paint_sources[index].as_ref();
         let ready = source.is_none_or(|source| source.invertible);

@@ -1,12 +1,12 @@
 //! Clip, rectangle and strip coverage emission plus the shared pixel-bounds and paint helpers
 //! used by preparation.
 
-use crate::prepared::{ClipRecord, PaintRecord, PixelRect, PreparedScene, Span, Strip};
+use crate::prepared::{ClipRecord, PaintRecord, PixelRect, FrameRecords, Span, Strip};
 use crate::raster::{Band, RasterScope};
 use motion_core::budget::Budget;
 use motion_core::{Color, PixelSize, Rect, ValidationError};
 
-impl PreparedScene {
+impl FrameRecords {
     pub(in crate::raster) fn prepare_ir_clip(
         &mut self,
         clip: &motion_core::PathClip,

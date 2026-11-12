@@ -1,12 +1,12 @@
 //! Property tests comparing prepared coverage with CPU raster output.
 
-use crate::{PreparedFrame, RenderPrepare};
+use crate::{PreparedCpuFrame, RenderPrepare};
 use motion_core::{
     Color, Node, Path2D, PixelSize, Point, RasterLimits, Rect, Shape, Size, ValidationLimits,
 };
 use proptest::prelude::*;
 
-fn prepare(node: Node) -> PreparedFrame {
+fn prepare(node: Node) -> PreparedCpuFrame {
     node.compile(
         Size::new(32.0, 32.0),
         PixelSize::new(32, 32),
@@ -17,7 +17,7 @@ fn prepare(node: Node) -> PreparedFrame {
     .unwrap()
 }
 
-fn coverage(frame: &PreparedFrame) -> Vec<u8> {
+fn coverage(frame: &PreparedCpuFrame) -> Vec<u8> {
     let mut pixels = vec![0; 32 * 32];
     for span in &frame.spans {
         for row in span.y..span.y + span.height {

@@ -1,6 +1,6 @@
 # 渲染与导出
 
-使用 `motion::prelude` 进行创作，`motion::render` 获取渲染契约，`motion::encode` 获取编码器与进度接收器，`motion::extend` 获取实现协议。已准备的覆盖率（strip、span、画刷记录与图层）以及 GPU 计划是 `motion-render` 的 crate 私有内容；`PreparedFrame` 只公开尺寸、统计与计数。逻辑尺寸使用 f64；输出的 `PixelSize` 使用正整数维度。Composition 会把逻辑内容等比包含进输出视口。本文是 [rendering.md](rendering.md) 的中文翻译，以英文版为准。
+使用 `motion::prelude` 进行创作，`motion::render` 获取渲染契约，`motion::encode` 获取编码器与进度接收器，`motion::extend` 获取实现协议。已准备的覆盖率（strip、span、画刷记录与图层）以及 GPU 计划是 `motion-render` 的 crate 私有内容；`PreparedCpuFrame` 只公开尺寸、统计与计数。逻辑尺寸使用 f64；输出的 `PixelSize` 使用正整数维度。Composition 会把逻辑内容等比包含进输出视口。本文是 [rendering.md](rendering.md) 的中文翻译，以英文版为准。
 
 ## 后端准备与效果
 
@@ -12,13 +12,13 @@ flowchart TD
     List -->|准入| IR["FrameIr：设备曲线、作用域、画刷、裁剪、滤镜域"]
     IR --> CPUPrep["CPU 准备：展平、积分面积、量化"]
     IR --> GPUPrep["GPU 准备：曲线描述符、上传、tile 上界"]
-    CPUPrep --> Prepared["PreparedFrame：strip、span、u8 alpha"]
+    CPUPrep --> Prepared["PreparedCpuFrame：strip、span、u8 alpha"]
     GPUPrep --> GpuFrame["PreparedGpuFrame：设备边记录"]
     Prepared --> CPUComp["CPU 合成"]
     GpuFrame --> GPUComp["GPU 覆盖率 pass 与合成"]
 ```
 
-公开的 `RenderPrepare` 与 `PreparedFrame` 只描述 CPU 覆盖率。GPU 会话与打包导出工作线程使用独立的准备结果，从不构造 CPU 准备帧；底层 GPU 使用者仍可显式上传一个 CPU 准备帧。符合条件的填充由设备生成覆盖率，参见 [GPU 渲染](#共享数据与输出)。
+公开的 `RenderPrepare` 与 `PreparedCpuFrame` 只描述 CPU 覆盖率。GPU 会话与打包导出工作线程使用独立的准备结果，从不构造 CPU 准备帧；底层 GPU 使用者仍可显式上传一个 CPU 准备帧。符合条件的填充由设备生成覆盖率，参见 [GPU 渲染](#共享数据与输出)。
 
 ### CPU 覆盖率
 
@@ -87,7 +87,7 @@ frame.write_ppm("frame.ppm")?;
 # Ok::<(), motion::Error>(())
 ```
 
-`RenderOptions` 选择输出尺寸、背景与透明度、后端、资源、结构与光栅限制，以及可选的快门采样。`FrameBuffer` 保留其声明的平面与格式：直通或预乘的 sRGB RGBA8、线性预乘的 RGBA16F 或未量化的 RGBA32F，或有限范围 BT.709 的 8 或 10 位 YUV420。YUV 要求偶数维度与不透明像素。没有隐式的 HDR 色调映射。`PreparedFrame::render_linear` 与 `Gpu::render_linear` 返回 RGBA32F 的 `FrameBuffer`，可由 `FrameBuffer::linear_pixel`、`linear_pixels` 与 `to_format` 读取或转换；它们背后的 CPU 工作帧是 crate 私有的。
+`RenderOptions` 选择输出尺寸、背景与透明度、后端、资源、结构与光栅限制，以及可选的快门采样。`FrameBuffer` 保留其声明的平面与格式：直通或预乘的 sRGB RGBA8、线性预乘的 RGBA16F 或未量化的 RGBA32F，或有限范围 BT.709 的 8 或 10 位 YUV420。YUV 要求偶数维度与不透明像素。没有隐式的 HDR 色调映射。`PreparedCpuFrame::render_linear` 与 `Gpu::render_linear` 返回 RGBA32F 的 `FrameBuffer`，可由 `FrameBuffer::linear_pixel`、`linear_pixels` 与 `to_format` 读取或转换；它们背后的 CPU 工作帧是 crate 私有的。
 
 `RenderQuality::Final` 是默认的生产策略。Draft 显式允许在几何、快门采样与墨迹材质上使用预览近似；它不是不同的输出分辨率，也不等价于 Final 的结果。当 sigma 至少为 1 时，Draft 模糊使用一个方差匹配的盒，更小的 sigma 保持 Final 的小核策略。质量必须在重放与缓存标识中保持固定。Studio 在播放与拖动时请求 Draft，导出时强制使用 Final；参见 [Studio 指南](../studio.md#preview-and-playback)。
 
@@ -100,7 +100,7 @@ flowchart TD
     Build["场景回调"] --> Node["Node"]
     Node -->|编译| Commands["ValidatedDisplayList"]
     Commands -->|准入| IR["FrameIr"]
-    IR -->|CPU 准备| Prepared["PreparedFrame：覆盖率、画刷、不可变图像"]
+    IR -->|CPU 准备| Prepared["PreparedCpuFrame：覆盖率、画刷、不可变图像"]
     IR -->|GPU 准备| GpuPrep["GPU 准备：描述符与上传"]
     Prepared --> CPU["CPU 合成"]
     GpuPrep --> GPU["GPU 合成：RGBA32F 工作纹理"]
@@ -322,7 +322,7 @@ flowchart TD
 
 `FrameIr` 在任一后端准备覆盖率之前，先准入 f64 设备曲线、线段上界、不可变资源以及规范化的合成语义。CPU 与 GPU 的准备共用一次场景遍历，通过后端接口只决定：填充如何产生覆盖率、哪些资源保持存活、粒子如何被观察。`FrameIr` 按身份对每张不同的图案图像只计费一次；CPU 帧借用不可变资源并释放这部分 IR 计费，GPU 帧则保留它以供上传。
 
-GPU 准备独立持有设备边记录，与公开的 CPU `PreparedFrame` 分开。`FrameRenderer` 的 GPU 准备与打包导出工作线程既不构造 CPU 准备帧，也不初始化设备。底层 API 仍可上传显式准备好的 CPU 帧。
+GPU 准备独立持有设备边记录，与公开的 CPU `PreparedCpuFrame` 分开。`FrameRenderer` 的 GPU 准备与打包导出工作线程既不构造 CPU 准备帧，也不初始化设备。底层 API 仍可上传显式准备好的 CPU 帧。
 
 工作颜色为有限的线性预乘 RGBA32F。符合条件的曲线以按静态 Wang 上界确定大小的描述符形式到达 GPU，由一个 pass 展开为边记录，因此主机既不展平也不上传这些边。仅含直线的上传同样被接受。其余覆盖率（贴花、CPU 生成的裁剪覆盖率）仍在 CPU 上生成并上传。解析矩形和 CPU 裁剪覆盖率属于 GPU 准备的一部分，不是回退。
 

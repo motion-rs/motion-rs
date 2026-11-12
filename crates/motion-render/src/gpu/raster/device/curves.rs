@@ -5,7 +5,7 @@ use super::{
     DEVICE_COORDINATE_LIMIT, DEVICE_MAX_FILL_VISITS, DEVICE_MAX_FILLS, DEVICE_MAX_FRAME_VISITS,
     DEVICE_MAX_PIXELS, DeviceGeometry, DeviceTotals, TileLayout, unsupported,
 };
-use crate::prepared::{PreparedScene, Strip};
+use crate::prepared::{FrameRecords, Strip};
 use crate::raster::{RasterScope, frame_ir, pixel_bounds};
 use motion_core::{PathVerb, Point, ValidationError};
 
@@ -20,7 +20,7 @@ pub(crate) struct DeviceCurve {
 impl DeviceGeometry {
     pub(super) fn curve_fill(
         &mut self,
-        scene: &mut PreparedScene,
+        scene: &mut FrameRecords,
         geometry: &frame_ir::IrPath<'_>,
         tolerance: f64,
         scope: &mut RasterScope<'_>,

@@ -341,12 +341,12 @@ fn temporary_storage_peak_work_limits_and_sibling_release_are_exact() {
     single.commands.pop();
     assert_eq!(
         twice.stats.peak_bytes - frame.stats.peak_bytes,
-        frame.stats.retained_bytes - size_of::<PreparedFrame>() as u64 + ir_bytes(&list)
+        frame.stats.retained_bytes - size_of::<PreparedCpuFrame>() as u64 + ir_bytes(&list)
             - ir_bytes(&single)
     );
     assert_eq!(
         twice.stats.retained_bytes - frame.stats.retained_bytes,
-        frame.stats.retained_bytes - size_of::<PreparedFrame>() as u64
+        frame.stats.retained_bytes - size_of::<PreparedCpuFrame>() as u64
     );
     let single_ir = ir_stats(&single, RasterLimits::default()).unwrap();
     let repeated_ir = ir_stats(&list, RasterLimits::default()).unwrap();
@@ -370,7 +370,7 @@ fn temporary_storage_peak_work_limits_and_sibling_release_are_exact() {
             }
         }
     }
-    for max_bytes in size_of::<PreparedFrame>() as u64..twice.stats.peak_bytes {
+    for max_bytes in size_of::<PreparedCpuFrame>() as u64..twice.stats.peak_bytes {
         let limits = RasterLimits {
             max_bytes,
             ..RasterLimits::default()
@@ -382,11 +382,11 @@ fn temporary_storage_peak_work_limits_and_sibling_release_are_exact() {
         match ir_stats(&list, limits) {
             Err(normalization) => assert_eq!(error, normalization),
             Ok(ir) => {
-                let header = ir.retained_bytes + size_of::<PreparedFrame>() as u64;
+                let header = ir.retained_bytes + size_of::<PreparedCpuFrame>() as u64;
                 let index = usize::from(max_bytes >= first_peak);
                 let before_command = header
                     + index as u64
-                        * (frame.stats.retained_bytes - size_of::<PreparedFrame>() as u64)
+                        * (frame.stats.retained_bytes - size_of::<PreparedCpuFrame>() as u64)
                     + crate::raster::frame_ir::COMMAND_PATH_BYTES;
                 let expected = if max_bytes < header {
                     "prepared".to_owned()
@@ -460,7 +460,7 @@ fn rectangle_fast_path_matches_independent_sweep_and_preserves_fallback() {
     let render = |geometry: &Path2D, transform, rule, fast, limits| {
         let mut frame = blank.clone();
         let mut budget = Budget::new(size, limits)?;
-        budget.bytes(size_of::<PreparedFrame>() as u64, "test")?;
+        budget.bytes(size_of::<PreparedCpuFrame>() as u64, "test")?;
         if fast {
             frame.polygon_path(geometry, transform, rule, 0.25, &mut budget, "test")?;
         } else {
@@ -1044,7 +1044,7 @@ fn curve_tolerance_scratch_budgets_and_hidden_failures_are_explicit() {
         ),
         (
             RasterLimits {
-                max_bytes: size_of::<PreparedFrame>() as u64,
+                max_bytes: size_of::<PreparedCpuFrame>() as u64,
                 ..exact
             },
             "max_bytes",
@@ -1067,7 +1067,7 @@ fn curve_tolerance_scratch_budgets_and_hidden_failures_are_explicit() {
         .unwrap();
     assert_eq!(
         repeated.stats.peak_bytes - frame.stats.peak_bytes,
-        frame.stats.retained_bytes - size_of::<PreparedFrame>() as u64 + ir_bytes(&repeated_list)
+        frame.stats.retained_bytes - size_of::<PreparedCpuFrame>() as u64 + ir_bytes(&repeated_list)
             - ir_bytes(&list)
     );
     for tolerance in [0.0, -1.0, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {

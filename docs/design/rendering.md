@@ -3,7 +3,7 @@
 Import `motion::prelude` for authoring, `motion::render` for rendering contracts,
 `motion::encode` for encoders and progress sinks, and `motion::extend` for implementation
 protocols. Prepared coverage (strips, spans, paint records and layers) and the GPU plan
-are crate-private to `motion-render`; `PreparedFrame` exposes sizes, statistics and counts
+are crate-private to `motion-render`; `PreparedCpuFrame` exposes sizes, statistics and counts
 only. Logical sizes use f64; output `PixelSize` uses positive integer dimensions. A
 composition uniformly contains logical content in its output viewport. Chinese
 translation: [rendering.zh-CN.md](rendering.zh-CN.md); this English page is the source of
@@ -22,13 +22,13 @@ flowchart TD
     List -->|admit| IR["FrameIr: device curves, scopes, paints, clips, filter domains"]
     IR --> CPUPrep["CPU preparation: flatten, integrate area, quantize"]
     IR --> GPUPrep["GPU preparation: curve descriptors, uploads, tile bounds"]
-    CPUPrep --> Prepared["PreparedFrame: strips, spans, u8 alpha"]
+    CPUPrep --> Prepared["PreparedCpuFrame: strips, spans, u8 alpha"]
     GPUPrep --> GpuFrame["PreparedGpuFrame: device edge records"]
     Prepared --> CPUComp["CPU composition"]
     GpuFrame --> GPUComp["GPU coverage passes and composition"]
 ```
 
-The public `RenderPrepare` and `PreparedFrame` describe CPU coverage only. GPU sessions and
+The public `RenderPrepare` and `PreparedCpuFrame` describe CPU coverage only. GPU sessions and
 packed export workers use a separate preparation result and never build a CPU prepared
 frame, while low-level GPU consumers can still explicitly upload one. GPU coverage is
 generated on the device for eligible fills; see [GPU rendering](#shared-data-and-output).
@@ -202,7 +202,7 @@ structural and raster limits, and optional shutter sampling. `FrameBuffer` prese
 declared planes and format: straight or premultiplied sRGB RGBA8, linear-premultiplied
 RGBA16F or unquantized RGBA32F, or limited-range BT.709 YUV420 at 8 or 10 bits. YUV requires
 even dimensions and opaque pixels. There is no implicit HDR tone mapper.
-`PreparedFrame::render_linear` and `Gpu::render_linear` return RGBA32F `FrameBuffer`s that
+`PreparedCpuFrame::render_linear` and `Gpu::render_linear` return RGBA32F `FrameBuffer`s that
 `FrameBuffer::linear_pixel`, `linear_pixels` and `to_format` read or convert; the CPU working
 frame behind them is crate-private.
 
@@ -225,7 +225,7 @@ flowchart TD
     Build["Scene callback"] --> Node["Node"]
     Node -->|compile| Commands["ValidatedDisplayList"]
     Commands -->|admit| IR["FrameIr"]
-    IR -->|CPU prepare| Prepared["PreparedFrame: coverage, paint, immutable images"]
+    IR -->|CPU prepare| Prepared["PreparedCpuFrame: coverage, paint, immutable images"]
     IR -->|GPU prepare| GpuPrep["GPU preparation: descriptors and uploads"]
     Prepared --> CPU["CPU composition"]
     GpuPrep --> GPU["GPU composition: RGBA32F working textures"]
@@ -634,7 +634,7 @@ fill produces coverage, which resources stay live and how particles are observed
 immutable resources and releases that charge, while a GPU frame keeps it for upload.
 
 GPU preparation owns device edge records separately from the public CPU
-`PreparedFrame`. `FrameRenderer`'s GPU preparation and packed export workers never
+`PreparedCpuFrame`. `FrameRenderer`'s GPU preparation and packed export workers never
 construct a CPU prepared frame or initialize a device. Low-level APIs can still upload
 an explicitly prepared CPU frame.
 

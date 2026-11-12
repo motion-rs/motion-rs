@@ -2,10 +2,10 @@
 
 #[cfg(feature = "gpu")]
 use crate::gpu::raster::prepare::GpuFrame;
-use crate::prepared::{PreparedFrame, PreparedScene};
+use crate::prepared::{PreparedCpuFrame, FrameRecords};
 
 pub(in crate::composition) enum PreparedOutput {
-    Cpu(PreparedFrame),
+    Cpu(PreparedCpuFrame),
     #[cfg(feature = "gpu")]
     Gpu(GpuFrame),
 }
@@ -27,11 +27,11 @@ impl PreparedOutput {
 }
 
 impl std::ops::Deref for PreparedOutput {
-    type Target = PreparedScene;
+    type Target = FrameRecords;
 
     fn deref(&self) -> &Self::Target {
         match self {
-            Self::Cpu(frame) => &frame.scene,
+            Self::Cpu(frame) => &frame.0,
             #[cfg(feature = "gpu")]
             Self::Gpu(frame) => &frame.scene,
         }

@@ -111,7 +111,7 @@ impl InstanceBatch for AnalyticFixture {
     }
 }
 
-fn frame(count: usize) -> motion_core::Result<PreparedFrame> {
+fn frame(count: usize) -> motion_core::Result<PreparedCpuFrame> {
     let mut frame = motion_core::Node::empty()
         .compile(
             motion_core::Size::new(32.0, 24.0),

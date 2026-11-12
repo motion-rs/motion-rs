@@ -10,7 +10,7 @@ use motion_core::{PixelSize, RasterLimits, ValidationError};
 
 /// Independently prepared GPU geometry and composition records.
 ///
-/// Unlike [`crate::PreparedFrame`], this is not CPU coverage and has no CPU rendering API.
+/// Unlike [`crate::PreparedCpuFrame`], this is not CPU coverage and has no CPU rendering API.
 /// Preparing and planning it never initializes a device or submits work.
 pub struct PreparedGpuFrame {
     pub(super) frame: GpuFrame,

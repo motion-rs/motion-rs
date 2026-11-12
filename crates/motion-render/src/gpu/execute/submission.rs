@@ -20,7 +20,7 @@ impl Gpu {
     /// Accepts dedicated packed plans or conservative linear plans with extra packing charges.
     pub(crate) fn submit_output(
         &mut self,
-        frame: &PreparedScene,
+        frame: &FrameRecords,
         mut plan: Plan,
         format: crate::PixelFormat,
     ) -> motion_core::Result<PendingOutputFrame> {
@@ -225,7 +225,7 @@ impl Gpu {
 
     pub(crate) fn render_output(
         &mut self,
-        frame: &PreparedScene,
+        frame: &FrameRecords,
         plan: Plan,
         format: crate::PixelFormat,
     ) -> motion_core::Result<crate::FrameBuffer> {
@@ -243,7 +243,7 @@ impl Gpu {
     /// Submits without waiting for readback. The caller must bound all in-flight plans.
     pub(crate) fn submit_linear(
         &mut self,
-        frame: &PreparedScene,
+        frame: &FrameRecords,
         plan: Plan,
     ) -> motion_core::Result<PendingLinearFrame> {
         if plan.packed_output.is_some() {
@@ -380,7 +380,7 @@ impl Gpu {
     /// Logical peak bytes and work of the plan [`Gpu::render_linear`] would execute, computed
     /// without a device.
     pub fn plan_stats(
-        frame: &PreparedFrame,
+        frame: &PreparedCpuFrame,
         limits: RasterLimits,
     ) -> Result<crate::WorkStats, ValidationError> {
         Ok(Plan::new(frame, limits)?.stats)
@@ -392,7 +392,7 @@ impl Gpu {
     /// Device loss, driver validation or nonfinite arithmetic fails the entire frame.
     pub fn render_linear(
         &mut self,
-        frame: &PreparedFrame,
+        frame: &PreparedCpuFrame,
         limits: RasterLimits,
     ) -> motion_core::Result<crate::FrameBuffer> {
         let linear = self.render(frame, Plan::new(frame, limits)?)?;
@@ -403,7 +403,7 @@ impl Gpu {
     /// Device loss, driver validation or nonfinite arithmetic fails the entire frame.
     pub(crate) fn render(
         &mut self,
-        frame: &PreparedScene,
+        frame: &FrameRecords,
         plan: Plan,
     ) -> motion_core::Result<LinearFrame> {
         self.begin_timings();
@@ -431,7 +431,7 @@ impl Gpu {
 
     pub(in crate::gpu) fn render_texture(
         &mut self,
-        frame: &PreparedScene,
+        frame: &FrameRecords,
         plan: Plan,
         texture: &wgpu::Texture,
         format: crate::PixelFormat,
@@ -441,7 +441,7 @@ impl Gpu {
 
     pub(crate) fn submit_texture(
         &mut self,
-        frame: &PreparedScene,
+        frame: &FrameRecords,
         plan: Plan,
         texture: &wgpu::Texture,
         format: crate::PixelFormat,
@@ -657,7 +657,7 @@ impl Gpu {
 
     fn submit(
         &mut self,
-        frame: &PreparedScene,
+        frame: &FrameRecords,
         plan: &Plan,
     ) -> motion_core::Result<(LinearFrame, Option<crate::gpu::timing::CompletedTimings>)> {
         let started = self.timing.as_ref().map(|_| std::time::Instant::now());

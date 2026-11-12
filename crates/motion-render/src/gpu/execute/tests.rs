@@ -418,7 +418,7 @@ fn native_frame_timestamps_preserve_bytes_and_inflight_results() -> motion_core:
     let format = crate::PixelFormat::SrgbRgba8 {
         premultiplied: false,
     };
-    let prepare = |background| -> motion_core::Result<PreparedFrame> {
+    let prepare = |background| -> motion_core::Result<PreparedCpuFrame> {
         Ok(motion_core::Node::empty()
             .compile(
                 motion_core::Size::new(8.0, 8.0),

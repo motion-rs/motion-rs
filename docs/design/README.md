@@ -41,7 +41,7 @@ The documentation uses these terms consistently; Rustdoc defines the exact types
 | Composition | Low-level fixed-output render configuration (`Composition`), used with a scene or a timeline |
 | Display list | Flat validated drawing commands (`DisplayList`) compiled from a node tree |
 | Frame IR | Internal admitted device-space curves, ordered scopes, paints, clips, filter domains and output window, without coverage (`FrameIr`) |
-| Prepared frame | CPU coverage, paints and preparation statistics (`PreparedFrame`); GPU preparation has its own result |
+| Prepared frame | CPU coverage, paints and preparation statistics (`PreparedCpuFrame`); GPU preparation has its own result |
 | Backend | The CPU backend or the GPU backend; GPU sessions may compute fill coverage independently |
 | Still | One rendered frame, saved as an image or returned as a bitmap |
 | Film | An exported video file, with or without an audio mix |

@@ -158,7 +158,7 @@ fn gpu_curve_flattening_cpu_gpu_equivalence_and_replay() -> motion_core::Result 
             )?
             .prepare(ValidationLimits::default(), limits)?;
         let reference = cpu
-            .scene
+            .0
             .compose_linear(limits)?
             .to_rgba8_frame(false, limits)?;
         let actual = gpu

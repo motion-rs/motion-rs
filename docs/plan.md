@@ -48,7 +48,7 @@ restoration are implemented; their functional gates do not establish timing gain
 first-review L shortcut is tracked as R7. Streaming native encoding, measured frame
 workers, pooled GPU textures, shared content caches and CPU pixel/encoded-plane pooling are
 implemented, not new tasks. Full-frame linear APIs remain supported; automatic subtree
-raster caching and DisplayList/PreparedFrame object pooling are not implied by storage
+raster caching and DisplayList/PreparedCpuFrame object pooling are not implied by storage
 reuse. Further locality, preview wait reduction and decode scratch tuning need profiling
 after measurements resume, without changing geometry, density, alpha or replay.
 
@@ -88,7 +88,7 @@ The v3 backend split has normalized FrameIr semantics and separate CPU/GPU prepa
 results. FrameIr retains admitted f64 device curves, Wang segment bounds, ordered
 scopes, paints, clips and filter domains without coverage. Eligible GPU curves are
 flattened into statically bounded edge storage on the device, followed by
-GPU-generated f32 coverage, not a CPU PreparedFrame.
+GPU-generated f32 coverage, not a CPU PreparedCpuFrame.
 GPU coverage uses bounded 16-by-16 tile binning with signed row carries.
 Preparation reports expose segment/tile counts, geometry-upload bytes and classified
 explicit unsupported-path errors (no CPU coverage fallback); the GPU startup self-check

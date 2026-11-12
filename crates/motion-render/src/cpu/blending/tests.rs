@@ -1,5 +1,5 @@
 use super::*;
-use crate::PreparedFrame;
+use crate::PreparedCpuFrame;
 use crate::prepared::PreparedItem;
 use crate::raster::prepare::RenderPrepare;
 use motion_core::Shape;
@@ -156,7 +156,7 @@ const MODES: [BlendMode; 13] = [
     BlendMode::ColorBurn,
 ];
 
-fn prepared(node: &Node) -> PreparedFrame {
+fn prepared(node: &Node) -> PreparedCpuFrame {
     node.compile(
         Size::new(2.0, 1.0),
         PixelSize::new(2, 1),

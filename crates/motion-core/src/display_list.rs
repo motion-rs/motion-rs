@@ -76,7 +76,7 @@ impl PixelSize {
 /// Flat drawing commands with composed local-to-device transforms.
 ///
 /// Fields remain inspectable/editable; consumers must preflight edited lists.
-/// This is not a PreparedFrame or a renderer and allocates no output pixels.
+/// This is not a PreparedCpuFrame or a renderer and allocates no output pixels.
 #[derive(Clone, Debug, PartialEq)]
 pub struct DisplayList {
     /// Integer output size, independent of logical design dimensions.

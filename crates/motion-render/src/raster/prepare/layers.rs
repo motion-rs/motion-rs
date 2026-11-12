@@ -1,12 +1,12 @@
 //! Reference plus-layer capture trimming after backend coverage preparation.
 
-use crate::prepared::{PixelRect, PreparedItem, PreparedScene};
+use crate::prepared::{PixelRect, PreparedItem, FrameRecords};
 use motion_core::ValidationError;
 use motion_core::budget::Budget;
 use std::mem::size_of;
 
 pub(super) fn trim_plus_layers(
-    frame: &mut PreparedScene,
+    frame: &mut FrameRecords,
     budget: &mut Budget,
 ) -> Result<(), ValidationError> {
     struct Capture {

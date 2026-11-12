@@ -3,7 +3,7 @@
 use super::*;
 use motion_core::{Color, FillRule, Node, Path2D, Point, Rect, Size};
 
-fn prepare_cpu(node: Node) -> motion_core::Result<crate::PreparedFrame> {
+fn prepare_cpu(node: Node) -> motion_core::Result<crate::PreparedCpuFrame> {
     let size = PixelSize::new(193, 81);
     let validation = ValidationLimits::default();
     let list = node.compile(Size::new(193.0, 81.0), size, validation)?;
@@ -167,7 +167,7 @@ fn tile_interiors_fill_rules_and_reused_scratch_match_cpu() -> motion_core::Resu
     for rule in [FillRule::NonZero, FillRule::EvenOdd, FillRule::NonZero] {
         let frame = prepare(ring(rule)?)?;
         assert_eq!(frame.geometry.device_fills.len(), 1);
-        let expected = prepare_cpu(ring(rule)?)?.scene.compose_linear(limits)?;
+        let expected = prepare_cpu(ring(rule)?)?.0.compose_linear(limits)?;
         let actual = gpu.render(&frame, Plan::new(&frame, limits)?)?;
         // Empty tile interiors need carries; global RMS alone would hide a missing hole.
         for (x, y) in [
@@ -213,7 +213,7 @@ fn sloping_tile_edges_match_cpu_with_explicit_tolerance() -> motion_core::Result
         let frame = prepare(node.clone())?;
         assert_eq!(frame.geometry.device_fills.len(), 1);
         let expected = prepare_cpu(node)?
-            .scene
+            .0
             .compose_linear(limits)?
             .to_rgba8_frame(false, limits)?;
         let actual = gpu

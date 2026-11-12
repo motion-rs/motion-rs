@@ -1,7 +1,7 @@
 //! GPU fill geometry and bounded curve uploads.
 
 use crate::prepared::GpuPreparationStats;
-use crate::prepared::{PreparedScene, Strip};
+use crate::prepared::{FrameRecords, Strip};
 use crate::raster::{RasterScope, pixel_bounds};
 use motion_core::geometry::flatten::{Edge, edge_bounds, path_edges};
 use motion_core::{Transform, ValidationError};
@@ -92,7 +92,7 @@ impl DeviceGeometry {
     /// coordinates exceed f32 resolution or its estimated GPU cost exceeds the frame allowance.
     pub(super) fn device_fill(
         &mut self,
-        scene: &mut PreparedScene,
+        scene: &mut FrameRecords,
         geometry: &crate::raster::frame_ir::IrPath<'_>,
         tolerance: f64,
         scope: &mut RasterScope<'_>,

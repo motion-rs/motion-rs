@@ -1,7 +1,7 @@
 //! Sprite atlas separation, exact admission and reuse across changing primitive records.
 
 use crate::gpu::{FrameInput, Gpu, Plan, Planner};
-use crate::prepared::{PreparedFrame, PreparedItem};
+use crate::prepared::{PreparedCpuFrame, PreparedItem};
 use crate::{RasterLimits, RenderPrepare};
 use motion_core::budget::Budget;
 use motion_core::instances::{
@@ -171,7 +171,7 @@ impl InstanceBatch for SpriteFixture {
     }
 }
 
-fn frame(batch: Arc<dyn InstanceBatch>) -> motion_core::Result<PreparedFrame> {
+fn frame(batch: Arc<dyn InstanceBatch>) -> motion_core::Result<PreparedCpuFrame> {
     let mut frame = Node::empty()
         .compile(
             Size::new(32.0, 24.0),

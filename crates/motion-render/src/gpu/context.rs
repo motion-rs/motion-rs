@@ -161,7 +161,7 @@ impl GpuContext {
                     .contains(wgpu::TextureFormatFeatureFlags::BLENDABLE);
             let (device, queue) = adapter
                 .request_device(&wgpu::DeviceDescriptor {
-                    label: Some("Motion PreparedFrame compute"),
+                    label: Some("Motion PreparedCpuFrame compute"),
                     required_features: if hardware_fills {
                         wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES
                     } else {
@@ -234,7 +234,7 @@ impl GpuContext {
     /// The caller must finish the returned frame before publishing the texture.
     pub fn submit_texture(
         &self,
-        frame: &PreparedFrame,
+        frame: &PreparedCpuFrame,
         texture: &wgpu::Texture,
         format: crate::PixelFormat,
         limits: RasterLimits,
@@ -248,7 +248,7 @@ impl GpuContext {
     /// for encoded RGBA8; no implicit alpha loss or CPU pixel roundtrip occurs.
     pub fn render(
         &self,
-        frame: &PreparedFrame,
+        frame: &PreparedCpuFrame,
         target: crate::RenderTarget<'_>,
         format: crate::PixelFormat,
         limits: RasterLimits,

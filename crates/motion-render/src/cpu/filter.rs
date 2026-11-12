@@ -207,7 +207,7 @@ pub(crate) fn apply(
     origin: PixelRect,
     budget: &mut Budget,
     path: &str,
-    frame: &PreparedScene,
+    frame: &FrameRecords,
 ) -> Result<(), ValidationError> {
     let blend_space = frame.blend_space;
     if domain.right <= domain.left || domain.bottom <= domain.top {

@@ -84,7 +84,7 @@ fn prepare(crossing: bool) -> motion_core::Result<crate::gpu::raster::prepare::G
 }
 
 /// CPU reference preparation of the same scene.
-fn prepare_cpu(crossing: bool) -> motion_core::Result<crate::PreparedFrame> {
+fn prepare_cpu(crossing: bool) -> motion_core::Result<crate::PreparedCpuFrame> {
     let size = PixelSize::new(240, 160);
     let validation = ValidationLimits::default();
     let list = scene(crossing)?.compile(motion_core::Size::new(240.0, 160.0), size, validation)?;
@@ -158,7 +158,7 @@ fn assert_matches_cpu(crossing: bool) -> motion_core::Result {
     let limits = RasterLimits::default();
     let device = prepare(crossing)?;
     let expected = prepare_cpu(crossing)?
-        .scene
+        .0
         .compose_linear(limits)?
         .to_rgba8_frame(false, limits)?;
     let mut gpu = Gpu::new()?;

@@ -48,7 +48,7 @@ levels are for integer-indexed clocks and extensions. A checked `Composition` co
 | `RenderOptions` | Shared backend, assets, quality, output dimensions and budget configuration |
 | `RenderSession` + `FrameRequest` | Repeated requests with explicit time, target and format |
 | `Composition` + `FrameRenderer` | Integer-indexed frame requests for one composition |
-| `RenderPrepare` / `PreparedFrame` | Extensions controlling command preparation and low-level consumption |
+| `RenderPrepare` / `PreparedCpuFrame` | Extensions controlling command preparation and low-level consumption |
 | `GpuContext` | Import or share native devices, queues and submission lifetimes |
 
 `FrameAt::Time` does not automatically snap to the frame grid; `FrameAt::Index` converts exactly with the request's rational frame rate. `FrameRenderer` wraps the same session for indices of one composition, so their clocks must remain distinct.
@@ -91,7 +91,7 @@ This only configures policy; it does not initialize a GPU. Actual GPU requests r
 
 Do not infer plane strides from format names or reinterpret bytes with different alpha representations as the same frame. YUV is not a synonym for an arbitrary RGBA buffer, and HDR has no automatic tone mapping.
 
-## PreparedFrame and Caches
+## PreparedCpuFrame and Caches
 
 Preparation generates curves, coverage, paints, clips and filter data on the CPU. GPU composition is not GPU path rasterization; it consumes the same supported prepared data.
 

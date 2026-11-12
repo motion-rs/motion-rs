@@ -1,8 +1,8 @@
 //! Polygon path rasterization into sparse strips and spans using exact area coverage.
 
-use crate::prepared::{PixelRect, PreparedScene, Span, Strip};
+use crate::prepared::{PixelRect, FrameRecords, Span, Strip};
 #[cfg(test)]
-use crate::prepared::{PreparationStats, PreparedFrame, PreparedItem, RenderPrepare};
+use crate::prepared::{PreparationStats, PreparedCpuFrame, PreparedItem, RenderPrepare};
 use crate::raster::{Band, RasterScope, coverage_to_byte, pixel_bounds};
 #[cfg(test)]
 use motion_core::RasterLimits;
@@ -31,7 +31,7 @@ pub(super) struct Crossing {
     horizontal: f64,
 }
 
-impl PreparedScene {
+impl FrameRecords {
     pub(crate) fn polygon_path(
         &mut self,
         geometry: &motion_core::Path2D,

@@ -81,7 +81,7 @@ impl LinearFrame {
         Some(self.pixels[y as usize * self.size.width as usize + x as usize])
     }
 
-    /// Work and peak logical storage, including retained PreparedFrame.
+    /// Work and peak logical storage, including retained PreparedCpuFrame.
     pub fn stats(&self) -> WorkStats {
         self.stats
     }

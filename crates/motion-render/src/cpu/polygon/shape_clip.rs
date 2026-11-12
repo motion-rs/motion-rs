@@ -92,7 +92,7 @@ struct Boundary {
 }
 
 pub(crate) fn rasterize(
-    frame: &mut PreparedScene,
+    frame: &mut FrameRecords,
     base: &[Point],
     regions: &[&Region],
     tolerance: f64,

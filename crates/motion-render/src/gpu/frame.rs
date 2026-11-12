@@ -2,11 +2,11 @@
 
 use crate::gpu::raster::device::DeviceFill;
 use crate::gpu::raster::prepare::GpuFrame;
-use crate::prepared::{PreparedFrame, PreparedScene};
+use crate::prepared::{PreparedCpuFrame, FrameRecords};
 
 #[derive(Clone, Copy)]
 pub(crate) struct FrameView<'a> {
-    scene: &'a PreparedScene,
+    scene: &'a FrameRecords,
     pub(super) device_fills: &'a [DeviceFill],
     pub(super) device_edges: &'a [[f64; 5]],
     pub(super) device_curves: &'a [crate::gpu::raster::device::DeviceCurve],
@@ -20,15 +20,15 @@ impl FrameView<'_> {
 }
 
 impl std::ops::Deref for FrameView<'_> {
-    type Target = PreparedScene;
+    type Target = FrameRecords;
 
     fn deref(&self) -> &Self::Target {
         self.scene
     }
 }
 
-impl AsRef<PreparedScene> for FrameView<'_> {
-    fn as_ref(&self) -> &PreparedScene {
+impl AsRef<FrameRecords> for FrameView<'_> {
+    fn as_ref(&self) -> &FrameRecords {
         self.scene
     }
 }
@@ -37,10 +37,10 @@ pub(crate) trait FrameInput {
     fn gpu_view(&self) -> FrameView<'_>;
 }
 
-impl FrameInput for PreparedFrame {
+impl FrameInput for PreparedCpuFrame {
     fn gpu_view(&self) -> FrameView<'_> {
         FrameView {
-            scene: &self.scene,
+            scene: &self.0,
             device_fills: &[],
             device_edges: &[],
             device_curves: &[],

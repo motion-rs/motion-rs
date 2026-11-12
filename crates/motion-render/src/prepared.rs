@@ -71,7 +71,7 @@ pub(crate) struct Strip {
     pub(crate) width: u32,
     /// Number of rows, in 1..=4 and contained in the output.
     pub(crate) height: u32,
-    /// Row-major start in PreparedFrame::alphas, or in the device f32 sample block for a device fill.
+    /// Row-major start in PreparedCpuFrame::alphas, or in the device f32 sample block for a device fill.
     pub(crate) alpha_offset: usize,
     /// Whether the GPU generates this strip's f32 coverage instead of reading packed alphas.
     pub(crate) device: bool,
@@ -91,7 +91,7 @@ pub(crate) struct Span {
 }
 
 /// A finite linear-sRGB premultiplied f32 constant paint record.
-/// Spatial descriptors are retained separately; use PreparedFrame::paint_at
+/// Spatial descriptors are retained separately; use PreparedCpuFrame::paint_at
 /// for a sample that also resolves gradients or image patterns.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct PaintRecord {
@@ -189,26 +189,26 @@ pub struct PreparationStats {
 /// fill rule and isolated linear-blended layers.
 /// Private storage prevents callers forging ranges or editing validated geometry.
 #[derive(Clone, Debug, PartialEq)]
-pub struct PreparedFrame {
-    pub(crate) scene: PreparedScene,
+pub struct PreparedCpuFrame {
+    pub(crate) scene: FrameRecords,
 }
 
-impl std::ops::Deref for PreparedFrame {
-    type Target = PreparedScene;
+impl std::ops::Deref for PreparedCpuFrame {
+    type Target = FrameRecords;
 
     fn deref(&self) -> &Self::Target {
         &self.scene
     }
 }
 
-impl std::ops::DerefMut for PreparedFrame {
+impl std::ops::DerefMut for PreparedCpuFrame {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.scene
     }
 }
 
-impl AsRef<PreparedScene> for PreparedFrame {
-    fn as_ref(&self) -> &PreparedScene {
+impl AsRef<FrameRecords> for PreparedCpuFrame {
+    fn as_ref(&self) -> &FrameRecords {
         &self.scene
     }
 }
@@ -219,11 +219,11 @@ impl AsRef<PreparedScene> for PreparedFrame {
 /// while the GPU reads them only for rectangles, decal patterns and clips. Device-generated fill
 /// coverage lives in the GPU frame's own geometry, never here.
 ///
-/// This type is exposed only as the dereference target of [`PreparedFrame`].
+/// This type is exposed only as the dereference target of [`PreparedCpuFrame`].
 /// Its storage cannot be constructed or edited outside this crate.
 #[doc(hidden)]
 #[derive(Clone, Debug, PartialEq)]
-pub struct PreparedScene {
+pub struct FrameRecords {
     pub(crate) quality: motion_core::RenderQuality,
     pub(crate) blend_space: motion_core::drawing::BlendSpace,
     pub(crate) size: PixelSize,
@@ -240,7 +240,7 @@ pub struct PreparedScene {
     pub(crate) stats: PreparationStats,
 }
 
-impl PreparedFrame {
+impl PreparedCpuFrame {
     /// Selects approximate Draft filter kernels; default preparation remains Final.
     pub fn quality(mut self, quality: motion_core::RenderQuality) -> Self {
         self.quality = quality;
@@ -320,7 +320,7 @@ impl PreparedFrame {
     }
 }
 
-impl PreparedScene {
+impl FrameRecords {
     /// Final integer output dimensions, excluding filter guard bands.
     pub fn size(&self) -> PixelSize {
         PixelSize::new(

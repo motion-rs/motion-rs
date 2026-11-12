@@ -403,7 +403,7 @@ fn gpu_plan_admits_prepared_layers_without_a_device() {
     assert_eq!(plan.size, PixelSize::new(2, 1));
 }
 
-fn prepared(node: Node) -> PreparedFrame {
+fn prepared(node: Node) -> PreparedCpuFrame {
     node.compile(
         Size::new(8.0, 4.0),
         PixelSize::new(8, 4),

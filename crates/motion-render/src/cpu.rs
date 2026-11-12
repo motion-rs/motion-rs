@@ -1,7 +1,7 @@
 //! Scalar linear-premultiplied composition of immutable coverage.
 
 use crate::linear::{LinearFrame, WorkStats};
-use crate::prepared::{ClipRecord, PixelRect, PreparedItem, PreparedLayer, PreparedScene};
+use crate::prepared::{ClipRecord, PixelRect, PreparedItem, PreparedLayer, FrameRecords};
 use crate::raster::prepare::pixel_bounds;
 use motion_core::budget::Budget;
 use motion_core::instances::{InstanceBlend, InstanceComposite};
@@ -23,7 +23,7 @@ mod tests;
 mod walk;
 
 #[cfg(test)]
-use crate::prepared::{PreparedFrame, RenderPrepare};
+use crate::prepared::{PreparedCpuFrame, RenderPrepare};
 
 pub(crate) fn particle_compositor(blend: InstanceBlend) -> InstanceComposite {
     fn composite_with_mode<const MODE: u8>(
@@ -48,7 +48,7 @@ pub(crate) fn particle_compositor(blend: InstanceBlend) -> InstanceComposite {
     }
 }
 
-impl PreparedScene {
+impl FrameRecords {
     /// Composes coverage with scalar linear-premultiplied layer blending.
     ///
     /// Independent render limits admit root pixels and every live capture before

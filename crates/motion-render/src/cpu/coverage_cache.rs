@@ -3,8 +3,8 @@
 use motion_core::{PixelSize, Rect, ValidationError};
 
 #[cfg(test)]
-use crate::prepared::{PreparedFrame, RenderPrepare};
-use crate::prepared::{PreparedScene, Span, Strip};
+use crate::prepared::{PreparedCpuFrame, RenderPrepare};
+use crate::prepared::{FrameRecords, Span, Strip};
 use crate::raster::RasterScope;
 #[cfg(test)]
 use crate::raster::prepare::prepare_with_cache;
@@ -178,7 +178,7 @@ impl CoverageCache {
 
     fn rasterize_path(
         &mut self,
-        frame: &mut PreparedScene,
+        frame: &mut FrameRecords,
         geometry: &Path2D,
         transform: Transform,
         rule: FillRule,
@@ -229,7 +229,7 @@ impl CoverageCache {
 
     pub(crate) fn polygon(
         &mut self,
-        frame: &mut PreparedScene,
+        frame: &mut FrameRecords,
         geometry: &Path2D,
         transform: Transform,
         rule: FillRule,
@@ -307,7 +307,7 @@ impl CoverageCache {
 }
 
 fn restore(
-    frame: &mut PreparedScene,
+    frame: &mut FrameRecords,
     entry: &Entry,
     budget: &mut Budget,
     path: &str,

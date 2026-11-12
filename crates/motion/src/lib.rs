@@ -15,7 +15,7 @@
 //! # Model
 //!
 //! 1. Build a [`Scene`] from exact local/global ticks and a rational [`FrameRate`].
-//! 2. Return [`Node`] content, compiled to a [`DisplayList`] and [`PreparedFrame`].
+//! 2. Return [`Node`] content, compiled to a [`DisplayList`] and [`PreparedCpuFrame`].
 //! 3. Render a transparent [`FrameBuffer`], external texture or native encoder output.
 //!
 //! [`RenderOptions`] configures reusable [`RenderSession`] state; each
@@ -168,7 +168,7 @@
 //! ```
 //!
 //! [`DisplayList`]: render::DisplayList
-//! [`PreparedFrame`]: render::PreparedFrame
+//! [`PreparedCpuFrame`]: render::PreparedCpuFrame
 //! [`FrameBuffer`]: render::FrameBuffer
 //! [`RenderSession`]: render::RenderSession
 //! [`FrameRequest`]: render::FrameRequest

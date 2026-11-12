@@ -386,7 +386,7 @@ fn cached(
     cache: &mut CoverageCache,
     limits: RasterLimits,
     tolerance: f64,
-) -> Result<PreparedFrame, ValidationError> {
+) -> Result<PreparedCpuFrame, ValidationError> {
     let mut preparation = crate::raster::PreparationCache::default();
     std::mem::swap(&mut preparation.coverage, cache);
     let prepared = prepare_with_cache(
@@ -400,7 +400,7 @@ fn cached(
     prepared
 }
 
-fn compare(actual: &PreparedFrame, expected: &PreparedFrame) {
+fn compare(actual: &PreparedCpuFrame, expected: &PreparedCpuFrame) {
     assert_eq!(actual.strips, expected.strips);
     assert_eq!(actual.spans, expected.spans);
     assert_eq!(actual.alphas, expected.alphas);

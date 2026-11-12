@@ -1,7 +1,7 @@
 //! GPU-specific preparation results, independent of public CPU prepared frames.
 
 use super::device::DeviceGeometry;
-use crate::prepared::PreparedScene;
+use crate::prepared::FrameRecords;
 use crate::raster::frame_ir::{FrameIr, GeometrySource, IrPaint, IrPath};
 use crate::raster::paint::TableCache;
 use crate::raster::prepare::{SceneBackend, prepare_geometry, prepare_scene};
@@ -12,7 +12,7 @@ use std::mem::size_of;
 /// GPU scene records and independently generated device geometry.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct GpuFrame {
-    pub(crate) scene: PreparedScene,
+    pub(crate) scene: FrameRecords,
     pub(crate) geometry: DeviceGeometry,
 }
 
@@ -50,7 +50,7 @@ impl GpuFrame {
 }
 
 impl std::ops::Deref for GpuFrame {
-    type Target = PreparedScene;
+    type Target = FrameRecords;
 
     fn deref(&self) -> &Self::Target {
         &self.scene
@@ -82,7 +82,7 @@ impl SceneBackend for DeviceBackend<'_> {
 
     fn fill(
         &mut self,
-        frame: &mut PreparedScene,
+        frame: &mut FrameRecords,
         geometry: &IrPath<'_>,
         paint: &IrPaint<'_>,
         tolerance: f64,

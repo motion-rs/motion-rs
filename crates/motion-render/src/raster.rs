@@ -1,6 +1,6 @@
 //! Shared bounded raster frontend for CPU and GPU consumers.
 
-use crate::prepared::{PaintRecord, PreparedScene};
+use crate::prepared::{PaintRecord, FrameRecords};
 use motion_core::budget::Budget;
 
 pub(crate) mod frame_ir;
@@ -14,7 +14,7 @@ use prepare::paint_record;
 pub(crate) use prepare::pixel_bounds;
 
 #[cfg(test)]
-use crate::prepared::{PreparedFrame, PreparedItem};
+use crate::prepared::{PreparedCpuFrame, PreparedItem};
 #[cfg(test)]
 use motion_core::RasterLimits;
 #[cfg(test)]

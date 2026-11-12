@@ -1,7 +1,7 @@
 //! Bounded geometric clip domains, with convex rectangle and general Shape paths.
 
 use super::polygon::shape_clip::{self, Region};
-use crate::prepared::{ClipRecord, PreparedScene};
+use crate::prepared::{ClipRecord, FrameRecords};
 use crate::raster::pixel_bounds;
 use motion_core::budget::Budget;
 use motion_core::{PathVerb, Point, Rect, RectClip, ValidationError};
@@ -35,7 +35,7 @@ impl Preparation {
         &mut self,
         clip: Option<&RectClip>,
         shape: Option<&motion_core::ShapeClip>,
-        frame: &mut PreparedScene,
+        frame: &mut FrameRecords,
         tolerance: f64,
         budget: &mut Budget,
         path: &str,
@@ -72,7 +72,7 @@ impl Preparation {
         &mut self,
         clip: &RectClip,
         parent: Option<usize>,
-        frame: &mut PreparedScene,
+        frame: &mut FrameRecords,
         tolerance: f64,
         budget: &mut Budget,
         path: &str,
@@ -151,7 +151,7 @@ impl Preparation {
         &mut self,
         region: Region,
         parent: Option<usize>,
-        frame: &mut PreparedScene,
+        frame: &mut FrameRecords,
         tolerance: f64,
         budget: &mut Budget,
         path: &str,

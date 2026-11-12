@@ -336,7 +336,7 @@ impl LinearFrame {
     /// to zero clears all RGB; premultiplied output channels never exceed alpha.
     ///
     /// Independent limits include the source/output frame values and both pixel
-    /// payloads, excluding clones, PreparedFrame, excess capacity and allocator
+    /// payloads, excluding clones, PreparedCpuFrame, excess capacity and allocator
     /// overhead. One work unit per pixel is admitted before allocation. Failure
     /// leaves the linear source unchanged, without returning a partial output.
     pub(crate) fn to_rgba8_frame(

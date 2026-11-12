@@ -3,9 +3,9 @@
 use motion_core::{
     Color, Node, PixelSize, Point, RasterLimits, Rect, Shape, Size, ValidationLimits,
 };
-use motion_render::{PreparedFrame, RenderPrepare};
+use motion_render::{PreparedCpuFrame, RenderPrepare};
 
-fn prepare(node: Node) -> PreparedFrame {
+fn prepare(node: Node) -> PreparedCpuFrame {
     node.compile(
         Size::new(32.0, 32.0),
         PixelSize::new(32, 32),

@@ -19,11 +19,11 @@ fn list(bounds: Rect, transform: Transform) -> DisplayList {
     }
 }
 
-fn prepare(list: &DisplayList) -> Result<PreparedFrame, ValidationError> {
+fn prepare(list: &DisplayList) -> Result<PreparedCpuFrame, ValidationError> {
     list.prepare(ValidationLimits::default(), RasterLimits::default())
 }
 
-pub(crate) fn coverage(frame: &PreparedFrame) -> Vec<u8> {
+pub(crate) fn coverage(frame: &PreparedCpuFrame) -> Vec<u8> {
     let mut result = vec![0; (frame.size.width * frame.size.height) as usize];
     let mut visits = result.clone();
     for strip in &frame.strips {

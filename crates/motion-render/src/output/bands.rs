@@ -2,8 +2,8 @@
 
 use super::*;
 #[cfg(test)]
-use crate::PreparedFrame;
-use crate::prepared::PreparedScene;
+use crate::PreparedCpuFrame;
+use crate::prepared::FrameRecords;
 use crate::{PixelRect, WorkStats};
 use motion_core::budget::Budget;
 
@@ -24,7 +24,7 @@ fn band_height(halo: u32, height: u32) -> u32 {
 
 impl FrameBuffer {
     pub(crate) fn from_prepared(
-        prepared: &PreparedScene,
+        prepared: &FrameRecords,
         format: PixelFormat,
         limits: RasterLimits,
         surfaces: &mut crate::cpu::pool::SurfacePool,
@@ -41,7 +41,7 @@ impl FrameBuffer {
     }
 
     pub(crate) fn from_prepared_display(
-        prepared: &PreparedScene,
+        prepared: &FrameRecords,
         format: PixelFormat,
         limits: RasterLimits,
         surfaces: &mut crate::cpu::pool::SurfacePool,
@@ -65,7 +65,7 @@ impl FrameBuffer {
     }
 
     fn from_prepared_banded(
-        prepared: &PreparedScene,
+        prepared: &FrameRecords,
         format: PixelFormat,
         limits: RasterLimits,
         surfaces: &mut crate::cpu::pool::SurfacePool,
@@ -83,7 +83,7 @@ impl FrameBuffer {
     }
 
     fn from_prepared_transformed(
-        prepared: &PreparedScene,
+        prepared: &FrameRecords,
         format: PixelFormat,
         limits: RasterLimits,
         surfaces: &mut crate::cpu::pool::SurfacePool,
