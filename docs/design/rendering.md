@@ -706,7 +706,11 @@ validation error.
 
 Planning reserves host, upload and device descriptors, tile counters and offsets, the
 full conservative index capacity and one integrated signed-height value per row. The
-count, prefix and scatter passes never grow a buffer or read back. Device buffer and
+integer prefix uses segmented 64-tile block scans, scans each fill's block sums in
+bounded batches, and adds the resulting bases in a separate dispatch. It reuses the
+tile records' reserved words for block sums; planning charges the additional scan and
+fill-lookup work. The count, prefix and scatter passes never grow a buffer or read back.
+Prefix diagnostics cover all three scan dispatches. Device buffer and
 two-dimensional dispatch limits are checked before encoding. Pooled counters are cleared
 before every count pass, and each row carry and output sample has one writer. Packed
 plans validate their actual packed buffer against device limits; linear readback plans
@@ -911,19 +915,25 @@ compilation, coverage preparation, GPU planning, command encoding and submission
 completion and readback, and output conversion. CPU banded output reports composition
 and conversion as one fused stage. Command encoding is not video or audio encoder time.
 
-Devices negotiate `TIMESTAMP_QUERY` only; each timestamp starts a marker compute pass,
-so no feature that writes between commands is needed (`TIMESTAMP_QUERY_INSIDE_ENCODERS`
-is deliberately not used). Imported devices use only their existing features, and
-devices without support keep rendering and report no device timestamps.
+Devices negotiate `TIMESTAMP_QUERY` only. Marker compute passes observe composition,
+output and readback copies; the six actual coverage compute passes provide their own
+beginning and end timestamps. No feature that writes between commands is needed
+(`TIMESTAMP_QUERY_INSIDE_ENCODERS` is deliberately not used). Imported devices use
+only their existing features, and devices without support keep rendering and report
+no device timestamps.
 
-An enabled submission owns six queries and two 48-byte resolve and readback payloads
-(96 bytes, reported apart from raster totals). Disabled observation allocates nothing.
-GPU timestamps bracket composition and filters, final packing, resolve and
-presentation, and output and status readback copies; they exclude host waits, mapping
-callbacks, pixel extraction and queue latency. Per-submission handles isolate in-flight
-results, including reverse completion, and results publish only after the frame passes
-its device, scoped-error, finite-value and output checks. Dropped or failed frames
-publish none. Studio Stats separates device intervals from host wall time.
+An enabled submission owns 18 queries and two 144-byte resolve and readback payloads
+(288 bytes, reported apart from raster totals). Disabled observation allocates no query
+or readback resources. Intervals retain their raw ticks, execution status and, when
+validity checks pass, duration. Inactive coverage passes are distinct from valid zero
+intervals; reversed or out-of-order timestamps and intervals longer than the enclosing
+host wall time have no duration. These checks do not prove accuracy, and the marker
+sequence is not used as the coverage passes' enclosing boundary. Device intervals
+exclude host waits, mapping callbacks, pixel extraction and queue latency.
+Per-submission handles isolate in-flight results, including reverse completion, and
+results publish only after the frame passes its device, scoped-error, finite-value and
+output checks. Dropped or failed frames publish none. Studio Stats separates device
+intervals from host wall time and displays invalid or inactive intervals explicitly.
 
 ### Limits and Validation
 

@@ -411,6 +411,125 @@ fn present_shader_validates_without_a_device() {
 }
 
 #[test]
+#[ignore = "requires native GPU; checks actual coverage pass instrumentation"]
+fn native_device_coverage_timestamps_preserve_output() -> motion_core::Result {
+    use motion_core::{Color, Path2D, PixelSize, Point, Size};
+
+    let path = Path2D::builder()
+        .move_to(Point::new(1.0, 1.0))
+        .line_to(Point::new(14.0, 2.0))
+        .line_to(Point::new(4.0, 14.0))
+        .close()
+        .build()?;
+    let validation = ValidationLimits::default();
+    let limits = RasterLimits::default();
+    let list = motion_core::Node::from(path.fill(Color::WHITE)).compile(
+        Size::new(16.0, 16.0),
+        PixelSize::new(16, 16),
+        validation,
+    )?;
+    let frame = crate::gpu::raster::prepare::prepare_validated_device(
+        &list,
+        validation,
+        limits,
+        1.0 / 256.0,
+        None,
+    )?;
+    assert!(frame.has_device_coverage());
+    let mut gpu = Gpu::new()?;
+    let expected = gpu.render(&frame.records, Plan::new(&frame, limits)?)?;
+    gpu.enable_timings(true);
+    let actual = gpu.render(&frame.records, Plan::new(&frame, limits)?)?;
+    assert_eq!(actual.pixels(), expected.pixels());
+    assert_eq!(actual.stats(), expected.stats());
+    if gpu.context().supports_timestamps() {
+        let timings = gpu.timings().unwrap();
+        assert_eq!(
+            timings.coverage[0].status,
+            crate::gpu::GpuTimestampStatus::NotExecuted
+        );
+        for stage in &timings.coverage[1..] {
+            assert!(stage.ticks.is_some());
+            assert_ne!(stage.status, crate::gpu::GpuTimestampStatus::NotExecuted);
+        }
+    } else {
+        assert!(gpu.timings().is_none());
+    }
+    Ok(())
+}
+
+#[test]
+#[ignore = "requires a native GPU; imports a device without timestamp features"]
+fn native_timestamp_disabled_device_preserves_output() -> motion_core::Result {
+    let instance = crate::gpu::instance(crate::BackendKind::Gpu)?;
+    let adapter = pollster::block_on(crate::gpu::adapter(&instance, None))?;
+    let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+        label: Some("Timestamp-disabled test device"),
+        required_features: wgpu::Features::empty(),
+        required_limits: wgpu::Limits::default(),
+        ..Default::default()
+    }))
+    .map_err(|error| motion_core::Error::GpuUnavailable(Box::new(error)))?;
+    let context = GpuContext::from_existing(device, queue, adapter.get_info())?;
+    assert!(!context.supports_timestamps());
+    let mut gpu = Gpu::from_context(context);
+    let limits = RasterLimits::default();
+    let frame = motion_core::Node::empty()
+        .compile(
+            motion_core::Size::new(8.0, 8.0),
+            PixelSize::new(8, 8),
+            ValidationLimits::default(),
+        )?
+        .with_background(Some(motion_core::Color::WHITE))
+        .prepare(ValidationLimits::default(), limits)?;
+    let expected = gpu.render(&frame, Plan::new(&frame, limits)?)?;
+    gpu.enable_timings(true);
+    let actual = gpu.render(&frame, Plan::new(&frame, limits)?)?;
+    assert_eq!(actual.pixels(), expected.pixels());
+    assert_eq!(actual.stats(), expected.stats());
+    assert!(gpu.timings().is_none());
+    let pending = gpu.submit_linear(&frame, Plan::new(&frame, limits)?)?;
+    assert!(pending.timing_handle().is_none());
+    assert_eq!(pending.finish()?.pixels(), expected.pixels());
+    Ok(())
+}
+
+#[test]
+#[ignore = "requires a native GPU; deliberately destroys only its test device"]
+fn native_device_loss_does_not_publish_pending_timestamps() -> motion_core::Result {
+    let mut gpu = Gpu::new()?;
+    assert!(
+        gpu.context().supports_timestamps(),
+        "test requires a device with timestamp support"
+    );
+    let limits = RasterLimits::default();
+    let frame = motion_core::Node::empty()
+        .compile(
+            motion_core::Size::new(8.0, 8.0),
+            PixelSize::new(8, 8),
+            ValidationLimits::default(),
+        )?
+        .prepare(ValidationLimits::default(), limits)?;
+    gpu.enable_timings(true);
+    let pending = gpu.submit_linear(&frame, Plan::new(&frame, limits)?)?;
+    let handle = pending.timing_handle();
+    assert!(handle.is_some(), "expected an in-flight timestamp handle");
+    gpu.device.destroy();
+    let _ = wait_for_gpu(&gpu.device, None);
+    let error = pending.finish().unwrap_err();
+    assert_eq!(error.kind(), motion_core::ErrorKind::DeviceLost);
+    assert!(handle.as_ref().and_then(GpuTimingHandle::get).is_none());
+    assert!(gpu.timings().is_none());
+    assert_eq!(
+        gpu.render(&frame, Plan::new(&frame, limits)?)
+            .unwrap_err()
+            .kind(),
+        motion_core::ErrorKind::DeviceLost
+    );
+    Ok(())
+}
+
+#[test]
 #[ignore = "requires native GPU; checks timestamp isolation and output without latency assertions"]
 fn native_frame_timestamps_preserve_bytes_and_inflight_results() -> motion_core::Result {
     let mut gpu = Gpu::new()?;

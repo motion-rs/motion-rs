@@ -29,7 +29,7 @@ pub use device::*;
 pub use frame::PreparedGpuFrame;
 pub use output_plan::OutputPlan;
 pub use residency::GpuResidencyStats;
-pub use timing::{GpuTimingHandle, GpuTimings};
+pub use timing::{GpuTimestamp, GpuTimestampStatus, GpuTimingHandle, GpuTimings};
 
 pub(crate) use abi::output_shader;
 use abi::{
@@ -199,7 +199,7 @@ type ScopedError = std::pin::Pin<Box<dyn std::future::Future<Output = Option<wgp
 
 struct CoveragePipelines {
     layout: wgpu::BindGroupLayout,
-    passes: [wgpu::ComputePipeline; 6],
+    passes: [wgpu::ComputePipeline; 8],
 }
 
 /// Submitted same-device texture rendering. Finish checks status and scoped errors

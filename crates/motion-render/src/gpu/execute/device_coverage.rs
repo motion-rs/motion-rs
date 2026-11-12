@@ -11,6 +11,7 @@ impl Gpu {
         device: &DeviceCoverage,
         samples: &wgpu::Buffer,
         working: &mut WorkingLease,
+        timestamps: Option<&crate::gpu::timing::TimestampRecorder>,
     ) {
         let pipelines = self.coverage_pipelines();
         let params = CoverageParams {
@@ -84,18 +85,29 @@ impl Gpu {
         let counts = [
             (device.curves.len() as u32).div_ceil(64),
             params.edges.div_ceil(64),
-            params.fills.div_ceil(64),
+            params.tiles.div_ceil(64),
+            params.fills,
+            params.tiles.div_ceil(64),
             params.edges.div_ceil(64),
             params.rows.div_ceil(64),
             params.tiles,
         ];
-        for (pipeline, groups) in pipelines.passes.iter().zip(counts) {
+        for (pass_index, (pipeline, groups)) in pipelines.passes.iter().zip(counts).enumerate() {
             if groups == 0 {
                 continue;
             }
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("Device coverage tiles"),
-                timestamp_writes: None,
+                timestamp_writes: timestamps.and_then(|recorder| match pass_index {
+                    2 => Some(recorder.coverage_pass_boundary(2, true, false)),
+                    3 => None,
+                    4 => Some(recorder.coverage_pass_boundary(2, false, true)),
+                    _ => Some(recorder.coverage_pass(if pass_index < 2 {
+                        pass_index
+                    } else {
+                        pass_index - 2
+                    })),
+                }),
             });
             pass.set_pipeline(pipeline);
             pass.set_bind_group(0, &group, &[]);

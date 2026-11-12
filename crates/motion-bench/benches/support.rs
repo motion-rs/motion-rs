@@ -20,6 +20,79 @@ pub fn invalid(message: impl Into<String>) -> Error {
     std::io::Error::new(std::io::ErrorKind::InvalidInput, message.into()).into()
 }
 
+pub fn frame_timing_json(
+    timings: motion::render::composition::FrameTimings,
+    gpu_status: &str,
+) -> Value {
+    #[cfg(feature = "gpu")]
+    let gpu = timings.gpu.map(|gpu| {
+        let interval = |value: motion::render::gpu::GpuTimestamp| {
+            use motion::render::gpu::GpuTimestampStatus as Status;
+            let status = match value.status {
+                Status::NotExecuted => "not_executed",
+                Status::Valid => "valid",
+                Status::Reversed => "reversed",
+                Status::OutOfOrder => "out_of_order",
+                Status::ExceedsWallTime => "exceeds_wall_time",
+                Status::InvalidPeriod => "invalid_period",
+                Status::Unrepresentable => "unrepresentable",
+            };
+            json!({
+                "status": status, "ticks": value.ticks,
+                "microseconds": value.duration.map(|duration| duration.as_secs_f64() * 1e6),
+            })
+        };
+        json!({
+            "composition": interval(gpu.composition),
+            "output": interval(gpu.output),
+            "readback_copy": interval(gpu.readback_copy),
+            "coverage": {
+                "flatten": interval(gpu.coverage[0]),
+                "count": interval(gpu.coverage[1]),
+                "prefix": interval(gpu.coverage[2]),
+                "scatter": interval(gpu.coverage[3]),
+                "carry": interval(gpu.coverage[4]),
+                "coverage": interval(gpu.coverage[5]),
+            },
+            "timestamp_period_ns": gpu.timestamp_period_ns,
+            "enclosing_wall_microseconds": gpu.enclosing_wall_time.as_secs_f64() * 1e6,
+            "instrumentation_bytes": gpu.instrumentation_bytes,
+        })
+    });
+    #[cfg(not(feature = "gpu"))]
+    let gpu: Option<Value> = None;
+    json!({
+        "evaluation": timings.evaluation.as_secs_f64() * 1e6,
+        "compile": timings.compile.as_secs_f64() * 1e6,
+        "coverage": timings.coverage.as_secs_f64() * 1e6,
+        "plan": timings.plan.as_secs_f64() * 1e6,
+        "encode": timings.encode.as_secs_f64() * 1e6,
+        "composition": timings.composition.as_secs_f64() * 1e6,
+        "output": timings.output.as_secs_f64() * 1e6,
+        "fused_output": timings.fused_output,
+        "readback": timings.readback.as_secs_f64() * 1e6,
+        "upload": timings.upload.as_secs_f64() * 1e6,
+        "submission": timings.submission.as_secs_f64() * 1e6,
+        "gpu_status": if gpu.is_some() { "available" } else { gpu_status },
+        "gpu": gpu,
+    })
+}
+
+pub fn gpu_timing_status(session: &motion::render::FrameRenderer) -> &'static str {
+    if session.backend_kind() != BackendKind::Gpu {
+        return "not_gpu";
+    }
+    #[cfg(feature = "gpu")]
+    if let Some(context) = session.shared_gpu_context() {
+        return if context.supports_timestamps() {
+            "not_completed"
+        } else {
+            "unsupported"
+        };
+    }
+    "unavailable"
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Settings {
     pub warmups: usize,

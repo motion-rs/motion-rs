@@ -125,7 +125,7 @@ used. Large-scene acceptance across text, SVG, clipping and particles is
 
 ## Frame timing diagnostics
 
-The breadth benchmark accepts `MOTION_BENCH_TIMINGS=1` to collect per-frame host
+The breadth and performance benchmarks accept `MOTION_BENCH_TIMINGS=1` to collect per-frame host
 stage observations and available GPU timestamps. This is separate from
 `MOTION_BENCH_STAGES`, which measures selected CPU pipeline stages. Timing
 diagnostics require `MOTION_BENCH_ITERATIONS=1`, exclude warmups from the recorded
@@ -137,7 +137,9 @@ Host encoding includes command encoding/submission; host readback includes
 completion waits, mapping and extraction. Device intervals overlap these host
 observations and must not be added to them. Preserve all raw device values, but
 flag an interval longer than its enclosing frame wall time as untrusted. Plausible
-values alone do not establish timestamp correctness. Instrumentation payload is
+values alone do not establish timestamp correctness. The diagnostic JSON preserves raw
+ticks and distinguishes invalid intervals, passes that did not execute and devices
+without timestamp support. Instrumentation payload is
 reported separately from logical raster budgets and is not a physical-memory
 measurement. Check free space before building heavyweight optional features, and
 do not delete frozen benchmark artifacts to make room without an explicit decision.

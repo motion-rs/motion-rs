@@ -137,6 +137,26 @@ fn gpu_text_seek_replay_meets_visual_tier() -> motion::Result {
 }
 
 #[test]
+#[ignore = "requires native GPU; compares benchmark brush strokes against CPU"]
+fn gpu_stroke_matches_cpu_visual_overlap_tier() -> motion::Result {
+    let mut cpu = visual_session(BackendPreference::Cpu, false)?;
+    let mut gpu = visual_session(BackendPreference::gpu(), false)?;
+    let mut failures = Vec::new();
+    for index in [0, 45, 17, 89] {
+        let reference = visual_frame(&mut cpu, "stroke", index)?;
+        let actual = visual_frame(&mut gpu, "stroke", index)?;
+        eprintln!("stroke/{index} preparation: {:?}", gpu.report().gpu_preparation);
+        assert!(gpu.report().gpu_preparation.unwrap().segment_count > 0);
+        match visual::compare_rgba8(&actual, &reference, 640, VisualTolerance::OVERLAP) {
+            Ok(difference) => eprintln!("stroke/{index} Overlap: {difference:?}"),
+            Err(error) => failures.push(format!("stroke/{index}: {error}")),
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+    Ok(())
+}
+
+#[test]
 #[ignore = "requires a native GPU and the explicit benchmark font"]
 fn gpu_text_matches_cpu_visual_coverage_tier() -> motion::Result {
     let mut cpu = visual_session(BackendPreference::Cpu, true)?;

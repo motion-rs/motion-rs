@@ -79,6 +79,12 @@ fn main() -> motion::Result {
     use support::{Report, Settings};
     let size = support::size((640, 360))?;
     let settings = Settings::from_env()?;
+    let observe = std::env::var("MOTION_BENCH_TIMINGS").unwrap_or_default() == "1";
+    if observe && settings.iterations != 1 {
+        return Err(invalid(
+            "Frame timing diagnostics require one iteration per sample",
+        ));
+    }
     let cases = support::selected("MOTION_BENCH_CASES", CASES)?;
     let renderers = support::renderers(cfg!(feature = "gpu"))?;
     let cold = std::env::var("MOTION_BENCH_COLD").unwrap_or_default() == "1";
@@ -163,25 +169,61 @@ fn main() -> motion::Result {
                 })?;
                 report.reference(&format!("{renderer:?}-{case}-{index}.ppm"), &ppm(&first))?;
             }
-            let measured = support::measure_output(
-                || {
-                    session.render_frame(45, |context| {
-                        artwork_with_particles(case, context, particle_count)
-                    })
-                },
-                |snapshot| checksum(&snapshot.packed_rgb()),
-                &settings,
-                settings.iterations,
-            )?;
+            session.enable_timings(observe);
+            let mut observations = Vec::new();
+            let measured = if observe {
+                support::measure_output(
+                    || {
+                        let snapshot = session.render_frame(45, |context| {
+                            artwork_with_particles(case, context, particle_count)
+                        })?;
+                        Ok((snapshot, session.timings()))
+                    },
+                    |(snapshot, timings)| {
+                        if let Some(timings) = timings {
+                            observations.push(timings);
+                        }
+                        checksum(&snapshot.packed_rgb())
+                    },
+                    &settings,
+                    settings.iterations,
+                )?
+            } else {
+                support::measure_output(
+                    || {
+                        session.render_frame(45, |context| {
+                            artwork_with_particles(case, context, particle_count)
+                        })
+                    },
+                    |snapshot| checksum(&snapshot.packed_rgb()),
+                    &settings,
+                    settings.iterations,
+                )?
+            };
             let stats = *session.last_stats().expect("render stats");
             let adapter = format!("{:?}", session.gpu_info());
-            report.record(format!("{name}/warm-frame"),measured,json!({
+            let mut metrics = json!({
                 "adapter":adapter,"peak_bytes":stats.peak_bytes(),"work":stats.work(),
                 "prepare_retained_bytes":stats.preparation.retained_bytes,
                 "prepare_peak_bytes":stats.preparation.peak_bytes,"prepare_work":stats.preparation.work,
                 "linear_peak_bytes":stats.linear.peak_bytes,"linear_work":stats.linear.work,
                 "output_peak_bytes":stats.output.peak_bytes,"output_work":stats.output.work,
-            }))?;
+            });
+            if observe {
+                if observations.len() != settings.warmups + settings.samples {
+                    return Err(invalid("Missing diagnostic frame observations"));
+                }
+                let gpu_status = support::gpu_timing_status(&session);
+                metrics["diagnostic_timings"] = json!({
+                    "unit": "microseconds", "warmups_excluded": true,
+                    "performance_acceptance": false,
+                    "samples": observations.into_iter().skip(settings.warmups)
+                        .map(|timings| support::frame_timing_json(timings, gpu_status))
+                        .collect::<Vec<_>>(),
+                });
+            }
+            report.record(format!("{name}/warm-frame"), measured, metrics)?;
+            session.enable_timings(false);
             if sequences {
                 for shuffled in [false, true] {
                     let frames = support::frame_order(sequence_frames, shuffled);

@@ -34,6 +34,12 @@ const CURVE_ADMISSION_HULLS: u32 = 8;
 /// Conservative scalar work for one cubic subsegment's control polygon.
 const CURVE_HULL_WORK: u64 = 128;
 
+/// Additional scan and bounded fill-lookup work per tile.
+const SEGMENTED_PREFIX_WORK_PER_TILE: u64 = 64;
+
+/// One full workgroup scans block sums even for a single-tile fill.
+const SEGMENTED_PREFIX_WORK_PER_FILL: u64 = 512;
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct TileLayout {
     pub(crate) columns: u32,
@@ -46,10 +52,13 @@ impl TileLayout {
     /// Work units for binning, row carries and area integration.
     ///
     /// Area integration and row carries visit each edge reference at most `256 + 16` times,
-    /// plus the count/scatter and prefix passes.
+    /// plus count/scatter and the segmented prefix passes, including fill lookup.
     fn work_for(indices: u64, tile_count: u64, bounds: PixelRect) -> u64 {
         let area = u64::from(COVERAGE_TILE_SIZE).pow(2) + 18;
-        indices * area + tile_count * 32 + bounds.pixels()
+        indices * area
+            + tile_count * (32 + SEGMENTED_PREFIX_WORK_PER_TILE)
+            + SEGMENTED_PREFIX_WORK_PER_FILL
+            + bounds.pixels()
     }
 
     pub(super) fn admit_curves(

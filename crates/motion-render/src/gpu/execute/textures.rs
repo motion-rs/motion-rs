@@ -212,7 +212,13 @@ impl Gpu {
             timestamps.write(&mut encoder, 0);
         }
         if plan.device.samples != 0 {
-            self.encode_device_coverage(&mut encoder, &plan.device, &device_coverage, &mut working);
+            self.encode_device_coverage(
+                &mut encoder,
+                &plan.device,
+                &device_coverage,
+                &mut working,
+                timestamps.as_ref(),
+            );
         }
         let mut budget = Budget::resume(
             plan.limits,

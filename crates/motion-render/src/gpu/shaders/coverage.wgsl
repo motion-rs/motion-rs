@@ -1,5 +1,6 @@
 // GPU curve flattening, edge binning and f32 analytic area coverage (signed-area accumulation
-// folded by the fill rule, as in Skia's analytic AA and Vello's fine rasterizer). Host layouts are asserted in gpu/layout.rs.
+// folded by the fill rule, as in Skia's analytic AA and Vello's fine rasterizer).
+// Host layouts are asserted in gpu/layout.rs.
 struct CoverageParams {
     fills: u32,
     edges: u32,
@@ -55,6 +56,10 @@ struct CoverageTile {
 const TILE_SIZE = 16u;
 // Signed row height carried into each tile row; mirrored by the host planner.
 const CARRY_STRIDE = 1u;
+
+var<workgroup> prefix_values: array<u32, 64>;
+var<workgroup> prefix_fills: array<u32, 64>;
+var<workgroup> prefix_base: u32;
 
 fn curve_point(curve: CoverageCurve, time: f32) -> vec2f {
     let a = mix(curve.first.xy, curve.first.zw, time);
@@ -132,19 +137,114 @@ fn count_tiles(@builtin(global_invocation_id) id: vec3u, @builtin(num_workgroups
     }
 }
 
-// Fills own disjoint statically admitted index ranges; no readback or resizing.
+fn tile_fill(index: u32) -> u32 {
+    var low = 0u;
+    var high = params.fills - 1u;
+    while low < high {
+        let middle = low + (high - low + 1u) / 2u;
+        if fills[middle].first_tile <= index {
+            low = middle;
+        } else {
+            high = middle - 1u;
+        }
+    }
+    return low;
+}
+
+// Each global block may contain several fills. The last lane of each segment
+// writes its sum to the reserved word of that segment's first tile.
 @compute @workgroup_size(64)
-fn prefix_tiles(@builtin(global_invocation_id) id: vec3u, @builtin(num_workgroups) groups: vec3u) {
-    let index = id.x + id.y * groups.x * 64u;
+fn prefix_tiles(
+    @builtin(workgroup_id) group: vec3u,
+    @builtin(local_invocation_index) lane: u32,
+    @builtin(num_workgroups) groups: vec3u,
+) {
+    let first = (group.x + group.y * groups.x) * 64u;
+    let tile = first + lane;
+    var fill = 0xffffffffu;
+    var count = 0u;
+    if tile < params.tiles {
+        fill = tile_fill(tile);
+        count = atomicLoad(&tiles[tile].count);
+    }
+    prefix_fills[lane] = fill;
+    prefix_values[lane] = count;
+    workgroupBarrier();
+    for (var step = 1u; step < 64u; step *= 2u) {
+        var value = prefix_values[lane];
+        if lane >= step && prefix_fills[lane - step] == fill {
+            value += prefix_values[lane - step];
+        }
+        workgroupBarrier();
+        prefix_values[lane] = value;
+        workgroupBarrier();
+    }
+    if tile < params.tiles {
+        tiles[tile].offset = prefix_values[lane] - count;
+        if lane == 63u || tile + 1u == params.tiles || prefix_fills[lane + 1u] != fill {
+            let start = max(first, fills[fill].first_tile);
+            tiles[start].reserved = prefix_values[lane];
+        }
+    }
+}
+
+// One workgroup per fill scans its block sums in bounded batches. No group
+// waits for another group: all block sums come from the preceding dispatch.
+@compute @workgroup_size(64)
+fn prefix_block_sums(
+    @builtin(workgroup_id) group: vec3u,
+    @builtin(local_invocation_index) lane: u32,
+    @builtin(num_workgroups) groups: vec3u,
+) {
+    let index = group.x + group.y * groups.x;
     if index >= params.fills {
         return;
     }
     let fill = fills[index];
-    var offset = fill.first_index;
     let end = fill.first_tile + fill.columns * fill.tile_rows;
-    for (var tile = fill.first_tile; tile < end; tile++) {
-        tiles[tile].offset = offset;
-        offset += atomicLoad(&tiles[tile].count);
+    let first_block = fill.first_tile / 64u;
+    let blocks = (end - 1u) / 64u + 1u - first_block;
+    if lane == 0u {
+        prefix_base = fill.first_index;
+    }
+    workgroupBarrier();
+    for (var batch = 0u; batch < blocks; batch += 64u) {
+        let block = batch + lane;
+        var sum = 0u;
+        var start = 0u;
+        if block < blocks {
+            start = max(fill.first_tile, (first_block + block) * 64u);
+            sum = tiles[start].reserved;
+        }
+        prefix_values[lane] = sum;
+        workgroupBarrier();
+        for (var step = 1u; step < 64u; step *= 2u) {
+            var value = prefix_values[lane];
+            if lane >= step {
+                value += prefix_values[lane - step];
+            }
+            workgroupBarrier();
+            prefix_values[lane] = value;
+            workgroupBarrier();
+        }
+        if block < blocks {
+            tiles[start].reserved = prefix_base + prefix_values[lane] - sum;
+        }
+        workgroupBarrier();
+        if lane == 0u {
+            prefix_base += prefix_values[63u];
+        }
+        workgroupBarrier();
+    }
+}
+
+@compute @workgroup_size(64)
+fn prefix_add_bases(@builtin(global_invocation_id) id: vec3u, @builtin(num_workgroups) groups: vec3u) {
+    let tile = id.x + id.y * groups.x * 64u;
+    if tile < params.tiles {
+        let fill = fills[tile_fill(tile)];
+        let start = max(tile / 64u * 64u, fill.first_tile);
+        tiles[tile].offset += tiles[start].reserved;
     }
 }
 

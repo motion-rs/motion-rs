@@ -30,7 +30,7 @@ impl Plan {
             let groups = [
                 u64::from(self.device.edge_count).div_ceil(64),
                 (self.device.curves.len() as u64).div_ceil(64),
-                (self.device.fills.len() as u64).div_ceil(64),
+                self.device.fills.len() as u64,
                 u64::from(self.device.rows).div_ceil(64),
                 u64::from(self.device.tiles),
             ];
@@ -655,6 +655,8 @@ impl GpuContext {
                 "flatten_curves",
                 "count_tiles",
                 "prefix_tiles",
+                "prefix_block_sums",
+                "prefix_add_bases",
                 "fill_tiles",
                 "carry_rows",
                 "coverage_pass",

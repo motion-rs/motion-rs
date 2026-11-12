@@ -53,35 +53,13 @@ pub(super) fn record_frame(
         if observations.len() != settings.warmups + settings.samples {
             return Err(invalid("Missing diagnostic frame observations"));
         }
+        let gpu_status = support::gpu_timing_status(session);
         metrics["diagnostic_timings"] = json!({
             "unit": "microseconds", "warmups_excluded": true,
             "performance_acceptance": false,
             "samples": observations.into_iter().skip(settings.warmups)
-                .map(|timings| {
-                    #[cfg(feature = "gpu")]
-                    let gpu = timings.gpu.map(|gpu| json!({
-                        "composition": gpu.composition.as_secs_f64() * 1e6,
-                        "output": gpu.output.as_secs_f64() * 1e6,
-                        "readback_copy": gpu.readback_copy.as_secs_f64() * 1e6,
-                        "instrumentation_bytes": gpu.instrumentation_bytes,
-                    }));
-                    #[cfg(not(feature = "gpu"))]
-                    let gpu: Option<serde_json::Value> = None;
-                    json!({
-                        "evaluation": timings.evaluation.as_secs_f64() * 1e6,
-                        "compile": timings.compile.as_secs_f64() * 1e6,
-                        "coverage": timings.coverage.as_secs_f64() * 1e6,
-                        "plan": timings.plan.as_secs_f64() * 1e6,
-                        "encode": timings.encode.as_secs_f64() * 1e6,
-                        "composition": timings.composition.as_secs_f64() * 1e6,
-                        "output": timings.output.as_secs_f64() * 1e6,
-                        "fused_output": timings.fused_output,
-                        "readback": timings.readback.as_secs_f64() * 1e6,
-                        "upload": timings.upload.as_secs_f64() * 1e6,
-                        "submission": timings.submission.as_secs_f64() * 1e6,
-                        "gpu": gpu,
-                    })
-                }).collect::<Vec<_>>(),
+                .map(|timings| support::frame_timing_json(timings, gpu_status))
+                .collect::<Vec<_>>(),
         });
     }
     report.record(format!("{name}/warm-frame"), measured, metrics)

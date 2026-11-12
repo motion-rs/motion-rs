@@ -3,6 +3,7 @@
 use super::*;
 use crate::gpu::visual::VisualTolerance;
 use motion_core::{Color, FillRule, Node, Path2D, Point, Shape};
+use wgpu::util::DeviceExt;
 
 fn star(center: Point, radius: f64, rule: FillRule, color: Color) -> motion_core::Result<Node> {
     let mut path = Path2D::new();
@@ -137,6 +138,137 @@ fn coverage_shader_validates_without_a_device() {
 }
 
 #[test]
+#[ignore = "requires native GPU; exact segmented tile prefix readback"]
+fn segmented_tile_prefix_matches_serial_reference() -> motion_core::Result {
+    use crate::gpu::abi::{CoverageFill, CoverageParams, CoverageTile};
+
+    let context = GpuContext::new()?;
+    let mut fills = Vec::new();
+    let mut tiles = Vec::new();
+    let mut expected = Vec::new();
+    for (fill_index, length) in [1u32, 63, 64, 65, 4095, 4096, 4097, 1_048_576]
+        .into_iter()
+        .enumerate()
+    {
+        let first_tile = tiles.len() as u32;
+        let total: u32 = (0..length).map(|tile| tile * 7 % 17).sum();
+        let first_index = if fill_index == 7 {
+            u32::MAX - total
+        } else {
+            (fill_index as u32 + 1) * 100_000
+        };
+        fills.push(CoverageFill {
+            first_tile,
+            columns: length,
+            tile_rows: 1,
+            first_index,
+            index_capacity: total,
+            ..Default::default()
+        });
+        let mut offset = first_index;
+        for tile in 0..length {
+            let count = tile * 7 % 17;
+            tiles.push(CoverageTile {
+                count,
+                ..Default::default()
+            });
+            expected.push(offset);
+            offset += count;
+        }
+    }
+    let params = CoverageParams {
+        fills: fills.len() as u32,
+        tiles: tiles.len() as u32,
+        ..Default::default()
+    };
+    let upload = |contents: &[u8], usage| {
+        context
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: None,
+                contents,
+                usage,
+            })
+    };
+    let uniforms = upload(bytemuck::bytes_of(&params), wgpu::BufferUsages::UNIFORM);
+    let fills = upload(bytemuck::cast_slice(&fills), wgpu::BufferUsages::STORAGE);
+    let tiles = upload(
+        bytemuck::cast_slice(&tiles),
+        wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
+    );
+    let unused: Vec<_> = (0..5)
+        .map(|_| upload(&[0; 48], wgpu::BufferUsages::STORAGE))
+        .collect();
+    let buffers = [
+        &uniforms, &fills, &unused[0], &tiles, &unused[1], &unused[2], &unused[3], &unused[4],
+    ];
+    let pipelines = context.coverage_pipelines();
+    let entries: Vec<_> = buffers
+        .iter()
+        .enumerate()
+        .map(|(binding, buffer)| wgpu::BindGroupEntry {
+            binding: binding as u32,
+            resource: buffer.as_entire_binding(),
+        })
+        .collect();
+    let bindings = context
+        .device
+        .create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None,
+            layout: &pipelines.layout,
+            entries: &entries,
+        });
+    let bytes = u64::from(params.tiles) * size_of::<CoverageTile>() as u64;
+    let readback = context.device.create_buffer(&wgpu::BufferDescriptor {
+        label: None,
+        size: bytes,
+        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+        mapped_at_creation: false,
+    });
+    let mut encoder = context.device.create_command_encoder(&Default::default());
+    for (index, groups) in [
+        (2, params.tiles.div_ceil(64)),
+        (3, params.fills),
+        (4, params.tiles.div_ceil(64)),
+    ] {
+        let mut pass = encoder.begin_compute_pass(&Default::default());
+        pass.set_pipeline(&pipelines.passes[index]);
+        pass.set_bind_group(0, &bindings, &[]);
+        let width = groups.min(7);
+        pass.dispatch_workgroups(width, groups.div_ceil(width), 1);
+    }
+    encoder.copy_buffer_to_buffer(&tiles, 0, &readback, 0, bytes);
+    context.queue.submit([encoder.finish()]);
+    let (sender, receiver) = std::sync::mpsc::channel();
+    readback
+        .slice(..)
+        .map_async(wgpu::MapMode::Read, move |result| {
+            sender.send(result).unwrap();
+        });
+    wait_for_gpu(&context.device, None)?;
+    receiver.recv().unwrap().unwrap();
+    let mapped = readback.slice(..).get_mapped_range().unwrap();
+    let actual = bytemuck::cast_slice::<u8, CoverageTile>(&mapped);
+    for (index, (tile, expected)) in actual.iter().zip(expected).enumerate() {
+        assert_eq!(tile.offset, expected, "tile {index}");
+    }
+    drop(mapped);
+    readback.unmap();
+    context.check_device()?;
+    Ok(())
+}
+
+#[test]
+fn empty_device_coverage_has_no_prefix_dispatch() -> motion_core::Result {
+    let frame = prepare_node(Node::group(Vec::<Node>::new()), PixelSize::new(1, 1))?;
+    let plan = Plan::new(&frame, RasterLimits::default())?;
+    assert!(plan.device.fills.is_empty());
+    assert_eq!(plan.device.tiles, 0);
+    assert_eq!(plan.device.samples, 0);
+    Ok(())
+}
+
+#[test]
 fn device_fills_replace_cpu_coverage() -> motion_core::Result {
     let device = prepare(true)?;
     assert_eq!(device.geometry.device_fills.len(), 5);
@@ -168,6 +300,50 @@ fn assert_matches_cpu(crossing: bool) -> motion_core::Result {
         .render(&device.records, Plan::new(&device, limits)?)?
         .to_rgba8_frame(false, limits)?;
     assert_visually_equivalent(&replay, &actual, VisualTolerance::REPLAY);
+    Ok(())
+}
+
+#[test]
+#[ignore = "requires native GPU; duplicate winding coverage against CPU"]
+fn duplicate_contour_matches_cpu_visual_overlap_tier() -> motion_core::Result {
+    let node = |contours| -> motion_core::Result<Node> {
+        let mut path = Path2D::new();
+        for _ in 0..contours {
+            path.try_move_to(Point::new(4.25, 4.25))?;
+            path.try_line_to(Point::new(20.25, 4.25))?;
+            path.try_line_to(Point::new(20.25, 20.25))?;
+            path.try_line_to(Point::new(4.25, 20.25))?;
+            path.try_close()?;
+        }
+        Ok(Node::from(path.fill(Color::WHITE)))
+    };
+    let size = PixelSize::new(32, 32);
+    let limits = RasterLimits::default();
+    let device = prepare_node(node(2)?, size)?;
+    assert!(device.has_device_coverage());
+    let prepare_cpu = |contours| -> motion_core::Result<_> {
+        Ok(node(contours)?
+            .compile(
+                motion_core::Size::new(32.0, 32.0),
+                size,
+                ValidationLimits::default(),
+            )?
+            .prepare(ValidationLimits::default(), limits)?
+            .0
+            .compose_linear(limits)?
+            .to_rgba8_frame(false, limits)?)
+    };
+    let cpu = prepare_cpu(2)?;
+    assert_eq!(prepare_cpu(1)?.pixels(), cpu.pixels());
+    let gpu = Gpu::new()?
+        .render(&device.records, Plan::new(&device, limits)?)?
+        .to_rgba8_frame(false, limits)?;
+    eprintln!(
+        "duplicate contour corner CPU={:?} GPU={:?}",
+        cpu.pixels()[4 * 32 + 4],
+        gpu.pixels()[4 * 32 + 4]
+    );
+    assert_visually_equivalent(&gpu, &cpu, VisualTolerance::OVERLAP);
     Ok(())
 }
 
