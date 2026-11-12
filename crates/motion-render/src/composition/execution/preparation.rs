@@ -57,37 +57,10 @@ impl FrameExecution<'_> {
                 .quality(quality)
                 .blend_space(blend_space),
             ),
-            crate::Renderer::Gpu => {
-                #[cfg(feature = "gpu")]
-                {
-                    let frame = crate::gpu::raster::prepare::prepare_validated_device(
-                        &list,
-                        validation,
-                        self.limits,
-                        tolerance,
-                        Some(&mut self.preparation_cache),
-                    )?
-                    .quality(quality)
-                    .blend_space(blend_space);
-                    PreparedOutput::Gpu(frame)
-                }
-                #[cfg(not(feature = "gpu"))]
-                {
-                    return Err(motion_core::ValidationError::unsupported(
-                        "prepared",
-                        "backend",
-                        "GPU preparation requires the gpu feature",
-                    )
-                    .into());
-                }
-            }
+            crate::Renderer::Gpu => self.prepare_gpu(&list, validation, tolerance)?,
         };
         if let Some(started) = started {
             self.timings.as_mut().expect("enabled timings").coverage += started.elapsed();
-        }
-        #[cfg(feature = "gpu")]
-        if let PreparedOutput::Gpu(frame) = &prepared {
-            self.gpu_preparation = Some(frame.geometry.stats(frame.stats()));
         }
         let limits = remaining(self.limits, prepared.stats().work)?;
         Ok((prepared, limits))

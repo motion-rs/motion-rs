@@ -8,6 +8,11 @@ use crate::{RasterLimits, RenderContext, Renderer, WorkStats};
 use motion_core::{Color, Node, Result, SceneContext, Shape, Time, ValidationError};
 
 mod backend;
+#[cfg(feature = "gpu")]
+mod gpu;
+#[cfg(not(feature = "gpu"))]
+#[path = "execution/no_gpu.rs"]
+mod gpu;
 mod preparation;
 mod prepared;
 
@@ -191,50 +196,8 @@ impl FrameExecution<'_> {
             }
             return Ok(frame);
         }
-        #[cfg(feature = "gpu")]
-        if !cpu
-            && (format == (crate::PixelFormat::Yuv420 { bit_depth: 10 })
-                || self.device_packing
-                    && format
-                        == (crate::PixelFormat::SrgbRgba8 {
-                            premultiplied: false,
-                        }))
-            && crate::gpu::Gpu::supports_packed_output(prepared.size(), format)
-        {
-            let started = self.timings.map(|_| std::time::Instant::now());
-            let plan = crate::gpu::Plan::new_packed(&prepared, limits, format)
-                .and_then(|plan| plan.with_display(&display, u64::from(index)))
-                .map_err(|error| motion_core::Error::from(error).at_frame(u64::from(index)))?;
-            if let Some(started) = started {
-                self.timings.as_mut().expect("enabled timings").plan += started.elapsed();
-            }
-            if self.select_backend()? == Renderer::Gpu {
-                let stats = plan.packed_stats(prepared.size(), format)?;
-                let output_work = crate::FrameBuffer::display_conversion_work(
-                    prepared.size(),
-                    format,
-                    Some(&display),
-                );
-                let frame = self
-                    .gpu
-                    .as_mut()
-                    .expect("selected native GPU")
-                    .render_output(&prepared, plan, format)
-                    .map_err(|error| error.at_frame(u64::from(index)))?;
-                self.record_gpu_timings();
-                self.last_stats = Some(FrameStats {
-                    preparation: prepared.stats(),
-                    linear: crate::WorkStats {
-                        peak_bytes: stats.peak_bytes,
-                        work: stats.work - output_work,
-                    },
-                    output: WorkStats {
-                        peak_bytes: stats.peak_bytes,
-                        work: output_work,
-                    },
-                });
-                return Ok(frame);
-            }
+        if let Some(frame) = self.render_packed_output(index, &prepared, limits, format)? {
+            return Ok(frame);
         }
         let linear = self.render_prepared(index, prepared, limits)?;
         let started = self.timings.map(|_| std::time::Instant::now());
