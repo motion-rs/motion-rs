@@ -27,7 +27,8 @@ pub struct RenderOptions {
     /// The default keeps export strict and fails the frame.
     pub mark_invalid_geometry: bool,
 
-    /// Explicit backend; CPU is the default. GPU requests carry their own software adapter policy.
+    /// Requested backend; defaults to [`BackendPreference::default`]. GPU requests carry their own
+    /// software adapter policy.
     pub backend: BackendPreference,
     /// Optional shared native device (for example Studio's eframe context).
     /// Does not select a backend.
@@ -60,7 +61,7 @@ impl Default for RenderOptions {
             display: crate::DisplayTransform::default(),
             allow_missing_assets: false,
             mark_invalid_geometry: false,
-            backend: BackendPreference::Cpu,
+            backend: BackendPreference::default(),
             #[cfg(feature = "gpu")]
             gpu_context: None,
             resources: None,
@@ -288,7 +289,7 @@ mod tests {
 
     #[test]
     fn cloned_compositions_share_coverage_between_worker_sessions() -> Result<()> {
-        let options = RenderOptions::default();
+        let options = RenderOptions::default().backend(crate::BackendPreference::Cpu);
         let composition =
             Composition::new(8, 8, crate::FrameClock::new(motion_core::fps!(30), 150))
                 .with_options(options.clone())?;
