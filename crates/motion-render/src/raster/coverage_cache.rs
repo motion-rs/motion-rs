@@ -71,7 +71,6 @@ impl Hash for ContentKey {
 
 pub(crate) struct CoverageCache {
     shared: Arc<motion_core::SceneCache>,
-    pub(crate) paints: super::paint::TableCache,
     polygon_scratch: super::polygon::scratch::PolygonScratch,
 }
 
@@ -151,13 +150,8 @@ impl CoverageCache {
             shared: cache
                 .partition(motion_core::CachePartition::Coverage)
                 .clone(),
-            paints: super::paint::TableCache::new(cache),
             polygon_scratch: Default::default(),
         }
-    }
-
-    pub(crate) fn retained_paint_bytes(&self) -> u64 {
-        self.paints.retained_bytes()
     }
 
     fn insert(&self, entry: Entry) {

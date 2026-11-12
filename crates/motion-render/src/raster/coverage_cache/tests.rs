@@ -387,13 +387,17 @@ fn cached(
     limits: RasterLimits,
     tolerance: f64,
 ) -> Result<PreparedFrame, ValidationError> {
-    prepare_with_cache(
+    let mut preparation = crate::raster::PreparationCache::default();
+    std::mem::swap(&mut preparation.coverage, cache);
+    let prepared = prepare_with_cache(
         source,
         ValidationLimits::default(),
         limits,
         tolerance,
-        Some(cache),
-    )
+        Some(&mut preparation),
+    );
+    std::mem::swap(&mut preparation.coverage, cache);
+    prepared
 }
 
 fn compare(actual: &PreparedFrame, expected: &PreparedFrame) {

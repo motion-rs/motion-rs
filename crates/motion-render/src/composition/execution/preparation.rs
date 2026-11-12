@@ -52,7 +52,7 @@ impl FrameExecution<'_> {
                     validation,
                     self.limits,
                     tolerance,
-                    Some(&mut self.coverage_cache),
+                    Some(&mut self.preparation_cache),
                 )?
                 .quality(quality)
                 .blend_space(blend_space),
@@ -65,7 +65,7 @@ impl FrameExecution<'_> {
                         validation,
                         self.limits,
                         tolerance,
-                        Some(&mut self.coverage_cache),
+                        Some(&mut self.preparation_cache),
                     )?
                     .quality(quality)
                     .blend_space(blend_space);

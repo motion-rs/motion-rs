@@ -26,7 +26,7 @@ pub struct RenderSession {
 
     pub(super) scene_cache: std::sync::Arc<SceneCache>,
     pub(super) layout_cache: std::sync::Arc<SceneCache>,
-    pub(super) coverage_cache: crate::prepared::CoverageCache,
+    pub(super) preparation_cache: crate::prepared::PreparationCache,
     pub(super) cpu_pool: crate::cpu::pool::SurfacePool,
     pub(super) output_pool: crate::output::OutputPool,
     pub(super) limits: RasterLimits,
@@ -92,7 +92,7 @@ impl RenderSession {
             .cache
             .partition(crate::CachePartition::Paragraph)
             .clone();
-        let coverage_cache = crate::prepared::CoverageCache::new(&options.cache);
+        let preparation_cache = crate::prepared::PreparationCache::new(&options.cache);
         let limits = options.limits;
         #[cfg(feature = "gpu")]
         let gpu = options
@@ -108,7 +108,7 @@ impl RenderSession {
             gpu,
             scene_cache,
             layout_cache,
-            coverage_cache,
+            preparation_cache,
             cpu_pool: crate::cpu::pool::SurfacePool::default(),
             output_pool: crate::output::OutputPool::default(),
             limits,
@@ -277,13 +277,13 @@ impl RenderSession {
     /// Retained coverage-cache logical payload, independent of active frame storage.
     /// Allocator/node capacity and overhead are not process RSS accounting.
     pub fn cached_coverage_bytes(&self) -> u64 {
-        self.coverage_cache.retained_bytes()
+        self.preparation_cache.retained_coverage_bytes()
     }
 
     /// Retained logical gradient-table payload, excluding allocator capacity.
     /// This session cache is separate from active-frame accounting and process RSS.
     pub fn cached_paint_bytes(&self) -> u64 {
-        self.coverage_cache.retained_paint_bytes()
+        self.preparation_cache.retained_paint_bytes()
     }
 
     /// Idle reusable CPU pixel capacity, separate from active frame payload totals.

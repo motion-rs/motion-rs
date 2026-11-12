@@ -3,7 +3,7 @@
 use super::*;
 #[cfg(feature = "gpu")]
 use crate::gpu::raster::prepare::GpuFrame;
-use crate::raster::{CoverageCache, prepare::prepare_ir};
+use crate::raster::{PreparationCache, prepare::prepare_ir};
 use motion_core::{
     Color, DisplayList, DrawCommand, Filter, Node, NodeModifiers, Point, Shape, Size,
 };
@@ -216,7 +216,7 @@ fn warm_cpu_cache_does_not_make_gpu_preparation_depend_on_cpu_coverage()
     let source = curved_list(Transform::translate(2.125, 1.0625))?;
     let ir = build(&source)?;
     let limits = RasterLimits::default();
-    let mut cache = CoverageCache::default();
+    let mut cache = PreparationCache::default();
     let cold = prepare_ir(&ir, limits, Some(&mut cache))?;
     let gpu = GpuFrame::prepare(&ir, limits, Some(&mut cache))?;
     assert_eq!(gpu.geometry.device_fills.len(), 1);

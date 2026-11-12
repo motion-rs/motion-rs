@@ -4,7 +4,7 @@ use super::frame_ir::{
     COMMAND_PATH_BYTES, FrameIr, GeometrySource, IrClip, IrItem, IrPaint, IrPath,
 };
 use super::paint::TableCache;
-use super::{CoverageCache, RasterScope, rect_clip};
+use super::{CoverageCache, PreparationCache, RasterScope, rect_clip};
 use crate::prepared::{
     PreparationStats, PreparedFilters, PreparedFrame, PreparedItem, PreparedLayer, PreparedScene,
     RasterLimits,
@@ -130,7 +130,7 @@ pub(crate) fn prepare_with_cache(
     validation: ValidationLimits,
     limits: RasterLimits,
     tolerance: f64,
-    cache: Option<&mut CoverageCache>,
+    cache: Option<&mut PreparationCache>,
 ) -> Result<PreparedFrame, ValidationError> {
     let source = source.clone().validate(validation)?;
     prepare_validated_with_cache(&source, validation, limits, tolerance, cache)
@@ -160,7 +160,7 @@ pub(crate) fn prepare_validated_with_cache(
     validation: ValidationLimits,
     limits: RasterLimits,
     tolerance: f64,
-    cache: Option<&mut CoverageCache>,
+    cache: Option<&mut PreparationCache>,
 ) -> Result<PreparedFrame, ValidationError> {
     let ir = FrameIr::build(source, validation, limits, tolerance)?;
     prepare_ir(&ir, limits, cache)
@@ -169,7 +169,7 @@ pub(crate) fn prepare_validated_with_cache(
 pub(crate) fn prepare_ir(
     ir: &FrameIr<'_>,
     limits: RasterLimits,
-    cache: Option<&mut CoverageCache>,
+    cache: Option<&mut PreparationCache>,
 ) -> Result<PreparedFrame, ValidationError> {
     Ok(PreparedFrame {
         scene: prepare_scene(ir, limits, &mut CpuBackend { cache })?,
@@ -203,7 +203,7 @@ pub(crate) trait SceneBackend {
 
 /// Preparation that borrows immutable resources and flattens every fill on the CPU.
 struct CpuBackend<'a> {
-    cache: Option<&'a mut CoverageCache>,
+    cache: Option<&'a mut PreparationCache>,
 }
 
 impl SceneBackend for CpuBackend<'_> {
@@ -229,7 +229,13 @@ impl SceneBackend for CpuBackend<'_> {
         tolerance: f64,
         scope: &mut RasterScope<'_>,
     ) -> Result<(), ValidationError> {
-        prepare_geometry(frame, geometry, tolerance, self.cache.as_deref_mut(), scope)
+        prepare_geometry(
+            frame,
+            geometry,
+            tolerance,
+            self.cache.as_deref_mut().map(|cache| &mut cache.coverage),
+            scope,
+        )
     }
 }
 

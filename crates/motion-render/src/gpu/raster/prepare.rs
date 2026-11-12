@@ -5,7 +5,7 @@ use crate::prepared::PreparedScene;
 use crate::raster::frame_ir::{FrameIr, GeometrySource, IrPaint, IrPath};
 use crate::raster::paint::TableCache;
 use crate::raster::prepare::{SceneBackend, prepare_geometry, prepare_scene};
-use crate::raster::{CoverageCache, RasterScope};
+use crate::raster::{PreparationCache, RasterScope};
 use motion_core::{RasterLimits, ValidationError, ValidationLimits};
 use std::mem::size_of;
 
@@ -20,7 +20,7 @@ impl GpuFrame {
     pub(crate) fn prepare(
         ir: &FrameIr<'_>,
         limits: RasterLimits,
-        cache: Option<&mut CoverageCache>,
+        cache: Option<&mut PreparationCache>,
     ) -> Result<Self, ValidationError> {
         let mut geometry = DeviceGeometry::default();
         let scene = prepare_scene(
@@ -60,7 +60,7 @@ impl std::ops::Deref for GpuFrame {
 /// Preparation that keeps resources for upload and emits device coverage when admitted.
 struct DeviceBackend<'a> {
     geometry: &'a mut DeviceGeometry,
-    cache: Option<&'a mut CoverageCache>,
+    cache: Option<&'a mut PreparationCache>,
 }
 
 impl SceneBackend for DeviceBackend<'_> {
@@ -92,7 +92,8 @@ impl SceneBackend for DeviceBackend<'_> {
         // CPU coverage. Every other fill is device coverage or an error.
         let decal = matches!(paint.source, motion_core::Paint::Pattern(pattern) if pattern.decal);
         if decal || !matches!(geometry.source, GeometrySource::Path(_)) {
-            return prepare_geometry(frame, geometry, tolerance, self.cache.as_deref_mut(), scope);
+            let cache = self.cache.as_deref_mut().map(|cache| &mut cache.coverage);
+            return prepare_geometry(frame, geometry, tolerance, cache, scope);
         }
         self.geometry.device_fill(frame, geometry, tolerance, scope)
     }
@@ -104,7 +105,7 @@ pub(crate) fn prepare_validated_device(
     validation: ValidationLimits,
     limits: RasterLimits,
     tolerance: f64,
-    cache: Option<&mut CoverageCache>,
+    cache: Option<&mut PreparationCache>,
 ) -> Result<GpuFrame, ValidationError> {
     let ir = FrameIr::build(source, validation, limits, tolerance)?;
     GpuFrame::prepare(&ir, limits, cache)

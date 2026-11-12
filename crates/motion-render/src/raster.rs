@@ -8,10 +8,12 @@ pub(crate) mod coverage_cache;
 pub(crate) mod frame_ir;
 pub(crate) mod paint;
 pub(crate) mod polygon;
+pub(crate) mod preparation_cache;
 pub mod prepare;
 pub(crate) mod rect_clip;
 
 pub(crate) use coverage_cache::CoverageCache;
+pub(crate) use preparation_cache::PreparationCache;
 use prepare::paint_record;
 pub(crate) use prepare::pixel_bounds;
 

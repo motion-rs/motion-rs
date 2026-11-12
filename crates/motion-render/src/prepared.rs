@@ -3,8 +3,8 @@
 #[cfg(any(feature = "gpu", test))]
 pub(crate) use crate::linear::LinearFrame;
 pub use crate::linear::WorkStats;
-pub(crate) use crate::raster::coverage_cache::CoverageCache;
 use crate::raster::paint;
+pub(crate) use crate::raster::preparation_cache::PreparationCache;
 pub use crate::raster::prepare::RenderPrepare;
 pub use motion_core::RasterLimits;
 use motion_core::{PixelSize, Rect};
