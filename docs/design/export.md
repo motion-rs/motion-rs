@@ -167,7 +167,7 @@ tests use a recording `Encoder` to check ordering, cancellation and capabilities
 ## Related
 
 - [Tutorial: Export](../tutorial/11-export.md)
-- [Rendering and export](rendering.md), [Reliability](reliability.md), [GPU](gpu.md)
+- [Rendering and export](rendering.md), [Reliability](reliability.md), [GPU](rendering.md)
 - [Development checks](../development.md)
 - [`export.rs`](../../crates/motion-encode/src/export.rs),
   [`options.rs`](../../crates/motion-encode/src/export/options.rs),

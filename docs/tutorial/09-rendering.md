@@ -128,4 +128,4 @@ Quality, pixel dimensions, filter halos, target formats and shared holders all a
 ## Next Steps
 
 Next chapter: [10 Audio](10-audio.md). Without audio, skip to [11 Export](11-export.md).
-Full contracts: [rendering and output](../design/rendering.md), [GPU](../design/gpu.md), [FrameRenderer](../../crates/motion-render/src/composition/frame_renderer.rs).
+Full contracts: [rendering and output](../design/rendering.md), [GPU](../design/rendering.md), [FrameRenderer](../../crates/motion-render/src/composition/frame_renderer.rs).

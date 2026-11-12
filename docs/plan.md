@@ -28,7 +28,7 @@ Benchmark workloads, commands and recorded results live in
 [current measurements](benchmarks.md#current-measurements), with per-case changes against
 both the previous step and the initial baseline. Do not create per-step reports.
 Contracts that already exist are in [rendering](design/rendering.md),
-[GPU rendering](design/gpu.md) and [architecture](design/architecture.md).
+[GPU rendering](design/rendering.md) and [architecture](design/architecture.md).
 
 Performance measurements are paused. Four merged deliverables remain from earlier reviews,
 while R12 comes from the Gallery profile in review 7, which also lists

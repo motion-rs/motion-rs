@@ -66,7 +66,7 @@ working image resolves to a buffer for linear readback; packed and external-text
 outputs read that texture directly without the full linear buffer.
 Particle metadata and coverage/paint uploads remain buffers. CPU determinism is
 unchanged; GPU output is checked for visual equivalence with fixture-specific tolerances
-in [GPU rendering](gpu.md), not byte identity, including replay on the same device and driver.
+in [GPU rendering](rendering.md), not byte identity, including replay on the same device and driver.
 
 CPU memory output renders full-width adaptive regions with conservative filter
 dependency halos. Preparation caches the maximum nested filter-chain halo;
