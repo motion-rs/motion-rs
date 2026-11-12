@@ -3,11 +3,11 @@
 use super::*;
 use crate::gpu::abi::{CoverageCurve, CoverageEdge, CoverageFill, CoverageParams, CoverageTile};
 use crate::gpu::raster::device::{
-    COVERAGE_CARRY_STRIDE, COVERAGE_TILE_SIZE, CURVE_FLATTEN_WORK_PER_SEGMENT,
+    COVERAGE_BOUNDARY_STRIDE, COVERAGE_TILE_SIZE, CURVE_FLATTEN_WORK_PER_SEGMENT,
 };
 use motion_core::{FillRule, ValidationError};
 
-/// GPU-owned counts, offsets, indices and row carries have no CPU-generated edge lists.
+/// GPU-owned counts, offsets, indices and boundary areas have no CPU-generated edge lists.
 #[derive(Default)]
 pub(in crate::gpu) struct DeviceCoverage {
     pub(in crate::gpu) fills: Vec<CoverageFill>,
@@ -27,7 +27,7 @@ impl DeviceCoverage {
             u64::from(self.edge_count).max(1) * size_of::<CoverageEdge>() as u64,
             u64::from(self.tiles) * size_of::<CoverageTile>() as u64,
             u64::from(self.indices).max(1) * 4,
-            u64::from(self.tiles) * u64::from(COVERAGE_TILE_SIZE) * COVERAGE_CARRY_STRIDE * 4,
+            u64::from(self.tiles) * u64::from(COVERAGE_TILE_SIZE) * COVERAGE_BOUNDARY_STRIDE * 4,
             (self.curves.len() as u64).max(1) * size_of::<CoverageCurve>() as u64,
         ]
     }

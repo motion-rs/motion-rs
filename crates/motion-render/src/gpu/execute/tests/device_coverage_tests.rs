@@ -93,7 +93,7 @@ fn prepare_cpu(crossing: bool) -> motion_core::Result<crate::PreparedCpuFrame> {
     Ok(list.prepare(validation, RasterLimits::default())?)
 }
 
-fn prepare_node(node: Node, size: PixelSize) -> motion_core::Result<PreparedGpuFrame> {
+pub(super) fn prepare_node(node: Node, size: PixelSize) -> motion_core::Result<PreparedGpuFrame> {
     let validation = ValidationLimits::default();
     let list = node.compile(
         motion_core::Size::new(f64::from(size.width), f64::from(size.height)),
@@ -111,7 +111,7 @@ fn prepare_node(node: Node, size: PixelSize) -> motion_core::Result<PreparedGpuF
 
 #[test]
 fn coverage_shader_constants_match_the_host_planner() {
-    use crate::gpu::raster::device::{COVERAGE_CARRY_STRIDE, COVERAGE_TILE_SIZE};
+    use crate::gpu::raster::device::{COVERAGE_BOUNDARY_STRIDE, COVERAGE_TILE_SIZE};
     let source = include_str!("../../shaders/coverage.wgsl");
     let constant = |name: &str| -> u64 {
         let prefix = format!("const {name} = ");
@@ -122,7 +122,7 @@ fn coverage_shader_constants_match_the_host_planner() {
         line.trim_end_matches("u;").parse().unwrap()
     };
     assert_eq!(constant("TILE_SIZE"), u64::from(COVERAGE_TILE_SIZE));
-    assert_eq!(constant("CARRY_STRIDE"), COVERAGE_CARRY_STRIDE);
+    assert_eq!(constant("BOUNDARY_STRIDE"), COVERAGE_BOUNDARY_STRIDE);
 }
 
 #[test]
@@ -338,11 +338,9 @@ fn duplicate_contour_matches_cpu_visual_overlap_tier() -> motion_core::Result {
     let gpu = Gpu::new()?
         .render(&device.records, Plan::new(&device, limits)?)?
         .to_rgba8_frame(false, limits)?;
-    eprintln!(
-        "duplicate contour corner CPU={:?} GPU={:?}",
-        cpu.pixels()[4 * 32 + 4],
-        gpu.pixels()[4 * 32 + 4]
-    );
+    for (x, y) in [(4, 4), (5, 5), (15, 5), (16, 5), (20, 5), (20, 20)] {
+        assert!(cpu.pixels()[y * 32 + x][3].abs_diff(gpu.pixels()[y * 32 + x][3]) <= 1);
+    }
     assert_visually_equivalent(&gpu, &cpu, VisualTolerance::OVERLAP);
     Ok(())
 }

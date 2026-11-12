@@ -332,7 +332,7 @@ impl crate::app::StudioApp {
                             ("Count", gpu.coverage[1]),
                             ("Prefix", gpu.coverage[2]),
                             ("Scatter", gpu.coverage[3]),
-                            ("Carry", gpu.coverage[4]),
+                            ("Boundaries", gpu.coverage[4]),
                             ("Coverage", gpu.coverage[5]),
                         ] {
                             let value = match time.duration {

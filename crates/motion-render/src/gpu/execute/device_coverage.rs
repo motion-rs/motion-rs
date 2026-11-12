@@ -1,8 +1,9 @@
-//! GPU count, prefix, scatter, row-carry and tile coverage dispatch.
+//! GPU count, prefix, scatter, analytic boundary and tile coverage dispatch.
 
 use super::*;
 use crate::gpu::abi::CoverageParams;
 use crate::gpu::plan::DeviceCoverage;
+use crate::gpu::raster::device::COVERAGE_TILE_SIZE;
 
 impl Gpu {
     pub(super) fn encode_device_coverage(
@@ -61,13 +62,13 @@ impl Gpu {
             sizes[3],
             wgpu::BufferUsages::STORAGE,
         );
-        let carries = self.working_buffer(
-            "Device coverage carries",
+        let row_areas = self.working_buffer(
+            "Device boundary row areas",
             sizes[4],
             wgpu::BufferUsages::STORAGE,
         );
         let buffers = [
-            &uniforms, &fills, &edges, &tiles, &indices, &carries, samples, &curves,
+            &uniforms, &fills, &edges, &tiles, &indices, &row_areas, samples, &curves,
         ];
         let entries = buffers
             .iter()
@@ -89,7 +90,7 @@ impl Gpu {
             params.fills,
             params.tiles.div_ceil(64),
             params.edges.div_ceil(64),
-            params.rows.div_ceil(64),
+            params.tiles * COVERAGE_TILE_SIZE,
             params.tiles,
         ];
         for (pass_index, (pipeline, groups)) in pipelines.passes.iter().zip(counts).enumerate() {
@@ -114,6 +115,6 @@ impl Gpu {
             let groups_x = groups.min(self.device.limits().max_compute_workgroups_per_dimension);
             pass.dispatch_workgroups(groups_x, groups.div_ceil(groups_x), 1);
         }
-        working.extend([uniforms, fills, edges, tiles, indices, carries, curves]);
+        working.extend([uniforms, fills, edges, tiles, indices, row_areas, curves]);
     }
 }

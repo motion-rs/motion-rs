@@ -124,7 +124,7 @@ sRGB RGBA8 images:
 | Replay | Same backend, device and inputs | 0.002 | 0.004 | 2 codes | 0 |
 | Paint | Solid and gradient paints, blending and group opacity on analytic or pixel-aligned coverage | 0.005 | 0.01 | 3 codes | 0 |
 | Coverage | Antialiased paths and geometric clips without overlapping contours in a pixel | 0.01 | 0.03 | 4 codes | 0 |
-| Overlap | Crossing or self-intersecting contours, where GPU signed-area accumulation approximates overlap inside a pixel | 0.05 | 0.12 | 8 codes | 3% |
+| Overlap | Crossing or self-intersecting contours, whose f32 boundary intersections can differ locally from the CPU sweep | 0.05 | 0.12 | 8 codes | 3% |
 
 A fixture may tighten any field of its tier; the startup self-check keeps a 0.02
 global RMS for its self-intersecting geometry and 0.01 after filtering. Loosening a

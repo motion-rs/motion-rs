@@ -2,6 +2,7 @@ use super::*;
 use motion_core::{NodeModifiers, Shape, ValidationLimits};
 
 mod analytic_tests;
+mod boundary_coverage_tests;
 mod curve_flatten_tests;
 mod device_coverage_tests;
 mod noise_tests;

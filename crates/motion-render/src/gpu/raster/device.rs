@@ -8,6 +8,7 @@ use motion_core::{Transform, ValidationError};
 use std::mem::size_of;
 use std::ops::Range;
 
+mod admission;
 mod curves;
 mod tiles;
 
@@ -15,7 +16,7 @@ pub(crate) use curves::DeviceCurve;
 
 pub(crate) use tiles::TileLayout;
 pub(crate) use tiles::{
-    COVERAGE_CARRY_STRIDE, COVERAGE_CURVE_BYTES, COVERAGE_EDGE_BYTES, COVERAGE_FILL_BYTES,
+    COVERAGE_BOUNDARY_STRIDE, COVERAGE_CURVE_BYTES, COVERAGE_EDGE_BYTES, COVERAGE_FILL_BYTES,
     COVERAGE_PARAMS_BYTES, COVERAGE_TILE_SIZE,
 };
 
@@ -56,7 +57,7 @@ pub(crate) struct DeviceFill {
     pub(crate) curves: Range<usize>,
     /// Statically admitted generated edge slots.
     pub(crate) segments: u32,
-    /// Winding rule that maps accumulated signed area to coverage.
+    /// Winding rule that selects boundaries before area integration.
     pub(crate) rule: motion_core::FillRule,
     /// Conservative GPU tile storage and work admission.
     pub(crate) tiles: TileLayout,

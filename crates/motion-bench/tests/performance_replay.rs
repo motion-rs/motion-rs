@@ -145,12 +145,16 @@ fn gpu_stroke_matches_cpu_visual_overlap_tier() -> motion::Result {
     for index in [0, 45, 17, 89] {
         let reference = visual_frame(&mut cpu, "stroke", index)?;
         let actual = visual_frame(&mut gpu, "stroke", index)?;
-        eprintln!("stroke/{index} preparation: {:?}", gpu.report().gpu_preparation);
         assert!(gpu.report().gpu_preparation.unwrap().segment_count > 0);
         match visual::compare_rgba8(&actual, &reference, 640, VisualTolerance::OVERLAP) {
             Ok(difference) => eprintln!("stroke/{index} Overlap: {difference:?}"),
             Err(error) => failures.push(format!("stroke/{index}: {error}")),
         }
+        visual_frame(&mut gpu, "stroke", (index + 31) % 90)?;
+        let replay = visual_frame(&mut gpu, "stroke", index)?;
+        let difference = visual::compare_rgba8(&replay, &actual, 640, VisualTolerance::REPLAY)
+            .unwrap_or_else(|error| panic!("stroke/{index} Replay: {error}"));
+        eprintln!("stroke/{index} Replay: {difference:?}");
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
     Ok(())

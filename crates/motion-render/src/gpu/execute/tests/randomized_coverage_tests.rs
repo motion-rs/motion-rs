@@ -139,9 +139,7 @@ fn opposite_windings_stay_covered_away_from_their_shared_edge() -> motion_core::
         rectangle(&mut path, [-5.0, 0.0, 20.0, 8.5], false)?;
         rectangle(&mut path, [-5.0, 8.5, 20.0, 17.0], true)?;
         let pixels = render_device(path, rule)?;
-        // The pixel row containing the shared edge accumulates opposite areas, which is the
-        // documented approximation of signed-area coverage; rows on either side stay exact.
-        for y in [4, 12] {
+        for y in [4, 8, 12] {
             let pixel = pixels[y * 32 + 10];
             assert!(pixel[3] > 0.99, "{rule:?}: row {y} alpha {}", pixel[3]);
         }
