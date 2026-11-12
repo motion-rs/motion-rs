@@ -9,7 +9,7 @@ use motion_core::Result;
 use motion_core::{Color, Node, SceneContext, Shape, Time};
 
 impl FrameExecution<'_> {
-    /// Shared context after startup selection; None means the fixed CPU decision.
+    /// Shared context after startup selection; None means the CPU renderer.
     #[cfg(feature = "gpu")]
     pub fn selected_gpu_context(&mut self) -> Result<Option<crate::GpuContext>> {
         let renderer = self.select_backend()?;
@@ -96,17 +96,11 @@ impl FrameExecution<'_> {
     }
 
     pub(in crate::composition) fn select_backend(&mut self) -> Result<crate::Renderer> {
-        if let Some(decision) = &self.backend {
-            return Ok(decision.renderer);
+        let renderer = self.renderer();
+        if renderer == Renderer::Cpu || self.backend_ready {
+            return Ok(renderer);
         }
-        let preference = self.composition.options.backend;
-        let allow_software = preference.allow_software();
-        if preference == crate::BackendPreference::Cpu {
-            self.backend = Some(crate::BackendDecision {
-                renderer: Renderer::Cpu,
-            });
-            return Ok(Renderer::Cpu);
-        }
+        let allow_software = self.composition.options.backend.allow_software();
         // Without the gpu feature the body is a single expression and needs no closure for `?`.
         #[cfg_attr(not(feature = "gpu"), allow(clippy::redundant_closure_call))]
         let result = (|| -> Result<()> {
@@ -135,9 +129,7 @@ impl FrameExecution<'_> {
         })();
         match result {
             Ok(()) => {
-                self.backend = Some(crate::BackendDecision {
-                    renderer: Renderer::Gpu,
-                });
+                self.backend_ready = true;
                 Ok(Renderer::Gpu)
             }
             Err(error) => {
@@ -175,13 +167,7 @@ impl FrameExecution<'_> {
         let result = (|| -> Result<_> {
             #[cfg(feature = "gpu")]
             let plan = {
-                let preference = self.composition.options.backend;
-                let requested = self
-                    .backend
-                    .as_ref()
-                    .map_or(preference.wants_gpu(), |decision| {
-                        decision.renderer == Renderer::Gpu
-                    });
+                let requested = self.renderer() == Renderer::Gpu;
                 let started = self
                     .timings
                     .filter(|_| requested)

@@ -332,7 +332,6 @@ mod drawing {
         fn stroke_gpu_matches_cpu_and_replays() -> motion::Result {
             use motion::Color;
             use motion::render::Composition;
-            use motion::render::Renderer;
             let composition = Composition::new(
                 16,
                 16,
@@ -341,7 +340,7 @@ mod drawing {
             .with_options(motion::render::RenderOptions::default().background(Color::BLACK))?;
             let mut cpu = composition.frame_renderer(Size::new(8.0, 8.0))?;
             let mut gpu = composition
-                .configure(|options| options.backend(Renderer::Gpu.into()))
+                .configure(|options| options.backend(motion::render::BackendPreference::gpu()))
                 .frame_renderer(Size::new(8.0, 8.0))?;
             let build = |context: &motion::SceneContext<'_>| {
                 let index = context.time().to_frame(context.frame_rate());
@@ -506,7 +505,6 @@ mod drawing {
         #[ignore = "requires a native GPU; no window or video export"]
         fn svg_gpu_matches_cpu_and_replays() -> motion::Result {
             use motion::render::Composition;
-            use motion::render::Renderer;
             use motion::{Color, FillRule, Node, NodeModifiers, Shape, Size};
             let cases = [
                 ("M1 1q2 4 4 0t-4 0z", FillRule::EvenOdd),
@@ -523,7 +521,7 @@ mod drawing {
             .with_options(motion::render::RenderOptions::default().background(Color::BLACK))?;
             let mut cpu = composition.frame_renderer(Size::new(8.0, 8.0))?;
             let mut gpu = composition
-                .configure(|options| options.backend(Renderer::Gpu.into()))
+                .configure(|options| options.backend(motion::render::BackendPreference::gpu()))
                 .frame_renderer(Size::new(8.0, 8.0))?;
             let build = |context: &motion::SceneContext<'_>| {
                 let index = context.time().to_frame(context.frame_rate()) as usize;

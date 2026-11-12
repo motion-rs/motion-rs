@@ -65,29 +65,23 @@ fn native_main10_export_renders_display() -> motion_core::Result {
 
 #[test]
 fn parallel_worker_selection_respects_frames_memory_and_backend() {
-    let cpu = motion_render::BackendDecision {
-        renderer: motion_render::Renderer::Cpu,
-    };
-    let gpu = motion_render::BackendDecision {
-        renderer: motion_render::Renderer::Gpu,
-    };
+    let cpu = motion_render::Renderer::Cpu;
+    let gpu = motion_render::Renderer::Gpu;
     let mut options = ExportOptions::new("unused")
         .size(motion_core::PixelSize::new(8, 4))
         .workers(8);
     options.render.limits.max_bytes = 1024 * 1024 * 1024;
     options.max_parallel_bytes = 3 * 2 * 1024;
-    assert_eq!(render_workers(&options, 100, 1024, Some(&cpu)), 3);
-    assert_eq!(render_workers(&options, 2, 1024, Some(&cpu)), 2);
+    assert_eq!(render_workers(&options, 100, 1024, cpu), 3);
+    assert_eq!(render_workers(&options, 2, 1024, cpu), 2);
     options.max_parallel_bytes = 1;
-    assert_eq!(render_workers(&options, 100, 1024, Some(&cpu)), 1);
+    assert_eq!(render_workers(&options, 100, 1024, cpu), 1);
     options.max_parallel_bytes = u64::MAX;
     options.render.limits.max_bytes = u64::MAX;
-    assert_eq!(render_workers(&options, 100, 1024, Some(&cpu)), 8);
-    assert_eq!(render_workers(&options, 100, u64::MAX, Some(&cpu)), 1);
-    options.render.backend = motion_render::BackendPreference::gpu();
-    assert_eq!(render_workers(&options, 100, 1024, None), 1);
-    assert_eq!(render_workers(&options, 100, 1024, Some(&cpu)), 8);
-    assert_eq!(render_workers(&options, 100, 1024, Some(&gpu)), 1);
+    assert_eq!(render_workers(&options, 100, 1024, cpu), 8);
+    assert_eq!(render_workers(&options, 100, u64::MAX, cpu), 1);
+    assert_eq!(render_workers(&options, 100, 1024, cpu), 8);
+    assert_eq!(render_workers(&options, 100, 1024, gpu), 1);
     let timeline = Timeline::new(Size::new(8.0, 4.0), motion_core::fps!(30))
         .track(|track| track.gap(1.seconds()))
         .build()
@@ -284,7 +278,7 @@ fn parallel_export_matches_serial_pixels_ntsc_ranges_and_progress() -> Result<()
     let peak = reference_renderer.last_stats().unwrap().peak_bytes();
     options.max_parallel_bytes = peak * 2 * 4;
     assert_eq!(
-        render_workers(&options, 7, peak, reference_renderer.backend_decision()),
+        render_workers(&options, 7, peak, reference_renderer.renderer()),
         4
     );
     let reference = (2..10)

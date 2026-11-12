@@ -176,7 +176,7 @@ fn export_through(
         &options,
         end - first - 1,
         observed_peak,
-        renderer.backend_decision(),
+        renderer.renderer(),
     );
     let mut write = |frame: i64, pixels: FrameBuffer| -> Result<()> {
         cancelled(progress)?;

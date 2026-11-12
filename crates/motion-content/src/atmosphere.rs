@@ -325,7 +325,10 @@ mod tests {
                 48,
                 motion_render::FrameClock::new(motion_core::fps!(30), 150),
             )
-            .with_options(motion_render::RenderOptions::default().backend(Renderer::Cpu.into()))?
+            .with_options(
+                motion_render::RenderOptions::default()
+                    .backend(motion_render::BackendPreference::Cpu),
+            )?
             .render_frame(0, Size::new(64.0, 48.0), |_| {
                 Node::group([
                     Rect::new(0.0, 0.0, 64.0, 48.0)

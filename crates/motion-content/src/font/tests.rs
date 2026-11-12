@@ -63,7 +63,7 @@ fn explicit_fonts_use_paragraph_layout_and_keep_registry_snapshots() -> motion_c
 #[ignore = "requires MOTION_TEST_FONT and a native GPU; no window"]
 fn explicit_font_gpu_matches_cpu_and_replays() -> motion_core::Result {
     use motion_core::NodeModifiers;
-    use motion_render::{Composition, Renderer};
+    use motion_render::Composition;
     let font = FontFace::from_bytes(std::fs::read(std::env::var("MOTION_TEST_FONT")?)?, 0)?;
     let latin = Text::from_font("office AV", &font, 16.0, Color::WHITE)?;
     let arabic = Text::from_font(
@@ -84,7 +84,7 @@ fn explicit_font_gpu_matches_cpu_and_replays() -> motion_core::Result {
     .with_options(motion_render::RenderOptions::default().background(motion_core::Color::BLACK))?;
     let mut cpu = composition.frame_renderer(Size::new(128.0, 64.0))?;
     let mut gpu = composition
-        .configure(|options| options.backend(Renderer::Gpu.into()))
+        .configure(|options| options.backend(motion_render::BackendPreference::gpu()))
         .frame_renderer(Size::new(128.0, 64.0))?;
     let build = |context: &motion_core::SceneContext<'_>| {
         row.clone()

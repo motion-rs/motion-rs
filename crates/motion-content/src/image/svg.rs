@@ -216,7 +216,7 @@ mod tests {
         use motion_core::{
             BlendSpace, Color, Node, NodeModifiers, Pivot, Point, SceneContext, Size, Time,
         };
-        use motion_render::{Composition, PixelFormat, Renderer};
+        use motion_render::{Composition, PixelFormat};
         let vector = crate::SvgAsset::from_bytes(br##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 12">
             <defs><linearGradient id="fill"><stop stop-color="red"/><stop offset="1" stop-color="teal"/></linearGradient></defs>
             <rect x="1" y="1" width="22" height="10" rx="3" fill="url(#fill)" opacity="0.7"/>
@@ -259,7 +259,7 @@ mod tests {
             .with_options(
                 motion_render::RenderOptions::default()
                     .background(Color::from_hex(0x23272c))
-                    .backend(Renderer::Gpu.into()),
+                    .backend(motion_render::BackendPreference::gpu()),
             )?
             .frame_renderer(Size::new(48.0, 36.0))?;
             let build = |context: &SceneContext<'_>| {

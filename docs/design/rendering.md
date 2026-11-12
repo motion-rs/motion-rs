@@ -339,11 +339,11 @@ conversion by GPU f32 rounding. Motion blur may call the builder
 multiple times. A memory target is replaced only on success and its old retained
 payload is charged while rendering; an external texture has no rollback guarantee
 after a GPU failure. Each request installs new diagnostics and clears prior totals.
-last_stats describes successful memory output, not external-texture conversion. Each stage reports a `WorkStats { peak_bytes, work }`, and `RenderSession::report()` aggregates stats, timings and the backend decision into one `FrameReport`.
+last_stats describes successful memory output, not external-texture conversion. Each stage reports a `WorkStats { peak_bytes, work }`, and `RenderSession::report()` aggregates stats, timings and the renderer into one `FrameReport`.
 Request background overrides the options' background. `render_frame*` output composites over
 `RenderOptions::background` made opaque, or white when it is absent; `render_still` and direct requests
-keep transparency when no background is given. Query
-backend_decision for the actual backend; `requested_backend()` reports the request.
+keep transparency when no background is given. `renderer()` reports
+the renderer fixed by the backend preference; `requested_backend()` reports the preference itself.
 
 ## Resources and Content
 

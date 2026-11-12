@@ -42,27 +42,7 @@ impl FrameExecution<'_> {
         } else {
             1.0 / 256.0
         };
-        let renderer = if let Some(renderer) = self.preparation_backend {
-            renderer
-        } else {
-            #[cfg(feature = "gpu")]
-            {
-                self.backend.as_ref().map_or_else(
-                    || {
-                        if self.composition.options.backend.wants_gpu() {
-                            crate::Renderer::Gpu
-                        } else {
-                            crate::Renderer::Cpu
-                        }
-                    },
-                    |decision| decision.renderer,
-                )
-            }
-            #[cfg(not(feature = "gpu"))]
-            {
-                self.select_backend()?
-            }
-        };
+        let renderer = self.preparation_backend.unwrap_or_else(|| self.renderer());
         let quality = self.composition.options.quality;
         let blend_space = self.composition.options.blend_space;
         let prepared = match renderer {

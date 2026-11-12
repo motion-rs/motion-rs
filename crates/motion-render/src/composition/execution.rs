@@ -118,10 +118,7 @@ impl FrameExecution<'_> {
     ) -> Result<crate::FrameBuffer> {
         self.output_pool.trim(limits.max_bytes / 8);
         let started = self.timings.map(|_| std::time::Instant::now());
-        let cpu = self.backend.as_ref().map_or_else(
-            || self.composition.options.backend == crate::BackendPreference::Cpu,
-            |decision| decision.renderer == Renderer::Cpu,
-        );
+        let cpu = self.renderer() == Renderer::Cpu;
         let display = self.composition.options.display.clone();
         if cpu && (!prepared.items.is_empty() || !display.is_identity()) {
             self.select_backend()?;
@@ -311,7 +308,7 @@ mod scene_output_tests {
     #[ignore = "requires native GPU; verifies frame-stage observations without latency assertions"]
     fn native_frame_stage_timings_preserve_output_and_logical_stats() -> motion_core::Result {
         let mut renderer = Composition::new(8, 8, crate::FrameClock::new(motion_core::fps!(30), 2))
-            .with_options(crate::RenderOptions::default().backend(Renderer::Gpu.into()))?
+            .with_options(crate::RenderOptions::default().backend(crate::BackendPreference::gpu()))?
             .frame_renderer(Size::new(8.0, 8.0))?;
         let build = |_: &SceneContext<'_>| {
             Node::from(motion_core::Rect::new(0.0, 0.0, 4.0, 8.0).fill(Color::WHITE))

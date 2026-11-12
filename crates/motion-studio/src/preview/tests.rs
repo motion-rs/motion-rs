@@ -399,10 +399,7 @@ fn automatic_preview_rejects_gpu_plan_without_rejecting_cpu_frame() -> motion_co
             .field,
         "max_bytes"
     );
-    assert_eq!(
-        selected.renderer.backend_decision().unwrap().renderer,
-        Renderer::Gpu
-    );
+    assert_eq!(selected.renderer.renderer(), Renderer::Gpu);
     let explicit = StudioScene {
         composition: scene
             .composition
@@ -1532,7 +1529,7 @@ fn gpu_preview_seek_export_and_cancellation_preserve_worker_contracts() -> motio
     let mut software = composition.frame_renderer(size)?;
     let mut gpu = composition
         .clone()
-        .configure(|options| options.backend(Renderer::Gpu.into()))
+        .configure(|options| options.backend(motion_render::BackendPreference::gpu()))
         .frame_renderer(size)?;
     gpu.render_frame(0, build)?;
     let adapter = gpu.gpu_info().expect("initialized GPU").clone();

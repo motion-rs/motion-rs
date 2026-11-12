@@ -120,10 +120,9 @@ fn compare_batches(style: ParticleStyle, renderer: Renderer) -> motion_core::Res
                         // This fixture isolates generic primitive expansion, not trajectory evaluation.
                         batch.analytic = None;
                         if expanded {
-                            for instance in batch.instances.iter() {
+                            for instance in batch.instances.slice().iter() {
                                 let mut single = batch.clone();
                                 single.instances = vec![instance.clone()].into();
-                                single.index = Arc::from([]);
                                 nodes.push(Node::from(ScalarBatch(single)));
                             }
                         } else {
@@ -286,7 +285,7 @@ fn per_style_blend_reaches_instance_upload_and_cpu_pixels() -> motion_core::Resu
     )
     .with_options(
         motion_render::RenderOptions::default()
-            .backend(Renderer::Cpu.into())
+            .backend(motion_render::BackendPreference::Cpu)
             .background(Color::rgb(96, 96, 96)),
     )?
     .frame_renderer(Size::new(96.0, 72.0))?;

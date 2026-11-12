@@ -19,7 +19,8 @@ pub struct RenderSession {
     pub(super) options: crate::RenderOptions,
     pub(super) design_size: Size,
     pub(super) size: PixelSize,
-    pub(super) backend: Option<crate::BackendDecision>,
+    /// Whether the GPU of a GPU request passed policy validation and its self-check.
+    pub(super) backend_ready: bool,
     #[cfg(feature = "gpu")]
     pub(super) gpu: Option<crate::gpu::Gpu>,
 
@@ -102,7 +103,7 @@ impl RenderSession {
             options,
             design_size,
             size,
-            backend: None,
+            backend_ready: false,
             #[cfg(feature = "gpu")]
             gpu,
             scene_cache,
@@ -232,18 +233,9 @@ impl RenderSession {
         &self.options.context
     }
 
-    /// Startup backend decision and optional fallback reason.
-    pub fn backend_decision(&self) -> Option<&crate::BackendDecision> {
-        self.backend.as_ref()
-    }
-
-    /// Configured renderer, without initializing a device.
+    /// Renderer fixed by the configured backend, without initializing a device.
     pub fn renderer(&self) -> Renderer {
-        if matches!(self.options.backend, crate::BackendPreference::Gpu { .. }) {
-            Renderer::Gpu
-        } else {
-            Renderer::Cpu
-        }
+        self.options.backend.renderer()
     }
 
     /// Initialized adapter metadata without probing a new device.
@@ -332,13 +324,13 @@ impl RenderSession {
         self.timings
     }
 
-    /// Aggregates [`RenderSession::last_stats`], [`RenderSession::timings`] and the backend
-    /// decision into one report.
+    /// Aggregates [`RenderSession::last_stats`], [`RenderSession::timings`] and the renderer
+    /// into one report.
     pub fn report(&self) -> FrameReport {
         FrameReport {
             stats: self.last_stats,
             timings: self.timings,
-            backend: self.backend.clone(),
+            renderer: self.renderer(),
             gpu_preparation: self.gpu_preparation,
         }
     }

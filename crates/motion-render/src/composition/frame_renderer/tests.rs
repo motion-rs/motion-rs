@@ -27,10 +27,10 @@ fn public_yuv10_output_uses_packing_and_preserves_unaligned_fallback() -> Result
         let base = Composition::new(width, 6, crate::FrameClock::new(motion_core::fps!(24), 2));
         let mut cpu = base
             .clone()
-            .configure(|options| options.backend(Renderer::Cpu.into()))
+            .configure(|options| options.backend(crate::BackendPreference::Cpu))
             .frame_renderer(size)?;
         let mut gpu = base
-            .configure(|options| options.backend(Renderer::Gpu.into()))
+            .configure(|options| options.backend(crate::BackendPreference::gpu()))
             .frame_renderer(size)?;
         let expected = cpu.render_output_at(Time::ZERO, Some(Color::BLACK), format, source)?;
         let actual = gpu.render_output_at(Time::ZERO, Some(Color::BLACK), format, source)?;
@@ -708,7 +708,7 @@ fn cpu_invalid_configuration_and_index_fail_before_evaluation() -> Result {
 #[test]
 fn gpu_selection_is_explicit_and_lazy_without_a_device() -> Result {
     let selected = composition()
-        .configure(|options| options.backend(Renderer::Gpu.into()))
+        .configure(|options| options.backend(crate::BackendPreference::gpu()))
         .frame_renderer(Size::new(8.0, 4.0));
     #[cfg(not(feature = "gpu"))]
     {
@@ -766,7 +766,7 @@ fn gpu_selection_is_explicit_and_lazy_without_a_device() -> Result {
 fn gpu_output_preparation_is_independent_and_device_free() -> Result {
     use crate::gpu::frame::FrameInput;
     let mut renderer = composition()
-        .configure(|options| options.backend(Renderer::Gpu.into()))
+        .configure(|options| options.backend(crate::BackendPreference::gpu()))
         .frame_renderer(Size::new(8.0, 4.0))?;
     let build = |_: &SceneContext<'_>| {
         Node::from(
@@ -819,7 +819,7 @@ fn gpu_device_session_seek_budget_and_recovery_match_cpu() -> Result {
         )?;
         let mut cpu = composition.frame_renderer(Size::new(8.0, 4.0))?;
         let mut gpu = composition
-            .configure(|options| options.backend(Renderer::Gpu.into()))
+            .configure(|options| options.backend(crate::BackendPreference::gpu()))
             .frame_renderer(Size::new(8.0, 4.0))?;
         assert!(gpu.gpu_info().is_none());
         let mut first = None;

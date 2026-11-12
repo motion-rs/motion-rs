@@ -1,12 +1,4 @@
-//! Observable native backend selection and startup parity contract.
-
-/// A session's fixed rendering backend. Device loss after this decision is a
-/// failure, not a mid-export switch to a different pixel implementation.
-#[derive(Clone, Debug)]
-pub struct BackendDecision {
-    /// Actual renderer used for this session.
-    pub renderer: crate::Renderer,
-}
+//! Backend preference, the renderer it fixes and the software-adapter policy.
 
 #[cfg(feature = "gpu")]
 pub(crate) fn software_adapter(name: &str, device_type: &str) -> bool {
@@ -38,15 +30,15 @@ pub enum Renderer {
 
 impl Default for Renderer {
     fn default() -> Self {
-        BackendPreference::default().into_renderer()
+        BackendPreference::default().renderer()
     }
 }
 
 /// Requested native backend; the GPU never silently falls back to the CPU.
 ///
-/// This is the only way to choose a backend. [`Renderer`] is the outcome
-/// reported by [`BackendDecision`]. The default is the GPU on hardware adapters
-/// when feature `gpu` is enabled and the CPU reference otherwise.
+/// This is the only way to choose a backend; [`BackendPreference::renderer`] reports the
+/// [`Renderer`] it fixes. The default is the GPU on hardware adapters when feature `gpu`
+/// is enabled and the CPU reference otherwise.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BackendPreference {
     /// Bounded CPU reference, selected explicitly.
@@ -76,7 +68,8 @@ impl BackendPreference {
         }
     }
 
-    const fn into_renderer(self) -> Renderer {
+    /// Renderer this preference selects; a GPU request never resolves to the CPU.
+    pub const fn renderer(self) -> Renderer {
         match self {
             Self::Cpu => Renderer::Cpu,
             Self::Gpu { .. } => Renderer::Gpu,
@@ -106,7 +99,7 @@ impl BackendPreference {
 }
 
 impl From<Renderer> for BackendPreference {
-    /// Requests exactly `renderer`; GPU is strict and hardware-only.
+    /// Requests exactly `renderer`; the GPU is hardware-only.
     fn from(renderer: Renderer) -> Self {
         match renderer {
             Renderer::Cpu => Self::Cpu,
@@ -155,11 +148,7 @@ mod tests {
             })
             .unwrap_err();
         assert!(error.to_string().contains("precision"), "{error}");
-        assert!(
-            session
-                .backend_decision()
-                .is_none_or(|decision| decision.renderer == crate::Renderer::Gpu)
-        );
+        assert_eq!(session.renderer(), crate::Renderer::Gpu);
         Ok(())
     }
 

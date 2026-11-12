@@ -15,7 +15,7 @@ pub mod output;
 pub mod prepared;
 pub(crate) mod raster;
 
-pub use backend::{BackendDecision, BackendPreference, Renderer};
+pub use backend::{BackendPreference, Renderer};
 pub use composition::{
     Composition, FrameAt, FrameClock, FrameRenderer, FrameReport, FrameRequest, FrameStats,
     RenderSession,

@@ -29,7 +29,7 @@ mod resources {
                 )
                 .with_options(
                     motion::render::RenderOptions::default()
-                        .backend(motion::render::Renderer::Gpu.into()),
+                        .backend(motion::render::BackendPreference::gpu()),
                 )?
                 .frame_renderer(motion::Size::new(1.0, 1.0))
                 .err()

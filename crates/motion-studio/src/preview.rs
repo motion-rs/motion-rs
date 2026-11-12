@@ -406,11 +406,7 @@ impl PreviewRenderer {
             None
         };
         Ok(PreviewSubmission::Ready(Box::new(PreviewImage {
-            backend: self
-                .renderer
-                .backend_decision()
-                .map(|decision| format!("{:?}", decision.renderer))
-                .unwrap_or_default(),
+            backend: format!("{:?}", self.renderer.renderer()),
             image: Arc::new(if settings.pixels {
                 ColorImage::from_rgba_unmultiplied(
                     [width as usize, height as usize],

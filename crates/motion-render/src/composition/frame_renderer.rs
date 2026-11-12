@@ -71,15 +71,15 @@ impl FrameStats {
 }
 
 /// Everything observed about the latest frame: logical totals, opt-in timings and the
-/// backend that produced it. Each part is `None` until the corresponding data exists.
+/// renderer that produces it. Optional parts are `None` until the corresponding data exists.
 #[derive(Clone, Debug, Default)]
 pub struct FrameReport {
     /// Logical pipeline totals of the latest successful memory-output frame.
     pub stats: Option<FrameStats>,
     /// Opt-in stage observations.
     pub timings: Option<FrameTimings>,
-    /// Backend decision made for this session.
-    pub backend: Option<crate::BackendDecision>,
+    /// Renderer fixed by the session's backend preference.
+    pub renderer: crate::Renderer,
     /// Latest completed GPU preparation attempt.
     /// Available for memory, texture and preparation-only requests; cleared on the next request.
     pub gpu_preparation: Option<crate::GpuPreparationStats>,

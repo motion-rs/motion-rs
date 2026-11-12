@@ -656,7 +656,7 @@ mod tests {
         let design = motion_core::Size::new(12.0, 8.0);
         let mut cpu = composition.clone().frame_renderer(design)?;
         let mut gpu = composition
-            .configure(|options| options.backend(motion_render::Renderer::Gpu.into()))
+            .configure(|options| options.backend(motion_render::BackendPreference::gpu()))
             .frame_renderer(design)?;
         let mut requests = 0;
         for mode in [
