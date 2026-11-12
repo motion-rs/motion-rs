@@ -1,8 +1,11 @@
 //! Bounded geometric clip domains, with convex rectangle and general Shape paths.
 
 use super::polygon::shape_clip::{self, Region};
-use super::*;
+use crate::prepared::{ClipRecord, PreparedScene};
+use crate::raster::pixel_bounds;
+use motion_core::budget::Budget;
 use motion_core::{PathVerb, Point, Rect, RectClip, ValidationError};
+use std::mem::size_of;
 
 struct Geometry {
     points: Vec<Point>,

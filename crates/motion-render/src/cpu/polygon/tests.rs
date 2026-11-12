@@ -38,7 +38,7 @@ fn ir_stats(
     limits: RasterLimits,
 ) -> Result<crate::prepared::PreparationStats, ValidationError> {
     let source = list.clone().validate(ValidationLimits::default()).unwrap();
-    super::super::frame_ir::FrameIr::build(
+    crate::raster::frame_ir::FrameIr::build(
         &source,
         ValidationLimits::default(),
         limits,
@@ -387,7 +387,7 @@ fn temporary_storage_peak_work_limits_and_sibling_release_are_exact() {
                 let before_command = header
                     + index as u64
                         * (frame.stats.retained_bytes - size_of::<PreparedFrame>() as u64)
-                    + super::super::frame_ir::COMMAND_PATH_BYTES;
+                    + crate::raster::frame_ir::COMMAND_PATH_BYTES;
                 let expected = if max_bytes < header {
                     "prepared".to_owned()
                 } else if max_bytes < before_command {

@@ -408,13 +408,13 @@ const policies = [
     "Source construction creates gradient geometry whenever its immutable paint is a gradient.",
   ],
   [
-    "motion-render/src/raster/polygon/shape_clip.rs",
+    "motion-render/src/cpu/polygon/shape_clip.rs",
     ["active clip interval"],
     "invariant",
     "The active-interval flag is set together with the preceding boundary in the same ordered sweep.",
   ],
   [
-    "motion-render/src/raster/rect_clip.rs",
+    "motion-render/src/cpu/rect_clip.rs",
     ["nonempty convex polygon"],
     "invariant",
     "Empty polygons return before requesting the previous vertex from this same polygon.",
@@ -498,7 +498,7 @@ const policies = [
     "Gradient paints are validated to have at least two stops, and the table holds a row of entries per stop.",
   ],
   [
-    "motion-render/src/raster/polygon.rs",
+    "motion-render/src/cpu/polygon.rs",
     ["inside span follows a crossing"],
     "invariant",
     "A span is inside only after a crossing has set the previous edge.",

@@ -1,5 +1,5 @@
 use super::*;
-use crate::prepared::PreparedLayer;
+use crate::prepared::{PixelRect, PreparedLayer};
 use motion_core::{
     Color, DisplayList, DrawCommand, Paint, PixelSize, Rect, ValidationError, ValidationErrorKind,
     ValidationLimits,

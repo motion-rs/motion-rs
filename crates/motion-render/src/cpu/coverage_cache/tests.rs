@@ -1,5 +1,5 @@
 use super::*;
-use crate::raster::polygon::scratch::MAX_IDLE_SCRATCH_BYTES;
+use crate::cpu::polygon::scratch::MAX_IDLE_SCRATCH_BYTES;
 use motion_core::{
     Color, DisplayList, DrawCommand, Node, Paint, PixelSize, Shape, Size, ValidationError,
     ValidationLimits,

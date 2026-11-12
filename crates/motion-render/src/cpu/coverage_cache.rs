@@ -2,11 +2,18 @@
 
 use motion_core::{PixelSize, Rect, ValidationError};
 
-use super::*;
+#[cfg(test)]
+use crate::prepared::{PreparedFrame, RenderPrepare};
+use crate::prepared::{PreparedScene, Span, Strip};
+use crate::raster::RasterScope;
 #[cfg(test)]
 use crate::raster::prepare::prepare_with_cache;
+#[cfg(test)]
+use motion_core::RasterLimits;
+use motion_core::budget::Budget;
 use motion_core::{FillRule, Path2D, Transform};
 use std::hash::{Hash, Hasher};
+use std::mem::size_of;
 use std::sync::Arc;
 
 #[cfg(test)]

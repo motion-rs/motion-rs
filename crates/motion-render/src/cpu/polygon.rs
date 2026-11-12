@@ -1,7 +1,14 @@
 //! Polygon path rasterization into sparse strips and spans using exact area coverage.
 
-use super::*;
+use crate::prepared::{PixelRect, PreparedScene, Span, Strip};
+#[cfg(test)]
+use crate::prepared::{PreparationStats, PreparedFrame, PreparedItem, RenderPrepare};
+use crate::raster::{Band, RasterScope, coverage_to_byte, pixel_bounds};
+#[cfg(test)]
+use motion_core::RasterLimits;
+use motion_core::budget::Budget;
 use motion_core::{FillRule, PathVerb, Point, Transform, ValidationError};
+use std::mem::size_of;
 
 mod intersections;
 pub(crate) mod scratch;

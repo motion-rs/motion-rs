@@ -1,4 +1,5 @@
 use super::*;
+use crate::prepared::PaintRecord;
 use motion_core::{Color, DisplayList, DrawCommand, Paint, PixelSize, ValidationLimits};
 
 fn prepared(

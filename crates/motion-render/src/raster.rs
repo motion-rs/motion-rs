@@ -1,24 +1,20 @@
 //! Shared bounded raster frontend for CPU and GPU consumers.
 
-use crate::prepared::{ClipRecord, PaintRecord, PixelRect, PreparedScene, Span, Strip};
+use crate::prepared::{PaintRecord, PreparedScene};
 use motion_core::budget::Budget;
-use std::mem::size_of;
 
-pub(crate) mod coverage_cache;
 pub(crate) mod frame_ir;
 pub(crate) mod paint;
-pub(crate) mod polygon;
 pub(crate) mod preparation_cache;
 pub mod prepare;
-pub(crate) mod rect_clip;
 
-pub(crate) use coverage_cache::CoverageCache;
+pub(crate) use crate::cpu::coverage_cache::CoverageCache;
 pub(crate) use preparation_cache::PreparationCache;
 use prepare::paint_record;
 pub(crate) use prepare::pixel_bounds;
 
 #[cfg(test)]
-use crate::prepared::{PreparationStats, PreparedFrame, PreparedItem};
+use crate::prepared::{PreparedFrame, PreparedItem};
 #[cfg(test)]
 use motion_core::RasterLimits;
 #[cfg(test)]

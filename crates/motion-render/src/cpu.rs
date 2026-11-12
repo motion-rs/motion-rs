@@ -10,11 +10,14 @@ use std::mem::size_of;
 
 mod blending;
 mod clipping;
+pub(crate) mod coverage_cache;
 mod filter;
 mod masking;
 pub(crate) mod output;
 mod particles;
+pub(crate) mod polygon;
 pub(crate) mod pool;
+pub(crate) mod rect_clip;
 #[cfg(test)]
 mod tests;
 mod walk;

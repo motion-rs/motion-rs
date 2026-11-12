@@ -4,7 +4,8 @@ use super::frame_ir::{
     COMMAND_PATH_BYTES, FrameIr, GeometrySource, IrClip, IrItem, IrPaint, IrPath,
 };
 use super::paint::TableCache;
-use super::{CoverageCache, PreparationCache, RasterScope, rect_clip};
+use super::{CoverageCache, PreparationCache, RasterScope};
+use crate::cpu::rect_clip;
 use crate::prepared::{
     PreparationStats, PreparedFilters, PreparedFrame, PreparedItem, PreparedLayer, PreparedScene,
     RasterLimits,

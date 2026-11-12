@@ -22,7 +22,7 @@ pub(super) use geometry::rectangle_verbs;
 pub(crate) use geometry::wang;
 
 /// Maximum scratch bytes for a command-index error path, including every usize digit.
-pub(super) const COMMAND_PATH_BYTES: u64 = 64;
+pub(crate) const COMMAND_PATH_BYTES: u64 = 64;
 
 /// Backend-neutral ordered frame, owning normalization but borrowing immutable resources.
 pub(crate) struct FrameIr<'a> {
