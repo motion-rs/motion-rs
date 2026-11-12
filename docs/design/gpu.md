@@ -146,8 +146,9 @@ retain compact constants or sparse/packed records. Decals retain CPU f64 rejecti
 and compact local payloads. Decals keep CPU coverage; eligible GPU fills bypass
 the CPU coverage cache.
 Each six-word strip record includes a storage discriminator: CPU records address
-packed u8 alpha bytes, while device records address absolute f32 words in the same
-buffer. GPU coverage writes one sample per tile invocation; large frames use two-dimensional
+packed u8 alpha bytes in the shared coverage buffer, while device records address f32
+words in a separate device coverage binding (`device_coverage`, binding 12) that the
+coverage passes write and composition reads. GPU coverage writes one sample per tile invocation; large frames use two-dimensional
 dispatch. Coverage storage and conservative tile/edge work are admitted before submission.
 CPU alpha decoding retains the original f32 values; device coverage stays f32 through
 composition. Geometric clip ratios

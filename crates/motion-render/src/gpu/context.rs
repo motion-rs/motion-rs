@@ -42,7 +42,7 @@ impl Plan {
                 ));
             }
         }
-        let coverage_bytes = self.coverage.len() as u64 * 4;
+        let coverage_bytes = (self.coverage.len() as u64).max(u64::from(self.device.samples)) * 4;
         if coverage_bytes > limits.max_storage_buffer_binding_size
             || coverage_bytes > limits.max_buffer_size
         {

@@ -90,6 +90,10 @@ var output_texture: texture_storage_2d<rgba32float, write>;
 @group(0) @binding(10)
 var<storage, read> frame_coverage: FrameCoverage;
 
+// Generated f32 device coverage; fills address it by their strip's alpha offset.
+@group(0) @binding(12)
+var<storage, read> device_coverage: array<f32>;
+
 // Value rows preserve host-narrowed f32 bit patterns.
 fn value(index: u32) -> f32 {
     return settings.values[index / 4u][index % 4u];

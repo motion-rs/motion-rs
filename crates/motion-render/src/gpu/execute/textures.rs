@@ -15,6 +15,7 @@ struct TextureInputs<'a> {
     status: &'a wgpu::Buffer,
     deferred: &'a [bool],
     coverage: &'a wgpu::Buffer,
+    device_coverage: &'a wgpu::Buffer,
 }
 
 pub(super) struct EncodedTexture {
@@ -189,6 +190,17 @@ impl Gpu {
             working.push(buffer.clone());
             buffer
         };
+        let device_coverage = if plan.device.samples == 0 {
+            dummy.clone()
+        } else {
+            let buffer = self.working_buffer(
+                "Device coverage samples",
+                u64::from(plan.device.samples) * 4,
+                wgpu::BufferUsages::STORAGE,
+            );
+            working.push(buffer.clone());
+            buffer
+        };
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -200,7 +212,7 @@ impl Gpu {
             timestamps.write(&mut encoder, 0);
         }
         if plan.device.samples != 0 {
-            self.encode_device_coverage(&mut encoder, &plan.device, &coverage, &mut working);
+            self.encode_device_coverage(&mut encoder, &plan.device, &device_coverage, &mut working);
         }
         let mut budget = Budget::resume(
             plan.limits,
@@ -232,6 +244,7 @@ impl Gpu {
                         status: &status,
                         deferred: &deferred,
                         coverage: &coverage,
+                        device_coverage: &device_coverage,
                     },
                     &mut encoder,
                     &mut working,
@@ -319,6 +332,10 @@ impl Gpu {
                             binding: 11,
                             resource: resource.as_entire_binding(),
                         },
+                        wgpu::BindGroupEntry {
+                            binding: 12,
+                            resource: device_coverage.as_entire_binding(),
+                        },
                     ],
                 });
                 let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
@@ -380,6 +397,7 @@ impl Gpu {
             status,
             deferred,
             coverage,
+            device_coverage,
         } = inputs;
         let step = &plan.steps[range.start];
         let accumulating = slots[step.first] == slots[range.end];
@@ -583,6 +601,10 @@ impl Gpu {
                     wgpu::BindGroupEntry {
                         binding: 11,
                         resource: resource.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 12,
+                        resource: device_coverage.as_entire_binding(),
                     },
                 ],
             });

@@ -34,21 +34,6 @@ impl DeviceCoverage {
 }
 
 impl Planner<'_> {
-    /// Words before the device f32 block in the shared coverage buffer.
-    pub(super) fn device_alpha_base(&self) -> usize {
-        4 + self.frame.strips.len() * 6
-            + self.frame.spans.len() * 4
-            + self.frame.alphas.len().div_ceil(4)
-    }
-
-    pub(super) fn device_words(&self) -> usize {
-        self.frame.device_fills.last().map_or(0, |fill| {
-            crate::gpu::raster::device::DeviceGeometry::device_sample_end(
-                &self.frame.strips[fill.strip],
-            )
-        })
-    }
-
     pub(in crate::gpu) fn device_coverage(&mut self) -> Result<DeviceCoverage, ValidationError> {
         let frame = self.frame;
         let mut device = DeviceCoverage::default();
@@ -112,7 +97,6 @@ impl Planner<'_> {
                     "Could not reserve device edge descriptors",
                 )
             })?;
-        let alpha_base = self.device_alpha_base();
         for fill in frame.device_fills {
             let strip = &frame.strips[fill.strip];
             let fill_index = index(device.fills.len() as u64)?;
@@ -155,7 +139,7 @@ impl Planner<'_> {
             }
             device.fills.push(CoverageFill {
                 size: [strip.width, strip.height],
-                coverage: index((alpha_base + strip.alpha_offset) as u64)?,
+                coverage: index(strip.alpha_offset as u64)?,
                 rule: u32::from(fill.rule == FillRule::EvenOdd),
                 first_edge,
                 edge_count: index(fill.edges.len() as u64 + u64::from(fill.segments))?,

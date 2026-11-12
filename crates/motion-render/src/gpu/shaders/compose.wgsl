@@ -81,6 +81,10 @@ var layer_texture: texture_2d<f32>;
 @group(0) @binding(10)
 var<storage, read> frame_coverage: FrameCoverage;
 
+// Generated f32 device coverage; fills address it by their strip's alpha offset.
+@group(0) @binding(12)
+var<storage, read> device_coverage: array<f32>;
+
 // Values are host-narrowed f32 lanes; indexing retains their stored bits.
 fn value(index: u32) -> f32 {
     return settings.values[index / 4u][index % 4u];
@@ -488,9 +492,9 @@ fn frame_record_coverage_at(base: u32, record: u32, coordinate: vec2u) -> f32 {
 
         let local = coordinate - origin;
         let index = frame_coverage.values[offset + 4u] + local.y * size.x + local.x;
-        // The sixth strip word selects absolute f32 samples or packed CPU alpha bytes.
+        // The sixth strip word selects generated device samples or packed CPU alpha bytes.
         if frame_coverage.values[offset + 5u] != 0u {
-            return bitcast<f32>(frame_coverage.values[index]);
+            return device_coverage[index];
         }
         let packed = frame_coverage.values[frame_coverage.values[3u] + index / 4u];
         return coverage_alpha((packed >> ((index % 4u) * 8u)) & 255u);

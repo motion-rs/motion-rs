@@ -227,11 +227,10 @@ fn device_float_coverage_layout_and_admission() -> motion_core::Result {
     let limits = RasterLimits::default();
     let plan = Plan::new(&frame, limits)?;
     assert_eq!(plan.device.samples, 2);
-    let base = plan.device.fills[0].coverage as usize;
-    assert_eq!(plan.coverage.len(), base + 2);
+    assert_eq!(plan.device.fills[0].coverage, 0);
     for (index, fill) in frame.geometry.device_fills.iter().enumerate() {
         let strip = 4 + fill.strip * 6;
-        assert_eq!(plan.coverage[strip + 4] as usize, base + index);
+        assert_eq!(plan.coverage[strip + 4] as usize, index);
         assert_eq!(plan.coverage[strip + 5], 1);
     }
     assert!(

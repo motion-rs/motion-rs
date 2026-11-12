@@ -9,7 +9,7 @@ impl Gpu {
         &self,
         encoder: &mut wgpu::CommandEncoder,
         device: &DeviceCoverage,
-        coverage: &wgpu::Buffer,
+        samples: &wgpu::Buffer,
         working: &mut WorkingLease,
     ) {
         let pipelines = self.coverage_pipelines();
@@ -66,7 +66,7 @@ impl Gpu {
             wgpu::BufferUsages::STORAGE,
         );
         let buffers = [
-            &uniforms, &fills, &edges, &tiles, &indices, &carries, coverage, &curves,
+            &uniforms, &fills, &edges, &tiles, &indices, &carries, samples, &curves,
         ];
         let entries = buffers
             .iter()
