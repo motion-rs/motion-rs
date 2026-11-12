@@ -12,12 +12,18 @@ use video::video_benchmark;
 mod artwork;
 #[path = "performance/micro.rs"]
 mod micro;
+#[path = "performance/replay.rs"]
+mod replay;
 #[path = "performance/stages.rs"]
 mod stages;
 #[path = "support.rs"]
 mod support;
 #[path = "performance/video.rs"]
 mod video;
+#[cfg(feature = "gpu")]
+#[expect(dead_code, reason = "only the Replay visual tier is used here")]
+#[path = "../../motion-render/src/gpu/visual.rs"]
+mod visual;
 
 const CASES: &[&str] = &[
     "empty",
@@ -152,9 +158,9 @@ fn main() -> motion::Result {
                 let replay = session.render_frame(index, |context| {
                     artwork_with_particles(case, context, particle_count)
                 })?;
-                if first.packed_rgb() != replay.packed_rgb() {
-                    return Err(invalid(format!("Seek replay differs: {name}/{index}")));
-                }
+                replay::verify(&first, &replay, renderer).map_err(|error| {
+                    invalid(format!("Seek replay differs: {name}/{index}: {error}"))
+                })?;
                 report.reference(&format!("{renderer:?}-{case}-{index}.ppm"), &ppm(&first))?;
             }
             let measured = support::measure_output(
