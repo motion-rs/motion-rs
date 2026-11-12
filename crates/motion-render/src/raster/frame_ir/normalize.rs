@@ -79,7 +79,7 @@ impl<'a> FrameIr<'a> {
                     IrItem::PushLayer {
                         layer: PreparedLayer {
                             opacity: 1.0,
-                            bounds: super::super::prepare::pixel_bounds(capture, self.size),
+                            bounds: crate::raster::prepare::pixel_bounds(capture, self.size),
                             blend_mode: motion_core::BlendMode::SourceOver,
                             alpha_clip: None,
                             geometric_clip: None,
@@ -192,7 +192,7 @@ impl<'a> FrameIr<'a> {
                     IrItem::PushLayer {
                         layer: PreparedLayer {
                             opacity: *opacity,
-                            bounds: super::super::prepare::pixel_bounds(
+                            bounds: crate::raster::prepare::pixel_bounds(
                                 if padding == 0 {
                                     *source
                                 } else {
@@ -306,7 +306,7 @@ impl<'a> FrameIr<'a> {
             )?;
         }
         if let Paint::Solid(color) = source {
-            super::super::prepare::paint_record(*color, path)?;
+            crate::raster::prepare::paint_record(*color, path)?;
         }
         if let Paint::Pattern(pattern) = source
             && self.seen_images.insert(pattern.image.identity())

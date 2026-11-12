@@ -425,7 +425,7 @@ impl Gpu {
             return Err(motion_core::Error::Gpu(Box::new(error)));
         }
         let (frame, timestamps) = result?;
-        super::super::timing::TimestampRecorder::publish(timestamps);
+        crate::gpu::timing::TimestampRecorder::publish(timestamps);
         Ok(frame)
     }
 
@@ -659,7 +659,7 @@ impl Gpu {
         &mut self,
         frame: &PreparedScene,
         plan: &Plan,
-    ) -> motion_core::Result<(LinearFrame, Option<super::super::timing::CompletedTimings>)> {
+    ) -> motion_core::Result<(LinearFrame, Option<crate::gpu::timing::CompletedTimings>)> {
         let started = self.timing.as_ref().map(|_| std::time::Instant::now());
         let bytes = u64::from(plan.size.width) * u64::from(plan.size.height) * 16;
         let super::textures::EncodedLinear {
@@ -758,7 +758,7 @@ impl Gpu {
         status_readback.unmap();
         let timings = if result.is_ok() {
             timestamps
-                .map(super::super::timing::TimestampRecorder::finish)
+                .map(crate::gpu::timing::TimestampRecorder::finish)
                 .transpose()?
         } else {
             None

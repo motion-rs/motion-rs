@@ -25,7 +25,7 @@ pub(super) struct EncodedTexture {
     pub(super) status: wgpu::Buffer,
     pub(super) stats: WorkStats,
     pub(super) working: WorkingLease,
-    pub(super) timestamps: Option<super::super::timing::TimestampRecorder>,
+    pub(super) timestamps: Option<crate::gpu::timing::TimestampRecorder>,
 }
 
 pub(super) struct EncodedLinear {
@@ -34,7 +34,7 @@ pub(super) struct EncodedLinear {
     pub(super) status: wgpu::Buffer,
     pub(super) stats: WorkStats,
     pub(super) working: WorkingLease,
-    pub(super) timestamps: Option<super::super::timing::TimestampRecorder>,
+    pub(super) timestamps: Option<crate::gpu::timing::TimestampRecorder>,
 }
 
 impl Gpu {
@@ -195,7 +195,7 @@ impl Gpu {
                 label: Some("Texture working images"),
             });
         let timestamps =
-            super::super::timing::TimestampRecorder::new(&self.context, self.timing.clone());
+            crate::gpu::timing::TimestampRecorder::new(&self.context, self.timing.clone());
         if let Some(timestamps) = &timestamps {
             timestamps.write(&mut encoder, 0);
         }

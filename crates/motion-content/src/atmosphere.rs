@@ -24,83 +24,97 @@ use motion_core::{
 
 use crate::ImageAsset;
 
-pub use motion_core::AtmosphereKind;
+pub use motion_core::{AtmosphereKind, AtmosphereParameters};
 
 /// Editable bounded recipe; sampling retains no playback or random state.
+///
+/// The parameters are shared with the core paint, and the recipe dereferences to them so
+/// fields such as `opacity` remain directly editable. This type adds presets, baking and
+/// blend-mode selection.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Atmosphere {
-    /// Envelope and effect-specific parameters.
-    pub kind: AtmosphereKind,
-    /// Explicit noise and mote seed.
-    pub seed: u32,
-    /// Encoded-sRGB tint, converted once to linear light.
-    pub color: Color,
-    /// Alpha/density multiplier, in 0..=1.
-    pub opacity: f64,
-    /// Straight-linear RGB multiplier, in 0..=64; values above one are HDR.
-    pub intensity: f64,
-    /// Base noise wavelength / dust-cell spacing in pixels, in 0.25..=1000000.
-    pub scale: f64,
-    /// Pattern velocity in pixels per second.
-    pub drift: [f64; 2],
-    /// Shared amplitude-normalized fBm parameters, with at most eight octaves.
-    pub fractal: Fractal,
+    parameters: AtmosphereParameters,
+}
+
+impl std::ops::Deref for Atmosphere {
+    type Target = AtmosphereParameters;
+
+    fn deref(&self) -> &Self::Target {
+        &self.parameters
+    }
+}
+
+impl std::ops::DerefMut for Atmosphere {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.parameters
+    }
 }
 
 impl Atmosphere {
+    /// Wraps explicit parameters; they are validated when the recipe is painted or rendered.
+    pub const fn new(parameters: AtmosphereParameters) -> Self {
+        Self { parameters }
+    }
+
     /// A pale, low-contrast fog layer, denser near the bottom edge.
     pub fn fog(seed: u32) -> Self {
         Self {
-            kind: AtmosphereKind::Fog {
-                gradient: [0.15, 1.0],
+            parameters: AtmosphereParameters {
+                kind: AtmosphereKind::Fog {
+                    gradient: [0.15, 1.0],
+                },
+                seed,
+                color: Color::rgb(220, 233, 230),
+                opacity: 0.45,
+                intensity: 1.0,
+                scale: 96.0,
+                drift: [6.0, -2.0],
+                fractal: Fractal::default(),
             },
-            seed,
-            color: Color::rgb(220, 233, 230),
-            opacity: 0.45,
-            intensity: 1.0,
-            scale: 96.0,
-            drift: [6.0, -2.0],
-            fractal: Fractal::default(),
         }
     }
 
     /// Sparse warm HDR dust, suitable for Plus or Screen composition.
     pub fn dust(seed: u32) -> Self {
         Self {
-            kind: AtmosphereKind::Dust {
-                radius: 2.0,
-                coverage: 0.3,
+            parameters: AtmosphereParameters {
+                kind: AtmosphereKind::Dust {
+                    radius: 2.0,
+                    coverage: 0.3,
+                },
+                seed,
+                color: Color::rgb(255, 238, 209),
+                opacity: 0.65,
+                intensity: 4.0,
+                scale: 24.0,
+                drift: [5.0, -12.0],
+                fractal: Fractal::default(),
             },
-            seed,
-            color: Color::rgb(255, 238, 209),
-            opacity: 0.65,
-            intensity: 4.0,
-            scale: 24.0,
-            drift: [5.0, -12.0],
-            fractal: Fractal::default(),
         }
     }
 
     /// Warm HDR light entering from the left edge.
     pub fn light_leak(seed: u32) -> Self {
         Self {
-            kind: AtmosphereKind::LightLeak {
-                center: [0.0, 0.5],
-                extent: [0.3, 0.65],
+            parameters: AtmosphereParameters {
+                kind: AtmosphereKind::LightLeak {
+                    center: [0.0, 0.5],
+                    extent: [0.3, 0.65],
+                },
+                seed,
+                color: Color::rgb(255, 100, 32),
+                opacity: 0.8,
+                intensity: 3.0,
+                scale: 128.0,
+                drift: [2.0, 1.0],
+                fractal: Fractal::default(),
             },
-            seed,
-            color: Color::rgb(255, 100, 32),
-            opacity: 0.8,
-            intensity: 3.0,
-            scale: 128.0,
-            drift: [2.0, 1.0],
-            fractal: Fractal::default(),
         }
     }
 
     /// Validates the full recipe before noise evaluation or allocation.
     pub fn validate(&self) -> Result<(), ValidationError> {
-        self.parameters().validate()
+        self.parameters.validate()
     }
 
     /// Captures the same recipe as an independently evaluated CPU/GPU paint.
@@ -112,20 +126,7 @@ impl Atmosphere {
         canvas: PixelSize,
         time: Time,
     ) -> Result<motion_core::AtmospherePaint, ValidationError> {
-        motion_core::AtmospherePaint::new(self.parameters(), canvas, time)
-    }
-
-    fn parameters(&self) -> motion_core::AtmosphereParameters {
-        motion_core::AtmosphereParameters {
-            kind: self.kind,
-            seed: self.seed,
-            color: self.color,
-            opacity: self.opacity,
-            intensity: self.intensity,
-            scale: self.scale,
-            drift: self.drift,
-            fractal: self.fractal,
-        }
+        motion_core::AtmospherePaint::new(self.parameters, canvas, time)
     }
 
     /// Blend mode that composes this recipe without darkening: Screen for fog, Plus for HDR light.
@@ -222,7 +223,7 @@ impl Atmosphere {
             pixels * (u64::from(self.fractal.octaves) * 192 + 256) + mip_pixels * 128,
             "atmosphere",
         )?;
-        let parameters = self.parameters();
+        let parameters = self.parameters;
         let mut values = Vec::new();
         values.try_reserve_exact(pixels as usize).map_err(|_| {
             ValidationError::limit(
@@ -262,7 +263,7 @@ mod tests {
             Atmosphere::light_leak(42),
         ] {
             let paint = recipe.paint(size, time)?;
-            assert_eq!(paint.parameters(), &recipe.parameters());
+            assert_eq!(paint.parameters(), &recipe.parameters);
             assert_eq!(paint.time(), time);
             assert_eq!(paint.canvas(), size);
             let image = recipe.render(size, time, RasterLimits::default())?;
@@ -341,10 +342,8 @@ mod tests {
             )?;
             assert_eq!(frame.packed_rgb(), manual.packed_rgb());
         }
-        let invalid = Atmosphere {
-            opacity: 2.0,
-            ..Atmosphere::fog(1)
-        };
+        let mut invalid = Atmosphere::fog(1);
+        invalid.opacity = 2.0;
         assert!(
             invalid
                 .overlay(size, 0.seconds().after_origin(), RasterLimits::default())
@@ -508,30 +507,27 @@ mod tests {
             )
             .is_err()
         );
+        let edited = |edit: &dyn Fn(&mut Atmosphere)| {
+            let mut recipe = base;
+            edit(&mut recipe);
+            recipe
+        };
         for recipe in [
-            Atmosphere { scale: 0.0, ..base },
-            Atmosphere {
-                intensity: f64::NAN,
-                ..base
-            },
-            Atmosphere {
-                drift: [f64::MAX, 0.0],
-                ..base
-            },
-            Atmosphere {
-                fractal: Fractal {
+            edited(&|recipe| recipe.scale = 0.0),
+            edited(&|recipe| recipe.intensity = f64::NAN),
+            edited(&|recipe| recipe.drift = [f64::MAX, 0.0]),
+            edited(&|recipe| {
+                recipe.fractal = Fractal {
                     octaves: 9,
                     ..Fractal::default()
-                },
-                ..base
-            },
-            Atmosphere {
-                kind: AtmosphereKind::Dust {
+                }
+            }),
+            edited(&|recipe| {
+                recipe.kind = AtmosphereKind::Dust {
                     radius: 100.0,
                     coverage: 0.5,
-                },
-                ..base
-            },
+                }
+            }),
         ] {
             assert!(
                 recipe

@@ -33,16 +33,21 @@ pub(crate) const CURVE_FLATTEN_WORK_PER_SEGMENT: u64 = 32;
 /// Largest local coordinate magnitude that f32 edge records resolve to a small fraction of a byte.
 const DEVICE_COORDINATE_LIMIT: f64 = 8192.0;
 
-/// Most fills one frame may leave to the GPU.
+/// Most fills one frame may leave to the GPU: 2^15 keeps the fill descriptor table, whose entries
+/// are `COVERAGE_FILL_BYTES` each, to 1.5 MiB.
 const DEVICE_MAX_FILLS: usize = 1 << 15;
 
-/// Most bounding-box pixels one frame may leave to the GPU, bounding the dispatch size.
+/// Most bounding-box pixels one frame may leave to the GPU, bounding the dispatch size: 2^24 is
+/// 4096 x 4096, and the f32 coverage block then stays at 64 MiB.
 const DEVICE_MAX_PIXELS: u64 = 1 << 24;
 
-/// Most conservatively admitted tile coverage work units in one fill.
+/// Most conservatively admitted tile coverage work units in one fill. Chosen empirically as the
+/// smallest power of two that admits the v3 SVG and text acceptance scenes.
 const DEVICE_MAX_FILL_VISITS: u64 = 1 << 28;
 
-/// Most conservatively admitted tile coverage work units in one frame.
+/// Most conservatively admitted tile coverage work units in one frame. Four fill ceilings: it
+/// bounds total dispatch time, and a 2^32 trial made the dense v3 benchmark scenes run for
+/// minutes, so larger frames are rejected instead.
 const DEVICE_MAX_FRAME_VISITS: u64 = 1 << 30;
 
 /// A path the device coverage pipeline cannot admit; GPU preparation has no CPU coverage route.

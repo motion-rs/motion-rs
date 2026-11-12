@@ -182,7 +182,7 @@ pub(crate) struct DeviceFill {
     pub(crate) strip: usize,
     /// Range in the GPU frame's independently owned device edges.
     pub(crate) edges: Range<usize>,
-    /// Curve descriptors expanded by the GPU; empty for the line compatibility path.
+    /// Curve descriptors expanded by the GPU; empty when the fill is described by `edges` alone.
     pub(crate) curves: Range<usize>,
     /// Statically admitted generated edge slots.
     pub(crate) segments: u32,

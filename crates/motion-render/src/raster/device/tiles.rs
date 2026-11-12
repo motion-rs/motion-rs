@@ -36,7 +36,8 @@ pub(crate) const COVERAGE_CURVE_BYTES: u64 = 48;
 #[cfg(feature = "gpu")]
 pub(crate) const COVERAGE_PARAMS_BYTES: u64 = 16;
 
-/// Maximum conservatively admitted edge references in one tile.
+/// Maximum conservatively admitted edge references in one tile. Every refined pixel scans this
+/// list 64 times, so the cap bounds the worst per-pixel shader loop at 2^18 edge tests.
 const MAX_TILE_EDGES: u32 = 4096;
 
 /// Maximum control hulls used to admit one curve, without generating its line segments.

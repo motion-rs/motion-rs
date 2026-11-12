@@ -1,5 +1,9 @@
 // Version-one core analytic protocol: 20 header words followed by eight-word seeded initial facts.
 // The output is the ordinary four-word instance header followed by twelve-word primitive records.
+//
+// `evaluate` mirrors `TrajectoryDefinition::evaluate` in motion-content (particles/trajectory.rs)
+// in f32: kind 1 is ballistic with drag, 2 is converge (smoothstep), 3 is orbit and 4 is noise
+// drift. `value_noise` mirrors `motion_core::animation::value_noise`. Keep both implementations in sync.
 @group(0) @binding(0) var<storage, read> program: array<f32>;
 @group(0) @binding(1) var<storage, read_write> primitives: array<f32>;
 @group(0) @binding(2) var<storage, read_write> status: atomic<u32>;

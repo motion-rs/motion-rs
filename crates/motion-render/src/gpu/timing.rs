@@ -251,7 +251,7 @@ mod tests {
         let submission = context.queue.submit(Some(encoder.finish()));
         recorder.map();
         assert!(handle.get().is_none());
-        super::super::wait_for_gpu(&context.device, Some(submission))?;
+        crate::gpu::wait_for_gpu(&context.device, Some(submission))?;
         assert!(pollster::block_on(validation_scope.pop()).is_none());
         let completed = recorder.finish()?;
         let timings = completed.1;
