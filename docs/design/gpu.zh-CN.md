@@ -6,7 +6,7 @@
 
 - 启用 `gpu` feature 时，引擎默认使用 GPU 后端；未启用时默认使用 CPU 后端。`BackendPreference::Cpu` 显式选择标量参考后端，且不会接触任何设备。
 - `Gpu` 需要受支持的原生 wgpu 适配器。仅当 `allow_software` 为 true 时才接受软件适配器。
-- 不会回退到 CPU。适配器、策略与自检失败、不支持的内容、计划被拒绝、设备丢失和执行失败，都以带类型的错误返回。`Renderer` 只报告实际使用的后端。
+- 不会回退到 CPU。适配器、策略与自检失败、不支持的内容、计划被拒绝、设备丢失和执行失败，都以带类型的错误返回。`BackendKind` 只报告实际使用的后端。
 - `GpuContext` 拥有设备、队列、管线、设备丢失监视器和提交串行化。克隆共享同一身份。Studio 与外部纹理通过导入已有的兼容设备（`GpuContext::from_existing`）接入，而不是每帧创建设备。
 - `RenderOptions::gpu_context` 是显式注入点。`RenderContext` 只拥有资源与结构策略，不拥有设备；挂载设备并不会选择后端。`RenderSession` 负责后端决策与请求级诊断，上下文克隆维持共享设备的生命周期。
 

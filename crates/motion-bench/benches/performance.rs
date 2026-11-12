@@ -3,7 +3,7 @@
 use artwork::artwork_with_particles;
 use micro::microbenchmarks;
 use motion::prelude::*;
-use motion::render::Renderer;
+use motion::render::BackendKind;
 use motion::render::{Composition, FrameBuffer, RasterLimits};
 use stages::cpu_stages;
 use video::video_benchmark;
@@ -134,7 +134,7 @@ fn main() -> motion::Result {
         )
         .with_options(
             motion::render::RenderOptions::default()
-                .backend(motion::render::BackendPreference::from_renderer(renderer))
+                .backend(motion::render::BackendPreference::from_kind(renderer))
                 .quality(motion::RenderQuality::Final)
                 .resources(resources.clone())
                 .limits(limits),
@@ -206,9 +206,9 @@ fn main() -> motion::Result {
                     &settings,
                     1,
                 )?;
-                report.record(format!("{name}/cold-session"),measured,json!({"adapter":adapter,"includes_gpu_device_creation":renderer==Renderer::Gpu}))?;
+                report.record(format!("{name}/cold-session"),measured,json!({"adapter":adapter,"includes_gpu_device_creation":renderer==BackendKind::Gpu}))?;
             }
-            if stages && renderer == Renderer::Cpu {
+            if stages && renderer == BackendKind::Cpu {
                 cpu_stages(
                     &mut report,
                     case,

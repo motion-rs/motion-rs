@@ -250,7 +250,7 @@ mod tests {
     use super::*;
     use motion_core::Shape;
     use motion_core::{BlendMode, Node, NodeModifiers, Rect, Size, TimeLiteral};
-    use motion_render::{Composition, Renderer};
+    use motion_render::{BackendKind, Composition};
 
     #[test]
     fn procedural_paint_preserves_recipe_time_and_unquantized_bake_reference() -> motion_core::Result
@@ -286,7 +286,7 @@ mod tests {
     fn compose(
         recipe: Atmosphere,
         mode: BlendMode,
-        renderer: Renderer,
+        renderer: BackendKind,
         time: Time,
     ) -> motion_core::Result<motion_render::FrameBuffer> {
         let size = PixelSize::new(64, 48);
@@ -298,7 +298,7 @@ mod tests {
         )
         .with_options(
             motion_render::RenderOptions::default()
-                .backend(motion_render::BackendPreference::from_renderer(renderer)),
+                .backend(motion_render::BackendPreference::from_kind(renderer)),
         )?
         .render_frame(0, Size::new(64.0, 48.0), |_| {
             Node::group([
@@ -343,7 +343,7 @@ mod tests {
             let manual = compose(
                 recipe,
                 recipe.blend_mode(),
-                Renderer::Cpu,
+                BackendKind::Cpu,
                 1.seconds().after_origin(),
             )?;
             assert_eq!(frame.packed_rgb(), manual.packed_rgb());
@@ -366,14 +366,16 @@ mod tests {
             Atmosphere::light_leak(42),
         ] {
             for mode in [BlendMode::Plus, BlendMode::Screen] {
-                let frame = compose(recipe, mode, Renderer::Cpu, 0.seconds().after_origin())?;
+                let frame = compose(recipe, mode, BackendKind::Cpu, 0.seconds().after_origin())?;
                 assert_eq!(
                     frame.packed_rgb(),
-                    compose(recipe, mode, Renderer::Cpu, 0.seconds().after_origin())?.packed_rgb()
+                    compose(recipe, mode, BackendKind::Cpu, 0.seconds().after_origin())?
+                        .packed_rgb()
                 );
                 assert_ne!(
                     frame.packed_rgb(),
-                    compose(recipe, mode, Renderer::Cpu, 1.seconds().after_origin())?.packed_rgb()
+                    compose(recipe, mode, BackendKind::Cpu, 1.seconds().after_origin())?
+                        .packed_rgb()
                 );
                 assert!(
                     frame
@@ -395,11 +397,12 @@ mod tests {
             Atmosphere::light_leak(42),
         ] {
             for mode in [BlendMode::Plus, BlendMode::Screen] {
-                let cpu = compose(recipe, mode, Renderer::Cpu, 1.seconds().after_origin())?;
-                let gpu = compose(recipe, mode, Renderer::Gpu, 1.seconds().after_origin())?;
+                let cpu = compose(recipe, mode, BackendKind::Cpu, 1.seconds().after_origin())?;
+                let gpu = compose(recipe, mode, BackendKind::Gpu, 1.seconds().after_origin())?;
                 assert_eq!(
                     gpu.packed_rgb(),
-                    compose(recipe, mode, Renderer::Gpu, 1.seconds().after_origin())?.packed_rgb()
+                    compose(recipe, mode, BackendKind::Gpu, 1.seconds().after_origin())?
+                        .packed_rgb()
                 );
                 for (cpu, gpu) in cpu.packed_rgb().iter().zip(gpu.packed_rgb()) {
                     for (cpu, gpu) in cpu.to_le_bytes().into_iter().zip(gpu.to_le_bytes()) {

@@ -4,7 +4,7 @@
 
 use super::{FrameExecution, PreparedOutput};
 use crate::composition::FrameStats;
-use crate::{RasterLimits, Renderer, WorkStats};
+use crate::{BackendKind, RasterLimits, WorkStats};
 use motion_core::{
     Color, Node, Result, SceneContext, Shape, Time, ValidatedDisplayList, ValidationLimits,
 };
@@ -16,7 +16,7 @@ impl FrameExecution<'_> {
     /// Shared context after startup selection; None means the CPU renderer.
     pub fn selected_gpu_context(&mut self) -> Result<Option<crate::GpuContext>> {
         let renderer = self.select_backend()?;
-        Ok(if renderer == Renderer::Gpu {
+        Ok(if renderer == BackendKind::Gpu {
             self.gpu.as_ref().map(|gpu| gpu.context().clone())
         } else {
             None
@@ -149,7 +149,7 @@ impl FrameExecution<'_> {
         prepared: &PreparedOutput,
         limits: RasterLimits,
     ) -> Result<GpuPlan> {
-        if self.renderer() != Renderer::Gpu {
+        if self.backend_kind() != BackendKind::Gpu {
             return Ok(None);
         }
         let started = self.timings.map(|_| std::time::Instant::now());
@@ -193,7 +193,7 @@ impl FrameExecution<'_> {
                     == (crate::PixelFormat::SrgbRgba8 {
                         premultiplied: false,
                     });
-        if self.renderer() == Renderer::Cpu
+        if self.backend_kind() == BackendKind::Cpu
             || !packed
             || !crate::gpu::Gpu::supports_packed_output(prepared.size(), format)
         {
@@ -207,7 +207,7 @@ impl FrameExecution<'_> {
         if let Some(started) = started {
             self.timings.as_mut().expect("enabled timings").plan += started.elapsed();
         }
-        if self.select_backend()? != Renderer::Gpu {
+        if self.select_backend()? != BackendKind::Gpu {
             return Ok(None);
         }
         let stats = plan.packed_stats(prepared.size(), format)?;

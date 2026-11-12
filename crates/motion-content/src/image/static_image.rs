@@ -7,7 +7,7 @@
 //!     DisplayList, RasterLimits, ResourceStore, ValidatedDisplayList, MAX_PATH_VERBS,
 //!     MAX_STROKE_VERBS, MAX_SVG_PATH_BYTES, sample_offsets,
 //! };
-//! use motion_render::{Composition, RenderPrepare, RenderOptions, Renderer, render_still};
+//! use motion_render::{Composition, RenderPrepare, RenderOptions, BackendKind, render_still};
 //! use std::sync::Arc;
 //! let asset = Arc::new(ImageAsset::from_rgba8(
 //!     2,

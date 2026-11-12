@@ -356,7 +356,7 @@ rounding. Motion blur may call the builder multiple times.
 - The request background overrides the options' background. `render_frame*` composites over
   `RenderOptions::background` made opaque, or white when absent; `render_still` and direct
   requests keep transparency when no background is given.
-- `renderer()` reports the renderer fixed by the backend preference; `requested_backend()`
+- `backend_kind()` reports the backend kind fixed by the backend preference; `requested_backend()`
   reports the preference itself.
 
 ## Resources and Content

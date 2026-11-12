@@ -15,7 +15,7 @@ use eframe::egui::Color32;
 use eframe::egui::{ColorImage, Context};
 
 use super::StudioScene;
-use motion_render::{FrameRenderer, Renderer};
+use motion_render::{BackendKind, FrameRenderer};
 
 mod pool;
 #[cfg(feature = "gpu")]
@@ -39,7 +39,7 @@ use motion_render::FrameBuffer;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct PreviewKey {
     pub frame: u32,
-    pub renderer: Renderer,
+    pub renderer: BackendKind,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -231,13 +231,13 @@ struct PreviewRenderer {
 }
 
 impl PreviewRenderer {
-    fn new(scene: &StudioScene, renderer: Renderer) -> motion_core::Result<Self> {
+    fn new(scene: &StudioScene, renderer: BackendKind) -> motion_core::Result<Self> {
         let mut frame_renderer = scene
             .composition
             .clone()
             .configure(|options| {
                 options
-                    .backend(motion_render::BackendPreference::from_renderer(renderer))
+                    .backend(motion_render::BackendPreference::from_kind(renderer))
                     .allow_missing_assets(true)
                     .mark_invalid_geometry(true)
             })
@@ -406,7 +406,7 @@ impl PreviewRenderer {
             None
         };
         Ok(PreviewSubmission::Ready(Box::new(PreviewImage {
-            backend: format!("{:?}", self.renderer.renderer()),
+            backend: format!("{:?}", self.renderer.backend_kind()),
             image: Arc::new(if settings.pixels {
                 ColorImage::from_rgba_unmultiplied(
                     [width as usize, height as usize],

@@ -615,7 +615,7 @@ fn shared_context_texture_target_self_check_and_device_loss_are_real() -> motion
         first.render_frame(0, |_| node.clone())?.packed_rgb(),
         second.render_frame(0, |_| node.clone())?.packed_rgb()
     );
-    assert_eq!(first.renderer(), crate::Renderer::Gpu);
+    assert_eq!(first.backend_kind(), crate::BackendKind::Gpu);
     context.device().destroy();
     let _ = wait_for_gpu(context.device(), None);
     assert!(

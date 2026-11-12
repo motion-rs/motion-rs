@@ -7,7 +7,7 @@
 //!     DisplayList, RasterLimits, ResourceStore, ValidatedDisplayList, MAX_PATH_VERBS,
 //!     MAX_STROKE_VERBS, MAX_SVG_PATH_BYTES, sample_offsets,
 //! };
-//! use motion_render::{Composition, RenderPrepare, RenderOptions, Renderer, render_still};
+//! use motion_render::{Composition, RenderPrepare, RenderOptions, BackendKind, render_still};
 //! use motion_core::Scene as _;
 //! let timeline = Timeline::new(Size::new(4.0, 2.0), fps!(30)).track(|track| {
 //!     track.push((|_: &SceneContext<'_>| Node::empty()).with_duration(1.seconds()))
@@ -176,7 +176,7 @@ fn export_through(
         &options,
         end - first - 1,
         observed_peak,
-        renderer.renderer(),
+        renderer.backend_kind(),
     );
     let mut write = |frame: i64, pixels: FrameBuffer| -> Result<()> {
         cancelled(progress)?;

@@ -175,7 +175,7 @@ session.render(FrameRequest {
 - 内存目标仅在成功时才被替换，渲染期间其旧的保留载荷仍然计费。外部纹理在 GPU 失败后没有回滚保证。
 - 每个请求安装新的诊断并清除之前的总量。`last_stats` 描述成功的内存输出，而不是外部纹理的转换。每个阶段报告 `WorkStats { peak_bytes, work }`，`RenderSession::report()` 把统计、计时与渲染器汇总为一个 `FrameReport`。
 - 请求中的背景覆盖选项中的背景。`render_frame*` 合成在 `RenderOptions::background`（取为不透明）之上，未设置时为白色；`render_still` 与直接请求在没有给定背景时保持透明。
-- `renderer()` 报告由后端偏好确定的渲染器；`requested_backend()` 报告偏好本身。
+- `backend_kind()` 报告由后端偏好确定的后端类型；`requested_backend()` 报告偏好本身。
 
 ## 资源与内容
 

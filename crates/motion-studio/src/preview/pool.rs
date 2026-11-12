@@ -307,7 +307,7 @@ impl PreviewCoordinator {
     pub fn request_thumbnail(&self, key: PreviewKey) {
         let mut state = self.shared.0.lock_unpoisoned();
         let key = PreviewKey {
-            renderer: Renderer::Cpu,
+            renderer: BackendKind::Cpu,
             ..key
         };
         if state.thumbnails.entries.iter().any(|entry| entry.0 == key) {

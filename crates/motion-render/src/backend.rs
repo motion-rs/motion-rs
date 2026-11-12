@@ -20,7 +20,7 @@ pub(crate) fn software_adapter(name: &str, device_type: &str) -> bool {
 ///
 /// The default is the GPU when feature `gpu` is enabled and the CPU reference otherwise.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Renderer {
+pub enum BackendKind {
     /// Bounded CPU reference rasterizer; does not require a window or GPU adapter.
     Cpu,
     /// Native wgpu composition using an available Metal, Vulkan or DX12 adapter.
@@ -28,16 +28,16 @@ pub enum Renderer {
     Gpu,
 }
 
-impl Default for Renderer {
+impl Default for BackendKind {
     fn default() -> Self {
-        BackendPreference::default().renderer()
+        BackendPreference::default().kind()
     }
 }
 
 /// Requested native backend; the GPU never silently falls back to the CPU.
 ///
-/// This is the only way to choose a backend; [`BackendPreference::renderer`] reports the
-/// [`Renderer`] it fixes. The default is the GPU on hardware adapters when feature `gpu`
+/// This is the only way to choose a backend; [`BackendPreference::kind`] reports the
+/// [`BackendKind`] it fixes. The default is the GPU on hardware adapters when feature `gpu`
 /// is enabled and the CPU reference otherwise.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BackendPreference {
@@ -68,11 +68,11 @@ impl BackendPreference {
         }
     }
 
-    /// Renderer this preference selects; a GPU request never resolves to the CPU.
-    pub const fn renderer(self) -> Renderer {
+    /// Backend kind this preference selects; a GPU request never resolves to the CPU.
+    pub const fn kind(self) -> BackendKind {
         match self {
-            Self::Cpu => Renderer::Cpu,
-            Self::Gpu { .. } => Renderer::Gpu,
+            Self::Cpu => BackendKind::Cpu,
+            Self::Gpu { .. } => BackendKind::Gpu,
         }
     }
 
@@ -93,10 +93,10 @@ impl BackendPreference {
     }
 
     /// Preference requesting exactly `renderer`; the GPU is hardware-only.
-    pub const fn from_renderer(renderer: Renderer) -> Self {
-        match renderer {
-            Renderer::Cpu => Self::Cpu,
-            Renderer::Gpu => Self::gpu(),
+    pub const fn from_kind(kind: BackendKind) -> Self {
+        match kind {
+            BackendKind::Cpu => Self::Cpu,
+            BackendKind::Gpu => Self::gpu(),
         }
     }
 
@@ -146,7 +146,7 @@ mod tests {
             })
             .unwrap_err();
         assert!(error.to_string().contains("precision"), "{error}");
-        assert_eq!(session.renderer(), crate::Renderer::Gpu);
+        assert_eq!(session.backend_kind(), crate::BackendKind::Gpu);
         Ok(())
     }
 
@@ -157,7 +157,7 @@ mod tests {
             cfg!(feature = "gpu")
         );
         assert_eq!(
-            crate::Renderer::default() == crate::Renderer::Gpu,
+            crate::BackendKind::default() == crate::BackendKind::Gpu,
             cfg!(feature = "gpu")
         );
     }

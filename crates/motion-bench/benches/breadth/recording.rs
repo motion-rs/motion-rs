@@ -7,7 +7,7 @@ use super::scenes::artwork;
 use super::{DESIGN, MAX_NODES, invalid, support};
 use motion::extend::RenderPrepare;
 use motion::prelude::*;
-use motion::render::Renderer;
+use motion::render::BackendKind;
 use motion::render::{Composition, SceneCache, ValidationLimits};
 use std::hint::black_box;
 
@@ -92,7 +92,7 @@ pub(super) fn record_frame(
 pub(super) fn record_memory_frame(
     report: &mut support::Report,
     composition: &Composition,
-    renderer: Renderer,
+    renderer: BackendKind,
     name: &str,
     case: &str,
     settings: &support::Settings,
@@ -129,7 +129,7 @@ pub(super) fn record_memory_frame(
         over_one += usize::from(difference > 1);
     }
     let pixels = snapshot.bytes().len() / 4;
-    let exact = renderer == Renderer::Cpu;
+    let exact = renderer == BackendKind::Cpu;
     if (exact && maximum != 0) || (!exact && (maximum > 2 || over_one * 1000 >= pixels)) {
         return Err(invalid(format!(
             "Memory output differs from snapshot: {name}, max={maximum}, over_one={over_one}"

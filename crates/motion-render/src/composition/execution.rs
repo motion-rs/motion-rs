@@ -4,7 +4,7 @@
 //! CPU and GPU backends use only explicitly supplied fonts; nothing is discovered implicitly.
 
 use super::*;
-use crate::{RasterLimits, RenderContext, Renderer, WorkStats};
+use crate::{BackendKind, RasterLimits, RenderContext, WorkStats};
 use motion_core::{Color, Node, Result, SceneContext, Shape, Time, ValidationError};
 
 mod backend;
@@ -25,7 +25,7 @@ pub(super) struct FrameExecution<'a> {
     pub(super) time: Option<Time>,
     pub(super) limits: RasterLimits,
     pub(super) device_packing: bool,
-    pub(super) preparation_backend: Option<Renderer>,
+    pub(super) preparation_backend: Option<BackendKind>,
     pub(super) session: &'a mut RenderSession,
 }
 
@@ -123,7 +123,7 @@ impl FrameExecution<'_> {
     ) -> Result<crate::FrameBuffer> {
         self.output_pool.trim(limits.max_bytes / 8);
         let started = self.timings.map(|_| std::time::Instant::now());
-        let cpu = self.renderer() == Renderer::Cpu;
+        let cpu = self.backend_kind() == BackendKind::Cpu;
         let display = self.composition.options.display.clone();
         if cpu && (!prepared.items.is_empty() || !display.is_identity()) {
             self.select_backend()?;

@@ -14,7 +14,7 @@ English page is the source of truth.
   when `allow_software` is true.
 - Nothing falls back to the CPU. Adapter, policy and self-check failures, unsupported
   content, plan rejection, device loss and execution failures are typed errors.
-  `Renderer` only reports the backend that was actually used.
+  `BackendKind` only reports the backend that was actually used.
 - `GpuContext` owns the device, queue, pipelines, device-loss monitor and submission
   serialization. Clones share that identity. Studio and external textures import an
   existing compatible device (`GpuContext::from_existing`) instead of creating one

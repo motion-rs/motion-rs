@@ -6,7 +6,7 @@ mod layer_format_tests {
     #[ignore = "requires a native GPU; checks layer attachment capabilities without a window"]
     fn native_layer_attachment_capabilities() -> motion_core::Result {
         pollster::block_on(async {
-            let instance = crate::gpu::instance(crate::Renderer::Gpu)?;
+            let instance = crate::gpu::instance(crate::BackendKind::Gpu)?;
             let adapter = instance
                 .request_adapter(&wgpu::RequestAdapterOptions::default())
                 .await

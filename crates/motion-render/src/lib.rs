@@ -16,7 +16,7 @@ pub mod output;
 pub mod prepared;
 pub(crate) mod raster;
 
-pub use backend::{BackendPreference, Renderer};
+pub use backend::{BackendKind, BackendPreference};
 pub use composition::{
     Composition, FrameAt, FrameClock, FrameRenderer, FrameReport, FrameRequest, FrameStats,
     RenderSession,
@@ -37,12 +37,12 @@ pub use prepared::{
 /// Rendering contracts used alongside core authoring values.
 pub mod prelude {
     pub use crate::{
+        BackendKind, FrameBuffer, PixelFormat, PixelPlane, PreparedFrame, RenderContext,
+        RenderPrepare, RenderTarget,
+    };
+    pub use crate::{
         BackendPreference, FrameAt, FrameClock, FrameRenderer, FrameRequest, FrameStats,
         RenderOptions, RenderQuality, RenderSession, render_still,
     };
     pub use crate::{Cdl, DisplayTransform, FilmGrain, OutputTransfer, ToneMap};
-    pub use crate::{
-        FrameBuffer, PixelFormat, PixelPlane, PreparedFrame, RenderContext, RenderPrepare,
-        RenderTarget, Renderer,
-    };
 }

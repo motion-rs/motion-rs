@@ -92,7 +92,7 @@ pub enum InstanceBlend {
     Multiply,
 }
 
-/// Renderer-independent evaluated geometry, encoded as twelve device words.
+/// Backend-independent evaluated geometry, encoded as twelve device words.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct InstanceRecord {
     /// Circle center or segment endpoint in local coordinates.

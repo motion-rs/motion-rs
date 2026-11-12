@@ -25,7 +25,7 @@ use crate::preview::PreviewCoordinator;
 use crate::session::{read_session, write_session};
 use eframe::egui::{self, RichText};
 use motion_core::Result;
-use motion_render::Renderer;
+use motion_render::BackendKind;
 
 mod reload;
 mod scene;
@@ -43,7 +43,7 @@ pub(crate) struct StudioApp {
     pub(crate) scene: StudioScene,
     pub(crate) clock: StudioClock,
 
-    pub(crate) renderer: Renderer,
+    pub(crate) renderer: BackendKind,
     pub(crate) gpu_available: bool,
     pub(crate) preview_settings: preview::PreviewSettings,
 
@@ -107,7 +107,7 @@ type TextureRegistrar = dyn Fn(&wgpu::Texture) -> egui::TextureId;
 ///     DisplayList, RasterLimits, ResourceStore, ValidatedDisplayList, MAX_PATH_VERBS,
 ///     MAX_STROKE_VERBS, MAX_SVG_PATH_BYTES, sample_offsets,
 /// };
-/// use motion_render::{Composition, RenderPrepare, RenderOptions, Renderer, render_still};
+/// use motion_render::{Composition, RenderPrepare, RenderOptions, BackendKind, render_still};
 /// use motion_studio::{self as studio, StudioScene};
 /// # fn main() -> motion_core::Result {
 /// let timeline = Timeline::try_new(Size::new(640.0, 360.0), fps!(30))?
@@ -269,7 +269,7 @@ impl StudioApp {
             scene,
             clock,
 
-            renderer: Renderer::Cpu,
+            renderer: BackendKind::Cpu,
             gpu_available,
             preview_settings: preview::PreviewSettings {
                 quality: motion_core::RenderQuality::Final,

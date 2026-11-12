@@ -4,7 +4,7 @@ use motion_content::AssetsExt;
 
 use std::sync::Arc;
 
-use crate::Renderer;
+use crate::BackendKind;
 
 use motion_core::{Assets, Node, SceneStats, ValidationError, ValidationLimits};
 
@@ -65,10 +65,10 @@ impl RenderCapabilities {
     }
 
     /// Whether the selected composition backend is compiled for this platform.
-    pub fn supports(self, renderer: Renderer) -> bool {
+    pub fn supports(self, renderer: BackendKind) -> bool {
         match renderer {
-            Renderer::Cpu => self.software,
-            Renderer::Gpu => self.gpu,
+            BackendKind::Cpu => self.software,
+            BackendKind::Gpu => self.gpu,
         }
     }
 }
@@ -152,9 +152,9 @@ mod tests {
     #[test]
     fn compiled_gpu_policy_is_distinct_from_live_adapter_metadata() {
         let capabilities = RenderCapabilities::compiled();
-        assert!(capabilities.supports(Renderer::Cpu));
+        assert!(capabilities.supports(BackendKind::Cpu));
         assert_eq!(
-            capabilities.supports(Renderer::Gpu),
+            capabilities.supports(BackendKind::Gpu),
             cfg!(all(feature = "gpu", not(target_arch = "wasm32")))
         );
         assert_eq!(
@@ -225,7 +225,7 @@ mod tests {
         assert!(cloned.assets().image("new").state().is_unloaded());
         assert!(context.assets().image("new").state().is_ready());
         assert_eq!(context.preflight(&Node::empty())?.nodes, 1);
-        assert!(context.capabilities().supports(Renderer::Cpu));
+        assert!(context.capabilities().supports(BackendKind::Cpu));
         assert!(
             context
                 .with_validation_limits(ValidationLimits {

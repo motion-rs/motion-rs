@@ -1,7 +1,7 @@
 //! Shared benchmark settings, timing, summary statistics and report records.
 
 use motion::prelude::*;
-use motion::render::Renderer;
+use motion::render::BackendKind;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{
@@ -87,15 +87,15 @@ pub fn selected(name: &str, available: &[&str]) -> motion::Result<Vec<String>> {
     Ok(values)
 }
 
-pub fn renderers(gpu: bool) -> motion::Result<Vec<Renderer>> {
+pub fn renderers(gpu: bool) -> motion::Result<Vec<BackendKind>> {
     let available = if gpu { vec!["cpu", "gpu"] } else { vec!["cpu"] };
     Ok(selected("MOTION_BENCH_BACKENDS", &available)?
         .iter()
         .map(|value| {
             if value == "gpu" {
-                Renderer::Gpu
+                BackendKind::Gpu
             } else {
-                Renderer::Cpu
+                BackendKind::Cpu
             }
         })
         .collect())

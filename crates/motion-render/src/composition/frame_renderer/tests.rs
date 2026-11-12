@@ -1,6 +1,6 @@
 use super::*;
 use crate::raster::prepare::RenderPrepare;
-use crate::{RenderContext, Renderer};
+use crate::{BackendKind, RenderContext};
 use motion_core::Shape;
 use motion_core::ValidationErrorKind;
 use motion_core::{Color, Filter, NodeModifiers, Rect, ValidationLimits};
@@ -725,7 +725,7 @@ fn gpu_selection_is_explicit_and_lazy_without_a_device() -> Result {
     #[cfg(feature = "gpu")]
     {
         let mut selected = selected?;
-        assert_eq!(selected.renderer(), Renderer::Gpu);
+        assert_eq!(selected.backend_kind(), BackendKind::Gpu);
         assert!(selected.gpu_info().is_none());
         assert!(
             selected

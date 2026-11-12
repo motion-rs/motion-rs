@@ -5,7 +5,7 @@ use motion_core::{
     Size, Transform, ValidationLimits, Vector2,
 };
 use motion_core::{NodeModifiers, TimeLiteral};
-use motion_render::{Composition, Renderer};
+use motion_render::{BackendKind, Composition};
 
 #[derive(Clone, Debug)]
 struct ScalarBatch(ParticleBatch);
@@ -69,7 +69,7 @@ impl Drawable for ScalarBatch {
     }
 }
 
-fn compare_batches(style: ParticleStyle, renderer: Renderer) -> motion_core::Result {
+fn compare_batches(style: ParticleStyle, renderer: BackendKind) -> motion_core::Result {
     let count = if matches!(
         &style,
         ParticleStyle::Trails { .. } | ParticleStyle::Plexus { .. }
@@ -92,7 +92,7 @@ fn compare_batches(style: ParticleStyle, renderer: Renderer) -> motion_core::Res
     )
     .with_options(
         motion_render::RenderOptions::default()
-            .backend(motion_render::BackendPreference::from_renderer(renderer))
+            .backend(motion_render::BackendPreference::from_kind(renderer))
             .background(Color::BLACK),
     )?
     .frame_renderer(Size::new(192.0, 144.0))?;
@@ -171,7 +171,7 @@ fn compare_batches(style: ParticleStyle, renderer: Renderer) -> motion_core::Res
 
 #[test]
 fn particle_batches_match_expanded_instances_with_effects_and_seek() -> motion_core::Result {
-    compare_batches(ParticleStyle::Dots { radius: 3.0 }, Renderer::Cpu)
+    compare_batches(ParticleStyle::Dots { radius: 3.0 }, BackendKind::Cpu)
 }
 
 #[test]
@@ -187,7 +187,7 @@ fn tiled_glow_lines_and_plexus_match_the_scalar_oracle() -> motion_core::Result 
             max_distance: 12.0,
         },
     ] {
-        compare_batches(style, Renderer::Cpu)?;
+        compare_batches(style, BackendKind::Cpu)?;
     }
     Ok(())
 }
@@ -214,7 +214,7 @@ fn transparent_sprite_batches_match_expanded_instances_and_replay() -> motion_co
             size: 20.0,
             align_to_velocity: false,
         },
-        Renderer::Cpu,
+        BackendKind::Cpu,
     )
 }
 

@@ -91,7 +91,7 @@ fn scene_status_and_sidebar_use_window_edges_without_preview_heading() -> motion
         app.observations.backend_status = "GPU (Apple M3)".into();
         let key = PreviewKey {
             frame: 1799,
-            renderer: Renderer::Cpu,
+            renderer: BackendKind::Cpu,
         };
         app.playback.transport.frame = key.frame;
         app.playback.last_interaction = Instant::now() - Duration::from_secs(1);
@@ -406,7 +406,7 @@ fn play_holds_the_clock_until_its_first_frame_is_answered() -> motion_core::Resu
     assert!(app.playback.transport.playing());
     let key = preview::PreviewKey {
         frame: 0,
-        renderer: Renderer::Cpu,
+        renderer: BackendKind::Cpu,
     };
     app.preview_state
         .request(key, preview::PreviewSettings::default());

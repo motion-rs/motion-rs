@@ -62,7 +62,7 @@ impl RenderPrepare for DisplayList {
     ///     DisplayList, RasterLimits, ResourceStore, ValidatedDisplayList, MAX_PATH_VERBS,
     ///     MAX_STROKE_VERBS, MAX_SVG_PATH_BYTES, sample_offsets,
     /// };
-    /// use motion_render::{Composition, RenderPrepare, RenderOptions, Renderer, render_still};
+    /// use motion_render::{Composition, RenderPrepare, RenderOptions, BackendKind, render_still};
     /// let node = Node::group([
     ///     Node::from(Rect::new(0.0, 0.0, 4.0, 4.0).fill(Color::WHITE)),
     ///     Node::from(Rect::new(2.0, 0.0, 6.0, 4.0).fill(Color::WHITE)),
@@ -97,7 +97,7 @@ impl RenderPrepare for DisplayList {
     ///     DisplayList, RasterLimits, ResourceStore, ValidatedDisplayList, MAX_PATH_VERBS,
     ///     MAX_STROKE_VERBS, MAX_SVG_PATH_BYTES, sample_offsets,
     /// };
-    /// use motion_render::{Composition, RenderPrepare, RenderOptions, Renderer, render_still};
+    /// use motion_render::{Composition, RenderPrepare, RenderOptions, BackendKind, render_still};
     /// let path = Path2D::builder()
     ///     .move_to(Point::ORIGIN)
     ///     .quadratic_to(Point::new(0.5, 2.0), Point::new(1.0, 0.0))

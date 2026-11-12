@@ -3,7 +3,7 @@
 //! CPU and GPU backends use only explicitly supplied fonts; nothing is discovered implicitly.
 
 use super::*;
-use crate::{RasterLimits, RenderContext, Renderer};
+use crate::{BackendKind, RasterLimits, RenderContext};
 use motion_core::{
     Color, Node, PixelSize, Result, SceneCache, SceneContext, Size, Time, ValidationError,
 };
@@ -233,9 +233,9 @@ impl RenderSession {
         &self.options.context
     }
 
-    /// Renderer fixed by the configured backend, without initializing a device.
-    pub fn renderer(&self) -> Renderer {
-        self.options.backend.renderer()
+    /// Backend kind fixed by the configured backend, without initializing a device.
+    pub fn backend_kind(&self) -> BackendKind {
+        self.options.backend.kind()
     }
 
     /// Initialized adapter metadata without probing a new device.
@@ -330,7 +330,7 @@ impl RenderSession {
         FrameReport {
             stats: self.last_stats,
             timings: self.timings,
-            renderer: self.renderer(),
+            renderer: self.backend_kind(),
             gpu_preparation: self.gpu_preparation,
         }
     }

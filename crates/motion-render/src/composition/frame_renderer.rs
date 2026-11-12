@@ -78,8 +78,8 @@ pub struct FrameReport {
     pub stats: Option<FrameStats>,
     /// Opt-in stage observations.
     pub timings: Option<FrameTimings>,
-    /// Renderer fixed by the session's backend preference.
-    pub renderer: crate::Renderer,
+    /// Backend kind fixed by the session's backend preference.
+    pub renderer: crate::BackendKind,
     /// Latest completed GPU preparation attempt.
     /// Available for memory, texture and preparation-only requests; cleared on the next request.
     pub gpu_preparation: Option<crate::GpuPreparationStats>,
@@ -206,7 +206,7 @@ impl FrameRenderer {
         build: impl FnMut(&SceneContext<'_>) -> Node,
     ) -> Result<(crate::PreparedFrame, RasterLimits)> {
         let mut execution = self.execution();
-        execution.preparation_backend = Some(crate::Renderer::Cpu);
+        execution.preparation_backend = Some(crate::BackendKind::Cpu);
         let (prepared, limits) = execution.prepare_output_at(time, background, build)?;
         match prepared {
             super::execution::PreparedOutput::Cpu(frame) => Ok((frame, limits)),
@@ -230,7 +230,7 @@ impl FrameRenderer {
         build: impl FnMut(&SceneContext<'_>) -> Node,
     ) -> Result<(crate::gpu::PreparedGpuFrame, RasterLimits)> {
         let mut execution = self.execution();
-        execution.preparation_backend = Some(crate::Renderer::Gpu);
+        execution.preparation_backend = Some(crate::BackendKind::Gpu);
         let (prepared, limits) = execution.prepare_output_at(time, background, build)?;
         match prepared {
             super::execution::PreparedOutput::Cpu(_) => Err(motion_core::ValidationError::invalid(

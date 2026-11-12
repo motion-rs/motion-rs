@@ -5,15 +5,15 @@ use super::artwork::rectangle;
 use super::{invalid, support};
 use motion::encode::NoProgress;
 use motion::prelude::*;
+use motion::render::BackendKind;
 use motion::render::RasterLimits;
-use motion::render::Renderer;
 
 pub(super) fn video_benchmark(
     report: &mut support::Report,
     settings: &support::Settings,
     size: PixelSize,
     frames: u32,
-    renderers: &[Renderer],
+    renderers: &[BackendKind],
     limits: RasterLimits,
 ) -> motion::Result {
     use motion::authoring::Scene as _;
@@ -41,14 +41,13 @@ pub(super) fn video_benchmark(
             || {
                 let temporary = tempfile::tempdir()?;
                 let output = temporary.path().join("sample.mp4");
-                let mut options =
-                    ExportOptions::new(&output)
-                        .size(size)
-                        .backend(if renderer == Renderer::Gpu {
-                            motion::BackendPreference::gpu()
-                        } else {
-                            motion::BackendPreference::Cpu
-                        });
+                let mut options = ExportOptions::new(&output).size(size).backend(
+                    if renderer == BackendKind::Gpu {
+                        motion::BackendPreference::gpu()
+                    } else {
+                        motion::BackendPreference::Cpu
+                    },
+                );
                 options.render.limits = limits;
                 let completed = export(&timeline, &options, &NoProgress)?;
                 if completed.frames != u64::from(frames) {

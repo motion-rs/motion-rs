@@ -7,7 +7,7 @@
 //!     DisplayList, RasterLimits, ResourceStore, ValidatedDisplayList, MAX_PATH_VERBS,
 //!     MAX_STROKE_VERBS, MAX_SVG_PATH_BYTES, sample_offsets,
 //! };
-//! use motion_render::{Composition, RenderPrepare, RenderOptions, Renderer, render_still};
+//! use motion_render::{Composition, RenderPrepare, RenderOptions, BackendKind, render_still};
 //! let source = PcmBuffer::new(48_000, 1, vec![0.25; 4800])?;
 //! let clip = AudioClip::source(source).start(50.milliseconds().after_origin()).pan(-1.0);
 //! let timeline = Timeline::new(Size::new(8.0, 4.0), fps!(30)).audio(clip).build()?;

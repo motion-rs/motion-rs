@@ -56,9 +56,9 @@ pub(super) fn render_workers(
     options: &ExportOptions,
     frames: i64,
     observed_peak: u64,
-    renderer: motion_render::Renderer,
+    renderer: motion_render::BackendKind,
 ) -> usize {
-    if renderer != motion_render::Renderer::Cpu {
+    if renderer != motion_render::BackendKind::Cpu {
         return 1;
     }
     let slot_bytes = observed_peak.saturating_mul(2).max(1);
@@ -77,7 +77,8 @@ pub(super) fn render_frame(
     format: PixelFormat,
     frame: i64,
 ) -> Result<FrameBuffer> {
-    let parallel_cpu = options.workers > 1 && renderer.renderer() == motion_render::Renderer::Cpu;
+    let parallel_cpu =
+        options.workers > 1 && renderer.backend_kind() == motion_render::BackendKind::Cpu;
     let render = || {
         renderer.render_output_at(
             Time::from_frame(frame, rate),

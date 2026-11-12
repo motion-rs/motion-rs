@@ -65,8 +65,8 @@ fn native_main10_export_renders_display() -> motion_core::Result {
 
 #[test]
 fn parallel_worker_selection_respects_frames_memory_and_backend() {
-    let cpu = motion_render::Renderer::Cpu;
-    let gpu = motion_render::Renderer::Gpu;
+    let cpu = motion_render::BackendKind::Cpu;
+    let gpu = motion_render::BackendKind::Gpu;
     let mut options = ExportOptions::new("unused")
         .size(motion_core::PixelSize::new(8, 4))
         .workers(8);
@@ -282,7 +282,7 @@ fn parallel_export_matches_serial_pixels_ntsc_ranges_and_progress() -> Result<()
     let peak = reference_renderer.last_stats().unwrap().peak_bytes();
     options.max_parallel_bytes = peak * 2 * 4;
     assert_eq!(
-        render_workers(&options, 7, peak, reference_renderer.renderer()),
+        render_workers(&options, 7, peak, reference_renderer.backend_kind()),
         4
     );
     let reference = (2..10)

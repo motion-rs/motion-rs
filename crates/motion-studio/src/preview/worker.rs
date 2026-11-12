@@ -59,7 +59,7 @@ fn run_preview_worker(
     worker: Arc<(Mutex<PreviewRequestQueue>, Condvar)>,
     notify_completed: Option<Arc<dyn Fn() + Send + Sync>>,
 ) {
-    let mut cache: Option<(Renderer, PreviewSettings, PreviewRenderer)> = None;
+    let mut cache: Option<(BackendKind, PreviewSettings, PreviewRenderer)> = None;
     let mut inflight = std::collections::VecDeque::<(
         PreviewRequest,
         motion_core::Result<PreviewSubmission>,
@@ -173,7 +173,7 @@ fn preview_result(
     result: PreviewResult,
     source: &StudioScene,
     request: PreviewRequest,
-    cache: &mut Option<(Renderer, PreviewSettings, PreviewRenderer)>,
+    cache: &mut Option<(BackendKind, PreviewSettings, PreviewRenderer)>,
 ) -> (
     motion_core::Result<PreviewImage>,
     Vec<Arc<motion_core::Error>>,
@@ -203,7 +203,7 @@ fn preview_result(
 fn submit_preview(
     source: &StudioScene,
     request: PreviewRequest,
-    cache: &mut Option<(Renderer, PreviewSettings, PreviewRenderer)>,
+    cache: &mut Option<(BackendKind, PreviewSettings, PreviewRenderer)>,
     #[cfg(feature = "gpu")] textures: &textures::TextureRing,
 ) -> motion_core::Result<(PreviewSubmission, Vec<Arc<motion_core::Error>>)> {
     let key = request.key;

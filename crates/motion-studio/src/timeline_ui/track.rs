@@ -19,7 +19,7 @@ impl StudioApp {
     ) -> Option<egui::TextureHandle> {
         self.preview.request_thumbnail(crate::preview::PreviewKey {
             frame,
-            renderer: motion_render::Renderer::Cpu,
+            renderer: motion_render::BackendKind::Cpu,
         });
         if self.thumbnail.as_ref().is_none_or(|entry| entry.0 != frame)
             && let Some((_, image)) = self.cached_previews.iter().find(|entry| entry.0 == frame)

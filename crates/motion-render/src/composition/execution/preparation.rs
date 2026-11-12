@@ -42,11 +42,13 @@ impl FrameExecution<'_> {
         } else {
             1.0 / 256.0
         };
-        let renderer = self.preparation_backend.unwrap_or_else(|| self.renderer());
+        let renderer = self
+            .preparation_backend
+            .unwrap_or_else(|| self.backend_kind());
         let quality = self.composition.options.quality;
         let blend_space = self.composition.options.blend_space;
         let prepared = match renderer {
-            crate::Renderer::Cpu => PreparedOutput::Cpu(
+            crate::BackendKind::Cpu => PreparedOutput::Cpu(
                 crate::raster::prepare::prepare_validated_with_cache(
                     &list,
                     validation,
@@ -57,7 +59,7 @@ impl FrameExecution<'_> {
                 .quality(quality)
                 .blend_space(blend_space),
             ),
-            crate::Renderer::Gpu => self.prepare_gpu(&list, validation, tolerance)?,
+            crate::BackendKind::Gpu => self.prepare_gpu(&list, validation, tolerance)?,
         };
         if let Some(started) = started {
             self.timings.as_mut().expect("enabled timings").coverage += started.elapsed();

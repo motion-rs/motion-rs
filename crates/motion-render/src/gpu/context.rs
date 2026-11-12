@@ -140,7 +140,7 @@ impl GpuContext {
     /// Creates a context with the requested adapter power preference.
     pub fn create(power: wgpu::PowerPreference) -> motion_core::Result<Self> {
         pollster::block_on(async {
-            let instance = crate::gpu::instance(crate::Renderer::Gpu)?;
+            let instance = crate::gpu::instance(crate::BackendKind::Gpu)?;
             let adapter = instance
                 .request_adapter(&wgpu::RequestAdapterOptions {
                     power_preference: power,

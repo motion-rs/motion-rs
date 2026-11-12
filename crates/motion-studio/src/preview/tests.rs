@@ -122,7 +122,7 @@ fn write_tone(path: &std::path::Path, frequency: f64, seconds: f64) -> io::Resul
 
 fn start_export_job(
     scene: StudioScene,
-    renderer: Renderer,
+    renderer: BackendKind,
     path: PathBuf,
     options: AudioOptions,
     context: Context,
@@ -133,7 +133,7 @@ fn start_export_job(
             0,
             u32::try_from(scene.composition.frame_count()).map_err(io::Error::other)?,
         ),
-        backend: if renderer == Renderer::Gpu {
+        backend: if renderer == BackendKind::Gpu {
             motion_render::BackendPreference::gpu()
         } else {
             motion_render::BackendPreference::Cpu
@@ -179,7 +179,7 @@ fn shared_texture_preview_and_automatic_export_loss_preserve_transactions()
     let worker = PreviewCoordinator::new(scene, egui.clone())?;
     let key = PreviewKey {
         frame: 1,
-        renderer: Renderer::Gpu,
+        renderer: BackendKind::Gpu,
     };
     worker.request_with_settings(
         key,
@@ -270,7 +270,7 @@ fn scaled_transparent_preview_is_rational_and_cached_without_devices() -> motion
     let worker = PreviewCoordinator::new(scene, context)?;
     let key = PreviewKey {
         frame: 2,
-        renderer: Renderer::Cpu,
+        renderer: BackendKind::Cpu,
     };
     let settings = PreviewSettings {
         scale: 50,
@@ -333,7 +333,7 @@ fn automatic_preview_rejects_gpu_plan_without_rejecting_cpu_frame() -> motion_co
         backend: Some(motion_render::BackendPreference::gpu()),
         ..PreviewSettings::default()
     };
-    let mut automatic = PreviewRenderer::new(&scene, Renderer::Cpu)?;
+    let mut automatic = PreviewRenderer::new(&scene, BackendKind::Cpu)?;
     let image = automatic.preview(&scene, 0, settings)?;
     assert!(image.texture.is_none());
     assert!(image.backend.starts_with("Cpu"), "{}", image.backend);
@@ -350,13 +350,13 @@ fn automatic_preview_rejects_gpu_plan_without_rejecting_cpu_frame() -> motion_co
         ..scene.clone()
     };
     let expected =
-        PreviewRenderer::new(&cpu_scene, Renderer::Cpu)?.preview(&cpu_scene, 0, settings)?;
+        PreviewRenderer::new(&cpu_scene, BackendKind::Cpu)?.preview(&cpu_scene, 0, settings)?;
     assert_eq!(image.image.pixels, expected.image.pixels);
     assert_eq!(
         automatic.preview(&scene, 0, settings)?.image.pixels,
         expected.image.pixels
     );
-    let mut inherited = PreviewRenderer::new(&scene, Renderer::Cpu)?;
+    let mut inherited = PreviewRenderer::new(&scene, BackendKind::Cpu)?;
     assert_eq!(
         inherited.renderer.requested_backend(),
         motion_render::BackendPreference::gpu()
@@ -388,7 +388,7 @@ fn automatic_preview_rejects_gpu_plan_without_rejecting_cpu_frame() -> motion_co
         },
     )
     .unwrap();
-    let mut selected = PreviewRenderer::new(&changing, Renderer::Cpu)?;
+    let mut selected = PreviewRenderer::new(&changing, BackendKind::Cpu)?;
     let first = selected.preview(&changing, 0, settings)?;
     assert!(first.texture.is_some(), "{}", first.backend);
     let error = selected.preview(&changing, 1, settings).err().unwrap();
@@ -399,7 +399,7 @@ fn automatic_preview_rejects_gpu_plan_without_rejecting_cpu_frame() -> motion_co
             .field,
         "max_bytes"
     );
-    assert_eq!(selected.renderer.renderer(), Renderer::Gpu);
+    assert_eq!(selected.renderer.backend_kind(), BackendKind::Gpu);
     let explicit = StudioScene {
         composition: scene
             .composition
@@ -407,7 +407,7 @@ fn automatic_preview_rejects_gpu_plan_without_rejecting_cpu_frame() -> motion_co
             .configure(|options| options.backend(motion_render::BackendPreference::gpu())),
         ..scene
     };
-    let error = PreviewRenderer::new(&explicit, Renderer::Gpu)?
+    let error = PreviewRenderer::new(&explicit, BackendKind::Gpu)?
         .preview(
             &explicit,
             0,
@@ -530,7 +530,7 @@ fn preview_cache_retains_long_cycles_and_evicts_by_bytes() -> motion_core::Resul
             for frame in 0..48 {
                 let key = PreviewKey {
                     frame,
-                    renderer: Renderer::Cpu,
+                    renderer: BackendKind::Cpu,
                 };
                 worker.request_with_settings(key, PreviewSettings::default());
                 let image = wait_for_preview(&worker, &updates, key).image?;
@@ -653,7 +653,7 @@ fn playback_prefetch_is_bounded_cached_and_never_published() -> motion_core::Res
     let worker = PreviewCoordinator::with_slots(scene, context, 4096, 2)?;
     let key = PreviewKey {
         frame: 0,
-        renderer: Renderer::Cpu,
+        renderer: BackendKind::Cpu,
     };
     worker.request_playback(key, PreviewSettings::default());
     wait_for_preview(&worker, &updates, key).image?;
@@ -709,7 +709,7 @@ fn playback_seek_preempts_inflight_prefetch_without_stale_reply() -> motion_core
     let worker = PreviewCoordinator::with_slots(scene, context, 4096, 2)?;
     let key = PreviewKey {
         frame: 0,
-        renderer: Renderer::Cpu,
+        renderer: BackendKind::Cpu,
     };
     worker.request_playback(key, PreviewSettings::default());
     wait_for_preview(&worker, &updates, key).image?;
@@ -755,7 +755,7 @@ fn preview_missing_asset_keeps_magenta_frame_and_typed_diagnostic() -> motion_co
     let worker = PreviewCoordinator::new(scene, context)?;
     let key = PreviewKey {
         frame: 2,
-        renderer: Renderer::Cpu,
+        renderer: BackendKind::Cpu,
     };
     worker.request(key);
     let reply = wait_for_preview(&worker, &updates, key);
@@ -796,7 +796,7 @@ fn export_no_clobber_uses_branch_before_evaluation() -> motion_core::Result {
     });
     let job = start_export_job(
         scene,
-        Renderer::Cpu,
+        BackendKind::Cpu,
         destination.clone(),
         AudioOptions::default(),
         context,
@@ -865,7 +865,7 @@ fn timeline_worker_keeps_preview_silent_and_exports_its_mix() -> motion_core::Re
         ),
         timeline,
     )?;
-    let mut preview = PreviewRenderer::new(&scene, Renderer::Cpu)?;
+    let mut preview = PreviewRenderer::new(&scene, BackendKind::Cpu)?;
     preview.render_frame(&scene, 0)?;
     assert_eq!(calls.load(std::sync::atomic::Ordering::Relaxed), 0);
     let directory = tempfile::tempdir()?;
@@ -877,7 +877,7 @@ fn timeline_worker_keeps_preview_silent_and_exports_its_mix() -> motion_core::Re
     });
     let job = start_export_job(
         scene.clone(),
-        Renderer::Cpu,
+        BackendKind::Cpu,
         destination.clone(),
         AudioOptions::default(),
         context.clone(),
@@ -900,7 +900,7 @@ fn timeline_worker_keeps_preview_silent_and_exports_its_mix() -> motion_core::Re
     calls.store(0, std::sync::atomic::Ordering::Relaxed);
     let refused = start_export_job(
         scene,
-        Renderer::Cpu,
+        BackendKind::Cpu,
         destination.clone(),
         AudioOptions::default(),
         context,
@@ -938,7 +938,7 @@ fn export_missing_gpu_fails_before_evaluation_or_files() -> motion_core::Result 
     });
     let job = start_export_job(
         scene,
-        Renderer::Gpu,
+        BackendKind::Gpu,
         destination.clone(),
         AudioOptions::default(),
         context,
@@ -968,7 +968,7 @@ fn preview_session_uses_linear_cpu_without_fonts() -> motion_core::Result {
         |_| Node::from(Rect::new(0.0, 0.0, 8.0, 4.0).fill(Color::WHITE)).opacity(0.5),
     )
     .unwrap();
-    let mut session = PreviewRenderer::new(&scene, Renderer::Cpu)?;
+    let mut session = PreviewRenderer::new(&scene, BackendKind::Cpu)?;
     let snapshot = session.render_frame(&scene, 0)?;
     assert_eq!(
         (
@@ -987,7 +987,7 @@ fn preview_session_uses_linear_cpu_without_fonts() -> motion_core::Result {
         }),
         ..scene.clone()
     };
-    let mut restricted = PreviewRenderer::new(&denied, Renderer::Cpu)?;
+    let mut restricted = PreviewRenderer::new(&denied, BackendKind::Cpu)?;
     let error = restricted
         .render_frame(&denied, 0)
         .expect_err("preview must inherit scene budget");
@@ -1040,7 +1040,7 @@ fn preview_honors_global_shutter_and_replays_without_fonts() -> motion_core::Res
         },
     )
     .unwrap();
-    let mut renderer = PreviewRenderer::new(&scene, Renderer::Cpu)?;
+    let mut renderer = PreviewRenderer::new(&scene, BackendKind::Cpu)?;
     let first = renderer.render_frame(&scene, 1)?;
     assert_eq!(calls.load(std::sync::atomic::Ordering::Relaxed), 4);
     assert_eq!(first.packed_rgb()[0], 0xbbbbbb);
@@ -1176,7 +1176,7 @@ fn preview_worker_rejects_gpu_without_fallback_and_recovers() -> motion_core::Re
     });
     let worker = PreviewCoordinator::new(scene, context)?;
     let gpu = PreviewKey {
-        renderer: Renderer::Gpu,
+        renderer: BackendKind::Gpu,
         ..key(4)
     };
     worker.request(gpu);
@@ -1193,7 +1193,7 @@ fn preview_worker_rejects_gpu_without_fallback_and_recovers() -> motion_core::Re
 #[ignore = "requires a native GPU; no window or video export"]
 fn preview_worker_gpu_switching_matches_cpu() -> motion_core::Result {
     let scene = worker_scene(Arc::new(std::sync::atomic::AtomicUsize::new(0)));
-    let mut reference = PreviewRenderer::new(&scene, Renderer::Cpu)?;
+    let mut reference = PreviewRenderer::new(&scene, BackendKind::Cpu)?;
     let supports_timestamps = crate::GpuContext::new()?.supports_timestamps();
     let (wake, updates) = std::sync::mpsc::channel();
     let context = Context::default();
@@ -1202,11 +1202,11 @@ fn preview_worker_gpu_switching_matches_cpu() -> motion_core::Result {
     });
     let worker = PreviewCoordinator::new(scene.clone(), context)?;
     for (renderer, frame) in [
-        (Renderer::Gpu, 4),
-        (Renderer::Gpu, 0),
-        (Renderer::Cpu, 6),
-        (Renderer::Gpu, 6),
-        (Renderer::Gpu, 4),
+        (BackendKind::Gpu, 4),
+        (BackendKind::Gpu, 0),
+        (BackendKind::Cpu, 6),
+        (BackendKind::Gpu, 6),
+        (BackendKind::Gpu, 4),
     ] {
         let request = PreviewKey {
             renderer,
@@ -1217,7 +1217,7 @@ fn preview_worker_gpu_switching_matches_cpu() -> motion_core::Result {
         if let Some(timings) = reply.timings {
             assert_eq!(
                 timings.gpu.is_some(),
-                renderer == Renderer::Gpu && supports_timestamps
+                renderer == BackendKind::Gpu && supports_timestamps
             );
         }
         let actual = reply.image.map_err(io::Error::other)?;
@@ -1246,7 +1246,7 @@ fn wait_for_export(job: &ExportJob, updates: &std::sync::mpsc::Receiver<()>) -> 
     }
 }
 
-fn worker_export_acceptance(renderer: Renderer) -> motion_core::Result {
+fn worker_export_acceptance(renderer: BackendKind) -> motion_core::Result {
     use crate::audio::settings::{AudioForm, ClipSettings};
     use motion_core::{Assets, Color, Node, NodeModifiers, Rect, SceneContext, Size};
     use motion_render::{Composition, RenderContext};
@@ -1294,7 +1294,7 @@ fn worker_export_acceptance(renderer: Renderer) -> motion_core::Result {
         let _result = wake.send(());
     });
     let preview = PreviewCoordinator::new(scene.clone(), context.clone())?;
-    let mut reference = PreviewRenderer::new(&scene, Renderer::Cpu)?;
+    let mut reference = PreviewRenderer::new(&scene, BackendKind::Cpu)?;
     let mut replay = None;
     let mut maximum = 0;
     for frame in [2, 0, 1, 2] {
@@ -1324,7 +1324,7 @@ fn worker_export_acceptance(renderer: Renderer) -> motion_core::Result {
     let directory = tempfile::tempdir()?;
     let audio_directory = tempfile::tempdir()?;
     let mut audio = AudioForm::default();
-    if renderer == Renderer::Cpu {
+    if renderer == BackendKind::Cpu {
         let path = audio_directory.path().join("tone.wav");
         write_tone(&path, 440.0, 0.125)?;
         audio.enabled = true;
@@ -1348,7 +1348,7 @@ fn worker_export_acceptance(renderer: Renderer) -> motion_core::Result {
     assert_eq!((media.width, media.height, media.video_frames), (96, 48, 3));
     assert_eq!(media.video_fps, 24.0);
     assert!(media.h264);
-    assert_eq!(media.aac, renderer == Renderer::Cpu);
+    assert_eq!(media.aac, renderer == BackendKind::Cpu);
     assert_eq!(motion_ffmpeg::inspect::video_frames(&destination, 4)?, 3);
     if media.aac {
         assert_eq!((media.sample_rate, media.channels), (48000, 2));
@@ -1486,14 +1486,14 @@ fn worker_export_acceptance(renderer: Renderer) -> motion_core::Result {
 #[test]
 #[ignore = "requires MOTION_TEST_FONT and native FFmpeg/libx264/AAC"]
 fn cpu_preview_export_cancel_failure_and_recovery() -> motion_core::Result {
-    worker_export_acceptance(Renderer::Cpu)
+    worker_export_acceptance(BackendKind::Cpu)
 }
 
 #[cfg(feature = "gpu")]
 #[test]
 #[ignore = "requires MOTION_TEST_FONT, native GPU and FFmpeg/libx264"]
 fn gpu_preview_export_cancel_failure_and_recovery() -> motion_core::Result {
-    worker_export_acceptance(Renderer::Gpu)
+    worker_export_acceptance(BackendKind::Gpu)
 }
 
 #[cfg(feature = "gpu")]
@@ -1543,11 +1543,11 @@ fn gpu_preview_seek_export_and_cancellation_preserve_worker_contracts() -> motio
     let preview = PreviewCoordinator::new(scene.clone(), context.clone())?;
     let mut preview_checks = Vec::new();
     for (renderer, frame) in [
-        (Renderer::Gpu, 0),
-        (Renderer::Gpu, 9),
-        (Renderer::Cpu, 3),
-        (Renderer::Gpu, 11),
-        (Renderer::Gpu, 0),
+        (BackendKind::Gpu, 0),
+        (BackendKind::Gpu, 9),
+        (BackendKind::Cpu, 3),
+        (BackendKind::Gpu, 11),
+        (BackendKind::Gpu, 0),
     ] {
         let key = PreviewKey { frame, renderer };
         preview.request(key);
@@ -1565,8 +1565,8 @@ fn gpu_preview_seek_export_and_cancellation_preserve_worker_contracts() -> motio
         assert_eq!(reply.key, key);
         let image = reply.image.map_err(io::Error::other)?;
         let reference = match renderer {
-            Renderer::Cpu => software.render_frame(frame, build)?,
-            Renderer::Gpu => gpu.render_frame(frame, build)?,
+            BackendKind::Cpu => software.render_frame(frame, build)?,
+            BackendKind::Gpu => gpu.render_frame(frame, build)?,
         };
         let reference = color_image(reference);
         assert_eq!(image.size, [96, 64]);
@@ -1582,7 +1582,7 @@ fn gpu_preview_seek_export_and_cancellation_preserve_worker_contracts() -> motio
     let destination = directory.join("gpu.mp4");
     let export = start_export_job(
         scene,
-        Renderer::Gpu,
+        BackendKind::Gpu,
         destination.clone(),
         AudioOptions::default(),
         context.clone(),
@@ -1623,7 +1623,7 @@ fn gpu_preview_seek_export_and_cancellation_preserve_worker_contracts() -> motio
         .unwrap();
     let cancelled = start_export_job(
         cancellable,
-        Renderer::Gpu,
+        BackendKind::Gpu,
         destination.clone(),
         AudioOptions::default().overwrite(true),
         context,
@@ -1720,7 +1720,7 @@ fn audio_drafts_round_trip_and_mix_through_the_export_worker() -> motion_core::R
     .unwrap();
     let job = start_export_job(
         scene.clone(),
-        Renderer::Cpu,
+        BackendKind::Cpu,
         destination.clone(),
         options,
         context.clone(),
@@ -1774,7 +1774,13 @@ fn audio_drafts_round_trip_and_mix_through_the_export_worker() -> motion_core::R
     let options = restored.apply(AudioOptions::default().overwrite(true))?;
     std::fs::rename(&voice, directory.join("voice moved.wav"))?;
     let previous = std::fs::read(&destination)?;
-    let missing = start_export_job(scene, Renderer::Cpu, destination.clone(), options, context)?;
+    let missing = start_export_job(
+        scene,
+        BackendKind::Cpu,
+        destination.clone(),
+        options,
+        context,
+    )?;
     let missing_error = match wait_for_export(&missing, &updates) {
         JobState::Finished(Err(error)) => error,
         state => panic!("Missing source unexpectedly succeeded: {state:?}"),
@@ -1818,7 +1824,7 @@ fn audio_drafts_round_trip_and_mix_through_the_export_worker() -> motion_core::R
 fn key(frame: u32) -> PreviewKey {
     PreviewKey {
         frame,
-        renderer: Renderer::Cpu,
+        renderer: BackendKind::Cpu,
     }
 }
 

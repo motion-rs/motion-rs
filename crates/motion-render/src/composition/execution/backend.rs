@@ -2,19 +2,19 @@
 
 use super::{FrameExecution, PreparedOutput};
 use crate::composition::FrameStats;
-use crate::{RasterLimits, Renderer, WorkStats};
+use crate::{BackendKind, RasterLimits, WorkStats};
 use motion_core::Result;
 
 impl FrameExecution<'_> {
-    pub(in crate::composition) fn select_backend(&mut self) -> Result<crate::Renderer> {
-        let renderer = self.renderer();
-        if renderer == Renderer::Cpu || self.backend_ready {
+    pub(in crate::composition) fn select_backend(&mut self) -> Result<crate::BackendKind> {
+        let renderer = self.backend_kind();
+        if renderer == BackendKind::Cpu || self.backend_ready {
             return Ok(renderer);
         }
         match self.init_gpu() {
             Ok(()) => {
                 self.backend_ready = true;
-                Ok(Renderer::Gpu)
+                Ok(BackendKind::Gpu)
             }
             Err(error) => {
                 self.gpu_reset();
@@ -32,7 +32,7 @@ impl FrameExecution<'_> {
         let result = (|| -> Result<_> {
             let plan = self.plan_gpu(&prepared, limits)?;
             let (linear, preparation) = match self.select_backend()? {
-                Renderer::Cpu => {
+                BackendKind::Cpu => {
                     let prepared = prepared.into_cpu()?;
                     let started = self.timings.map(|_| std::time::Instant::now());
                     let linear = prepared.render_linear_pooled(limits, &mut self.cpu_pool)?;
@@ -42,7 +42,7 @@ impl FrameExecution<'_> {
                     }
                     (linear, prepared.stats())
                 }
-                Renderer::Gpu => (self.render_gpu(&prepared, plan, limits)?, prepared.stats()),
+                BackendKind::Gpu => (self.render_gpu(&prepared, plan, limits)?, prepared.stats()),
             };
             let stats = FrameStats {
                 preparation,
