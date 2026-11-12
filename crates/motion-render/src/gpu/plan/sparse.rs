@@ -74,16 +74,14 @@ impl Planner<'_> {
             checked(frame.alphas.len())?,
             checked(alpha_base)?,
         ]);
-        let mut device = frame.device_fills.iter().map(|fill| fill.strip).peekable();
-        for (index, strip) in frame.strips.iter().enumerate() {
-            let is_device = device.next_if_eq(&index).is_some();
+        for strip in &frame.strips {
             data.extend([
                 strip.x,
                 strip.y,
                 strip.width,
                 strip.height,
                 checked(strip.alpha_offset)?,
-                u32::from(is_device),
+                u32::from(strip.device),
             ]);
         }
         for span in &frame.spans {

@@ -182,6 +182,7 @@ impl DeviceGeometry {
                 width: pixels.width(),
                 height: pixels.height(),
                 alpha_offset,
+                device: true,
             },
             path,
         )?;

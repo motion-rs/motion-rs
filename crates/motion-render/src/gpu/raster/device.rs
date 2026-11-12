@@ -190,6 +190,7 @@ impl DeviceGeometry {
             width: pixels.width(),
             height: pixels.height(),
             alpha_offset,
+            device: true,
         };
         budget.push(
             &mut self.device_fills,

@@ -140,6 +140,7 @@ impl PreparedScene {
                 width: right - left,
                 height,
                 alpha_offset: offset,
+                device: false,
             },
             path,
         )?;

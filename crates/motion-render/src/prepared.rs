@@ -73,6 +73,8 @@ pub(crate) struct Strip {
     pub(crate) height: u32,
     /// Row-major start in PreparedFrame::alphas, or in the device f32 sample block for a device fill.
     pub(crate) alpha_offset: usize,
+    /// Whether the GPU generates this strip's f32 coverage instead of reading packed alphas.
+    pub(crate) device: bool,
 }
 
 /// A fully covered interval in a band of up to four rows.

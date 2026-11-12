@@ -272,6 +272,7 @@ impl PreparedScene {
                         width: column - start,
                         height,
                         alpha_offset,
+                        device: false,
                     },
                     path,
                 )?;
