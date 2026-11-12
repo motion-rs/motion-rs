@@ -5,7 +5,7 @@ use motion_core::animation::value_noise;
 #[cfg(feature = "gpu")]
 use motion_core::instances::{AnalyticInstanceState, AnalyticTrajectoryKind};
 use motion_core::instances::{AnalyticInstanceUpload, InstanceKind};
-use motion_core::{Point, Vector2};
+use motion_core::{Point, Rect, Vector2};
 use std::ops::Range;
 
 /// A whole random-access particle trajectory, not separately composable forces.
@@ -32,6 +32,13 @@ pub trait TrajectoryModel: Send + Sync {
         _primitive: InstanceKind,
         _align_to_velocity: bool,
     ) -> Result<Option<AnalyticInstanceUpload>, ValidationError> {
+        Ok(None)
+    }
+
+    /// Conservative extent of every particle center at this age, for models whose
+    /// [`Self::analytic_upload`] lets the GPU evaluate positions. Returning `None` keeps
+    /// the ordinary evaluated path.
+    fn analytic_bounds(&self, _age_seconds: f32) -> Result<Option<Rect>, ValidationError> {
         Ok(None)
     }
 }
@@ -124,21 +131,7 @@ impl TrajectoryDefinition {
                         "Require nonnegative drag and ordered speeds",
                     ));
                 }
-                let product = drag * time;
-                let (decay, advance, gravity) = if product.abs() < 0.01 {
-                    let square = product * product;
-                    let cube = square * product;
-                    let fourth = cube * product;
-                    (
-                        libm::exp(-product),
-                        time * (1.0 - product * 0.5 + square / 6.0 - cube / 24.0 + fourth / 120.0),
-                        time * time
-                            * (0.5 - product / 6.0 + square / 24.0 - cube / 120.0 + fourth / 720.0),
-                    )
-                } else {
-                    let advance = -libm::expm1(-product) / drag;
-                    (libm::exp(-product), advance, (time - advance) / drag)
-                };
+                let (decay, advance, gravity) = ballistic_terms(drag, time);
                 for axis in 0..2 {
                     let velocity = f64::from(particle.velocity[axis]);
                     particle.position[axis] = (f64::from(particle.position[axis])
@@ -193,6 +186,97 @@ impl TrajectoryDefinition {
         particle.age = age;
         particle.validate()?;
         Ok(particle)
+    }
+}
+
+/// Drag decay, advance and gravity integrals of the ballistic model at one age.
+fn ballistic_terms(drag: f64, time: f64) -> (f64, f64, f64) {
+    let product = drag * time;
+    if product.abs() < 0.01 {
+        let square = product * product;
+        let cube = square * product;
+        let fourth = cube * product;
+        (
+            libm::exp(-product),
+            time * (1.0 - product * 0.5 + square / 6.0 - cube / 24.0 + fourth / 120.0),
+            time * time * (0.5 - product / 6.0 + square / 24.0 - cube / 120.0 + fourth / 720.0),
+        )
+    } else {
+        let advance = -libm::expm1(-product) / drag;
+        (libm::exp(-product), advance, (time - advance) / drag)
+    }
+}
+
+impl TrajectoryDefinition {
+    /// Box containing every particle center over `[0, age]`, padded for f32 rounding.
+    ///
+    /// Each model is bounded by its own closed form: ballistic motion is linear in the
+    /// monotone advance and gravity integrals, converge stays on its segment, orbit stays on
+    /// its circle and noise drift is a linear drift plus a bounded noise offset.
+    pub(crate) fn center_bounds(&self, age: f32) -> Result<Rect, ValidationError> {
+        let time = f64::from(age);
+        let values = self.parameters.map(f64::from);
+        let (advance, gravity) = if self.kind == 1 {
+            let (_, advance, gravity) = ballistic_terms(values[4], time);
+            (advance, gravity)
+        } else {
+            (0.0, 0.0)
+        };
+        let mut low = [f64::INFINITY; 2];
+        let mut high = [f64::NEG_INFINITY; 2];
+        let mut include = |axis: usize, value: f64| {
+            low[axis] = low[axis].min(value);
+            high[axis] = high[axis].max(value);
+        };
+        if self.kind == 3 {
+            for axis in 0..2 {
+                include(axis, values[axis] - values[2]);
+                include(axis, values[axis] + values[2]);
+            }
+        } else {
+            for index in 0..self.count {
+                let particle = self.initial(index)?;
+                for axis in 0..2 {
+                    let start = f64::from(particle.position[axis]);
+                    let velocity = f64::from(particle.velocity[axis]);
+                    match self.kind {
+                        1 => {
+                            for (advance, gravity) in [
+                                (0.0, 0.0),
+                                (advance, 0.0),
+                                (0.0, gravity),
+                                (advance, gravity),
+                            ] {
+                                include(
+                                    axis,
+                                    start + velocity * advance + values[2 + axis] * gravity,
+                                );
+                            }
+                        }
+                        2 => {
+                            include(axis, start);
+                            include(axis, f64::from(particle.custom[axis]));
+                        }
+                        _ => {
+                            let drift = velocity * time;
+                            let noise = 2.0 * values[4];
+                            include(axis, start + drift.min(0.0) - noise);
+                            include(axis, start + drift.max(0.0) + noise);
+                        }
+                    }
+                }
+            }
+        }
+        let pad = |axis: usize| {
+            let scale = low[axis].abs().max(high[axis].abs()).max(1.0);
+            scale * 1e-5 + 1e-3
+        };
+        Ok(Rect::new(
+            low[0] - pad(0),
+            low[1] - pad(1),
+            high[0] + pad(0),
+            high[1] + pad(1),
+        ))
     }
 }
 
@@ -336,6 +420,13 @@ macro_rules! common {
                     initial.into_iter(),
                 )
                 .map(Some)
+            }
+
+            fn analytic_bounds(&self, age: f32) -> Result<Option<Rect>, ValidationError> {
+                if age < 0.0 || age >= self.0.lifetime || self.0.count == 0 {
+                    return Ok(None);
+                }
+                self.0.center_bounds(age).map(Some)
             }
 
             fn spawned(&self, from: Time, to: Time) -> Range<u64> {

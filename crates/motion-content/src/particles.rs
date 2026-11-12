@@ -49,17 +49,15 @@ mod curves;
 mod events;
 mod extended;
 mod forces;
+mod lazy;
 mod neighbors;
 pub mod presets;
 mod render;
+mod simulation;
 mod sprites;
 mod style;
 #[cfg(test)]
 mod tests;
-
-use batch::Instance;
-
-mod simulation;
 mod trajectory;
 
 pub use batch::ParticleBatch;

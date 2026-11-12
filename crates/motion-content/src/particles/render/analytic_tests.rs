@@ -87,6 +87,7 @@ fn analytic_builtins_attach_seeded_initial_states_without_changing_cpu_samples()
         assert_eq!(
             batch
                 .instances
+                .slice()
                 .iter()
                 .map(|instance| instance.particle)
                 .collect::<Vec<_>>(),
@@ -110,6 +111,61 @@ fn analytic_builtins_attach_seeded_initial_states_without_changing_cpu_samples()
             if let DrawCommand::ParticleInstances { batch, .. } = command {
                 assert!(batch.analytic_upload().is_none());
             }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn analytic_batches_defer_cpu_sampling_and_bound_every_center() -> motion_core::Result {
+    let cache = SceneCache::new(0);
+    for system in systems(64)? {
+        for milliseconds in [0, 250, 900, 1_900] {
+            let context = SceneContext::new(
+                milliseconds.milliseconds().after_origin(),
+                motion_core::fps!(30),
+                Size::new(32.0, 24.0),
+                &cache,
+            );
+            let list = system.clone().try_render(&context)?.compile(
+                context.size(),
+                PixelSize::new(32, 24),
+                ValidationLimits::default(),
+            )?;
+            let batch = list
+                .commands
+                .iter()
+                .find_map(|command| {
+                    if let DrawCommand::ParticleInstances { batch, .. } = command {
+                        batch.as_any().downcast_ref::<ParticleBatch>()
+                    } else {
+                        None
+                    }
+                })
+                .unwrap();
+            assert!(batch.instances.is_deferred());
+            assert!(!batch.instances.is_materialized());
+            assert!(batch.upload()?.into_words()[0] == 64.0);
+            assert!(!batch.instances.is_materialized());
+            let bounds = batch.bounds();
+            for particle in system.sample(context.time())?.iter() {
+                let [x, y] = particle.position.map(f64::from);
+                assert!(
+                    bounds.left <= x && x <= bounds.right && bounds.top <= y && y <= bounds.bottom,
+                    "{milliseconds} ms: {x},{y} outside {bounds:?}"
+                );
+            }
+            batch.sample(
+                Point::new(16.0, 12.0),
+                1.0,
+                [0.0; 4],
+                BlendSpace::LinearRgb,
+                |destination, source, _| {
+                    *destination = source;
+                    Ok(())
+                },
+            )?;
+            assert!(batch.instances.is_materialized());
         }
     }
     Ok(())
@@ -152,6 +208,7 @@ fn analytic_precision_fallback_preserves_cpu_and_exposes_a_reason() -> motion_co
     assert_eq!(
         reference
             .instances
+            .slice()
             .iter()
             .map(|instance| instance.particle)
             .collect::<Vec<_>>(),

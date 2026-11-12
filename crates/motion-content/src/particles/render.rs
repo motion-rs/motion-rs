@@ -2,6 +2,8 @@
 
 #[cfg(test)]
 use super::batch::SpatialNode;
+use super::batch::{Instance, build_spatial_index};
+use super::lazy::{Instances, Materialized};
 use super::*;
 use motion_core::{Node, Rect, SceneContext};
 
@@ -10,11 +12,19 @@ mod analytic_tests;
 #[cfg(test)]
 mod instance_protocol_tests;
 
+/// Seeded trajectories whose positions the GPU evaluates: the CPU keeps only a conservative
+/// center extent and a source that samples states if the CPU reference path asks for them.
+struct Deferred {
+    bounds: Rect,
+    source: Arc<dyn Fn() -> Result<Arc<[Particle]>, ValidationError> + Send + Sync>,
+}
+
 fn render(
     style: &ParticleStyle,
     context: &SceneContext<'_>,
     states: Arc<[Particle]>,
     analytic: Option<Result<motion_core::instances::AnalyticInstanceUpload, ValidationError>>,
+    deferred: Option<Deferred>,
     mut sample: impl FnMut(Time) -> Result<Arc<[Particle]>, ValidationError>,
 ) -> Result<Node, ValidationError> {
     match style {
@@ -32,7 +42,7 @@ fn render(
                 && !options.trails.smooth
                 && !options.trails.ribbon
             {
-                return render(style, context, states, None, sample);
+                return render(style, context, states, None, None, sample);
             }
             return super::extended::render(style, options, context, states, sample);
         }
@@ -72,7 +82,7 @@ fn render(
             "Plexus distance must be finite and positive",
         ));
     }
-    if states.is_empty() && !matches!(style, ParticleStyle::Trails { .. }) {
+    if states.is_empty() && deferred.is_none() && !matches!(style, ParticleStyle::Trails { .. }) {
         return Ok(Node::empty());
     }
     let (kind, radius, width, align, sprite) = match style {
@@ -96,6 +106,46 @@ fn render(
     };
     if !radius.is_finite() || radius < 0.0 || !width.is_finite() || width < 0.0 {
         return Err(invalid("style", "Invalid particle style geometry"));
+    }
+    if let (Some(deferred), Some(Ok(upload))) = (deferred, &analytic) {
+        let count = upload.len();
+        let reach = (radius * if kind == 1 { 3.0 } else { 2.0 }).max(width);
+        let centers = deferred.bounds;
+        let source = deferred.source;
+        let instances = Instances::deferred(count, move || {
+            let states = source()?;
+            if states.len() != count {
+                return Err(invalid("analytic", "Analytic initial-state count mismatch"));
+            }
+            let mut instances = Vec::new();
+            instances
+                .try_reserve_exact(count)
+                .map_err(|_| limit("Particle instance allocation failed"))?;
+            for particle in states.iter() {
+                particle.validate()?;
+                instances.push(Instance::new(*particle, particle.position, false));
+            }
+            let instances: Arc<[Instance]> = instances.into();
+            let index = build_spatial_index(kind, radius as f32, width as f32, &instances);
+            Ok(Materialized { instances, index })
+        });
+        let batch = ParticleBatch {
+            instances,
+            kind,
+            radius: radius as f32,
+            width: width as f32,
+            align,
+            sprite,
+            bounds: Rect::new(
+                centers.left - reach,
+                centers.top - reach,
+                centers.right + reach,
+                centers.bottom + reach,
+            ),
+            analytic,
+        };
+        batch.validate()?;
+        return Ok(Node::from(batch));
     }
     let mut instances = Vec::new();
     let mut append = |particle: Particle, previous: [f32; 2], line: bool| {
@@ -154,19 +204,19 @@ fn render(
             bounds.union(extent)
         };
     }
-    let mut batch = ParticleBatch {
-        instances: instances.into(),
+    let instances: Arc<[Instance]> = instances.into();
+    let index = build_spatial_index(kind, radius as f32, width as f32, &instances);
+    let batch = ParticleBatch {
+        instances: Instances::ready(instances, index),
         kind,
         radius: radius as f32,
         width: width as f32,
         align,
         sprite,
         bounds,
-        index: Arc::from([]),
         analytic,
     };
     batch.validate()?;
-    batch.index = batch.build_spatial_index();
     Ok(Node::from(batch))
 }
 
@@ -186,7 +236,7 @@ impl ParticleSimulation {
         // instead of replaying from a retained snapshot for every historical sample.
         let mut cursor = super::simulation::SampleCursor::default();
         let states = self.sample_with(&mut cursor, context.time(), duration)?;
-        render(&self.style, context, states, None, |time| {
+        render(&self.style, context, states, None, None, |time| {
             self.sample_with(&mut cursor, time, duration)
         })
     }
@@ -227,13 +277,28 @@ impl ParticleTrajectory {
             }
             Err(error) => return Err(error),
         };
-        render(
-            &self.style,
-            context,
-            self.sample(context.time())?,
-            analytic,
-            |time| self.sample(time),
-        )
+        let deferred = match (&analytic, primitive) {
+            (Some(Ok(_)), Some(_)) => self
+                .model
+                .analytic_bounds(context.time().as_seconds() as f32)?
+                .map(|bounds| {
+                    let trajectory = self.clone();
+                    let time = context.time();
+                    Deferred {
+                        bounds,
+                        source: Arc::new(move || trajectory.sample(time)),
+                    }
+                }),
+            _ => None,
+        };
+        let states = if deferred.is_some() {
+            Arc::from([])
+        } else {
+            self.sample(context.time())?
+        };
+        render(&self.style, context, states, analytic, deferred, |time| {
+            self.sample(time)
+        })
     }
 }
 
