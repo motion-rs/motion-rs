@@ -78,8 +78,27 @@ impl PatternImage {
         Arc::as_ptr(&self.0).cast::<()>() as usize
     }
 
+    /// Non-owning handle that recognizes this exact shared pixel storage without keeping it alive.
+    ///
+    /// The handle keeps the allocation reserved, so its address cannot be reused by another
+    /// image while the handle exists.
+    pub fn downgrade(&self) -> WeakPatternImage {
+        WeakPatternImage(Arc::downgrade(&self.0))
+    }
+
     fn same(&self, other: &Self) -> bool {
         Arc::ptr_eq(&self.0, &other.0) || self.0.content_eq(other.0.as_ref())
+    }
+}
+
+/// Weak identity of a [`PatternImage`]'s shared pixel storage.
+#[derive(Clone, Debug)]
+pub struct WeakPatternImage(std::sync::Weak<dyn crate::pixels::ImagePixels>);
+
+impl WeakPatternImage {
+    /// Whether `image` shares this handle's exact pixel storage.
+    pub fn refers_to(&self, image: &PatternImage) -> bool {
+        std::sync::Weak::ptr_eq(&self.0, &Arc::downgrade(&image.0))
     }
 }
 

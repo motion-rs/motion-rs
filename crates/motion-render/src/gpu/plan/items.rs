@@ -199,18 +199,7 @@ impl<'a> ItemPlanner<'a> {
             }
             self.attach_spatial_paint(source, &mut data, &mut parameters)?;
             if let motion_core::Paint::Pattern(pattern) = &source.paint {
-                let count = (0..pattern.image.levels())
-                    .map(|level| {
-                        let size = pattern.image.size(level);
-                        size.0 as usize * size.1 as usize * 4
-                    })
-                    .sum();
-                let mut words = self.planner.data(count, 0.0)?;
-                words.clear();
-                for level in 0..pattern.image.levels() {
-                    pattern.image.extend_level(level, &mut words);
-                }
-                resource = Some(words);
+                resource = Some(pattern.image.clone());
             }
         }
         let work = frame.paint_sources[*paint]
@@ -220,8 +209,8 @@ impl<'a> ItemPlanner<'a> {
         let scan = (data[0].to_bits() == DIRECT_COVERAGE).then(|| Planner::clip_work(&data));
         let layer = self.layers.last_mut().expect("validated root");
         layer.image = self.planner.step(layer.image, 0, parameters, data, work)?;
-        if let Some(words) = resource {
-            self.planner.attach_resource(layer.image, words)?;
+        if let Some(image) = resource {
+            self.planner.attach_image(layer.image, image)?;
         }
         self.push_quads(strips, spans, layer_bounds)?;
         if let (Some(scan), Some(step)) = (scan, self.planner.steps.last())

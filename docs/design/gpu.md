@@ -289,8 +289,11 @@ in static admission.
 Immutable image/mip/atlas words instead use a separate shared context LRU.
 Binding 11 reads the immutable payload independently of per-draw parameters,
 coverage and instance state; repeated frames do not upload those words on a
-cache hit. Exact encoded content equality follows hashing, so changed pixels
-cannot alias an older resource. The default 64-entry, 64-MiB limit includes
+cache hit. A pattern image that is the same shared pixel storage as a resident
+entry hits by identity, without building, hashing or comparing its words; a weak
+handle keeps the address unique. Every other resource, and an image seen for the
+first time, is hashed and then compared for exact encoded content equality, so
+changed pixels cannot alias an older resource. The default 64-entry, 64-MiB limit includes
 host comparison words and device payload, independently of the mutable pool.
 Frame admission conservatively covers a miss and bounded lookup work even for a
 hit. Resident buffers have dedicated in-flight leases and never enter the mutable

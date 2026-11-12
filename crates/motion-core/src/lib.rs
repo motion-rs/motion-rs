@@ -86,8 +86,8 @@ pub use drawing::{
     PathClip, RectClip, RenderQuality, Shape, ShapeClip, StrokeStyle, Styled,
 };
 pub use drawing::{
-    GradientExtend, GradientSpace, GradientUnits, ImagePattern, LinearGradient, RadialGradient,
-    SweepGradient,
+    GradientExtend, GradientSpace, GradientUnits, ImagePattern, LinearGradient, PatternImage,
+    RadialGradient, SweepGradient, WeakPatternImage,
 };
 pub use drawing::{
     MAX_MESH_POINTS_PER_AXIS, MAX_MESH_SUBDIVISIONS, MeshGradient, MeshImage, MeshPaint, MeshPatch,

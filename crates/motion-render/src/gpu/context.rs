@@ -75,8 +75,8 @@ impl Plan {
             step.data.len() as u64 * 4 > limits.max_storage_buffer_binding_size
                 || step.data.len() as u64 * 4 > limits.max_buffer_size
                 || step.resource.as_ref().is_some_and(|resource| {
-                    resource.words.len() as u64 * 4 > limits.max_storage_buffer_binding_size
-                        || resource.words.len() as u64 * 4 > limits.max_buffer_size
+                    resource.len() as u64 * 4 > limits.max_storage_buffer_binding_size
+                        || resource.len() as u64 * 4 > limits.max_buffer_size
                 })
         }) {
             return Err(device_error(

@@ -203,7 +203,7 @@ fn sprite_atlas_separation_preserves_raw_upload_and_admits_exact_bytes_work() ->
         let first = 4 + 3 * if extended { 16 } else { 12 };
         assert_eq!(step.data, raw[..first]);
         assert_eq!(
-            step.resource.as_ref().unwrap().words.as_slice(),
+            step.resource.as_ref().unwrap().words().as_slice(),
             &raw[first..]
         );
         let admit = |limits| -> motion_core::Result<(u64, u64)> {

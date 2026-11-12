@@ -65,32 +65,94 @@ pub struct GpuResidencyStats {
     pub retained_bytes: u64,
 }
 
+/// Immutable words requested for a device buffer, either built or derived from a shared image.
 #[derive(Clone)]
 pub(in crate::gpu) struct ResidentResource {
     hash: u64,
-    pub(in crate::gpu) words: Arc<Vec<f32>>,
+    len: usize,
+    content: ResourceContent,
+}
+
+#[derive(Clone)]
+enum ResourceContent {
+    Words(Arc<Vec<f32>>),
+    /// Every mip level in order; the words are built only when no resident buffer has this identity.
+    Image(motion_core::PatternImage),
+}
+
+fn content_hash(words: &[f32]) -> u64 {
+    words.iter().fold(RESOURCE_HASH_OFFSET, |hash, word| {
+        (hash ^ u64::from(word.to_bits())).wrapping_mul(RESOURCE_HASH_PRIME)
+    })
 }
 
 impl ResidentResource {
     fn new(words: Vec<f32>) -> Self {
-        let hash = words.iter().fold(RESOURCE_HASH_OFFSET, |hash, word| {
-            (hash ^ u64::from(word.to_bits())).wrapping_mul(RESOURCE_HASH_PRIME)
-        });
         Self {
-            hash,
-            words: Arc::new(words),
+            hash: content_hash(&words),
+            len: words.len(),
+            content: ResourceContent::Words(Arc::new(words)),
         }
     }
 
-    fn same_content(&self, other: &Self) -> bool {
-        self.hash == other.hash
-            && self.words.len() == other.words.len()
-            && self
-                .words
-                .iter()
-                .zip(other.words.iter())
-                .all(|(first, second)| first.to_bits() == second.to_bits())
+    /// A resource whose words are the image's mip chain; the producer's identity is the cache key.
+    pub(in crate::gpu) fn image(image: motion_core::PatternImage) -> Self {
+        let len = (0..image.levels())
+            .map(|level| {
+                let (width, height) = image.size(level);
+                width as usize * height as usize * 4
+            })
+            .sum();
+        Self {
+            hash: 0,
+            len,
+            content: ResourceContent::Image(image),
+        }
     }
+
+    /// Number of f32 words the device buffer holds.
+    pub(in crate::gpu) fn len(&self) -> usize {
+        self.len
+    }
+
+    /// The words, building them for image resources.
+    #[cfg(test)]
+    pub(in crate::gpu) fn words(&self) -> Arc<Vec<f32>> {
+        self.materialize().1
+    }
+
+    fn materialize(&self) -> (u64, Arc<Vec<f32>>) {
+        match &self.content {
+            ResourceContent::Words(words) => (self.hash, words.clone()),
+            ResourceContent::Image(image) => {
+                let mut words = Vec::with_capacity(self.len);
+                for level in 0..image.levels() {
+                    image.extend_level(level, &mut words);
+                }
+                (content_hash(&words), Arc::new(words))
+            }
+        }
+    }
+
+    #[cfg(test)]
+    fn same_content(&self, other: &Self) -> bool {
+        self.hash == other.hash && same_words(&self.words(), &other.words())
+    }
+
+    fn image_source(&self) -> Option<&motion_core::PatternImage> {
+        match &self.content {
+            ResourceContent::Image(image) => Some(image),
+            ResourceContent::Words(_) => None,
+        }
+    }
+}
+
+fn same_words(first: &[f32], second: &[f32]) -> bool {
+    first.len() == second.len()
+        && first
+            .iter()
+            .zip(second)
+            .all(|(first, second)| first.to_bits() == second.to_bits())
 }
 
 pub(in crate::gpu) struct ResidentStore {
@@ -127,35 +189,62 @@ impl ResidentStore {
         Ok(())
     }
 
+    fn hit(
+        &mut self,
+        index: usize,
+        source: Option<motion_core::WeakPatternImage>,
+    ) -> Result<wgpu::Buffer, ValidationError> {
+        let entry = self.entries.remove(index).ok_or_else(|| {
+            ValidationError::invalid(
+                "gpu.residency",
+                "entries",
+                "Resource cache index is out of range",
+            )
+        })?;
+        let buffer = entry.buffer.clone();
+        let mut entry = entry;
+        if source.is_some() {
+            entry.source = source;
+        }
+        self.entries.push_back(entry);
+        self.stats.hits = self.stats.hits.saturating_add(1);
+        Ok(buffer)
+    }
+
     fn buffer(
         &mut self,
         context: &GpuContext,
         resource: &ResidentResource,
     ) -> Result<wgpu::Buffer, ValidationError> {
+        // A resource made from an image already seen skips building, hashing and comparing words.
+        if let Some(image) = resource.image_source()
+            && let Some(index) = self.entries.iter().position(|entry| {
+                entry
+                    .source
+                    .as_ref()
+                    .is_some_and(|source| source.refers_to(image))
+            })
+        {
+            return self.hit(index, None);
+        }
+        let (hash, words) = resource.materialize();
         let mut matches = 0;
         for index in 0..self.entries.len() {
             let entry = &self.entries[index];
-            matches += usize::from(entry.resource.hash == resource.hash);
-            if entry.resource.hash != resource.hash
-                || entry.resource.words.len() != resource.words.len()
-            {
+            matches += usize::from(entry.hash == hash);
+            if entry.hash != hash || entry.words.len() != words.len() {
                 continue;
             }
-            if entry.resource.same_content(resource) {
-                let entry = self.entries.remove(index).ok_or_else(|| {
-                    ValidationError::invalid(
-                        "gpu.residency",
-                        "entries",
-                        "Resource cache index is out of range",
-                    )
-                })?;
-                let buffer = entry.buffer.clone();
-                self.entries.push_back(entry);
-                self.stats.hits = self.stats.hits.saturating_add(1);
-                return Ok(buffer);
+            if same_words(&entry.words, &words) {
+                return self.hit(
+                    index,
+                    resource
+                        .image_source()
+                        .map(motion_core::PatternImage::downgrade),
+                );
             }
         }
-        let payload = resource.words.len() as u64 * size_of::<f32>() as u64;
+        let payload = words.len() as u64 * size_of::<f32>() as u64;
         let bytes = payload
             .checked_mul(2)
             .and_then(|bytes| {
@@ -187,14 +276,18 @@ impl ResidentStore {
         }
         let buffer = context.upload_buffer(
             "Immutable resident resource",
-            bytemuck::cast_slice(resource.words.as_slice()),
+            bytemuck::cast_slice(words.as_slice()),
             wgpu::BufferUsages::STORAGE,
         );
         self.stats.misses = self.stats.misses.saturating_add(1);
         self.stats.upload_bytes = self.stats.upload_bytes.saturating_add(payload);
         if retain {
             self.entries.push_back(ResidentEntry {
-                resource: resource.clone(),
+                hash,
+                words,
+                source: resource
+                    .image_source()
+                    .map(motion_core::PatternImage::downgrade),
                 buffer: buffer.clone(),
                 bytes,
             });
@@ -262,7 +355,25 @@ impl Planner<'_> {
         step: usize,
         words: Vec<f32>,
     ) -> Result<(), ValidationError> {
-        if words.is_empty() {
+        self.attach(step, ResidentResource::new(words))
+    }
+
+    /// Attaches an image's mip chain without building its words; the host words are admitted
+    /// like a built resource so budgets do not depend on cache state.
+    pub(in crate::gpu) fn attach_image(
+        &mut self,
+        step: usize,
+        image: motion_core::PatternImage,
+    ) -> Result<(), ValidationError> {
+        let resource = ResidentResource::image(image);
+        let count = resource.len();
+        self.budget.bytes(count as u64 * 4, "gpu.data")?;
+        self.budget.work(count as u64, "gpu.data")?;
+        self.attach(step, resource)
+    }
+
+    fn attach(&mut self, step: usize, resource: ResidentResource) -> Result<(), ValidationError> {
+        if resource.len() == 0 {
             return Err(ValidationError::invalid(
                 "gpu.resources",
                 "words",
@@ -285,7 +396,7 @@ impl Planner<'_> {
             ));
         }
         // Host words were admitted by Planner::data; misses must also admit GPU and staging.
-        let bytes = (words.len() as u64)
+        let bytes = (resource.len() as u64)
             .checked_mul(RESOURCE_UPLOAD_BYTES_PER_WORD)
             .and_then(|bytes| bytes.checked_add(RESOURCE_OWNER_BYTES))
             .ok_or_else(|| {
@@ -297,17 +408,19 @@ impl Planner<'_> {
             })?;
         self.budget.bytes(bytes, "gpu.resources")?;
         self.budget.work(
-            words.len() as u64 * RESOURCE_WORD_WORK
+            resource.len() as u64 * RESOURCE_WORD_WORK
                 + MAX_RESOURCE_ENTRIES as u64 * RESOURCE_ENTRY_WORK,
             "gpu.resources",
         )?;
-        target.resource = Some(ResidentResource::new(words));
+        target.resource = Some(resource);
         Ok(())
     }
 }
 
 struct ResidentEntry {
-    resource: ResidentResource,
+    hash: u64,
+    words: Arc<Vec<f32>>,
+    source: Option<motion_core::WeakPatternImage>,
     buffer: wgpu::Buffer,
     bytes: u64,
 }
@@ -375,6 +488,83 @@ mod tests {
         Ok(())
     }
 
+    /// Single-level image that counts how often its texels are read into words.
+    #[derive(Debug)]
+    struct CountingImage(std::sync::atomic::AtomicUsize);
+
+    impl motion_core::pixels::ImagePixels for CountingImage {
+        fn width(&self) -> u32 {
+            2
+        }
+
+        fn height(&self) -> u32 {
+            1
+        }
+
+        fn level_count(&self) -> usize {
+            1
+        }
+
+        fn level_size(&self, _: usize) -> (u32, u32) {
+            (2, 1)
+        }
+
+        fn texel(&self, _: usize, column: usize, _: usize) -> [f32; 4] {
+            [column as f32; 4]
+        }
+
+        fn extend_level(&self, _: usize, out: &mut Vec<f32>) {
+            self.0.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            out.extend([0.0; 4]);
+            out.extend([1.0; 4]);
+        }
+
+        fn content_eq(&self, other: &dyn motion_core::pixels::ImagePixels) -> bool {
+            std::ptr::addr_eq(self, other)
+        }
+
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+    }
+
+    fn counting_resource(image: &Arc<CountingImage>) -> ResidentResource {
+        ResidentResource::image(motion_core::ImagePattern::from_asset(image.clone()).image)
+    }
+
+    #[test]
+    fn image_resources_report_their_length_and_build_words_only_on_demand() {
+        let image = Arc::new(CountingImage(Default::default()));
+        let resource = counting_resource(&image);
+        assert_eq!(resource.len(), 8);
+        assert_eq!(image.0.load(std::sync::atomic::Ordering::Relaxed), 0);
+        assert_eq!(resource.words().len(), 8);
+        assert_eq!(image.0.load(std::sync::atomic::Ordering::Relaxed), 1);
+        let pattern = motion_core::ImagePattern::from_asset(image.clone());
+        let other = Arc::new(CountingImage(Default::default()));
+        let other = motion_core::ImagePattern::from_asset(other).image;
+        let weak = pattern.image.downgrade();
+        assert!(weak.refers_to(&pattern.image));
+        assert!(!weak.refers_to(&other));
+    }
+
+    #[test]
+    #[ignore = "requires a native GPU; verifies image identity skips word construction"]
+    fn native_image_identity_hits_without_rebuilding_words() -> motion_core::Result {
+        let gpu = Gpu::new()?;
+        let context = &gpu.context;
+        context.clear_resident_resources()?;
+        let before = context.residency_stats();
+        let image = Arc::new(CountingImage(Default::default()));
+        context.resource_buffer(&counting_resource(&image))?;
+        context.resource_buffer(&counting_resource(&image))?;
+        let after = context.residency_stats();
+        assert_eq!(after.misses, before.misses + 1);
+        assert_eq!(after.hits, before.hits + 1);
+        assert_eq!(image.0.load(std::sync::atomic::Ordering::Relaxed), 1);
+        Ok(())
+    }
+
     #[test]
     #[ignore = "requires a native GPU; verifies immutable resource residency and in-flight eviction"]
     fn native_resources_reuse_content_evict_safely_and_allow_disabling() -> motion_core::Result {
@@ -386,7 +576,7 @@ mod tests {
         let retained = context.resource_buffer(&first)?;
         assert_eq!(
             retained,
-            context.resource_buffer(&ResidentResource::new(first.words.as_ref().clone()))?
+            context.resource_buffer(&ResidentResource::new(first.words().as_ref().clone()))?
         );
         assert_eq!(context.residency_stats().hits, before.hits + 1);
         assert_eq!(
@@ -412,7 +602,7 @@ mod tests {
             before_clear.clear_resident_resources()?;
         }
         assert_eq!(context.residency_stats().retained_bytes, 0);
-        assert_eq!(read_resource(context, &retained)?, first.words.as_slice());
+        assert_eq!(read_resource(context, &retained)?, first.words().as_slice());
         context.set_residency_limits(CacheLimits {
             max_entries: 0,
             max_bytes: 0,

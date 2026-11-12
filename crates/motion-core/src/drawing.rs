@@ -26,7 +26,7 @@ pub use mesh::{
 };
 pub use paint::{
     GradientExtend, GradientSpace, GradientUnits, ImagePattern, LinearGradient, Paint,
-    RadialGradient, SweepGradient,
+    PatternImage, RadialGradient, SweepGradient, WeakPatternImage,
 };
 pub use stroke::{LineCap, LineJoin, MAX_STROKE_VERBS, StrokeStyle};
 
