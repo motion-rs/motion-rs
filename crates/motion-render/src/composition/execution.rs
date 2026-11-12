@@ -251,11 +251,11 @@ impl FrameExecution<'_> {
                 )
             })
             .map_err(|error| motion_core::Error::from(error).at_frame(u64::from(index)));
-        linear.recycle(&mut self.cpu_pool);
+        self.cpu_pool.put(linear.into_pixels());
         let frame = frame?;
         stats.output = WorkStats {
             peak_bytes: linear_bytes
-                + std::mem::size_of::<crate::cpu::LinearFrame>() as u64
+                + std::mem::size_of::<crate::linear::LinearFrame>() as u64
                 + frame.retained_bytes(),
             work: crate::FrameBuffer::display_conversion_work(frame.size(), format, Some(&display)),
         };

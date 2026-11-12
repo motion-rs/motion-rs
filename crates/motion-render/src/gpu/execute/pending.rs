@@ -181,7 +181,7 @@ impl PendingLinearFrame {
                 "Could not reserve pending output",
                 "Nonfinite GPU readback",
             )?;
-            Ok(crate::cpu::LinearFrame::from_gpu(
+            Ok(crate::linear::LinearFrame::from_pixels_with_stats(
                 PixelSize::new(
                     self.output_bounds.right - self.output_bounds.left,
                     self.output_bounds.bottom - self.output_bounds.top,

@@ -9,6 +9,7 @@ pub(crate) mod cpu;
 pub mod display;
 #[cfg(feature = "gpu")]
 pub mod gpu;
+pub(crate) mod linear;
 pub mod look;
 pub mod options;
 pub mod output;

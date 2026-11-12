@@ -1,5 +1,5 @@
 use super::*;
-use crate::{FrameBuffer, PixelFormat, WorkStats};
+use crate::{FrameBuffer, PixelFormat};
 use motion_core::ValidationErrorKind;
 
 #[test]
@@ -21,23 +21,14 @@ fn yuv_single_pass_matches_scalar_planes() {
         })
         .collect();
     let frames = [
-        LinearFrame {
+        LinearFrame::from_pixels(size, pixels),
+        LinearFrame::from_pixels(size, vec![[0.25, 0.5, 0.75, 1.0]; 180]),
+        LinearFrame::from_pixels(
             size,
-            pixels,
-            stats: WorkStats::default(),
-        },
-        LinearFrame {
-            size,
-            pixels: vec![[0.25, 0.5, 0.75, 1.0]; 180],
-            stats: WorkStats::default(),
-        },
-        LinearFrame {
-            size,
-            pixels: (0..180)
+            (0..180)
                 .map(|index| [if index % 3 == 0 { -0.0 } else { 0.0 }, 1.0, 4.0, 1.0])
                 .collect(),
-            stats: WorkStats::default(),
-        },
+        ),
     ];
     let encode = |pixel: [f32; 4]| {
         let rgb = [pixel[0], pixel[1], pixel[2]]
@@ -226,11 +217,10 @@ fn rgba8_thresholds_match_scalar_boundaries_and_alpha_modes() {
     }
     for width in [1, 3, 7, 17, 32] {
         let count = pixels.len() / width * width;
-        let frame = LinearFrame {
-            size: PixelSize::new(width as u32, (count / width) as u32),
-            pixels: pixels[..count].to_vec(),
-            stats: WorkStats::default(),
-        };
+        let frame = LinearFrame::from_pixels(
+            PixelSize::new(width as u32, (count / width) as u32),
+            pixels[..count].to_vec(),
+        );
         for premultiplied in [false, true] {
             let actual = frame
                 .to_rgba8_frame(premultiplied, RasterLimits::default())
@@ -317,19 +307,18 @@ fn byte_lookup_is_exhaustively_equal_to_counting_thresholds() {
 
 #[test]
 fn gamma_and_alpha_modes_use_straight_linear_channels_first() {
-    let source = LinearFrame {
-        size: PixelSize {
+    let source = LinearFrame::from_pixels(
+        PixelSize {
             width: 4,
             height: 1,
         },
-        pixels: vec![
+        vec![
             [0.5, 0.5, 0.5, 1.0],
             [0.25, 0.0, 0.0, 0.5],
             [0.0; 4],
             [1.0; 4],
         ],
-        stats: WorkStats::default(),
-    };
+    );
     let straight = source
         .to_rgba8_frame(false, RasterLimits::default())
         .unwrap();
@@ -354,11 +343,10 @@ fn ordered_dither_has_fixed_spatial_phase_and_no_channel_or_history_noise() {
         for step in 0..16 {
             let encoded = (64.0 + (step as f32 + 0.25) / 16.0) / 255.0;
             let linear = motion_core::srgb_to_linear(encoded);
-            let source = LinearFrame {
-                size: PixelSize::new(width, height),
-                pixels: vec![[linear, linear, linear, 1.0]; (width * height) as usize],
-                stats: WorkStats::default(),
-            };
+            let source = LinearFrame::from_pixels(
+                PixelSize::new(width, height),
+                vec![[linear, linear, linear, 1.0]; (width * height) as usize],
+            );
             let first = source
                 .to_rgba8_frame(false, RasterLimits::default())
                 .unwrap();
@@ -389,9 +377,9 @@ fn ordered_dither_has_fixed_spatial_phase_and_no_channel_or_history_noise() {
 
 #[test]
 fn hdr_clips_only_at_output_and_zero_quantized_alpha_clears_hidden_rgb() {
-    let source = LinearFrame {
-        size: PixelSize::new(6, 1),
-        pixels: vec![
+    let source = LinearFrame::from_pixels(
+        PixelSize::new(6, 1),
+        vec![
             [f32::MAX, -f32::MAX, 0.0, 1.0],
             [0.5, 5.0, -0.5, 0.25],
             [f32::MAX, -f32::MAX, 0.0, 1.0 / 255.0],
@@ -399,8 +387,7 @@ fn hdr_clips_only_at_output_and_zero_quantized_alpha_clears_hidden_rgb() {
             [1.0, -1.0, 0.5, 0.001],
             [1.0, -1.0, 0.5, 0.0],
         ],
-        stats: WorkStats::default(),
-    };
+    );
     let original = source.clone();
     let straight = source
         .to_rgba8_frame(false, RasterLimits::default())
@@ -435,11 +422,7 @@ fn alpha_rounding_and_premultiplied_bounds_hold_at_all_byte_midpoints() {
             pixels.push([alpha; 4]);
         }
     }
-    let source = LinearFrame {
-        size: PixelSize::new(pixels.len() as u32, 1),
-        pixels,
-        stats: WorkStats::default(),
-    };
+    let source = LinearFrame::from_pixels(PixelSize::new(pixels.len() as u32, 1), pixels);
     for mode in [false, true] {
         let output = source
             .to_rgba8_frame(mode, RasterLimits::default())
@@ -465,11 +448,7 @@ fn alpha_rounding_and_premultiplied_bounds_hold_at_all_byte_midpoints() {
 
 #[test]
 fn exact_conversion_limits_succeed_and_short_limits_preserve_the_source() {
-    let source = LinearFrame {
-        size: PixelSize::new(4, 1),
-        pixels: vec![[0.25, 0.0, 0.0, 0.5]; 4],
-        stats: WorkStats::default(),
-    };
+    let source = LinearFrame::from_pixels(PixelSize::new(4, 1), vec![[0.25, 0.0, 0.0, 0.5]; 4]);
     let original = source.clone();
     let output = source
         .to_rgba8_frame(false, RasterLimits::default())

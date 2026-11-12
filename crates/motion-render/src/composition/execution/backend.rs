@@ -160,7 +160,7 @@ impl FrameExecution<'_> {
         index: u32,
         prepared: PreparedOutput,
         limits: RasterLimits,
-    ) -> Result<crate::cpu::LinearFrame> {
+    ) -> Result<crate::linear::LinearFrame> {
         let result = (|| -> Result<_> {
             #[cfg(feature = "gpu")]
             let plan = {

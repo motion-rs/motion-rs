@@ -249,7 +249,7 @@ impl FrameBuffer {
             );
             let source =
                 linear.pixels().len() as u64 * 16 + std::mem::size_of::<LinearFrame>() as u64;
-            linear.recycle(surfaces);
+            surfaces.put(linear.into_pixels());
             let encoded = match encoded {
                 Err(error)
                     if error.field == "max_bytes"

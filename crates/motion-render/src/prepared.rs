@@ -1,8 +1,8 @@
 //! CPU preparation results and common immutable composition records.
 
 #[cfg(any(feature = "gpu", test))]
-pub(crate) use crate::cpu::LinearFrame;
-pub use crate::cpu::WorkStats;
+pub(crate) use crate::linear::LinearFrame;
+pub use crate::linear::WorkStats;
 pub(crate) use crate::raster::coverage_cache::CoverageCache;
 use crate::raster::paint;
 pub use crate::raster::prepare::RenderPrepare;

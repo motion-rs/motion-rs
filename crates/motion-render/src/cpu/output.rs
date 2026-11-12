@@ -1,7 +1,7 @@
 //! Explicit SDR output conversion of immutable linear-premultiplied frames.
 
 #[cfg(test)]
-use super::{LinearFrame, WorkStats};
+use crate::linear::{LinearFrame, WorkStats};
 #[cfg(test)]
 use motion_core::{PixelSize, RasterLimits, ValidationError, budget::Budget};
 
@@ -344,8 +344,8 @@ impl LinearFrame {
         premultiplied: bool,
         limits: RasterLimits,
     ) -> Result<Rgba8Frame, ValidationError> {
-        let mut budget = Budget::new(self.size, limits)?;
-        let count = self.pixels.len() as u64;
+        let mut budget = Budget::new(self.size(), limits)?;
+        let count = self.pixels().len() as u64;
         budget.bytes(size_of::<LinearFrame>() as u64, "rgba8.source")?;
         budget.bytes(
             count
@@ -374,18 +374,22 @@ impl LinearFrame {
         )?;
         budget.work(count, "rgba8.pixels")?;
         let mut pixels = Vec::new();
-        pixels.try_reserve_exact(self.pixels.len()).map_err(|_| {
+        pixels.try_reserve_exact(self.pixels().len()).map_err(|_| {
             ValidationError::limit(
                 "rgba8.pixels",
                 "max_bytes",
                 "Could not reserve RGBA8 storage",
             )
         })?;
-        RgbaEncoder::new(premultiplied).encode(&self.pixels, self.size.width as usize, |pixel| {
-            pixels.push(pixel);
-        });
+        RgbaEncoder::new(premultiplied).encode(
+            self.pixels(),
+            self.size().width as usize,
+            |pixel| {
+                pixels.push(pixel);
+            },
+        );
         Ok(Rgba8Frame {
-            size: self.size,
+            size: self.size(),
             pixels,
             premultiplied,
             stats: WorkStats {

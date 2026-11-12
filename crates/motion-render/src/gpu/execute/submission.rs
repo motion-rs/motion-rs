@@ -748,7 +748,7 @@ impl Gpu {
                 "Could not reserve native GPU output",
                 "Native GPU readback must remain finite",
             )?;
-            Ok(crate::cpu::LinearFrame::from_gpu(
+            Ok(crate::linear::LinearFrame::from_pixels_with_stats(
                 frame.size(),
                 pixels,
                 stats,
