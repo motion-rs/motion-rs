@@ -231,13 +231,16 @@ struct PreviewRenderer {
 }
 
 impl PreviewRenderer {
-    fn new(scene: &StudioScene, renderer: BackendKind) -> motion_core::Result<Self> {
+    fn new(
+        scene: &StudioScene,
+        backend: motion_render::BackendPreference,
+    ) -> motion_core::Result<Self> {
         let mut frame_renderer = scene
             .composition
             .clone()
             .configure(|options| {
                 options
-                    .backend(motion_render::BackendPreference::from_kind(renderer))
+                    .backend(backend)
                     .allow_missing_assets(true)
                     .mark_invalid_geometry(true)
             })

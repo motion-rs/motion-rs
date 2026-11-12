@@ -78,6 +78,8 @@ completions. Resource-error placeholders are not retained as healthy thumbnails.
 The preview uses the GPU when the window's device is available and the CPU otherwise;
 the backend selector lists only CPU and GPU. GPU admission failures, including
 `max_bytes`, and device loss are typed errors and never switch the preview to the CPU.
+The backend selector controls the preview workers independently of export settings;
+changing it rebuilds their renderers and invalidates previews from the previous selection.
 Frame-cache capacity is separate from per-frame GPU storage allowance.
 
 Playback is real-time only: Play waits for its first frame (at most two seconds),

@@ -223,16 +223,15 @@ fn submit_preview(
                     ((u64::from(size.height) * u64::from(request.settings.scale)) / 100).max(1)
                         as u32,
                 ))?;
-            if let Some(preference) = request.settings.backend {
-                scene.composition = scene
-                    .composition
-                    .configure(|options| options.backend(preference));
-            }
             scene.composition = scene
                 .composition
                 .configure(|options| options.quality(request.settings.quality));
         }
-        let renderer = PreviewRenderer::new(&scene, key.renderer)?;
+        let backend = request
+            .settings
+            .backend
+            .unwrap_or_else(|| motion_render::BackendPreference::from_kind(key.renderer));
+        let renderer = PreviewRenderer::new(&scene, backend)?;
         #[cfg(feature = "gpu")]
         let renderer = {
             let mut renderer = renderer;

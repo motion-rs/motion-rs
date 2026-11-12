@@ -2,6 +2,65 @@ use super::*;
 use motion_content::{AssetsExt, FontFace, Image, Text};
 use motion_core::Shape;
 
+#[cfg(feature = "gpu")]
+#[test]
+#[ignore = "requires native GPU; validates preview backend switching without a window or fonts"]
+fn preview_workers_honor_backend_settings_over_request_key() -> motion_core::Result<()> {
+    let scene = StudioScene::from_render(
+        "Backend selection",
+        motion_render::Composition::new(
+            16,
+            8,
+            motion_render::FrameClock::new(motion_core::fps!(30), 3),
+        ),
+        motion_core::Size::new(16.0, 8.0),
+        |context| motion_core::Node::from(context.bounds().fill(motion_core::Color::WHITE)),
+    )
+    .unwrap();
+    let (wake, updates) = std::sync::mpsc::channel();
+    let context = Context::default();
+    context.set_request_repaint_callback(move |_| {
+        let _ = wake.send(());
+    });
+    let worker = PreviewCoordinator::with_slots(scene, context, 0, 1)?;
+    let key = PreviewKey {
+        frame: 0,
+        renderer: BackendKind::Cpu,
+    };
+    for backend in [
+        Some(motion_render::BackendPreference::gpu()),
+        Some(motion_render::BackendPreference::Cpu),
+        Some(motion_render::BackendPreference::gpu()),
+        None,
+    ] {
+        worker.request_with_settings(
+            key,
+            PreviewSettings {
+                backend,
+                pixels: true,
+                ..PreviewSettings::default()
+            },
+        );
+        let reply = wait_for_preview(&worker, &updates, key);
+        let image = reply.image?;
+        assert_eq!(image.size, [16, 8]);
+        assert!(
+            image.pixels.iter().all(|pixel| *pixel == Color32::WHITE),
+            "{:?}",
+            image.pixels
+        );
+        let expected = if backend.is_some_and(|preference| preference.wants_gpu()) {
+            "Gpu"
+        } else {
+            "Cpu"
+        };
+        assert!(reply.backend.starts_with(expected), "{}", reply.backend);
+        let timings = reply.timings.unwrap();
+        assert_eq!(timings.fused_output, expected == "Cpu");
+    }
+    Ok(())
+}
+
 #[test]
 #[ignore = "requires native FFmpeg codecs; correctness only, no window or audio device"]
 fn studio_all_codecs_export_and_retain_transactions() -> motion_core::Result<()> {
@@ -333,7 +392,7 @@ fn automatic_preview_rejects_gpu_plan_without_rejecting_cpu_frame() -> motion_co
         backend: Some(motion_render::BackendPreference::gpu()),
         ..PreviewSettings::default()
     };
-    let mut automatic = PreviewRenderer::new(&scene, BackendKind::Cpu)?;
+    let mut automatic = PreviewRenderer::new(&scene, motion_render::BackendPreference::Cpu)?;
     let image = automatic.preview(&scene, 0, settings)?;
     assert!(image.texture.is_none());
     assert!(image.backend.starts_with("Cpu"), "{}", image.backend);
@@ -349,14 +408,14 @@ fn automatic_preview_rejects_gpu_plan_without_rejecting_cpu_frame() -> motion_co
             .configure(|options| options.backend(motion_render::BackendPreference::Cpu)),
         ..scene.clone()
     };
-    let expected =
-        PreviewRenderer::new(&cpu_scene, BackendKind::Cpu)?.preview(&cpu_scene, 0, settings)?;
+    let expected = PreviewRenderer::new(&cpu_scene, motion_render::BackendPreference::Cpu)?
+        .preview(&cpu_scene, 0, settings)?;
     assert_eq!(image.image.pixels, expected.image.pixels);
     assert_eq!(
         automatic.preview(&scene, 0, settings)?.image.pixels,
         expected.image.pixels
     );
-    let mut inherited = PreviewRenderer::new(&scene, BackendKind::Cpu)?;
+    let mut inherited = PreviewRenderer::new(&scene, motion_render::BackendPreference::Cpu)?;
     assert_eq!(
         inherited.renderer.requested_backend(),
         motion_render::BackendPreference::gpu()
@@ -388,7 +447,7 @@ fn automatic_preview_rejects_gpu_plan_without_rejecting_cpu_frame() -> motion_co
         },
     )
     .unwrap();
-    let mut selected = PreviewRenderer::new(&changing, BackendKind::Cpu)?;
+    let mut selected = PreviewRenderer::new(&changing, motion_render::BackendPreference::Cpu)?;
     let first = selected.preview(&changing, 0, settings)?;
     assert!(first.texture.is_some(), "{}", first.backend);
     let error = selected.preview(&changing, 1, settings).err().unwrap();
@@ -407,7 +466,7 @@ fn automatic_preview_rejects_gpu_plan_without_rejecting_cpu_frame() -> motion_co
             .configure(|options| options.backend(motion_render::BackendPreference::gpu())),
         ..scene
     };
-    let error = PreviewRenderer::new(&explicit, BackendKind::Gpu)?
+    let error = PreviewRenderer::new(&explicit, motion_render::BackendPreference::gpu())?
         .preview(
             &explicit,
             0,
@@ -865,7 +924,7 @@ fn timeline_worker_keeps_preview_silent_and_exports_its_mix() -> motion_core::Re
         ),
         timeline,
     )?;
-    let mut preview = PreviewRenderer::new(&scene, BackendKind::Cpu)?;
+    let mut preview = PreviewRenderer::new(&scene, motion_render::BackendPreference::Cpu)?;
     preview.render_frame(&scene, 0)?;
     assert_eq!(calls.load(std::sync::atomic::Ordering::Relaxed), 0);
     let directory = tempfile::tempdir()?;
@@ -968,7 +1027,7 @@ fn preview_session_uses_linear_cpu_without_fonts() -> motion_core::Result {
         |_| Node::from(Rect::new(0.0, 0.0, 8.0, 4.0).fill(Color::WHITE)).opacity(0.5),
     )
     .unwrap();
-    let mut session = PreviewRenderer::new(&scene, BackendKind::Cpu)?;
+    let mut session = PreviewRenderer::new(&scene, motion_render::BackendPreference::Cpu)?;
     let snapshot = session.render_frame(&scene, 0)?;
     assert_eq!(
         (
@@ -987,7 +1046,7 @@ fn preview_session_uses_linear_cpu_without_fonts() -> motion_core::Result {
         }),
         ..scene.clone()
     };
-    let mut restricted = PreviewRenderer::new(&denied, BackendKind::Cpu)?;
+    let mut restricted = PreviewRenderer::new(&denied, motion_render::BackendPreference::Cpu)?;
     let error = restricted
         .render_frame(&denied, 0)
         .expect_err("preview must inherit scene budget");
@@ -1040,7 +1099,7 @@ fn preview_honors_global_shutter_and_replays_without_fonts() -> motion_core::Res
         },
     )
     .unwrap();
-    let mut renderer = PreviewRenderer::new(&scene, BackendKind::Cpu)?;
+    let mut renderer = PreviewRenderer::new(&scene, motion_render::BackendPreference::Cpu)?;
     let first = renderer.render_frame(&scene, 1)?;
     assert_eq!(calls.load(std::sync::atomic::Ordering::Relaxed), 4);
     assert_eq!(first.packed_rgb()[0], 0xbbbbbb);
@@ -1193,7 +1252,7 @@ fn preview_worker_rejects_gpu_without_fallback_and_recovers() -> motion_core::Re
 #[ignore = "requires a native GPU; no window or video export"]
 fn preview_worker_gpu_switching_matches_cpu() -> motion_core::Result {
     let scene = worker_scene(Arc::new(std::sync::atomic::AtomicUsize::new(0)));
-    let mut reference = PreviewRenderer::new(&scene, BackendKind::Cpu)?;
+    let mut reference = PreviewRenderer::new(&scene, motion_render::BackendPreference::Cpu)?;
     let supports_timestamps = crate::GpuContext::new()?.supports_timestamps();
     let (wake, updates) = std::sync::mpsc::channel();
     let context = Context::default();
@@ -1294,7 +1353,7 @@ fn worker_export_acceptance(renderer: BackendKind) -> motion_core::Result {
         let _result = wake.send(());
     });
     let preview = PreviewCoordinator::new(scene.clone(), context.clone())?;
-    let mut reference = PreviewRenderer::new(&scene, BackendKind::Cpu)?;
+    let mut reference = PreviewRenderer::new(&scene, motion_render::BackendPreference::Cpu)?;
     let mut replay = None;
     let mut maximum = 0;
     for frame in [2, 0, 1, 2] {
