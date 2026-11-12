@@ -9,16 +9,9 @@ use motion_core::budget::Budget;
 /// Width and height of a coverage tile in pixels.
 pub(crate) const COVERAGE_TILE_SIZE: u32 = 16;
 
-/// Full-row area followed by eight subrow winding carries; mirrored in coverage.wgsl.
+/// Signed row height carried into each tile row; mirrored in coverage.wgsl.
 #[cfg(feature = "gpu")]
-pub(crate) const COVERAGE_CARRY_STRIDE: u64 = 9;
-
-/// Winding samples (8 x 8) one refined pixel evaluates against every edge of its tile.
-const COVERAGE_REFINEMENT_SAMPLES: u64 = 64;
-
-/// Pixels one edge reference can force into refinement inside a tile: the pixels it crosses
-/// plus the pixels to its right in rows where it ends.
-const REFINED_PIXELS_PER_EDGE: u64 = 2 * COVERAGE_TILE_SIZE as u64;
+pub(crate) const COVERAGE_CARRY_STRIDE: u64 = 1;
 
 /// Bytes in the host/WGSL coverage fill descriptor.
 #[cfg(feature = "gpu")]
@@ -36,8 +29,8 @@ pub(crate) const COVERAGE_CURVE_BYTES: u64 = 48;
 #[cfg(feature = "gpu")]
 pub(crate) const COVERAGE_PARAMS_BYTES: u64 = 16;
 
-/// Maximum conservatively admitted edge references in one tile. Every refined pixel scans this
-/// list 64 times, so the cap bounds the worst per-pixel shader loop at 2^18 edge tests.
+/// Maximum conservatively admitted edge references in one tile. Every pixel scans this list
+/// once, so the cap bounds the worst per-pixel shader loop at 2^12 edge tests.
 const MAX_TILE_EDGES: u32 = 4096;
 
 /// Maximum control hulls used to admit one curve, without generating its line segments.
@@ -55,15 +48,13 @@ pub(crate) struct TileLayout {
 }
 
 impl TileLayout {
-    /// Work units for binning, row carries, area integration and refinement.
+    /// Work units for binning, row carries and area integration.
     ///
     /// Area integration and row carries visit each edge reference at most `256 + 16` times,
-    /// plus the count/scatter and prefix passes. Refinement evaluates every reference against
-    /// each pixel it forces into the 8 x 8 winding test.
+    /// plus the count/scatter and prefix passes.
     fn work_for(indices: u64, tile_count: u64, bounds: PixelRect) -> u64 {
         let area = u64::from(COVERAGE_TILE_SIZE).pow(2) + 18;
-        let refinement = REFINED_PIXELS_PER_EDGE * COVERAGE_REFINEMENT_SAMPLES;
-        indices * (area + refinement) + tile_count * 32 + bounds.pixels()
+        indices * area + tile_count * 32 + bounds.pixels()
     }
 
     pub(super) fn admit_curves(

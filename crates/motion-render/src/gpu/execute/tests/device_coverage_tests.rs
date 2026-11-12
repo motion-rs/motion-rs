@@ -124,7 +124,6 @@ fn coverage_shader_constants_match_the_host_planner() {
     };
     assert_eq!(constant("TILE_SIZE"), u64::from(COVERAGE_TILE_SIZE));
     assert_eq!(constant("CARRY_STRIDE"), COVERAGE_CARRY_STRIDE);
-    assert_eq!(constant("CARRY_STRIDE"), constant("WINDING_SAMPLES") + 1);
 }
 
 #[test]

@@ -1,4 +1,5 @@
-// GPU curve flattening, edge binning and f32 area coverage. Host layouts are asserted in gpu/layout.rs.
+// GPU curve flattening, edge binning and f32 analytic area coverage (signed-area accumulation
+// folded by the fill rule, as in Skia's analytic AA and Vello's fine rasterizer). Host layouts are asserted in gpu/layout.rs.
 struct CoverageParams {
     fills: u32,
     edges: u32,
@@ -52,9 +53,8 @@ struct CoverageTile {
 @group(0) @binding(7) var<storage, read> curves: array<CoverageCurve>;
 
 const TILE_SIZE = 16u;
-// Full-row signed area plus midpoint winding at eight subrows; host carry stride is nine.
-const WINDING_SAMPLES = 8u;
-const CARRY_STRIDE = 9u;
+// Signed row height carried into each tile row; mirrored by the host planner.
+const CARRY_STRIDE = 1u;
 
 fn curve_point(curve: CoverageCurve, time: f32) -> vec2f {
     let a = mix(curve.first.xy, curve.first.zw, time);
@@ -184,27 +184,15 @@ fn carry_rows(@builtin(global_invocation_id) id: vec3u, @builtin(num_workgroups)
     let row = index - fill.first_row;
     let band = row / TILE_SIZE;
     var total = 0.0;
-    var winding: array<f32, 8>;
     for (var column = 0u; column < fill.columns; column++) {
         let tile = fill.first_tile + band * fill.columns + column;
-        let carry = (tile * TILE_SIZE + row % TILE_SIZE) * CARRY_STRIDE;
-        carries[carry] = total;
-        for (var sample = 0u; sample < WINDING_SAMPLES; sample++) {
-            carries[carry + 1u + sample] = winding[sample];
-        }
+        carries[(tile * TILE_SIZE + row % TILE_SIZE) * CARRY_STRIDE] = total;
         let first = tiles[tile].offset;
         let last = first + atomicLoad(&tiles[tile].count);
         for (var item = first; item < last; item++) {
             let edge = edges[indices[item]].points;
             if tile_columns(edge, band, fill.columns).y == column {
                 total += row_height(edge, row);
-                let ordered = upper_lower(edge);
-                for (var sample = 0u; sample < WINDING_SAMPLES; sample++) {
-                    let y = f32(row) + (f32(sample) + 0.5) / f32(WINDING_SAMPLES);
-                    if ordered.y <= y && y < ordered.w {
-                        winding[sample] += select(-1.0, 1.0, edge.w > edge.y);
-                    }
-                }
             }
         }
     }
@@ -232,13 +220,12 @@ fn column_area(xa: f32, xb: f32, left: f32, height: f32) -> f32 {
     return area * height;
 }
 
-fn signed_area(tile: u32, pixel: vec2u) -> vec2f {
+fn signed_area(tile: u32, pixel: vec2u) -> f32 {
     let origin = vec2f((pixel / TILE_SIZE) * TILE_SIZE);
     let top = f32(pixel.y % TILE_SIZE);
     let first = tiles[tile].offset;
     let last = first + atomicLoad(&tiles[tile].count);
     var total = carries[(tile * TILE_SIZE + pixel.y % TILE_SIZE) * CARRY_STRIDE];
-    var boundaries = 0.0;
     for (var item = first; item < last; item++) {
         let points = edges[indices[item]].points;
         let edge = upper_lower(points) - origin.xyxy;
@@ -250,18 +237,10 @@ fn signed_area(tile: u32, pixel: vec2u) -> vec2f {
         let xa = edge.x + (edge.z - edge.x) * ((y_top - edge.y) / (edge.w - edge.y));
         let xb = edge.x + (edge.z - edge.x) * ((y_bottom - edge.y) / (edge.w - edge.y));
         let column = f32(pixel.x % TILE_SIZE);
-        if max(xa, xb) > column && min(xa, xb) < column + 1.0 {
-            boundaries += 1.0;
-        }
-        // An edge that starts or ends inside this row, at or left of the pixel, leaves
-        // different windings in the row's upper and lower parts; area alone would blend them.
-        if (edge.y > top || edge.w < top + 1.0) && min(xa, xb) < column + 1.0 {
-            boundaries += 2.0;
-        }
         let area = column_area(xa, xb, f32(pixel.x % TILE_SIZE), y_bottom - y_top);
         total += select(-area, area, points.w > points.y);
     }
-    return vec2f(total, boundaries);
+    return total;
 }
 
 fn rule_coverage(total: f32, rule: u32) -> f32 {
@@ -271,57 +250,6 @@ fn rule_coverage(total: f32, rule: u32) -> f32 {
     }
     let folded = magnitude - 2.0 * floor(magnitude * 0.5);
     return select(folded, 2.0 - folded, folded > 1.0);
-}
-
-// Folding an integrated winding is not equivalent to integrating the fill rule at
-// overlapping contours. Refine those pixels, retaining analytic area for simple boundaries.
-fn refined_coverage(tile: u32, pixel: vec2u, rule: u32, area: vec2f) -> f32 {
-    let analytic = rule_coverage(area.x, rule);
-    let carry = (tile * TILE_SIZE + pixel.y % TILE_SIZE) * CARRY_STRIDE;
-    var uniform_carry = true;
-    for (var row = 1u; row < WINDING_SAMPLES; row++) {
-        uniform_carry = uniform_carry && carries[carry + 1u + row] == carries[carry + 1u];
-    }
-    if uniform_carry && area.y <= 1.0 && abs(area.x) <= 1.0 {
-        return analytic;
-    }
-    let first = tiles[tile].offset;
-    let last = first + atomicLoad(&tiles[tile].count);
-    var minimum = 0.0;
-    var maximum = 0.0;
-    var covered = 0.0;
-    for (var row = 0u; row < WINDING_SAMPLES; row++) {
-        let y = f32(pixel.y) + (f32(row) + 0.5) / f32(WINDING_SAMPLES);
-        var winding: array<f32, 8>;
-        for (var column = 0u; column < WINDING_SAMPLES; column++) {
-            // The carry holds the winding left of this tile for each sub-row, not per column.
-            winding[column] = carries[carry + 1u + row];
-        }
-        for (var item = first; item < last; item++) {
-            let points = edges[indices[item]].points;
-            let edge = upper_lower(points);
-            if y < edge.y || y >= edge.w {
-                continue;
-            }
-            let x = edge.x + (edge.z - edge.x) * ((y - edge.y) / (edge.w - edge.y));
-            let direction = select(-1.0, 1.0, points.w > points.y);
-            for (var column = 0u; column < WINDING_SAMPLES; column++) {
-                let sample_x = f32(pixel.x) + (f32(column) + 0.5) / f32(WINDING_SAMPLES);
-                if x <= sample_x {
-                    winding[column] += direction;
-                }
-            }
-        }
-        for (var column = 0u; column < WINDING_SAMPLES; column++) {
-            minimum = min(minimum, winding[column]);
-            maximum = max(maximum, winding[column]);
-            covered += rule_coverage(winding[column], rule);
-        }
-    }
-    if (minimum >= 0.0 && maximum <= 1.0) || (minimum >= -1.0 && maximum <= 0.0) {
-        return analytic;
-    }
-    return covered / f32(WINDING_SAMPLES * WINDING_SAMPLES);
 }
 
 @compute @workgroup_size(16, 16)
@@ -350,6 +278,6 @@ fn coverage_pass(
     if any(pixel >= fill.size) {
         return;
     }
-    let value = clamp(refined_coverage(tile, pixel, fill.rule, signed_area(tile, pixel)), 0.0, 1.0);
+    let value = clamp(rule_coverage(signed_area(tile, pixel), fill.rule), 0.0, 1.0);
     coverage[fill.coverage + pixel.y * fill.size.x + pixel.x] = bitcast<u32>(value);
 }

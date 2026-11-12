@@ -53,10 +53,11 @@ A GPU pass expands those descriptors into the edge records consumed by coverage;
 the host does not flatten or upload those curve edges. Line-only uploads remain
 compatible. The GPU computes f32 coverage before composition, without an
 intermediate u8 quantization. All other coverage is still generated on the CPU and uploaded.
-Simple boundaries retain analytic signed areas. Overlapping winding is refined on
-an eight-by-eight midpoint grid before applying the fill rule, rather than folding
-an integrated winding and leaving false coverage along duplicate even-odd contours.
-This is not the exact CPU sweep and permits localized antialiasing differences. CPU rendering
+Coverage follows the Skia analytic-AA and Vello fine-rasterizer model: each pixel
+accumulates signed area from its tile edges plus a per-row carry, then folds the
+total by the fill rule (non-zero clamps its magnitude, even-odd folds it). Contours
+that overlap inside one pixel are approximated, so duplicate even-odd edges and
+opposite windings sharing an edge within a pixel row can differ from the CPU. This is not the exact CPU sweep and permits localized antialiasing differences. CPU rendering
 prepares its own coverage with unchanged reference arithmetic. GPU preparation never generates CPU coverage and a selected GPU never
 changes backends after a failure.
 
@@ -92,10 +93,8 @@ path; there is no CPU coverage route. Exhausting the caller's byte/work allowanc
 remains a validation error.
 
 Planning reserves host/upload/device descriptors, tile counters and offsets,
-the full conservative index capacity and nine values per row: integrated signed
-height and eight midpoint winding carries. Refinement work is admitted separately
-from the base tile-work ceilings, conservatively charging up to 64 winding samples
-per edge visit plus the original coverage work. The count,
+the full conservative index capacity and one value per row: the integrated signed
+height. Work is admitted against the base tile-work ceilings. The count,
 prefix and scatter passes never request growth or a readback. Device buffer and
 two-dimensional dispatch limits are checked before encoding. Per-fill/frame work
 ceilings bound each coverage dispatch. Pooled counters are explicitly cleared
