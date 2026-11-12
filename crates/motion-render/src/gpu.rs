@@ -16,7 +16,6 @@ mod layout;
 mod output_plan;
 mod particle_tiles;
 mod plan;
-mod prepared;
 pub(crate) mod raster;
 mod residency;
 #[cfg(test)]
@@ -27,8 +26,8 @@ mod timing;
 mod visual;
 
 pub use device::*;
+pub use frame::PreparedGpuFrame;
 pub use output_plan::OutputPlan;
-pub use prepared::PreparedGpuFrame;
 pub use residency::GpuResidencyStats;
 pub use timing::{GpuTimingHandle, GpuTimings};
 

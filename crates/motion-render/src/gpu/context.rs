@@ -4,7 +4,6 @@ use super::*;
 use motion_core::sync::MutexExt;
 use motion_core::{PixelSize, ValidationError};
 
-mod batch;
 mod self_check;
 pub(in crate::gpu) mod textures;
 

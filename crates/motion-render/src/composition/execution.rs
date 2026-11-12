@@ -1,23 +1,67 @@
 //! One-frame render entry points and output conversion; scene preparation and backend
-//! dispatch live in the `preparation` and `backend` submodules.
+//! dispatch live in `preparation` and backend methods on [`FrameExecution`].
 //!
 //! CPU and GPU backends use only explicitly supplied fonts; nothing is discovered implicitly.
 
 use super::*;
+#[cfg(feature = "gpu")]
+use crate::gpu::PreparedGpuFrame;
+use crate::prepared::{FrameRecords, PreparedCpuFrame};
 use crate::{BackendKind, RasterLimits, RenderContext, WorkStats};
 use motion_core::{Color, Node, Result, SceneContext, Shape, Time, ValidationError};
 
-mod backend;
 #[cfg(feature = "gpu")]
 mod gpu;
 #[cfg(not(feature = "gpu"))]
 #[path = "execution/no_gpu.rs"]
 mod gpu;
 mod preparation;
-mod prepared;
 
 use preparation::remaining;
-pub(super) use prepared::PreparedOutput;
+
+pub(in crate::composition) enum PreparedOutput {
+    Cpu(PreparedCpuFrame),
+    #[cfg(feature = "gpu")]
+    Gpu(PreparedGpuFrame),
+}
+
+impl PreparedOutput {
+    /// Reference-path frame; GPU preparation is never converted to CPU coverage.
+    pub(super) fn into_cpu(self) -> motion_core::Result<Self> {
+        match self {
+            Self::Cpu(_) => Ok(self),
+            #[cfg(feature = "gpu")]
+            Self::Gpu(_) => Err(motion_core::ValidationError::unsupported(
+                "prepared",
+                "backend",
+                "GPU preparation cannot be rendered by the CPU backend",
+            )
+            .into()),
+        }
+    }
+}
+
+impl std::ops::Deref for PreparedOutput {
+    type Target = FrameRecords;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::Cpu(frame) => &frame.0,
+            #[cfg(feature = "gpu")]
+            Self::Gpu(frame) => &frame.scene,
+        }
+    }
+}
+
+#[cfg(feature = "gpu")]
+impl crate::gpu::frame::FrameInput for PreparedOutput {
+    fn gpu_view(&self) -> crate::gpu::frame::FrameView<'_> {
+        match self {
+            Self::Cpu(frame) => frame.gpu_view(),
+            Self::Gpu(frame) => frame.gpu_view(),
+        }
+    }
+}
 
 pub(super) struct FrameExecution<'a> {
     pub(super) composition: Composition,
@@ -227,6 +271,56 @@ impl FrameExecution<'_> {
             self.timings.as_mut().expect("enabled timings").output += started.elapsed();
         }
         Ok(frame)
+    }
+
+    pub(in crate::composition) fn select_backend(&mut self) -> Result<crate::BackendKind> {
+        let renderer = self.backend_kind();
+        if renderer == BackendKind::Cpu || self.backend_ready {
+            return Ok(renderer);
+        }
+        match self.init_gpu() {
+            Ok(()) => {
+                self.backend_ready = true;
+                Ok(BackendKind::Gpu)
+            }
+            Err(error) => {
+                self.gpu_reset();
+                Err(error)
+            }
+        }
+    }
+
+    pub(super) fn render_prepared(
+        &mut self,
+        index: u32,
+        prepared: PreparedOutput,
+        limits: RasterLimits,
+    ) -> Result<crate::linear::LinearFrame> {
+        let result = (|| -> Result<_> {
+            let plan = self.plan_gpu(&prepared, limits)?;
+            let (linear, preparation) = match self.select_backend()? {
+                BackendKind::Cpu => {
+                    let prepared = prepared.into_cpu()?;
+                    let started = self.timings.map(|_| std::time::Instant::now());
+                    let linear = prepared.render_linear_pooled(limits, &mut self.cpu_pool)?;
+                    if let Some(started) = started {
+                        self.timings.as_mut().expect("enabled timings").composition +=
+                            started.elapsed();
+                    }
+                    (linear, prepared.stats())
+                }
+                BackendKind::Gpu => (self.render_gpu(&prepared, plan, limits)?, prepared.stats()),
+            };
+            let stats = FrameStats {
+                preparation,
+                linear: linear.stats(),
+                output: WorkStats::default(),
+            };
+            Ok((linear, stats))
+        })()
+        .map_err(|error| error.at_frame(u64::from(index)))?;
+        self.last_stats = Some(result.1);
+        Ok(result.0)
     }
 }
 

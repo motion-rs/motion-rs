@@ -1,15 +1,14 @@
 //! Shared bounded raster frontend for CPU and GPU consumers.
 
-use crate::prepared::{PaintRecord, FrameRecords};
+use crate::prepared::{FrameRecords, PaintRecord};
 use motion_core::budget::Budget;
 
 pub(crate) mod frame_ir;
 pub(crate) mod paint;
-pub(crate) mod preparation_cache;
 pub mod prepare;
 
 pub(crate) use crate::cpu::coverage_cache::CoverageCache;
-pub(crate) use preparation_cache::PreparationCache;
+use paint::TableCache;
 use prepare::paint_record;
 pub(crate) use prepare::pixel_bounds;
 
@@ -53,4 +52,36 @@ pub(crate) struct Band {
     pub(crate) row: u32,
     pub(crate) left: u32,
     pub(crate) right: u32,
+}
+
+/// Session-lifetime preparation caches.
+///
+/// Paint tables are backend-neutral. Coverage holds CPU strips and spans, which the GPU only
+/// consults for analytic fills it keeps on the CPU (rectangles and decal patterns).
+pub(crate) struct PreparationCache {
+    pub(crate) coverage: CoverageCache,
+    pub(crate) paints: TableCache,
+}
+
+impl Default for PreparationCache {
+    fn default() -> Self {
+        Self::new(&motion_core::RenderCache::default())
+    }
+}
+
+impl PreparationCache {
+    pub(crate) fn new(cache: &motion_core::RenderCache) -> Self {
+        Self {
+            coverage: CoverageCache::new(cache),
+            paints: TableCache::new(cache),
+        }
+    }
+
+    pub(crate) fn retained_coverage_bytes(&self) -> u64 {
+        self.coverage.retained_bytes()
+    }
+
+    pub(crate) fn retained_paint_bytes(&self) -> u64 {
+        self.paints.retained_bytes()
+    }
 }

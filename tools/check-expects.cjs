@@ -261,12 +261,6 @@ const policies = [
     "The local start instant is constructed only from Some(timings); the intervening stage does not disable timings.",
   ],
   [
-    "motion-render/src/composition/execution/backend.rs",
-    ["enabled timings"],
-    "invariant",
-    "The local start instant is constructed only from Some(timings); the intervening stage does not disable timings.",
-  ],
-  [
     "motion-render/src/composition/execution/gpu.rs",
     ["enabled timings"],
     "invariant",

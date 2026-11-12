@@ -1,7 +1,6 @@
 //! Startup visual fixtures that prepare CPU and GPU coverage independently.
 
-use crate::gpu::raster::prepare::GpuFrame;
-use crate::gpu::{Gpu, GpuContext, Plan, visual};
+use crate::gpu::{Gpu, GpuContext, Plan, PreparedGpuFrame, visual};
 use crate::{RasterLimits, RenderPrepare};
 use motion_core::{
     BlendMode, Circle, ClipMode, Color, FillRule, Filter, LinearGradient, Node, NodeModifiers,
@@ -77,7 +76,7 @@ fn run(context: &GpuContext) -> motion_core::Result<()> {
 
 fn render(
     gpu: &mut Gpu,
-    frame: &GpuFrame,
+    frame: &PreparedGpuFrame,
     limits: RasterLimits,
 ) -> motion_core::Result<crate::FrameBuffer> {
     Ok(crate::FrameBuffer::from_linear_rgba8(
@@ -182,5 +181,47 @@ mod tests {
         }
         assert_eq!(device_cases, 2);
         Ok(())
+    }
+
+    #[test]
+    #[ignore = "requires a native GPU; checks layer attachment capabilities without a window"]
+    fn native_layer_attachment_capabilities() -> motion_core::Result {
+        pollster::block_on(async {
+            let instance = crate::gpu::instance(crate::BackendKind::Gpu)?;
+            let adapter = instance
+                .request_adapter(&wgpu::RequestAdapterOptions::default())
+                .await
+                .map_err(|error| motion_core::Error::GpuUnavailable(Box::new(error)))?;
+            let info = crate::gpu::adapter_info(&adapter)?;
+            for format in [
+                wgpu::TextureFormat::Rgba32Float,
+                wgpu::TextureFormat::Rgba16Float,
+            ] {
+                let features = adapter.get_texture_format_features(format);
+                eprintln!(
+                    "Layer attachment {format:?} on {info:?}: usages={:?}, flags={:?}, adapter_specific={}",
+                    features.allowed_usages,
+                    features.flags,
+                    adapter
+                        .features()
+                        .contains(wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES)
+                );
+                assert!(
+                    features
+                        .allowed_usages
+                        .contains(wgpu::TextureUsages::RENDER_ATTACHMENT)
+                );
+            }
+            let context = crate::GpuContext::new()?;
+            let supported = adapter
+                .features()
+                .contains(wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES)
+                && adapter
+                    .get_texture_format_features(wgpu::TextureFormat::Rgba32Float)
+                    .flags
+                    .contains(wgpu::TextureFormatFeatureFlags::BLENDABLE);
+            assert_eq!(context.textures.blends.is_some(), supported);
+            Ok(())
+        })
     }
 }
