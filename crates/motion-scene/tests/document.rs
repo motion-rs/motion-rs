@@ -1,5 +1,6 @@
 //! Round-trip, schema, diagnostics and rendering tests for declarative documents.
 
+use motion_content::{CollisionResponse, Fit, ParticleEventKind, WriteOptions};
 use motion_core::{
     BlendMode, ClipMode, Color, ErrorKind, FillRule, LineCap, LineJoin, MaskMode, Pivot, Point,
     Rect, Time, ValidationError,
@@ -26,6 +27,70 @@ fn errors(document: &Document) -> Vec<ValidationError> {
         .iter()
         .map(|error| error.downcast_ref::<ValidationError>().unwrap().clone())
         .collect()
+}
+
+#[test]
+fn shared_content_policies_preserve_json_without_content_features() {
+    use serde_json::json;
+
+    let source = json!({"version": 1, "size": [8, 8], "fps": 4, "tracks": [{
+        "items": [{"scene": {"duration": 1, "content": {"children": [
+            {"image": {"source": "image.png", "fit": "cover"}},
+            {"text": {"content": "Shared", "alignment": "center", "split": "words"}},
+            {"svg": {"source": "drawing.svg", "write_options": {
+                "width": 2, "outline_fraction": 0.75
+            }}},
+            {"particles": {"seed": 7, "blend": "screen", "duration": 1,
+                "preset": {"kind": "logo_assemble", "bounds": [0, 0, 8, 8]}
+            }},
+            {"particles": {"seed": 8, "sub_emitters": [{
+                "on": {"age_reached": 0.5}, "emitter": {"point": [0, 0]},
+                "inherit": "all", "probability": 1
+            }], "modifiers": [{"operator": {"color_field": {
+                "coordinate": "speed", "range": [0, 10],
+                "colors": [[0, 0, 0, 1], [1, 1, 1, 1]]
+            }}}]}}
+        ]}}}]
+    }]});
+    let document = Document::from_json(&source.to_string()).unwrap();
+    let output = document.to_json().unwrap();
+    assert_eq!(Document::from_json(&output).unwrap(), document);
+    let output: serde_json::Value = serde_json::from_str(&output).unwrap();
+    let children = &output["tracks"][0]["items"][0]["scene"]["content"]["children"];
+    assert_eq!(children[0]["image"]["fit"], "cover");
+    assert_eq!(children[1]["text"]["alignment"], "center");
+    assert_eq!(children[1]["text"]["split"], "words");
+    assert_eq!(
+        children[2]["svg"]["write_options"],
+        json!({
+            "width": 2.0, "outline_fraction": 0.75
+        })
+    );
+    assert_eq!(children[3]["particles"]["preset"]["kind"], "logo_assemble");
+    assert_eq!(children[3]["particles"]["blend"], "screen");
+    let event = &children[4]["particles"]["sub_emitters"][0];
+    assert_eq!(event["on"], json!({"age_reached": 0.5}));
+    assert_eq!(event["inherit"], "all");
+}
+
+#[test]
+fn shared_content_options_keep_required_fields_and_reject_unknown_fields() {
+    use serde_json::json;
+
+    for value in [
+        json!({"restitution": 0.5, "kill_on_hit": false}),
+        json!({"restitution": 0.5, "friction": 0.25, "kill_on_hit": false, "extra": 1}),
+    ] {
+        assert!(serde_json::from_value::<CollisionResponse>(value).is_err());
+    }
+    for value in [
+        json!({"width": 2}),
+        json!({"width": 2, "outline_fraction": 0.75, "extra": 1}),
+    ] {
+        assert!(serde_json::from_value::<WriteOptions>(value).is_err());
+    }
+    assert!(serde_json::from_value::<Fit>(json!("stretch")).is_err());
+    assert!(serde_json::from_value::<ParticleEventKind>(json!("age_reached")).is_err());
 }
 
 #[test]

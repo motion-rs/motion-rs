@@ -1,5 +1,7 @@
 //! Particles, diagrams, captions, formulas and morphs in declarative documents.
 
+#[cfg(feature = "particles")]
+use motion_core::instances::InstanceBlend;
 use motion_core::{Color, Pivot, Point, Rect, Time, ValidationError};
 use motion_render::{FrameBuffer, RenderOptions, render_still};
 use motion_scene::*;
@@ -323,7 +325,7 @@ fn trajectories_render_closed_form_bursts() {
         },
         sample_time: None,
         style: Some(ParticleStyleSpec::GlowDots { radius: 2.0 }),
-        blend: Some(ParticleBlendSpec::Plus),
+        blend: Some(InstanceBlend::Plus),
     }));
     assert!(ink(&render(&film(element), 0.5)) > 20);
 }

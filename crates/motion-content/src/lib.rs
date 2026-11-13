@@ -18,6 +18,7 @@ pub mod diagram;
 #[cfg(feature = "text")]
 pub mod font;
 pub mod image;
+mod options;
 #[cfg(feature = "particles")]
 pub mod particles;
 #[cfg(feature = "svg")]
@@ -32,6 +33,10 @@ pub use font::{FontFace, FontIdentifier, FontLibrary, MAX_FONT_FACE_BYTES};
 #[cfg(feature = "image")]
 pub use image::{AnimatedImage, AnimatedImageAsset, ImageLoopMode};
 pub use image::{Fit, Image, ImageAsset, ImageLevel, Sampling};
+pub use options::{
+    CollisionResponse, FieldCoordinate, Inherit, ParticleEventKind, Preset, TextAlignment,
+    TextSplit,
+};
 #[cfg(feature = "particles")]
 pub use particles::{
     Attractor, Ballistic, BounceBox, BurstEmitter, ColorOverLifetime, Converge, CurlNoise,
@@ -45,8 +50,7 @@ pub use particles::{
 pub use svg::{Svg, SvgAsset, SvgDiagnostic};
 #[cfg(feature = "text")]
 pub use text::{
-    FontWeight, ParagraphLayout, ParagraphStyle, PartStyle, Text, TextAlignment, TextGlyph,
-    TextPart, TextSpan, TextSplit,
+    FontWeight, ParagraphLayout, ParagraphStyle, PartStyle, Text, TextGlyph, TextPart, TextSpan,
 };
 pub use vector::{
     CompileCache, Morph, SurfaceTriangle, VectorGroup, VectorImage, VectorItem, VectorLeaf,

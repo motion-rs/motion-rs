@@ -409,19 +409,14 @@ impl Compiler<'_> {
 
     #[cfg(feature = "vector")]
     fn image(&mut self, spec: &ImageSpec, path: &str) -> Option<Built> {
-        use motion_content::{Fit, Image};
+        use motion_content::Image;
         let source = self.resolve(&spec.source, &format!("{path}.source"))?;
         let mut image = Image::open(motion_core::Source::File(source));
         if let Some([width, height]) = spec.size {
             image = image.size(width, height);
         }
         if let Some(fit) = spec.fit {
-            image = image.fit(match fit {
-                crate::options::FitSpec::Fill => Fit::Fill,
-                crate::options::FitSpec::Contain => Fit::Contain,
-                crate::options::FitSpec::Cover => Fit::Cover,
-                crate::options::FitSpec::None => Fit::None,
-            });
+            image = image.fit(fit);
         }
         if let Some(radius) = spec.corner_radius {
             image = image.corner_radius(radius);
@@ -451,13 +446,7 @@ impl Compiler<'_> {
             svg = svg.fit(motion_core::Size::new(width, height));
         }
         let varying = write.as_ref().is_some_and(super::value::Prop::varying);
-        let write_options =
-            spec.write_options
-                .as_ref()
-                .map(|options| motion_content::WriteOptions {
-                    width: options.width,
-                    outline_fraction: options.outline_fraction,
-                });
+        let write_options = spec.write_options;
         if let Some(options) = write_options
             && (!options.width.is_finite()
                 || options.width <= 0.0

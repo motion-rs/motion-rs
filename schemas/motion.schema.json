@@ -1878,6 +1878,60 @@
         }
       ]
     },
+    "CollisionResponse": {
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "description": "Bounded normal restitution and tangential friction.",
+          "properties": {
+            "friction": {
+              "anyOf": [
+                {
+                  "description": "Fraction of tangential velocity removed in 0..=1.",
+                  "format": "float",
+                  "type": "number"
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "kill_on_hit": {
+              "anyOf": [
+                {
+                  "description": "Remove the particle at its first contact.",
+                  "type": "boolean"
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "restitution": {
+              "anyOf": [
+                {
+                  "description": "Normal velocity restitution in 0..=1.",
+                  "format": "float",
+                  "type": "number"
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            }
+          },
+          "required": [
+            "restitution",
+            "friction",
+            "kill_on_hit"
+          ],
+          "type": "object"
+        },
+        {
+          "$ref": "#/$defs/ValueRef"
+        }
+      ]
+    },
     "Color": {
       "anyOf": [
         {
@@ -4363,6 +4417,33 @@
         }
       ]
     },
+    "FieldCoordinate": {
+      "anyOf": [
+        {
+          "description": "Scalar coordinate used by a particle color field.",
+          "oneOf": [
+            {
+              "const": "x",
+              "description": "Horizontal position.",
+              "type": "string"
+            },
+            {
+              "const": "y",
+              "description": "Vertical position.",
+              "type": "string"
+            },
+            {
+              "const": "speed",
+              "description": "Velocity magnitude.",
+              "type": "string"
+            }
+          ]
+        },
+        {
+          "$ref": "#/$defs/ValueRef"
+        }
+      ]
+    },
     "FillRule": {
       "anyOf": [
         {
@@ -4786,29 +4867,29 @@
         }
       ]
     },
-    "FitSpec": {
+    "Fit": {
       "anyOf": [
         {
-          "description": "Image placement inside its viewport.",
+          "description": "Centered image placement in a local viewport.",
           "oneOf": [
             {
               "const": "fill",
-              "description": "Stretch each axis.",
+              "description": "Stretch independently along each axis.",
               "type": "string"
             },
             {
               "const": "contain",
-              "description": "Preserve aspect ratio inside the viewport.",
+              "description": "Preserve aspect ratio with transparent letterboxing.",
               "type": "string"
             },
             {
               "const": "cover",
-              "description": "Preserve aspect ratio and crop.",
+              "description": "Preserve aspect ratio and crop to fill the viewport.",
               "type": "string"
             },
             {
               "const": "none",
-              "description": "Keep source pixel dimensions.",
+              "description": "Keep source pixel dimensions and crop centrally.",
               "type": "string"
             }
           ]
@@ -5334,7 +5415,7 @@
                 {
                   "anyOf": [
                     {
-                      "$ref": "#/$defs/FitSpec"
+                      "$ref": "#/$defs/Fit"
                     },
                     {
                       "type": "null"
@@ -5408,6 +5489,75 @@
             "source"
           ],
           "type": "object"
+        },
+        {
+          "$ref": "#/$defs/ValueRef"
+        }
+      ]
+    },
+    "Inherit": {
+      "anyOf": [
+        {
+          "description": "Parent properties added to an emitter's local child record.",
+          "oneOf": [
+            {
+              "const": "none",
+              "description": "Keep emitter-authored values.",
+              "type": "string"
+            },
+            {
+              "const": "position",
+              "description": "Translate local emission to the event location.",
+              "type": "string"
+            },
+            {
+              "const": "velocity",
+              "description": "Translate and add parent velocity.",
+              "type": "string"
+            },
+            {
+              "const": "color",
+              "description": "Translate and multiply parent premultiplied color.",
+              "type": "string"
+            },
+            {
+              "const": "all",
+              "description": "Translate, add velocity and inherit color.",
+              "type": "string"
+            }
+          ]
+        },
+        {
+          "$ref": "#/$defs/ValueRef"
+        }
+      ]
+    },
+    "InstanceBlend": {
+      "anyOf": [
+        {
+          "description": "Batch-level compositing applied to every primitive in a batch.",
+          "oneOf": [
+            {
+              "const": "source_over",
+              "description": "Premultiplied source-over compositing.",
+              "type": "string"
+            },
+            {
+              "const": "plus",
+              "description": "Additive linear RGB with bounded alpha.",
+              "type": "string"
+            },
+            {
+              "const": "screen",
+              "description": "Screen compositing.",
+              "type": "string"
+            },
+            {
+              "const": "multiply",
+              "description": "Multiply compositing.",
+              "type": "string"
+            }
+          ]
         },
         {
           "$ref": "#/$defs/ValueRef"
@@ -9531,38 +9681,6 @@
       ],
       "type": "object"
     },
-    "ParticleBlendSpec": {
-      "anyOf": [
-        {
-          "description": "Compositing of a particle layer.",
-          "oneOf": [
-            {
-              "const": "source_over",
-              "description": "Premultiplied source-over.",
-              "type": "string"
-            },
-            {
-              "const": "plus",
-              "description": "Additive linear RGB.",
-              "type": "string"
-            },
-            {
-              "const": "screen",
-              "description": "Screen.",
-              "type": "string"
-            },
-            {
-              "const": "multiply",
-              "description": "Multiply.",
-              "type": "string"
-            }
-          ]
-        },
-        {
-          "$ref": "#/$defs/ValueRef"
-        }
-      ]
-    },
     "ParticleConfigurationSpec": {
       "anyOf": [
         {
@@ -9768,33 +9886,6 @@
         }
       ]
     },
-    "ParticleCoordinateSpec": {
-      "anyOf": [
-        {
-          "description": "Source coordinate for particle color fields.",
-          "oneOf": [
-            {
-              "const": "x",
-              "description": "Horizontal position.",
-              "type": "string"
-            },
-            {
-              "const": "y",
-              "description": "Vertical position.",
-              "type": "string"
-            },
-            {
-              "const": "speed",
-              "description": "Velocity magnitude.",
-              "type": "string"
-            }
-          ]
-        },
-        {
-          "$ref": "#/$defs/ValueRef"
-        }
-      ]
-    },
     "ParticleCurveSpec": {
       "anyOf": [
         {
@@ -9858,29 +9949,29 @@
         }
       ]
     },
-    "ParticleEventSpec": {
+    "ParticleEventKind": {
       "anyOf": [
         {
-          "description": "Fixed-boundary event trigger.",
+          "description": "Fixed-boundary particle event.",
           "oneOf": [
             {
               "const": "birth",
-              "description": "First live admission.",
+              "description": "First admission of a live particle.",
               "type": "string"
             },
             {
               "const": "death",
-              "description": "Half-open lifetime expiry.",
+              "description": "Half-open lifetime expiry, including kill-on-hit.",
               "type": "string"
             },
             {
               "const": "collision",
-              "description": "Geometric contact.",
+              "description": "Geometric or population contact.",
               "type": "string"
             },
             {
               "additionalProperties": false,
-              "description": "First boundary at the specified absolute age in seconds.",
+              "description": "Age threshold in seconds, reported at its first simulation boundary.",
               "properties": {
                 "age_reached": {
                   "anyOf": [
@@ -10079,43 +10170,6 @@
             "rgba"
           ],
           "type": "object"
-        },
-        {
-          "$ref": "#/$defs/ValueRef"
-        }
-      ]
-    },
-    "ParticleInheritSpec": {
-      "anyOf": [
-        {
-          "description": "Parent properties inherited by local event births.",
-          "oneOf": [
-            {
-              "const": "none",
-              "description": "Keeps local emitter properties.",
-              "type": "string"
-            },
-            {
-              "const": "position",
-              "description": "Adds the parent's position.",
-              "type": "string"
-            },
-            {
-              "const": "velocity",
-              "description": "Adds position and velocity.",
-              "type": "string"
-            },
-            {
-              "const": "color",
-              "description": "Adds position and multiplies color.",
-              "type": "string"
-            },
-            {
-              "const": "all",
-              "description": "Adds position, velocity and color.",
-              "type": "string"
-            }
-          ]
         },
         {
           "$ref": "#/$defs/ValueRef"
@@ -10661,7 +10715,7 @@
                 "particle_collisions": {
                   "anyOf": [
                     {
-                      "$ref": "#/$defs/ParticleResponseSpec"
+                      "$ref": "#/$defs/CollisionResponse"
                     },
                     {
                       "$ref": "#/$defs/ValueRef"
@@ -10722,7 +10776,7 @@
                         "response": {
                           "anyOf": [
                             {
-                              "$ref": "#/$defs/ParticleResponseSpec",
+                              "$ref": "#/$defs/CollisionResponse",
                               "description": "Contact response."
                             },
                             {
@@ -10785,7 +10839,7 @@
                         "response": {
                           "anyOf": [
                             {
-                              "$ref": "#/$defs/ParticleResponseSpec",
+                              "$ref": "#/$defs/CollisionResponse",
                               "description": "Contact response."
                             },
                             {
@@ -10848,7 +10902,7 @@
                         "response": {
                           "anyOf": [
                             {
-                              "$ref": "#/$defs/ParticleResponseSpec",
+                              "$ref": "#/$defs/CollisionResponse",
                               "description": "Contact response."
                             },
                             {
@@ -10945,7 +10999,7 @@
                         "response": {
                           "anyOf": [
                             {
-                              "$ref": "#/$defs/ParticleResponseSpec",
+                              "$ref": "#/$defs/CollisionResponse",
                               "description": "Contact response."
                             },
                             {
@@ -11101,7 +11155,7 @@
                         "coordinate": {
                           "anyOf": [
                             {
-                              "$ref": "#/$defs/ParticleCoordinateSpec",
+                              "$ref": "#/$defs/FieldCoordinate",
                               "description": "Source coordinate."
                             },
                             {
@@ -11271,83 +11325,6 @@
         }
       ]
     },
-    "ParticlePresetKind": {
-      "anyOf": [
-        {
-          "description": "Stable names of the shared particle recipes.",
-          "oneOf": [
-            {
-              "const": "sparks",
-              "description": "Tapered ballistic burst.",
-              "type": "string"
-            },
-            {
-              "const": "embers",
-              "description": "Cooling glowing embers.",
-              "type": "string"
-            },
-            {
-              "const": "dust",
-              "description": "Small depth-aware dust.",
-              "type": "string"
-            },
-            {
-              "const": "motes",
-              "description": "Floating bokeh motes.",
-              "type": "string"
-            },
-            {
-              "const": "snow",
-              "description": "Layered wind-driven snow.",
-              "type": "string"
-            },
-            {
-              "const": "rain",
-              "description": "Colliding rain and splash bursts.",
-              "type": "string"
-            },
-            {
-              "const": "smoke",
-              "description": "Curl-driven smoke sprites.",
-              "type": "string"
-            },
-            {
-              "const": "fire",
-              "description": "Buoyant fire sprites.",
-              "type": "string"
-            },
-            {
-              "const": "confetti",
-              "description": "Flipping colored quads.",
-              "type": "string"
-            },
-            {
-              "const": "fireworks",
-              "description": "Rockets and secondary bursts.",
-              "type": "string"
-            },
-            {
-              "const": "fireflies",
-              "description": "Breathing drifting lights.",
-              "type": "string"
-            },
-            {
-              "const": "logo_dissolve",
-              "description": "Colored vector dispersal.",
-              "type": "string"
-            },
-            {
-              "const": "logo_assemble",
-              "description": "Colored vector convergence.",
-              "type": "string"
-            }
-          ]
-        },
-        {
-          "$ref": "#/$defs/ValueRef"
-        }
-      ]
-    },
     "ParticlePresetSpec": {
       "anyOf": [
         {
@@ -11415,7 +11392,7 @@
             "kind": {
               "anyOf": [
                 {
-                  "$ref": "#/$defs/ParticlePresetKind",
+                  "$ref": "#/$defs/Preset",
                   "description": "Recipe name."
                 },
                 {
@@ -11466,60 +11443,6 @@
           "required": [
             "kind",
             "bounds"
-          ],
-          "type": "object"
-        },
-        {
-          "$ref": "#/$defs/ValueRef"
-        }
-      ]
-    },
-    "ParticleResponseSpec": {
-      "anyOf": [
-        {
-          "additionalProperties": false,
-          "description": "Finite normal and tangential particle contact policy.",
-          "properties": {
-            "friction": {
-              "anyOf": [
-                {
-                  "description": "Tangential friction in 0 to 1.",
-                  "format": "float",
-                  "type": "number"
-                },
-                {
-                  "$ref": "#/$defs/ValueRef"
-                }
-              ]
-            },
-            "kill_on_hit": {
-              "anyOf": [
-                {
-                  "description": "Removes the root particle on contact.",
-                  "type": "boolean"
-                },
-                {
-                  "$ref": "#/$defs/ValueRef"
-                }
-              ]
-            },
-            "restitution": {
-              "anyOf": [
-                {
-                  "description": "Restitution in 0 to 1.",
-                  "format": "float",
-                  "type": "number"
-                },
-                {
-                  "$ref": "#/$defs/ValueRef"
-                }
-              ]
-            }
-          },
-          "required": [
-            "restitution",
-            "friction",
-            "kill_on_hit"
           ],
           "type": "object"
         },
@@ -12406,7 +12329,7 @@
             "inherit": {
               "anyOf": [
                 {
-                  "$ref": "#/$defs/ParticleInheritSpec",
+                  "$ref": "#/$defs/Inherit",
                   "description": "Parent-property inheritance."
                 },
                 {
@@ -12417,7 +12340,7 @@
             "on": {
               "anyOf": [
                 {
-                  "$ref": "#/$defs/ParticleEventSpec",
+                  "$ref": "#/$defs/ParticleEventKind",
                   "description": "Trigger event."
                 },
                 {
@@ -12778,7 +12701,7 @@
                 {
                   "anyOf": [
                     {
-                      "$ref": "#/$defs/ParticleBlendSpec"
+                      "$ref": "#/$defs/InstanceBlend"
                     },
                     {
                       "type": "null"
@@ -13366,6 +13289,83 @@
             }
           },
           "type": "object"
+        },
+        {
+          "$ref": "#/$defs/ValueRef"
+        }
+      ]
+    },
+    "Preset": {
+      "anyOf": [
+        {
+          "description": "Curated, independently configurable particle recipes.",
+          "oneOf": [
+            {
+              "const": "sparks",
+              "description": "Tapered HDR ballistic burst.",
+              "type": "string"
+            },
+            {
+              "const": "embers",
+              "description": "Cooling, upward-moving glowing embers.",
+              "type": "string"
+            },
+            {
+              "const": "dust",
+              "description": "Slow depth-aware dust.",
+              "type": "string"
+            },
+            {
+              "const": "motes",
+              "description": "Soft floating motes.",
+              "type": "string"
+            },
+            {
+              "const": "snow",
+              "description": "Three parallax depth layers of wind-driven snow.",
+              "type": "string"
+            },
+            {
+              "const": "rain",
+              "description": "Stretched rain with collision-triggered splashes.",
+              "type": "string"
+            },
+            {
+              "const": "smoke",
+              "description": "Expanding procedural smoke sprites.",
+              "type": "string"
+            },
+            {
+              "const": "fire",
+              "description": "Buoyant procedural fire cores.",
+              "type": "string"
+            },
+            {
+              "const": "confetti",
+              "description": "Flipping, colored falling quads.",
+              "type": "string"
+            },
+            {
+              "const": "fireworks",
+              "description": "Rocket death, spark burst, then secondary spark deaths.",
+              "type": "string"
+            },
+            {
+              "const": "fireflies",
+              "description": "Drifting and breathing light points.",
+              "type": "string"
+            },
+            {
+              "const": "logo_dissolve",
+              "description": "Color-preserving vector surface dispersal.",
+              "type": "string"
+            },
+            {
+              "const": "logo_assemble",
+              "description": "Color-preserving vector surface convergence.",
+              "type": "string"
+            }
+          ]
         },
         {
           "$ref": "#/$defs/ValueRef"
@@ -15305,7 +15305,7 @@
                 {
                   "anyOf": [
                     {
-                      "$ref": "#/$defs/SvgWriteSpec"
+                      "$ref": "#/$defs/WriteOptions"
                     },
                     {
                       "type": "null"
@@ -15321,48 +15321,6 @@
           },
           "required": [
             "source"
-          ],
-          "type": "object"
-        },
-        {
-          "$ref": "#/$defs/ValueRef"
-        }
-      ]
-    },
-    "SvgWriteSpec": {
-      "anyOf": [
-        {
-          "additionalProperties": false,
-          "description": "Options for cumulative contour handwriting.",
-          "properties": {
-            "outline_fraction": {
-              "anyOf": [
-                {
-                  "description": "Fraction of progress spent drawing the outline, in `0..=1`.",
-                  "format": "double",
-                  "type": "number"
-                },
-                {
-                  "$ref": "#/$defs/ValueRef"
-                }
-              ]
-            },
-            "width": {
-              "anyOf": [
-                {
-                  "description": "Outline width in design units.",
-                  "format": "double",
-                  "type": "number"
-                },
-                {
-                  "$ref": "#/$defs/ValueRef"
-                }
-              ]
-            }
-          },
-          "required": [
-            "width",
-            "outline_fraction"
           ],
           "type": "object"
         },
@@ -15456,29 +15414,29 @@
         }
       ]
     },
-    "TextAlignmentSpec": {
+    "TextAlignment": {
       "anyOf": [
         {
-          "description": "Paragraph alignment.",
+          "description": "Paragraph alignment, with start/end resolved by the paragraph direction.",
           "oneOf": [
             {
               "const": "start",
-              "description": "Paragraph start.",
+              "description": "Follow paragraph start.",
               "type": "string"
             },
             {
               "const": "end",
-              "description": "Paragraph end.",
+              "description": "Follow paragraph end.",
               "type": "string"
             },
             {
               "const": "center",
-              "description": "Centered lines.",
+              "description": "Center each line within the requested width.",
               "type": "string"
             },
             {
               "const": "justified",
-              "description": "Justified nonfinal lines.",
+              "description": "Justify nonfinal lines.",
               "type": "string"
             }
           ]
@@ -15602,7 +15560,7 @@
                 {
                   "anyOf": [
                     {
-                      "$ref": "#/$defs/TextAlignmentSpec"
+                      "$ref": "#/$defs/TextAlignment"
                     },
                     {
                       "type": "null"
@@ -15765,7 +15723,7 @@
                 {
                   "anyOf": [
                     {
-                      "$ref": "#/$defs/TextSplitSpec"
+                      "$ref": "#/$defs/TextSplit"
                     },
                     {
                       "type": "null"
@@ -15839,19 +15797,19 @@
         }
       ]
     },
-    "TextSplitSpec": {
+    "TextSplit": {
       "anyOf": [
         {
-          "description": "Granularity of text parts.",
+          "description": "Units used for visibility and per-part animation.",
           "oneOf": [
             {
               "const": "characters",
-              "description": "Extended Unicode grapheme clusters.",
+              "description": "Extended Unicode grapheme clusters, not scalar chars.",
               "type": "string"
             },
             {
               "const": "words",
-              "description": "Unicode words with their trailing separators.",
+              "description": "Unicode words, with separators attached to the preceding word.",
               "type": "string"
             },
             {
@@ -16465,7 +16423,7 @@
                 {
                   "anyOf": [
                     {
-                      "$ref": "#/$defs/ParticleBlendSpec"
+                      "$ref": "#/$defs/InstanceBlend"
                     },
                     {
                       "type": "null"
@@ -17405,6 +17363,48 @@
               "type": "string"
             }
           ]
+        },
+        {
+          "$ref": "#/$defs/ValueRef"
+        }
+      ]
+    },
+    "WriteOptions": {
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "description": "Shared cumulative-length handwriting and fill handoff settings.",
+          "properties": {
+            "outline_fraction": {
+              "anyOf": [
+                {
+                  "description": "Fraction of progress reserved for drawing contours; the remainder hands\nover to the original fill/stroke/images. Must be strictly between 0 and 1.",
+                  "format": "double",
+                  "type": "number"
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "width": {
+              "anyOf": [
+                {
+                  "description": "Temporary outline thickness in tree coordinates (not font units).",
+                  "format": "double",
+                  "type": "number"
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            }
+          },
+          "required": [
+            "width",
+            "outline_fraction"
+          ],
+          "type": "object"
         },
         {
           "$ref": "#/$defs/ValueRef"

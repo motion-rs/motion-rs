@@ -12,7 +12,7 @@ categories.workspace = true
 
 [features]
 default = []
-vector = ["dep:motion-content"]
+vector = []
 image = ["vector", "motion-content/image"]
 svg = ["image", "text", "motion-content/svg"]
 text = ["image", "motion-content/text"]
@@ -25,7 +25,7 @@ audio = ["dep:motion-encode", "motion-encode/audio"]
 [dependencies]
 motion-core = { version = "0.1.0", path = "../motion-core", features = ["schema"] }
 motion-render = { version = "0.1.0", path = "../motion-render", default-features = false }
-motion-content = { version = "0.1.0", path = "../motion-content", default-features = false, optional = true }
+motion-content = { version = "0.1.0", path = "../motion-content", default-features = false, features = ["schema"] }
 motion-formula = { version = "0.1.0", path = "../motion-formula", default-features = false, optional = true }
 motion-encode = { version = "0.1.0", path = "../motion-encode", default-features = false, optional = true }
 schemars = "1"

@@ -70,7 +70,6 @@ mod document;
 mod effects;
 mod element;
 mod formula;
-mod options;
 mod paint;
 mod params;
 mod particles;
@@ -87,8 +86,7 @@ pub use compile::{CompileOptions, CompiledDocument, load, load_with};
 pub use content::{
     ArcSpec, ArrowSpec, CircleSpec, Content, EllipseSpec, ImageSpec, LineSpec, NumberTextSpec,
     PartsSpec, PathSpec, PointsSpec, RectSpec, RegularPolygonSpec, RingSpec, SampledPointsSpec,
-    SplineSpec, StarSpec, SvgSourceSpec, SvgSpec, SvgWriteSpec, TextSpanSpec, TextSpec,
-    TextSplitSpec,
+    SplineSpec, StarSpec, SvgSourceSpec, SvgSpec, TextSpanSpec, TextSpec,
 };
 pub use diagram::{
     CalloutSpec, LineChartSpec, OrientationSpec, RulerSpec, ScaleKind, ScaleSpec, SeriesSpec,
@@ -103,20 +101,17 @@ pub use effects::{
 };
 pub use element::Element;
 pub use formula::{FormulaSpec, MorphSpec, SvgMorphSpec};
-pub use options::{FitSpec, TextAlignmentSpec};
 pub use paint::{
     GradientOptions, GradientSpec, GradientStop, LinearGradientSpec, PaintSpec, RadialGradientSpec,
     StrokeSpec, SweepGradientSpec, TrimSpec,
 };
 pub use particles::{
-    BurstShape, DiskShape, EmitterShape, EmitterSpec, ModifierSpec, ParticleBlendSpec,
-    ParticleConfigurationSpec, ParticleCoordinateSpec, ParticleCurveSpec, ParticleEventSpec,
-    ParticleFalloffSpec, ParticleImageSourceSpec, ParticleImageSpec, ParticleInheritSpec,
-    ParticleMaterialSpec, ParticleOperatorSpec, ParticlePointsSpec, ParticlePresetKind,
-    ParticlePresetSpec, ParticleResponseSpec, ParticleShapeSpec, ParticleSheetSpec,
-    ParticleSpriteSpec, ParticleStyleSpec, ParticleSubEmitterSpec, ParticleSurfaceSpec,
-    ParticleTextSourceSpec, ParticleTrailSpec, ParticleVectorPathSpec, ParticlesSpec,
-    TrajectoryModelSpec, TrajectorySpec,
+    BurstShape, DiskShape, EmitterShape, EmitterSpec, ModifierSpec, ParticleConfigurationSpec,
+    ParticleCurveSpec, ParticleFalloffSpec, ParticleImageSourceSpec, ParticleImageSpec,
+    ParticleMaterialSpec, ParticleOperatorSpec, ParticlePointsSpec, ParticlePresetSpec,
+    ParticleShapeSpec, ParticleSheetSpec, ParticleSpriteSpec, ParticleStyleSpec,
+    ParticleSubEmitterSpec, ParticleSurfaceSpec, ParticleTextSourceSpec, ParticleTrailSpec,
+    ParticleVectorPathSpec, ParticlesSpec, TrajectoryModelSpec, TrajectorySpec,
 };
 pub use value::{
     Animated, EasingSpec, ExprSpec, KeyframeSpec, KeyframesSpec, MotionSpec, NoiseSpec,

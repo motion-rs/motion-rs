@@ -4,6 +4,7 @@ use super::{
     EmitterSpec, ParticleCurveSpec, ParticleImageSpec, ParticlePointsSpec, ParticleSurfaceSpec,
 };
 use crate::value::EasingSpec;
+use motion_content::{CollisionResponse, FieldCoordinate, Inherit, ParticleEventKind};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -72,7 +73,7 @@ pub enum ParticleOperatorSpec {
         closed: bool,
     },
     /// Equal-mass pairwise contact response.
-    ParticleCollisions(ParticleResponseSpec),
+    ParticleCollisions(CollisionResponse),
     /// Solid circular obstacle.
     CircleCollider {
         /// Obstacle center.
@@ -80,7 +81,7 @@ pub enum ParticleOperatorSpec {
         /// Obstacle radius.
         radius: f64,
         /// Contact response.
-        response: ParticleResponseSpec,
+        response: CollisionResponse,
     },
     /// Finite line-segment obstacle.
     SegmentCollider {
@@ -89,14 +90,14 @@ pub enum ParticleOperatorSpec {
         /// End point.
         end: [f64; 2],
         /// Contact response.
-        response: ParticleResponseSpec,
+        response: CollisionResponse,
     },
     /// Prepared solid polygon obstacle.
     PolygonCollider {
         /// Polygon vertices, 3 to 256.
         vertices: Vec<[f64; 2]>,
         /// Contact response.
-        response: ParticleResponseSpec,
+        response: CollisionResponse,
     },
     /// Budgeted signed-distance grid of an explicit vector surface.
     SdfCollider {
@@ -105,7 +106,7 @@ pub enum ParticleOperatorSpec {
         /// Grid columns and rows, 2 to 512 each.
         resolution: [u32; 2],
         /// Contact response.
-        response: ParticleResponseSpec,
+        response: CollisionResponse,
     },
     /// Equally spaced premultiplied color stops over normalized age.
     ColorCurve {
@@ -118,7 +119,7 @@ pub enum ParticleOperatorSpec {
     /// Position or speed mapped through a linear color ramp.
     ColorField {
         /// Source coordinate.
-        coordinate: ParticleCoordinateSpec,
+        coordinate: FieldCoordinate,
         /// Normalization interval.
         range: [f32; 2],
         /// Premultiplied linear colors, 1 to 256.
@@ -149,73 +150,19 @@ pub enum ParticleFalloffSpec {
     Curve(ParticleCurveSpec),
 }
 
-/// Source coordinate for particle color fields.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum ParticleCoordinateSpec {
-    /// Horizontal position.
-    X,
-    /// Vertical position.
-    Y,
-    /// Velocity magnitude.
-    Speed,
-}
-
-/// Finite normal and tangential particle contact policy.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct ParticleResponseSpec {
-    /// Restitution in 0 to 1.
-    pub restitution: f32,
-    /// Tangential friction in 0 to 1.
-    pub friction: f32,
-    /// Removes the root particle on contact.
-    pub kill_on_hit: bool,
-}
-
 /// Explicit nonrecursive event-triggered particle births.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ParticleSubEmitterSpec {
     /// Trigger event.
-    pub on: ParticleEventSpec,
+    pub on: ParticleEventKind,
     /// Local emitter definition.
     pub emitter: EmitterSpec,
     /// Parent-property inheritance.
-    pub inherit: ParticleInheritSpec,
+    pub inherit: Inherit,
     /// Probability in 0 to 1.
     pub probability: f32,
     /// Only particles with custom slot three equal to zero may trigger this rule.
     #[serde(default)]
     pub root_only: bool,
-}
-
-/// Fixed-boundary event trigger.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum ParticleEventSpec {
-    /// First live admission.
-    Birth,
-    /// Half-open lifetime expiry.
-    Death,
-    /// Geometric contact.
-    Collision,
-    /// First boundary at the specified absolute age in seconds.
-    AgeReached(f32),
-}
-
-/// Parent properties inherited by local event births.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum ParticleInheritSpec {
-    /// Keeps local emitter properties.
-    None,
-    /// Adds the parent's position.
-    Position,
-    /// Adds position and velocity.
-    Velocity,
-    /// Adds position and multiplies color.
-    Color,
-    /// Adds position, velocity and color.
-    All,
 }

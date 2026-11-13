@@ -1,7 +1,7 @@
 //! Compilation of shared particle recipes and their fixed colored vector sources.
 
 use super::Compiler;
-use crate::particles::{ParticlePresetKind, ParticlePresetSpec, ParticlesSpec};
+use crate::particles::{ParticlePresetSpec, ParticlesSpec};
 use motion_content::particles::presets::{Preset, PresetOptions};
 use motion_content::{ParticleSimulationBuilder, VectorGroup, VectorItem, VectorPath, VectorTree};
 use motion_core::{Rect, Time};
@@ -106,10 +106,7 @@ impl Compiler<'_> {
             );
             valid = false;
         }
-        if matches!(
-            spec.kind,
-            ParticlePresetKind::LogoDissolve | ParticlePresetKind::LogoAssemble
-        ) && spec.logo.is_empty()
+        if matches!(spec.kind, Preset::LogoDissolve | Preset::LogoAssemble) && spec.logo.is_empty()
         {
             self.error(
                 path,
@@ -165,22 +162,8 @@ impl Compiler<'_> {
                 .ok()?,
             ));
         }
-        let kind = match spec.kind {
-            ParticlePresetKind::Sparks => Preset::Sparks,
-            ParticlePresetKind::Embers => Preset::Embers,
-            ParticlePresetKind::Dust => Preset::Dust,
-            ParticlePresetKind::Motes => Preset::Motes,
-            ParticlePresetKind::Snow => Preset::Snow,
-            ParticlePresetKind::Rain => Preset::Rain,
-            ParticlePresetKind::Smoke => Preset::Smoke,
-            ParticlePresetKind::Fire => Preset::Fire,
-            ParticlePresetKind::Confetti => Preset::Confetti,
-            ParticlePresetKind::Fireworks => Preset::Fireworks,
-            ParticlePresetKind::Fireflies => Preset::Fireflies,
-            ParticlePresetKind::LogoDissolve => Preset::LogoDissolve,
-            ParticlePresetKind::LogoAssemble => Preset::LogoAssemble,
-        };
-        kind.simulation(options)
+        spec.kind
+            .simulation(options)
             .map_err(|error| self.error(path, "preset", error.to_string()))
             .ok()
     }

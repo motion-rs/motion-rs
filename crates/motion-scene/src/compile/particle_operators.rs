@@ -2,14 +2,12 @@
 
 use super::Compiler;
 use super::particle_events::GENERATION_SLOT;
-use crate::particles::{
-    ParticleCoordinateSpec, ParticleFalloffSpec, ParticleOperatorSpec, ParticleResponseSpec,
-};
+use crate::particles::{ParticleFalloffSpec, ParticleOperatorSpec};
 use motion_content::particles::{
-    Boids, CircleCollider, CollisionResponse, ColorField, ColorOverLifetime, FieldCoordinate,
-    FlowField, FlowSource, ForceFalloff, Particle, ParticleCollisions, ParticleModifier,
-    ParticleSimulationBuilder, PolygonCollider, RadialForce, SdfCollider, SegmentCollider,
-    SignedDistanceGrid, SimulationLimits, Spring,
+    Boids, CircleCollider, CollisionResponse, ColorField, ColorOverLifetime, FlowField, FlowSource,
+    ForceFalloff, Particle, ParticleCollisions, ParticleModifier, ParticleSimulationBuilder,
+    PolygonCollider, RadialForce, SdfCollider, SegmentCollider, SignedDistanceGrid,
+    SimulationLimits, Spring,
 };
 use motion_core::{Point, Random, Rect, Time, ValidationError};
 use std::sync::Arc;
@@ -20,7 +18,7 @@ const MAX_OPERATOR_ITEMS: usize = 256;
 impl Compiler<'_> {
     pub(super) fn particle_response(
         &mut self,
-        spec: ParticleResponseSpec,
+        spec: CollisionResponse,
         path: &str,
     ) -> Option<CollisionResponse> {
         self.bounded(
@@ -37,11 +35,7 @@ impl Compiler<'_> {
             path,
             "response.friction",
         )?;
-        Some(CollisionResponse {
-            restitution: spec.restitution,
-            friction: spec.friction,
-            kill_on_hit: spec.kill_on_hit,
-        })
+        Some(spec)
     }
 
     pub(super) fn particle_operator(
@@ -200,13 +194,8 @@ impl Compiler<'_> {
                 colors,
             } => {
                 self.particle_colors(colors, path)?;
-                let coordinate = match coordinate {
-                    ParticleCoordinateSpec::X => FieldCoordinate::X,
-                    ParticleCoordinateSpec::Y => FieldCoordinate::Y,
-                    ParticleCoordinateSpec::Speed => FieldCoordinate::Speed,
-                };
                 simulation.modifier(ColorField {
-                    coordinate,
+                    coordinate: *coordinate,
                     range: *range,
                     colors: ColorOverLifetime::new(Arc::from(colors.clone()))
                         .curve(motion_core::Easing::Linear),

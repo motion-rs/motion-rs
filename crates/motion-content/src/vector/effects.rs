@@ -3,7 +3,10 @@
 use super::*;
 
 /// Shared cumulative-length handwriting and fill handoff settings.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct WriteOptions {
     /// Temporary outline thickness in tree coordinates (not font units).
     pub width: f64,

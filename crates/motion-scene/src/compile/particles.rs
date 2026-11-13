@@ -14,8 +14,8 @@ use super::failure::failure;
 use super::value::Lift;
 #[cfg(feature = "particles")]
 use crate::particles::{
-    EmitterShape, EmitterSpec, ModifierSpec, ParticleBlendSpec, ParticleShapeSpec,
-    ParticleStyleSpec, TrajectoryModelSpec,
+    EmitterShape, EmitterSpec, ModifierSpec, ParticleShapeSpec, ParticleStyleSpec,
+    TrajectoryModelSpec,
 };
 #[cfg(feature = "particles")]
 use motion_content::particles::{
@@ -24,6 +24,8 @@ use motion_content::particles::{
     ParticleSimulation, ParticleStyle, ParticleTrajectory, PathEmitter, PointEmitter, RectEmitter,
     Seek, SimulationLimits, SizeOverLifetime, SurfaceEmitter, Vortex, Wind,
 };
+#[cfg(feature = "particles")]
+use motion_core::instances::InstanceBlend;
 #[cfg(feature = "particles")]
 use motion_core::{Duration, Rect, Time, Vector2};
 
@@ -616,7 +618,7 @@ impl Compiler<'_> {
     fn particle_style(
         &mut self,
         style: Option<&ParticleStyleSpec>,
-        blend: Option<ParticleBlendSpec>,
+        blend: Option<InstanceBlend>,
         path: &str,
     ) -> Option<ParticleStyle> {
         let path = format!("{path}.style");
@@ -662,12 +664,7 @@ impl Compiler<'_> {
             ) => self.particle_material_style(style, &path)?,
         };
         if let Some(blend) = blend {
-            particle = particle.blend(match blend {
-                ParticleBlendSpec::SourceOver => motion_core::instances::InstanceBlend::SourceOver,
-                ParticleBlendSpec::Plus => motion_core::instances::InstanceBlend::Plus,
-                ParticleBlendSpec::Screen => motion_core::instances::InstanceBlend::Screen,
-                ParticleBlendSpec::Multiply => motion_core::instances::InstanceBlend::Multiply,
-            });
+            particle = particle.blend(blend);
         }
         Some(particle)
     }

@@ -4,9 +4,9 @@ use crate::captions::CaptionsSpec;
 use crate::diagram::{CalloutSpec, LineChartSpec, RulerSpec};
 use crate::element::Element;
 use crate::formula::{FormulaSpec, MorphSpec, SvgMorphSpec};
-use crate::options::{FitSpec, TextAlignmentSpec};
 use crate::particles::{ParticlesSpec, TrajectorySpec};
 use crate::value::Animated;
+use motion_content::{Fit, TextAlignment, TextSplit, WriteOptions};
 use motion_core::{ArrowHead, Color, Point, Rect, Sampling};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -369,10 +369,10 @@ pub struct TextSpec {
     pub max_width: Option<f64>,
     /// Paragraph alignment.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub alignment: Option<TextAlignmentSpec>,
+    pub alignment: Option<TextAlignment>,
     /// Unit of `visible_parts` and `parts`; characters by default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub split: Option<TextSplitSpec>,
+    pub split: Option<TextSplit>,
     /// Number of leading parts drawn, rounded down; a typewriter reveal when animated.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub visible_parts: Option<Animated<f64>>,
@@ -432,7 +432,7 @@ impl TextSpec {
     }
 
     /// Selects the unit of parts.
-    pub fn split(mut self, split: TextSplitSpec) -> Self {
+    pub fn split(mut self, split: TextSplit) -> Self {
         self.split = Some(split);
         self
     }
@@ -517,19 +517,6 @@ impl TextSpanSpec {
     }
 }
 
-/// Granularity of text parts.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum TextSplitSpec {
-    /// Extended Unicode grapheme clusters.
-    #[default]
-    Characters,
-    /// Unicode words with their trailing separators.
-    Words,
-    /// Wrapped visual lines.
-    Lines,
-}
-
 /// Per-part animation. Part `i` is sampled at its own time, the scene time minus
 /// `i * delay`, so every animated value (and `t` in expressions) is delayed by part.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -587,7 +574,7 @@ pub struct ImageSpec {
     pub size: Option<[f64; 2]>,
     /// Placement inside the viewport.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub fit: Option<FitSpec>,
+    pub fit: Option<Fit>,
     /// Corner radius of the viewport.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub corner_radius: Option<f64>,
@@ -610,7 +597,7 @@ pub struct SvgSpec {
     pub write: Option<Animated<f64>>,
     /// Handwriting geometry; core defaults when omitted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub write_options: Option<SvgWriteSpec>,
+    pub write_options: Option<WriteOptions>,
 }
 
 /// An SVG file path or explicitly embedded SVG markup.
@@ -636,16 +623,6 @@ impl From<&str> for SvgSourceSpec {
     fn from(source: &str) -> Self {
         Self::File(source.to_owned())
     }
-}
-
-/// Options for cumulative contour handwriting.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct SvgWriteSpec {
-    /// Outline width in design units.
-    pub width: f64,
-    /// Fraction of progress spent drawing the outline, in `0..=1`.
-    pub outline_fraction: f64,
 }
 
 impl<'de> Deserialize<'de> for SvgSourceSpec {

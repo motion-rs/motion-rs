@@ -2,6 +2,8 @@
 
 use crate::paint::PaintSpec;
 use crate::value::Animated;
+use motion_content::Preset;
+use motion_core::instances::InstanceBlend;
 use motion_core::{Color, Point, Rect};
 use schemars::{JsonSchema, Schema, SchemaGenerator};
 use serde::{Deserialize, Serialize};
@@ -14,10 +16,7 @@ mod sources;
 
 pub use configuration::{ParticleConfigurationSpec, ParticleCurveSpec, ParticleTrailSpec};
 pub use materials::{ParticleMaterialSpec, ParticleSheetSpec, ParticleSpriteSpec};
-pub use operators::{
-    ParticleCoordinateSpec, ParticleEventSpec, ParticleFalloffSpec, ParticleInheritSpec,
-    ParticleOperatorSpec, ParticleResponseSpec, ParticleSubEmitterSpec,
-};
+pub use operators::{ParticleFalloffSpec, ParticleOperatorSpec, ParticleSubEmitterSpec};
 pub use sources::ParticlePointsSpec;
 pub use sources::{
     ParticleImageSourceSpec, ParticleImageSpec, ParticleSurfaceSpec, ParticleTextSourceSpec,
@@ -72,7 +71,7 @@ pub struct ParticlesSpec {
     pub style: Option<ParticleStyleSpec>,
     /// Compositing of the particle layer.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub blend: Option<ParticleBlendSpec>,
+    pub blend: Option<InstanceBlend>,
     /// Optional time mapping, work allowance and batch presentation policy.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub configuration: Option<Box<ParticleConfigurationSpec>>,
@@ -124,7 +123,7 @@ impl ParticlesSpec {
 #[serde(deny_unknown_fields)]
 pub struct ParticlePresetSpec {
     /// Recipe name.
-    pub kind: ParticlePresetKind,
+    pub kind: Preset,
     /// Local design bounds `[left, top, right, bottom]`.
     pub bounds: [f64; 4],
     /// Density multiplier in `(0, 16]`; one by default.
@@ -153,38 +152,6 @@ pub struct ParticleVectorPathSpec {
     pub data: String,
     /// Fixed solid color or gradient; animated paints are rejected.
     pub fill: PaintSpec,
-}
-
-/// Stable names of the shared particle recipes.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum ParticlePresetKind {
-    /// Tapered ballistic burst.
-    Sparks,
-    /// Cooling glowing embers.
-    Embers,
-    /// Small depth-aware dust.
-    Dust,
-    /// Floating bokeh motes.
-    Motes,
-    /// Layered wind-driven snow.
-    Snow,
-    /// Colliding rain and splash bursts.
-    Rain,
-    /// Curl-driven smoke sprites.
-    Smoke,
-    /// Buoyant fire sprites.
-    Fire,
-    /// Flipping colored quads.
-    Confetti,
-    /// Rockets and secondary bursts.
-    Fireworks,
-    /// Breathing drifting lights.
-    Fireflies,
-    /// Colored vector dispersal.
-    LogoDissolve,
-    /// Colored vector convergence.
-    LogoAssemble,
 }
 
 /// Where particles are born.
@@ -651,21 +618,6 @@ pub enum ParticleShapeSpec {
     },
 }
 
-/// Compositing of a particle layer.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum ParticleBlendSpec {
-    /// Premultiplied source-over.
-    #[default]
-    SourceOver,
-    /// Additive linear RGB.
-    Plus,
-    /// Screen.
-    Screen,
-    /// Multiply.
-    Multiply,
-}
-
 /// A closed-form particle burst without a simulation step.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -681,7 +633,7 @@ pub struct TrajectorySpec {
     pub style: Option<ParticleStyleSpec>,
     /// Compositing of the particle layer.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub blend: Option<ParticleBlendSpec>,
+    pub blend: Option<InstanceBlend>,
 }
 
 /// Analytic particle motion, written as `{"ballistic": {...}}` and similar.

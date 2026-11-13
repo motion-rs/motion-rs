@@ -45,36 +45,11 @@ mod parts;
 #[cfg(test)]
 mod tests;
 
+pub use crate::{TextAlignment, TextSplit};
 pub use cosmic_text::Weight as FontWeight;
 pub use paragraph::ParagraphStyle;
 pub(crate) use paragraph::{ParagraphSpec, SharedLayouts, SpanSpec};
 pub use parts::{PartStyle, TextPart};
-
-/// Paragraph alignment, with start/end resolved by the paragraph direction.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum TextAlignment {
-    /// Follow paragraph start.
-    #[default]
-    Start,
-    /// Follow paragraph end.
-    End,
-    /// Center each line within the requested width.
-    Center,
-    /// Justify nonfinal lines.
-    Justified,
-}
-
-/// Units used for visibility and per-part animation.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum TextSplit {
-    /// Extended Unicode grapheme clusters, not scalar chars.
-    #[default]
-    Characters,
-    /// Unicode words, with separators attached to the preceding word.
-    Words,
-    /// Wrapped visual lines.
-    Lines,
-}
 
 /// span style; unset properties inherit paragraph defaults.
 #[derive(Clone, Debug)]

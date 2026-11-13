@@ -159,6 +159,92 @@ fn committed_schema_matches_the_format() {
     );
 }
 
+#[cfg(feature = "vector")]
+#[test]
+fn document_fields_accept_native_content_policies() -> motion::Result {
+    use motion::declarative::{
+        Content, EmitterShape, EmitterSpec, ImageSpec, ParticleOperatorSpec, ParticlePresetSpec,
+        ParticleSubEmitterSpec, ParticlesSpec, SvgSpec, TextSpec,
+    };
+    use motion_content::{
+        CollisionResponse, FieldCoordinate, Fit, Inherit, ParticleEventKind, Preset, TextAlignment,
+        TextSplit, WriteOptions,
+    };
+
+    let mut text = TextSpec::new("Shared types").split(TextSplit::Words);
+    text.alignment = Some(TextAlignment::Center);
+    let image = ImageSpec {
+        source: "image.png".into(),
+        size: None,
+        fit: Some(Fit::Cover),
+        corner_radius: None,
+        sampling: None,
+    };
+    let svg = SvgSpec {
+        source: "drawing.svg".into(),
+        size: None,
+        write: None,
+        write_options: Some(WriteOptions {
+            width: 2.0,
+            outline_fraction: 0.75,
+        }),
+    };
+    let mut particles = ParticlesSpec::new(7);
+    particles.blend = Some(motion_core::instances::InstanceBlend::Screen);
+    particles.duration = Some(1.0);
+    particles.preset = Some(ParticlePresetSpec {
+        kind: Preset::Rain,
+        bounds: [0.0, 0.0, 8.0, 8.0],
+        density: None,
+        speed: None,
+        intensity: None,
+        logo: Vec::new(),
+    });
+    let document = Document::new([8.0, 8.0], 4).track(TrackSpec::new().scene(SceneSpec::new(
+        1.0,
+        Element::group([
+            Element::new(Content::Text(text)),
+            Element::new(Content::Image(image)),
+            Element::new(Content::Svg(svg)),
+            Element::new(Content::Particles(particles)),
+        ]),
+    )));
+    assert_eq!(Document::from_json(&document.to_json()?)?, document);
+
+    let response = ParticleOperatorSpec::ParticleCollisions(CollisionResponse {
+        restitution: 0.5,
+        friction: 0.25,
+        kill_on_hit: true,
+    });
+    let field = ParticleOperatorSpec::ColorField {
+        coordinate: FieldCoordinate::Speed,
+        range: [0.0, 10.0],
+        colors: vec![[0.0, 0.0, 0.0, 1.0], [1.0; 4]],
+    };
+    for operator in [response, field] {
+        let json = serde_json::to_value(&operator).unwrap();
+        assert_eq!(
+            serde_json::from_value::<ParticleOperatorSpec>(json).unwrap(),
+            operator
+        );
+    }
+    let event = ParticleSubEmitterSpec {
+        on: ParticleEventKind::AgeReached(0.5),
+        emitter: EmitterSpec::new(EmitterShape::Point(Point::ORIGIN)),
+        inherit: Inherit::All,
+        probability: 1.0,
+        root_only: false,
+    };
+    let json = serde_json::to_value(&event).unwrap();
+    assert_eq!(json["on"], serde_json::json!({"age_reached": 0.5}));
+    assert_eq!(json["inherit"], "all");
+    assert_eq!(
+        serde_json::from_value::<ParticleSubEmitterSpec>(json).unwrap(),
+        event
+    );
+    Ok(())
+}
+
 #[test]
 fn parametric_example_follows_overrides() -> motion::Result {
     let project = Project::default();

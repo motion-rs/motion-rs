@@ -2,9 +2,9 @@
 
 use super::Compiler;
 use super::particles::Emitter;
-use crate::particles::{ParticleEventSpec, ParticleInheritSpec, ParticleSubEmitterSpec};
+use crate::particles::ParticleSubEmitterSpec;
 use motion_content::particles::{
-    Inherit, Particle, ParticleEmitter, ParticleEvent, ParticleEventKind, SubEmitter,
+    Particle, ParticleEmitter, ParticleEvent, ParticleEventKind, SubEmitter,
 };
 use motion_core::{Random, Time, ValidationError};
 use std::sync::Arc;
@@ -20,21 +20,15 @@ impl Compiler<'_> {
         path: &str,
     ) -> Option<SubEmitter> {
         self.bounded(f64::from(spec.probability), 0.0, 1.0, path, "probability")?;
-        let on = match spec.on {
-            ParticleEventSpec::Birth => ParticleEventKind::Birth,
-            ParticleEventSpec::Death => ParticleEventKind::Death,
-            ParticleEventSpec::Collision => ParticleEventKind::Collision,
-            ParticleEventSpec::AgeReached(age) => {
-                self.bounded(
-                    f64::from(age),
-                    f64::from(f32::MIN_POSITIVE),
-                    3600.0,
-                    path,
-                    "on.age_reached",
-                )?;
-                ParticleEventKind::AgeReached(age)
-            }
-        };
+        if let ParticleEventKind::AgeReached(age) = spec.on {
+            self.bounded(
+                f64::from(age),
+                f64::from(f32::MIN_POSITIVE),
+                3600.0,
+                path,
+                "on.age_reached",
+            )?;
+        }
         let emitter: Arc<dyn ParticleEmitter> =
             match self.emitter(&spec.emitter, &format!("{path}.emitter"))? {
                 Emitter::Point(emitter) => Arc::new(emitter),
@@ -55,17 +49,10 @@ impl Compiler<'_> {
         } else {
             emitter
         };
-        let inherit = match spec.inherit {
-            ParticleInheritSpec::None => Inherit::None,
-            ParticleInheritSpec::Position => Inherit::Position,
-            ParticleInheritSpec::Velocity => Inherit::Velocity,
-            ParticleInheritSpec::Color => Inherit::Color,
-            ParticleInheritSpec::All => Inherit::All,
-        };
         Some(SubEmitter {
-            on,
+            on: spec.on,
             emitter,
-            inherit,
+            inherit: spec.inherit,
             probability: spec.probability,
         })
     }

@@ -11,36 +11,7 @@
 use super::*;
 use motion_core::{Point, Rect, Vector2};
 
-/// Curated, independently configurable recipes.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum Preset {
-    /// Tapered HDR ballistic burst.
-    Sparks,
-    /// Cooling, upward-moving glowing embers.
-    Embers,
-    /// Slow depth-aware dust.
-    Dust,
-    /// Soft floating motes.
-    Motes,
-    /// Three parallax depth layers of wind-driven snow.
-    Snow,
-    /// Stretched rain with collision-triggered splashes.
-    Rain,
-    /// Expanding procedural smoke sprites.
-    Smoke,
-    /// Buoyant procedural fire cores.
-    Fire,
-    /// Flipping, colored falling quads.
-    Confetti,
-    /// Rocket death, spark burst, then secondary spark deaths.
-    Fireworks,
-    /// Drifting and breathing light points.
-    Fireflies,
-    /// Color-preserving vector surface dispersal.
-    LogoDissolve,
-    /// Color-preserving vector surface convergence.
-    LogoAssemble,
-}
+pub use crate::Preset;
 
 /// Adjustable inputs shared by the recipe gallery and Studio.
 #[derive(Clone)]

@@ -2935,6 +2935,8 @@ dependencies = [
  "motion-encode",
  "motion-render",
  "png",
+ "schemars",
+ "serde",
  "skrifa 0.44.0",
  "svgtypes",
  "tempfile",

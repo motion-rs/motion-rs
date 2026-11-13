@@ -37,6 +37,9 @@ pub use motion_core::pixels::Sampling;
 
 /// Centered image placement in a local viewport.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub enum Fit {
     /// Stretch independently along each axis.
     Fill,

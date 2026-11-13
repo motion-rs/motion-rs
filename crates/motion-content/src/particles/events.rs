@@ -2,18 +2,7 @@
 
 use super::*;
 
-/// Fixed-boundary particle event.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum ParticleEventKind {
-    /// First admission of a live particle.
-    Birth,
-    /// Half-open lifetime expiry, including kill-on-hit.
-    Death,
-    /// Geometric or population contact.
-    Collision,
-    /// First boundary at/after an absolute age in seconds.
-    AgeReached(f32),
-}
+pub use crate::{Inherit, ParticleEventKind};
 
 /// Event payload ordered by stable nonrecycled particle ID.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -24,22 +13,6 @@ pub struct ParticleEvent {
     pub particle: Particle,
     /// Trigger kind.
     pub kind: ParticleEventKind,
-}
-
-/// Parent properties added to an emitter's local child record.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum Inherit {
-    /// Keep emitter-authored values.
-    None,
-    /// Translate local emission to the event location.
-    #[default]
-    Position,
-    /// Translate and add parent velocity.
-    Velocity,
-    /// Translate and multiply parent premultiplied color.
-    Color,
-    /// Translate, add velocity and inherit color.
-    All,
 }
 
 /// Event-triggered emitter. It receives local step zero and Time::ZERO for each trigger.

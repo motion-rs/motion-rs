@@ -143,10 +143,10 @@ its targets, fixtures and provenance build script, not a facade build script.
 | --- | --- | --- |
 | motion-core | Time, geometry, animation, scene/layout/timeline, commands, resources, audio occurrences; optional `serde`/`schema` for plain value types | None |
 | motion-render | Coverage, CPU/GPU composition, filters, sessions, output buffers, film looks | core |
-| motion-content | Images, text, SVG, vectors, particles, optional ink/diagram/captions | core |
+| motion-content | Images, text, SVG, vectors, particles, optional ink/diagram/captions; feature-independent plain content policies with optional `serde`/`schema` | core |
 | motion-formula | Typst document/math compilation and formula operations | core, content |
 | motion-encode | PCM preparation, file streaming and transactional encoding | core, render; optional FFmpeg |
-| motion-scene | Versioned JSON documents, their schema and compilation to timelines | core, render; optional content |
+| motion-scene | Versioned JSON documents, their schema and compilation to timelines | core, render, content; optional content preparation features |
 | motion-studio | Workbench, preview, playback and export orchestration | core, render, encode |
 | motion-rs | Facade/prelude, Project/CLI and scene metadata | Feature-selected packages |
 | motion-ffmpeg | Native FFmpeg bindings and thread-confined codec/mixer resources | None |
@@ -176,7 +176,7 @@ Gallery disables facade defaults and forwards its own selected capabilities.
 | typst / formula | Optional compiler / additional math authoring and morphing |
 | audio / ffmpeg | Headless audio / native codecs and audio preparation |
 | studio | Desktop workbench; enables FFmpeg, not automatic scene GPU selection |
-| serde / schema | Core: serde and JSON Schema for plain value types (enums, `Color`, `Point`, `Rect`), enabled by motion-scene |
+| serde / schema | Core and content: serde and JSON Schema for plain value types and policies, enabled by motion-scene without enabling optional content engines |
 | declarative | JSON documents; text, image and SVG elements follow the matching content features |
 
 The facade's authoring, extension, rendering and eager namespaces have different

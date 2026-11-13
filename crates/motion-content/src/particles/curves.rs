@@ -3,6 +3,8 @@
 use super::*;
 use motion_core::Easing;
 
+pub use crate::FieldCoordinate;
+
 /// Bounded nonnegative scalar keyframes with explicit normalized times and easing.
 #[derive(Clone)]
 pub struct ParticleCurve {
@@ -245,17 +247,6 @@ impl ParticleModifier for Temperature {
         }
         particle.validate()
     }
-}
-
-/// Scalar coordinate used by a color field.
-#[derive(Clone, Copy, Debug)]
-pub enum FieldCoordinate {
-    /// Horizontal position.
-    X,
-    /// Vertical position.
-    Y,
-    /// Velocity magnitude.
-    Speed,
 }
 
 /// Color sampled from position or speed, with an explicit normalization interval.

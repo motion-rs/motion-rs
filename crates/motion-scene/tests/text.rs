@@ -1,6 +1,7 @@
 //! Rich text, parts and reveal in declarative documents.
 #![cfg(feature = "text")]
 
+use motion_content::TextSplit;
 use motion_core::{Color, Time, ValidationError};
 use motion_render::{FrameBuffer, RenderOptions, render_still};
 use motion_scene::*;
@@ -72,7 +73,7 @@ fn visible_parts_reveal_like_a_typewriter() {
 fn parts_stagger_opacity_by_delay() {
     let parts = text(
         TextSpec::new("Staggered")
-            .split(TextSplitSpec::Characters)
+            .split(TextSplit::Characters)
             .parts(PartsSpec::new(0.1).opacity(Animated::tween(0.0, 1.0, 0.2))),
     );
     let start = ink(&render(parts.clone(), 0.0));
@@ -85,7 +86,7 @@ fn parts_stagger_opacity_by_delay() {
 fn text_documents_round_trip_and_report_errors() {
     let element = text(
         TextSpec::rich([TextSpanSpec::new("a").weight(700)])
-            .split(TextSplitSpec::Words)
+            .split(TextSplit::Words)
             .visible_parts(Animated::expr("floor(t * 2)"))
             .parts(PartsSpec::new(0.05).offset(Animated::tween([0.0, 8.0], [0.0, 0.0], 0.3))),
     );

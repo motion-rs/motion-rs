@@ -20,6 +20,8 @@ ink = ["image"]
 diagram = ["text"]
 captions = ["text"]
 gpu = ["dep:bytemuck"]
+serde = ["dep:serde"]
+schema = ["serde", "dep:schemars"]
 
 [dependencies]
 motion-core = { version = "0.1.0", path = "../motion-core" }
@@ -37,6 +39,8 @@ skrifa = { version = "0.44", default-features = false, features = ["std"], optio
 ttf-parser = { version = "0.25", optional = true }
 unicode-linebreak = { version = "0.1", optional = true }
 bytemuck = { version = "1", features = ["derive"], optional = true }
+serde = { version = "1", features = ["derive"], optional = true }
+schemars = { version = "1", optional = true }
 
 [dev-dependencies]
 motion-render = { path = "../motion-render", features = ["gpu"] }

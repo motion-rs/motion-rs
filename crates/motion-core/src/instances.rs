@@ -79,6 +79,9 @@ pub enum InstanceKind {
 
 /// Batch-level compositing applied to every primitive in a batch.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[repr(u32)]
 pub enum InstanceBlend {
     /// Premultiplied source-over compositing.

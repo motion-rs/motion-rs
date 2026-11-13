@@ -20,6 +20,17 @@ dashes, and vector shorthands such as sizes and offsets. Validation of the reuse
 (for example the stroke miter limit) belongs to core; the compiler calls it instead of
 repeating it.
 
+The same rule applies to content policies: image fit, paragraph alignment and splitting,
+vector write options, particle preset names, color-field coordinates, collision responses,
+event kinds and inheritance reuse `motion-content` types. Particle blending reuses core's
+`InstanceBlend`. Document fields use the original type names; duplicate `*Spec` names are
+removed rather than retained as compatibility aliases. Content's optional `serde` and
+`schema` features expose the JSON contracts; plain policies are available without text or
+particle preparation. Disabling a document
+content feature therefore still permits parsing and serialization, but compilation reports
+the unsupported capability. Resource descriptions, animated properties and particle shape
+parameters that retain f64 authoring precision remain document-specific structures.
+
 ## Data Model
 
 - Documents are plain data. Parsing and serialization never read resources, discover

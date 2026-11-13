@@ -9,9 +9,7 @@ use std::sync::Arc;
 #[cfg(feature = "text")]
 use super::value::{Lift, Prop};
 #[cfg(feature = "text")]
-use crate::content::{PartsSpec, TextSplitSpec};
-#[cfg(feature = "text")]
-use crate::options::TextAlignmentSpec;
+use crate::content::PartsSpec;
 #[cfg(feature = "text")]
 use motion_core::{Duration, Node, Time};
 
@@ -36,7 +34,7 @@ impl Compiler<'_> {
         style: Option<Arc<Style>>,
         path: &str,
     ) -> Option<Built> {
-        use motion_content::{FontWeight, Text, TextAlignment, TextSpan, TextSplit};
+        use motion_content::{FontWeight, Text, TextSpan};
         let rich = !spec.spans.is_empty();
         let mut valid = true;
         let choices = usize::from(rich)
@@ -162,19 +160,10 @@ impl Compiler<'_> {
                 text = text.max_width(width);
             }
             if let Some(alignment) = spec.alignment {
-                text = text.alignment(match alignment {
-                    TextAlignmentSpec::Start => TextAlignment::Start,
-                    TextAlignmentSpec::End => TextAlignment::End,
-                    TextAlignmentSpec::Center => TextAlignment::Center,
-                    TextAlignmentSpec::Justified => TextAlignment::Justified,
-                });
+                text = text.alignment(alignment);
             }
             if let Some(split) = spec.split {
-                text = text.split(match split {
-                    TextSplitSpec::Characters => TextSplit::Characters,
-                    TextSplitSpec::Words => TextSplit::Words,
-                    TextSplitSpec::Lines => TextSplit::Lines,
-                });
+                text = text.split(split);
             }
             if let Some(fonts) = &fonts {
                 text = text.fonts(fonts);

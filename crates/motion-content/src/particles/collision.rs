@@ -22,33 +22,14 @@
 use super::*;
 use motion_core::{Point, Rect};
 
+pub use crate::CollisionResponse;
+
 /// Largest coordinate magnitude for which [`swept_from`] may skip a particle using collider
 /// bounds; probe rounding there stays far below [`BOUNDS_MARGIN`].
 const BOUNDS_EXTENT: f64 = 1e7;
 
 /// Absolute slack, in design units, added to the bounds test for probe rounding.
 const BOUNDS_MARGIN: f64 = 1e-3;
-
-/// Bounded normal restitution and tangential friction.
-#[derive(Clone, Copy, Debug)]
-pub struct CollisionResponse {
-    /// Normal velocity restitution in 0..=1.
-    pub restitution: f32,
-    /// Fraction of tangential velocity removed in 0..=1.
-    pub friction: f32,
-    /// Remove the particle at its first contact.
-    pub kill_on_hit: bool,
-}
-
-impl Default for CollisionResponse {
-    fn default() -> Self {
-        Self {
-            restitution: 1.0,
-            friction: 0.0,
-            kill_on_hit: false,
-        }
-    }
-}
 
 impl CollisionResponse {
     pub(super) fn validate(self) -> Result<(), ValidationError> {
