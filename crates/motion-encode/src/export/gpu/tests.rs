@@ -5,6 +5,7 @@ use motion_core::Scene;
 use motion_core::Shape;
 use motion_core::{Color, FrameRate, Node, NodeModifiers, Rect, Size, Time};
 use motion_render::PixelFormat;
+use motion_render::gpu::OutputPlan;
 use std::sync::{Arc, Mutex};
 
 #[test]
@@ -146,8 +147,8 @@ fn measured_gpu_schedule_ignores_configuration_ceiling_and_bounds_all_slots() {
 }
 
 #[test]
-#[ignore = "requires native GPU; an Automatic request that selects the GPU must use the pipeline"]
-fn automatic_backend_selecting_the_gpu_uses_the_pipeline() -> Result<()> {
+#[ignore = "requires native GPU; a GPU request must use the pipeline"]
+fn gpu_backend_uses_the_pipeline() -> Result<()> {
     struct Discard;
 
     impl Encoder for Discard {
@@ -197,7 +198,7 @@ fn automatic_backend_selecting_the_gpu_uses_the_pipeline() -> Result<()> {
         })
         .build()?;
     let mut options = ExportOptions::new("unused-automatic-output")
-        .backend(motion_render::BackendPreference::automatic())
+        .backend(motion_render::BackendPreference::gpu())
         .workers(2);
     options.render.gpu_context = Some(motion_render::GpuContext::new()?);
     export(

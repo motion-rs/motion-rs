@@ -2,15 +2,25 @@
 
 use motion_core::{PixelSize, Rect, ValidationError};
 
-use super::*;
+#[cfg(test)]
+use crate::prepared::{PreparedCpuFrame, RenderPrepare};
+use crate::prepared::{FrameRecords, Span, Strip};
+use crate::raster::RasterScope;
 #[cfg(test)]
 use crate::raster::prepare::prepare_with_cache;
+#[cfg(test)]
+use motion_core::RasterLimits;
+use motion_core::budget::Budget;
 use motion_core::{FillRule, Path2D, Transform};
 use std::hash::{Hash, Hasher};
+use std::mem::size_of;
 use std::sync::Arc;
 
+mod clips;
 #[cfg(test)]
 mod tests;
+
+pub(crate) use clips::ClipCache;
 
 #[derive(Clone)]
 struct Entry {
@@ -71,7 +81,6 @@ impl Hash for ContentKey {
 
 pub(crate) struct CoverageCache {
     shared: Arc<motion_core::SceneCache>,
-    pub(super) paints: super::paint::TableCache,
     polygon_scratch: super::polygon::scratch::PolygonScratch,
 }
 
@@ -151,13 +160,8 @@ impl CoverageCache {
             shared: cache
                 .partition(motion_core::CachePartition::Coverage)
                 .clone(),
-            paints: super::paint::TableCache::new(cache),
             polygon_scratch: Default::default(),
         }
-    }
-
-    pub(crate) fn retained_paint_bytes(&self) -> u64 {
-        self.paints.retained_bytes()
     }
 
     fn insert(&self, entry: Entry) {
@@ -177,7 +181,7 @@ impl CoverageCache {
 
     fn rasterize_path(
         &mut self,
-        frame: &mut PreparedFrame,
+        frame: &mut FrameRecords,
         geometry: &Path2D,
         transform: Transform,
         rule: FillRule,
@@ -196,6 +200,7 @@ impl CoverageCache {
         result
     }
 
+    /// Whether a prepared coverage entry already exists for the fill.
     pub(super) fn lookup(
         &self,
         geometry: &Path2D,
@@ -227,7 +232,7 @@ impl CoverageCache {
 
     pub(crate) fn polygon(
         &mut self,
-        frame: &mut PreparedFrame,
+        frame: &mut FrameRecords,
         geometry: &Path2D,
         transform: Transform,
         rule: FillRule,
@@ -305,7 +310,7 @@ impl CoverageCache {
 }
 
 fn restore(
-    frame: &mut PreparedFrame,
+    frame: &mut FrameRecords,
     entry: &Entry,
     budget: &mut Budget,
     path: &str,

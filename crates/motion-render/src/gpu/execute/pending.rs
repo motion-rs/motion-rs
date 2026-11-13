@@ -54,7 +54,7 @@ impl PendingTextureFrame {
     pub fn timing_handle(&self) -> Option<GpuTimingHandle> {
         self.timestamps
             .as_ref()
-            .map(super::super::timing::TimestampRecorder::handle)
+            .map(crate::gpu::timing::TimestampRecorder::handle)
     }
 
     /// Polls only for completion; a ready frame still requires finish for errors.
@@ -113,9 +113,9 @@ impl PendingTextureFrame {
         }
         let timestamps = self
             .timestamps
-            .map(super::super::timing::TimestampRecorder::finish)
+            .map(crate::gpu::timing::TimestampRecorder::finish)
             .transpose()?;
-        super::super::timing::TimestampRecorder::publish(timestamps);
+        crate::gpu::timing::TimestampRecorder::publish(timestamps);
         self.working.push(self.readback);
         self.context.return_working(self.working, self.maximum);
         Ok(())
@@ -128,7 +128,7 @@ impl PendingLinearFrame {
     pub(crate) fn timing_handle(&self) -> Option<GpuTimingHandle> {
         self.timestamps
             .as_ref()
-            .map(super::super::timing::TimestampRecorder::handle)
+            .map(crate::gpu::timing::TimestampRecorder::handle)
     }
 
     /// Waits and consumes the frame; another pending frame may already be executing.
@@ -181,7 +181,7 @@ impl PendingLinearFrame {
                 "Could not reserve pending output",
                 "Nonfinite GPU readback",
             )?;
-            Ok(crate::cpu::LinearFrame::from_gpu(
+            Ok(crate::linear::LinearFrame::from_pixels_with_stats(
                 PixelSize::new(
                     self.output_bounds.right - self.output_bounds.left,
                     self.output_bounds.bottom - self.output_bounds.top,
@@ -195,9 +195,9 @@ impl PendingLinearFrame {
         if result.is_ok() {
             let timestamps = self
                 .timestamps
-                .map(super::super::timing::TimestampRecorder::finish)
+                .map(crate::gpu::timing::TimestampRecorder::finish)
                 .transpose()?;
-            super::super::timing::TimestampRecorder::publish(timestamps);
+            crate::gpu::timing::TimestampRecorder::publish(timestamps);
             self.context.return_working(self.working, self.cache_limit);
         }
         result.map(|frame| {
@@ -213,7 +213,7 @@ impl PendingOutputFrame {
     pub(crate) fn timing_handle(&self) -> Option<GpuTimingHandle> {
         self.timestamps
             .as_ref()
-            .map(super::super::timing::TimestampRecorder::handle)
+            .map(crate::gpu::timing::TimestampRecorder::handle)
     }
 
     /// Exact transferred payload bytes, excluding the four-byte finite/alpha status.
@@ -306,7 +306,8 @@ impl PendingOutputFrame {
                         [
                             mapped[..luma_bytes].to_vec(),
                             mapped[luma_bytes..luma_bytes + luma_bytes / 4].to_vec(),
-                            mapped[luma_bytes + luma_bytes / 4..].to_vec(),
+                            mapped[luma_bytes + luma_bytes / 4..luma_bytes + luma_bytes / 2]
+                                .to_vec(),
                         ],
                         bit_depth,
                         self.limits,
@@ -321,9 +322,9 @@ impl PendingOutputFrame {
         if result.is_ok() {
             let timestamps = self
                 .timestamps
-                .map(super::super::timing::TimestampRecorder::finish)
+                .map(crate::gpu::timing::TimestampRecorder::finish)
                 .transpose()?;
-            super::super::timing::TimestampRecorder::publish(timestamps);
+            crate::gpu::timing::TimestampRecorder::publish(timestamps);
             self.context
                 .return_working(self.working, self.limits.max_bytes / 4);
         }

@@ -56,11 +56,11 @@ fn cinematic_grain_is_identical_across_band_heights() {
     }
 }
 
-fn prepared(node: Node, opaque: bool) -> PreparedFrame {
+fn prepared(node: Node, opaque: bool) -> PreparedCpuFrame {
     prepared_size(node, opaque, PixelSize::new(34, 70))
 }
 
-fn prepared_size(node: Node, opaque: bool, size: PixelSize) -> PreparedFrame {
+fn prepared_size(node: Node, opaque: bool, size: PixelSize) -> PreparedCpuFrame {
     node.compile(
         Size::new(f64::from(size.width), f64::from(size.height)),
         size,

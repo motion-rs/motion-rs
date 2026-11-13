@@ -1,8 +1,8 @@
 use super::*;
-use crate::raster::polygon::scratch::MAX_IDLE_SCRATCH_BYTES;
+use crate::cpu::polygon::scratch::MAX_IDLE_SCRATCH_BYTES;
 use motion_core::{
-    Color, DisplayList, DrawCommand, Node, Paint, PixelSize, Shape, Size, ValidationError,
-    ValidationLimits,
+    Color, DisplayList, DrawCommand, Node, NodeModifiers, Paint, PixelSize, Shape, Size,
+    ValidationError, ValidationLimits,
 };
 
 #[test]
@@ -386,17 +386,21 @@ fn cached(
     cache: &mut CoverageCache,
     limits: RasterLimits,
     tolerance: f64,
-) -> Result<PreparedFrame, ValidationError> {
-    prepare_with_cache(
+) -> Result<PreparedCpuFrame, ValidationError> {
+    let mut preparation = crate::raster::PreparationCache::default();
+    std::mem::swap(&mut preparation.coverage, cache);
+    let prepared = prepare_with_cache(
         source,
         ValidationLimits::default(),
         limits,
         tolerance,
-        Some(cache),
-    )
+        Some(&mut preparation),
+    );
+    std::mem::swap(&mut preparation.coverage, cache);
+    prepared
 }
 
-fn compare(actual: &PreparedFrame, expected: &PreparedFrame) {
+fn compare(actual: &PreparedCpuFrame, expected: &PreparedCpuFrame) {
     assert_eq!(actual.strips, expected.strips);
     assert_eq!(actual.spans, expected.spans);
     assert_eq!(actual.alphas, expected.alphas);
@@ -570,4 +574,64 @@ fn coverage_cache_keys_collisions_validation_and_eviction_are_bounded() {
     }
     assert!(cache.shared.len() > 64 && cache.shared.len() <= 2048);
     assert!(cache.retained_bytes() <= 16 * 1024 * 1024);
+}
+
+#[test]
+fn shape_clip_replay_matches_rasterizing_and_keeps_budget_failures() {
+    let size = PixelSize::new(24, 24);
+    let clip = Path2D::parse_svg("M3 2C20 0 23 9 18 21L2 17Z").unwrap();
+    let source = Node::group([Node::from(
+        Path2D::parse_svg("M0 0H24V24H0Z")
+            .unwrap()
+            .fill(Color::WHITE),
+    )
+    .clip_with(clip, motion_core::ClipMode::Geometric)])
+    .compile(Size::new(24.0, 24.0), size, ValidationLimits::default())
+    .unwrap()
+    .into_editable();
+    let reference = source
+        .prepare(ValidationLimits::default(), RasterLimits::default())
+        .unwrap();
+    assert_eq!(reference.clips.len(), 1);
+    let tolerance = 1.0 / 256.0;
+    let mut cache = CoverageCache::default();
+    for _ in 0..2 {
+        compare(
+            &cached(&source, &mut cache, RasterLimits::default(), tolerance).unwrap(),
+            &reference,
+        );
+    }
+    let exact = RasterLimits {
+        max_pixels: 576,
+        max_bytes: reference.stats().peak_bytes,
+        max_work: reference.stats().work,
+    };
+    for limits in [
+        RasterLimits {
+            max_bytes: exact.max_bytes - 1,
+            ..exact
+        },
+        RasterLimits {
+            max_work: exact.max_work - 1,
+            ..exact
+        },
+    ] {
+        let expected = source
+            .prepare(ValidationLimits::default(), limits)
+            .unwrap_err();
+        let actual = cached(&source, &mut cache, limits, tolerance).unwrap_err();
+        assert_eq!(
+            (actual.kind, actual.field, actual.path, actual.message),
+            (
+                expected.kind,
+                expected.field,
+                expected.path,
+                expected.message
+            )
+        );
+    }
+    compare(
+        &cached(&source, &mut cache, exact, tolerance).unwrap(),
+        &reference,
+    );
 }

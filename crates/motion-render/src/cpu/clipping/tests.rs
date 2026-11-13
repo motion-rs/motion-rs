@@ -15,7 +15,7 @@ fn list(node: &Node, size: PixelSize) -> DisplayList {
     .into_editable()
 }
 
-fn prepare(node: &Node, size: PixelSize) -> PreparedFrame {
+fn prepare(node: &Node, size: PixelSize) -> PreparedCpuFrame {
     list(node, size)
         .prepare(ValidationLimits::default(), RasterLimits::default())
         .unwrap()

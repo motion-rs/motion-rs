@@ -114,7 +114,7 @@ impl Formula {
     }
 
     /// Explicitly requests cached compiled metadata without rendering a frame.
-    pub fn compile(&self) -> motion_core::Result<Arc<FormulaAsset>> {
+    pub fn asset(&self) -> motion_core::Result<Arc<FormulaAsset>> {
         self.compiled().map_err(Into::into)
     }
 
@@ -196,8 +196,8 @@ mod tests {
             .write(0.5)
             .select_subexpression("x", |node| node.opacity(0.5));
         assert!(!formula.compilation.is_compiled());
-        let first = formula.compile().unwrap();
-        assert!(Arc::ptr_eq(&first, &formula.compile().unwrap()));
+        let first = formula.asset().unwrap();
+        assert!(Arc::ptr_eq(&first, &formula.asset().unwrap()));
         let list = Node::from(formula)
             .named("equation")
             .compile(

@@ -24,13 +24,38 @@ No CPU/GPU equivalence or real-time guarantee follows from reduced work totals.
 
 ## GPU State Preparation
 
-Rust uploads evaluated primitive positions, radius, color, rotation, kind and
-independently sampled segment endpoints through `Canvas::instances` and
-`InstanceBatch`. Velocity alignment is resolved in Rust, not in WGSL.
-A 64-thread compute pass copies geometry and derives conservative local support
-in a 48-byte metadata record; it does not evaluate trajectories or noise models.
+The legacy upload path supplies Rust-evaluated primitive positions, radius,
+color, rotation, kind and independently sampled segment endpoints through
+`Canvas::instances` and `InstanceBatch`. It remains the boundary for arbitrary
+custom trajectories and CPU fixed-step simulations.
+
+Eligible built-in analytic trajectories additionally supply admitted explicit
+seed/time/model descriptions. A GPU pass evaluates those descriptions into the
+48-byte primitive records that are then consumed by support preparation,
+binning and composition. It is not a disconnected diagnostic calculation:
+eligible analytic rendering does not upload CPU-evaluated primitive positions.
+Precision or unsupported-model cases retain diagnosed CPU materialization,
+including an analytic fallback count, without changing the selected backend.
+The CPU reference and keyed streams remain unchanged.
+
+Analytic uploads admit at most 1,048,576 instances with
+`0 <= age < lifetime <= 3600` seconds. Numeric magnitudes are bounded by one
+million and temporal/noise phases by 8192 for the f32 device path. Precision
+rejection uses the `Unsupported` diagnostic at `instances.analytic.precision`;
+the batch's `analytic_fallback` observation and preparation's
+`analytic_cpu_fallbacks` count distinguish it from a backend change.
+
+A separate 64-thread compute pass derives conservative local support in a
+48-byte metadata record from either form of primitive storage.
 Batches below 256 instances retain the full-loop path to avoid fixed
-binning/synchronization overhead. Larger batches use ordered 16x16 tile lists.
+binning/synchronization overhead. Larger batches use ordered 16x16 tiles. When
+the bitset layout and its conservative work bound fit the budgets, one 64-thread
+compute pass assigns an invocation to each particle. It transforms the
+particle's conservative support to device space and atomically sets that
+particle's source-order bit in every overlapped tile. Composition enumerates
+set bits from low to high, preserving source order without a GPU summary
+readback. If the bitset is too large or cannot be admitted, the exact-size
+count/prefix/fill list path remains available.
 
 `InstanceUpload::new` accepts typed `InstanceRecord` values: Disc, Glow, Sprite or
 Segment. The upload is a four-word header (record stride in the low five bits of word three,
@@ -43,8 +68,18 @@ allocation are validated. Planning checks the exact declared byte charge and
 instance count. CPU-only batches default to no upload and are rejected by explicit
 GPU consumers rather than silently falling back.
 
-There is no GPU-program enum, `GpuTrajectoryModel` or `TrajectoryModel::gpu_model`
-hook. Built-in and custom trajectories use the same Rust-evaluated boundary.
+GPU planning separates immutable sprite atlas texels from the per-draw header
+and records, for both ordinary and extended strides. Binding 11 consumes the
+context-resident atlas, so changing time, record positions or draw transforms does
+not upload its pixels again on a cache hit. The raw `InstanceUpload` protocol
+still includes optional trailing texels; CPU consumers are unchanged.
+Atlas host storage, worst-case device upload and comparison work are admitted
+even on a hit. Device storage limits apply independently of cache occupancy.
+See [resource residency](resources.md#limits-and-accounting).
+
+The analytic protocol is a bounded set of supported models, not an arbitrary GPU
+program interpreter. Custom trajectories need not implement it and retain their
+existing Rust-evaluated boundary. Fixed-step simulation is not executed on the GPU.
 `MAX_INSTANCE_COUNT` permits up to 1,048,576 uploaded primitives or analytic
 trajectory states, replacing the old 65,536 protocol ceiling. Memory, work,
 device-storage and index checks still apply; simulation and per-step emitter
@@ -52,15 +87,19 @@ quotas remain separate. Plexus uses deterministic spatial hashing up to 65,536 s
 A native regression renders and replays 65,537 instances. The 48-byte GPU metadata
 record is separate charged storage, not a second name for the upload record.
 
-Separate count, prefix and fill passes keep each tile's original instance order;
-there is no unordered atomic append. A 16-byte prefix summary is read back before
+Bit positions encode the original indices, so atomic writes do not introduce
+unordered compositing. The complete state and bitset storage, worst-case
+particle-to-tile build work and conservative maximum composition work are
+admitted before execution. The fallback uses separate count, prefix and fill
+passes to retain original instance order; it reads back a 16-byte summary before
 allocating exact index storage and admitting actual tile-instance pixel work.
-Each reference has an independent 16-byte storage record to avoid concurrent
-read/modify/write races between packed vector components. Metadata, scan work,
-duplicate state storage and references all count toward logical budgets. Index,
-device-storage or work overflow fails the frame before public output commits;
-indices are never silently truncated. Returned frame stats include dynamic work
-and storage; the internal GPU plan statistics contain static admission charges only.
+Each fallback reference has an independent 16-byte storage record to avoid
+concurrent read/modify/write races between packed vector components. Metadata,
+scan work, duplicate state storage and references all count toward logical
+budgets. Index, device-storage or work overflow fails the frame before public
+output commits; indices are never silently truncated. Returned frame stats
+include path-specific work and storage; the internal GPU plan statistics
+contain static admission charges only.
 
 Tile composition has a separate shader-specialized pipeline. Ordinary scenes
 and small batches do not execute the tile lookup. Scalar WGSL coverage, blend
@@ -75,7 +114,7 @@ Original uploads keep header word three zero and twelve-word records unchanged. 
 
 Extra words contain a UV cell, tapered start RGBA or analytic shape parameters. Tapered width is the start diameter; base radius/color are the endpoint. SpriteSheet stores stretch aspect in base width. New kinds do not renumber Disc/Glow/Sprite/Segment. Geometry, finite values, UVs and endpoint alpha are validated; HDR RGB is not clipped. Shape evaluation, CPU binning, upload and GPU storage retain independent budget gates. SourceOver/Plus/Screen/Multiply are batch policies; without an explicit blend, `GlowDots` uses Plus and every other style uses SourceOver.
 
-Historical segments share one sample and ID lookup per time. One render queries those times in ascending order through a forward cursor held in the admitted working buffers: a query continues stepping from the previous one when it lies between the nearest retained snapshot and the target, and otherwise restarts from that snapshot. Fixed steps are deterministic, so results equal independent queries; the cursor is dropped with the render and never carries state between frames. A conservative 64 MiB logical history/index bound rejects excess storage without silently reducing segment counts. Interval/subdivision/count limits bound record generation. CPU tiled work uses declared per-instance sampling cost. Extended styles retain the 72-byte Particle and 48-byte GPU metadata. All depth sorting, CoC, flip, stretch, curves and random selection happen in Rust, never GPU simulation.
+Historical segments share one sample and ID lookup per time. One render queries those times in ascending order through a forward cursor held in the admitted working buffers: a query continues stepping from the previous one when it lies between the nearest retained snapshot and the target, and otherwise restarts from that snapshot. Fixed steps are deterministic, so results equal independent queries; the cursor is dropped with the render and never carries state between frames. A conservative 64 MiB logical history/index bound rejects excess storage without silently reducing segment counts. Interval/subdivision/count limits bound record generation. CPU tiled work uses declared per-instance sampling cost. Extended styles retain the 72-byte Particle and 48-byte GPU metadata. Style operations not represented by an admitted analytic upload retain their Rust-evaluated path; neither upload path moves fixed-step simulation to the GPU.
 
 ## Replay Extensions
 

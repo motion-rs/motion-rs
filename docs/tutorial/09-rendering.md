@@ -48,7 +48,7 @@ levels are for integer-indexed clocks and extensions. A checked `Composition` co
 | `RenderOptions` | Shared backend, assets, quality, output dimensions and budget configuration |
 | `RenderSession` + `FrameRequest` | Repeated requests with explicit time, target and format |
 | `Composition` + `FrameRenderer` | Integer-indexed frame requests for one composition |
-| `RenderPrepare` / `PreparedFrame` | Extensions controlling command preparation and low-level consumption |
+| `RenderPrepare` / `PreparedCpuFrame` | Extensions controlling command preparation and low-level consumption |
 | `GpuContext` | Import or share native devices, queues and submission lifetimes |
 
 `FrameAt::Time` does not automatically snap to the frame grid; `FrameAt::Index` converts exactly with the request's rational frame rate. `FrameRenderer` wraps the same session for indices of one composition, so their clocks must remain distinct.
@@ -60,20 +60,20 @@ use motion::prelude::*;
 
 fn main() {
     let cpu = RenderOptions::default().backend(BackendPreference::Cpu);
-    let automatic = RenderOptions::default().backend(BackendPreference::automatic());
+    let default = RenderOptions::default();
     let strict_gpu = RenderOptions::default().backend(BackendPreference::gpu());
     let ci_gpu = RenderOptions::default().backend(BackendPreference::Gpu {
         allow_software: true,
     });
-    let _ = (cpu, automatic, strict_gpu, ci_gpu);
+    let _ = (cpu, default, strict_gpu, ci_gpu);
 }
 ```
 
 This only configures policy; it does not initialize a GPU. Actual GPU requests require `gpu` and a supported native adapter.
 
-- `Cpu` is the library default and does not initialize a composition GPU.
-- `Automatic` can select CPU during startup policy and admission checks, retaining the reason.
-- `Gpu` explicitly requires GPU rendering. Device loss, unsupported formats and execution failures do not silently switch to CPU.
+- The default is `Gpu` when feature `gpu` is enabled and `Cpu` otherwise.
+- `Cpu` is an explicit choice of the reference rasterizer and does not initialize a composition GPU.
+- `Gpu` requires GPU rendering. Startup failures, unsupported content, device loss and execution failures are errors and never switch to CPU.
 - Software GPU adapters require explicit permission. Their measurements do not represent physical GPU performance.
 
 `RenderContext` manages Assets and structural policy, not a GPU. `RenderOptions.gpu_context` explicitly shares a device but does not select the backend.
@@ -91,7 +91,7 @@ This only configures policy; it does not initialize a GPU. Actual GPU requests r
 
 Do not infer plane strides from format names or reinterpret bytes with different alpha representations as the same frame. YUV is not a synonym for an arbitrary RGBA buffer, and HDR has no automatic tone mapping.
 
-## PreparedFrame and Caches
+## PreparedCpuFrame and Caches
 
 Preparation generates curves, coverage, paints, clips and filter data on the CPU. GPU composition is not GPU path rasterization; it consumes the same supported prepared data.
 
@@ -128,4 +128,4 @@ Quality, pixel dimensions, filter halos, target formats and shared holders all a
 ## Next Steps
 
 Next chapter: [10 Audio](10-audio.md). Without audio, skip to [11 Export](11-export.md).
-Full contracts: [rendering and output](../design/rendering.md), [GPU](../design/gpu.md), [FrameRenderer](../../crates/motion-render/src/composition/frame_renderer.rs).
+Full contracts: [rendering and output](../design/rendering.md), [GPU](../design/rendering.md), [FrameRenderer](../../crates/motion-render/src/composition/frame_renderer.rs).

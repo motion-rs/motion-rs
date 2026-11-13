@@ -30,7 +30,7 @@ fn direct_descriptors_preserve_ranges_bounds_and_alpha_bits() -> motion_core::Re
         })
         .unwrap();
     let mut planner = Planner {
-        frame: &frame,
+        frame: frame.gpu_view(),
         steps: Vec::new(),
         budget: Budget::new(frame.size, limits)?,
     };
@@ -47,7 +47,7 @@ fn direct_descriptors_preserve_ranges_bounds_and_alpha_bits() -> motion_core::Re
     assert_eq!(decoded, frame.alphas);
     assert_eq!(
         shared.len(),
-        4 + 6 * frame.strips.len() + 4 * frame.spans.len() + frame.alphas.len().div_ceil(4)
+        4 + 5 * frame.strips.len() + 4 * frame.spans.len() + frame.alphas.len().div_ceil(4)
     );
     for clip in [
         PixelRect {
@@ -132,7 +132,7 @@ fn sparse_records_preserve_original_u8_coverage_after_clipping() -> motion_core:
         bottom: 63,
     };
     let mut planner = Planner {
-        frame: &frame,
+        frame: frame.gpu_view(),
         steps: Vec::new(),
         budget: Budget::new(frame.size, limits)?,
     };
@@ -186,7 +186,7 @@ fn conditional_packets_preserve_mixed_payloads_and_zero_denominators() -> motion
         )?
         .prepare(motion_core::ValidationLimits::default(), limits)?;
     let mut planner = Planner {
-        frame: &frame,
+        frame: frame.gpu_view(),
         steps: Vec::new(),
         budget: Budget::new(frame.size, limits)?,
     };

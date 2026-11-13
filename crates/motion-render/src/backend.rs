@@ -1,14 +1,4 @@
-//! Observable native backend selection and startup parity contract.
-
-/// A session's fixed rendering backend. Device loss after this decision is a
-/// failure, not a mid-export switch to a different pixel implementation.
-#[derive(Clone, Debug)]
-pub struct BackendDecision {
-    /// Actual renderer used for this session.
-    pub renderer: crate::Renderer,
-    /// GPU setup/self-check explanation when Automatic selected CPU instead.
-    pub reason: Option<String>,
-}
+//! Backend preference, the renderer it fixes and the software-adapter policy.
 
 #[cfg(feature = "gpu")]
 pub(crate) fn software_adapter(name: &str, device_type: &str) -> bool {
@@ -27,35 +17,47 @@ pub(crate) fn software_adapter(name: &str, device_type: &str) -> bool {
 }
 
 /// Offscreen composition backend, independent of the Studio window renderer.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum Renderer {
-    /// Default CPU rasterizer; does not require a window or GPU adapter.
-    #[default]
+///
+/// The default is the GPU when feature `gpu` is enabled and the CPU reference otherwise.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BackendKind {
+    /// Bounded CPU reference rasterizer; does not require a window or GPU adapter.
     Cpu,
     /// Native wgpu composition using an available Metal, Vulkan or DX12 adapter.
     /// Requires feature `gpu`; no fallback to the CPU renderer is performed.
     Gpu,
 }
 
-/// Requested native backend; explicit GPU never silently falls back.
+impl Default for BackendKind {
+    fn default() -> Self {
+        BackendPreference::default().kind()
+    }
+}
+
+/// Requested native backend; the GPU never silently falls back to the CPU.
 ///
-/// This is the only way to choose a backend. [`Renderer`] is the outcome
-/// reported by [`BackendDecision`].
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+/// This is the only way to choose a backend; [`BackendPreference::kind`] reports the
+/// [`BackendKind`] it fixes. The default is the GPU on hardware adapters when feature `gpu`
+/// is enabled and the CPU reference otherwise.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BackendPreference {
-    /// Bounded CPU reference.
-    #[default]
+    /// Bounded CPU reference, selected explicitly.
     Cpu,
-    /// Explicit native GPU, without fallback.
+    /// Native GPU; setup, self-check and unsupported content are errors.
     Gpu {
         /// Admits software adapters such as llvmpipe or WARP.
         allow_software: bool,
     },
-    /// Validates a native GPU once, falling back only before the session starts.
-    Automatic {
-        /// Admits software adapters such as llvmpipe or WARP.
-        allow_software: bool,
-    },
+}
+
+impl Default for BackendPreference {
+    fn default() -> Self {
+        if cfg!(feature = "gpu") {
+            Self::gpu()
+        } else {
+            Self::Cpu
+        }
+    }
 }
 
 impl BackendPreference {
@@ -66,10 +68,11 @@ impl BackendPreference {
         }
     }
 
-    /// GPU on hardware adapters with a startup fallback to CPU.
-    pub const fn automatic() -> Self {
-        Self::Automatic {
-            allow_software: false,
+    /// Backend kind this preference selects; a GPU request never resolves to the CPU.
+    pub const fn kind(self) -> BackendKind {
+        match self {
+            Self::Cpu => BackendKind::Cpu,
+            Self::Gpu { .. } => BackendKind::Gpu,
         }
     }
 
@@ -77,7 +80,7 @@ impl BackendPreference {
     pub const fn allow_software(self) -> bool {
         match self {
             Self::Cpu => false,
-            Self::Gpu { allow_software } | Self::Automatic { allow_software } => allow_software,
+            Self::Gpu { allow_software } => allow_software,
         }
     }
 
@@ -86,23 +89,20 @@ impl BackendPreference {
         match self {
             Self::Cpu => Self::Cpu,
             Self::Gpu { .. } => Self::Gpu { allow_software },
-            Self::Automatic { .. } => Self::Automatic { allow_software },
         }
     }
 
-    /// Whether a GPU may be used, strictly or after a startup check.
+    /// Preference requesting exactly `renderer`; the GPU is hardware-only.
+    pub const fn from_kind(kind: BackendKind) -> Self {
+        match kind {
+            BackendKind::Cpu => Self::Cpu,
+            BackendKind::Gpu => Self::gpu(),
+        }
+    }
+
+    /// Whether the GPU is requested.
     pub const fn wants_gpu(self) -> bool {
         !matches!(self, Self::Cpu)
-    }
-}
-
-impl From<Renderer> for BackendPreference {
-    /// Requests exactly `renderer`; GPU is strict and hardware-only.
-    fn from(renderer: Renderer) -> Self {
-        match renderer {
-            Renderer::Cpu => Self::Cpu,
-            Renderer::Gpu => Self::gpu(),
-        }
     }
 }
 
@@ -128,51 +128,37 @@ mod tests {
 
     #[test]
     #[cfg(feature = "gpu")]
-    fn automatic_precision_fallback_precedes_device_initialization() -> motion_core::Result<()> {
+    fn gpu_precision_rejection_is_an_error_not_a_cpu_retry() -> motion_core::Result<()> {
         use motion_core::NodeModifiers;
         use motion_core::Shape;
         let mut session =
             crate::Composition::new(4, 4, crate::FrameClock::new(motion_core::fps!(30), 150))
                 .with_options(
-                    crate::RenderOptions::default().backend(crate::BackendPreference::automatic()),
+                    crate::RenderOptions::default().backend(crate::BackendPreference::gpu()),
                 )?
                 .frame_renderer(motion_core::Size::new(4.0, 4.0))?;
-        session.render_frame(0, |_| {
-            motion_core::Node::from(
-                motion_core::Rect::new(0.0, 0.0, 4.0, 4.0).fill(motion_core::Color::WHITE),
-            )
-            .opacity(1e-50)
-        })?;
-        assert!(session.gpu_info().is_none());
-        let decision = session.backend_decision().unwrap();
-        assert_eq!(decision.renderer, crate::Renderer::Cpu);
-        assert!(
-            decision
-                .reason
-                .as_deref()
-                .is_some_and(|reason| reason.contains("precision"))
-        );
+        let error = session
+            .render_frame(0, |_| {
+                motion_core::Node::from(
+                    motion_core::Rect::new(0.0, 0.0, 4.0, 4.0).fill(motion_core::Color::WHITE),
+                )
+                .opacity(1e-50)
+            })
+            .unwrap_err();
+        assert!(error.to_string().contains("precision"), "{error}");
+        assert_eq!(session.backend_kind(), crate::BackendKind::Gpu);
         Ok(())
     }
 
     #[test]
-    #[cfg(not(feature = "gpu"))]
-    fn automatic_without_feature_falls_back_before_rendering() -> motion_core::Result<()> {
-        let mut session =
-            crate::Composition::new(4, 4, crate::FrameClock::new(motion_core::fps!(30), 150))
-                .with_options(
-                    crate::RenderOptions::default().backend(crate::BackendPreference::automatic()),
-                )?
-                .frame_renderer(motion_core::Size::new(4.0, 4.0))?;
-        session.render_frame(0, |_| motion_core::Node::empty())?;
-        let decision = session.backend_decision().unwrap();
-        assert_eq!(decision.renderer, crate::Renderer::Cpu);
-        assert!(
-            decision
-                .reason
-                .as_deref()
-                .is_some_and(|reason| reason.contains("feature gpu"))
+    fn default_backend_is_gpu_only_when_the_feature_is_enabled() {
+        assert_eq!(
+            crate::BackendPreference::default().wants_gpu(),
+            cfg!(feature = "gpu")
         );
-        Ok(())
+        assert_eq!(
+            crate::BackendKind::default() == crate::BackendKind::Gpu,
+            cfg!(feature = "gpu")
+        );
     }
 }

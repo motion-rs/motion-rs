@@ -15,7 +15,7 @@
 //! # Model
 //!
 //! 1. Build a [`Scene`] from exact local/global ticks and a rational [`FrameRate`].
-//! 2. Return [`Node`] content, compiled to a [`DisplayList`] and [`PreparedFrame`].
+//! 2. Return [`Node`] content, compiled to a [`DisplayList`] and [`PreparedCpuFrame`].
 //! 3. Render a transparent [`FrameBuffer`], external texture or native encoder output.
 //!
 //! [`RenderOptions`] configures reusable [`RenderSession`] state; each
@@ -84,7 +84,8 @@
 //! # Features and Resources
 //!
 //! Default Cargo features include `gpu`, content, native FFmpeg and Studio;
-//! library rendering selects CPU unless requested explicitly; the CLI defaults to Automatic.
+//! rendering defaults to the GPU when `gpu` is enabled and never falls back to the CPU; select
+//! `BackendPreference::Cpu` explicitly for the reference rasterizer.
 //! Native GPU composition uses Metal, Vulkan or DX12. `BackendPreference::gpu()` selects an
 //! available native backend, including Metal on macOS. `studio` adds an egui
 //! workbench but does not open a window on import. Geometry-only rendering does
@@ -167,7 +168,7 @@
 //! ```
 //!
 //! [`DisplayList`]: render::DisplayList
-//! [`PreparedFrame`]: render::PreparedFrame
+//! [`PreparedCpuFrame`]: render::PreparedCpuFrame
 //! [`FrameBuffer`]: render::FrameBuffer
 //! [`RenderSession`]: render::RenderSession
 //! [`FrameRequest`]: render::FrameRequest
@@ -212,20 +213,20 @@ pub use motion_core::{camera, group, scene};
 pub use motion_core::{key, math};
 
 pub use motion_core::{
-    Alignment, AngleLiteral, ArcShape, Arrow, ArrowHead, Assets, AudioClip, BlendMode, BlendSpace,
-    Bone, BonePose, BoneTransform, Camera, Circle, Clip, Color, Column, Constant, CrossFade,
-    Direction, Duration, Easing, Ellipse, Error, ErrorKind, ErrorReport, FillRule, Filter,
-    FiniteAnimation, FontEnvironment, FrameRate, FunctionGraph, GradientExtend, GradientSpace,
-    GradientUnits, ImagePattern, Interpolate, Interval, Iris, IrisShape, Keyframes, Layout, Line,
-    LineCap, LineJoin, LinearGradient, MaskMode, MeshGradient, MeshVertex, MotionBlur, Node,
-    NodeModifiers, Paint, Path2D, PathBooleanOp, PathBooleanOptions, PathBuilder, Perspective,
-    Pivot, PixelSize, Point, Polygon, Polyline, Pose, Push, RadialGradient, Random, Rect,
-    RegularPolygon, RenderQuality, Ring, RoundedRect, Row, Sampling, Scene, SceneContext, Shape,
-    Side, Signal, Size, Skeleton, Slide, Soundtrack, Source, Spline, Spring, Star, StrokeStyle,
-    Styled, SweepGradient, Time, TimeLiteral, TimeOffset, Timeline, TimelineBuilder,
-    TimelineWarning, Track, TrackBuilder, Transform, TransformComponents, Tween, ValidationError,
-    Vector2, Wipe, ZoomBlur, animation, authoring, color, fps, geometry, noise, path2d,
-    sample_offsets, shape, time, try_camera,
+    Alignment, AngleLiteral, ArcShape, Arrow, ArrowHead, Assets, AtmosphereKind, AtmospherePaint,
+    AtmosphereParameters, AudioClip, BlendMode, BlendSpace, Bone, BonePose, BoneTransform, Camera,
+    Circle, Clip, Color, Column, Constant, CrossFade, Direction, Duration, Easing, Ellipse, Error,
+    ErrorKind, ErrorReport, FillRule, Filter, FiniteAnimation, FontEnvironment, FrameRate,
+    FunctionGraph, GradientExtend, GradientSpace, GradientUnits, ImagePattern, Interpolate,
+    Interval, Iris, IrisShape, Keyframes, Layout, Line, LineCap, LineJoin, LinearGradient,
+    MaskMode, MeshGradient, MeshPaint, MeshVertex, MotionBlur, Node, NodeModifiers, Paint, Path2D,
+    PathBooleanOp, PathBooleanOptions, PathBuilder, Perspective, Pivot, PixelSize, Point, Polygon,
+    Polyline, Pose, Push, RadialGradient, Random, Rect, RegularPolygon, RenderQuality, Ring,
+    RoundedRect, Row, Sampling, Scene, SceneContext, Shape, Side, Signal, Size, Skeleton, Slide,
+    Soundtrack, Source, Spline, Spring, Star, StrokeStyle, Styled, SweepGradient, Time,
+    TimeLiteral, TimeOffset, Timeline, TimelineBuilder, TimelineWarning, Track, TrackBuilder,
+    Transform, TransformComponents, Tween, ValidationError, Vector2, Wipe, ZoomBlur, animation,
+    authoring, color, fps, geometry, noise, path2d, sample_offsets, shape, time, try_camera,
 };
 pub use motion_render::{BackendPreference, RenderOptions, render_still};
 
@@ -337,13 +338,14 @@ pub mod eager {
 /// (see the table in the crate documentation). Transition is in scope for its methods only.
 pub mod prelude {
     pub use crate::{
-        Alignment, AngleLiteral, ArcShape, Arrow, ArrowHead, Assets, AudioClip, BackendPreference,
-        BlendMode, BlendSpace, Bone, BonePose, BoneTransform, Camera, Circle, Clip, ClipMode,
-        Color, Column, Constant, CrossFade, Direction, Duration, Easing, Ellipse, Error, ErrorKind,
-        ErrorReport, Extrapolate, FillRule, Filter, FiniteAnimation, FollowPath, FontEnvironment,
-        FrameRate, FunctionGraph, GradientExtend, GradientSpace, GradientUnits, ImagePattern,
-        Interpolate, Interval, Iris, IrisShape, Keyframes, Layout, Line, LineCap, LineJoin,
-        LinearGradient, MaskMode, MeshGradient, MeshVertex, MotionBlur, Node, NodeModifiers, Noise,
+        Alignment, AngleLiteral, ArcShape, Arrow, ArrowHead, Assets, AtmosphereKind,
+        AtmospherePaint, AtmosphereParameters, AudioClip, BackendPreference, BlendMode, BlendSpace,
+        Bone, BonePose, BoneTransform, Camera, Circle, Clip, ClipMode, Color, Column, Constant,
+        CrossFade, Direction, Duration, Easing, Ellipse, Error, ErrorKind, ErrorReport,
+        Extrapolate, FillRule, Filter, FiniteAnimation, FollowPath, FontEnvironment, FrameRate,
+        FunctionGraph, GradientExtend, GradientSpace, GradientUnits, ImagePattern, Interpolate,
+        Interval, Iris, IrisShape, Keyframes, Layout, Line, LineCap, LineJoin, LinearGradient,
+        MaskMode, MeshGradient, MeshPaint, MeshVertex, MotionBlur, Node, NodeModifiers, Noise,
         Oscillator, Paint, Path2D, PathBooleanOp, PathBooleanOptions, PathSample, Pivot, PixelSize,
         Point, Polygon, Polyline, Pose, Project, ProjectBuilder, ProjectOutcome,
         ProjectTimelineInfo, Push, RadialGradient, Random, Rect, RegularPolygon, RenderOptions,

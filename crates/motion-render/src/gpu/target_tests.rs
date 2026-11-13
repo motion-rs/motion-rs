@@ -504,6 +504,8 @@ fn shared_context_texture_target_self_check_and_device_loss_are_real() -> motion
     );
     assert!(context.self_check_result.get().is_none());
     context.self_check()?;
+    assert!(context.self_check_result.get().unwrap().is_ok());
+    context.clone().self_check()?;
     assert!(context.same_device(&context.clone()));
     let node = motion_core::Node::from(
         motion_core::Rect::new(0.25, 0.5, 12.75, 7.25).fill(motion_core::Color::rgb(20, 190, 230)),
@@ -605,7 +607,7 @@ fn shared_context_texture_target_self_check_and_device_loss_are_real() -> motion
             .with_options(
                 crate::RenderOptions::default()
                     .gpu_context(context.clone())
-                    .backend(crate::BackendPreference::automatic()),
+                    .backend(crate::BackendPreference::gpu()),
             )?;
     let mut first = composition.frame_renderer(motion_core::Size::new(16.0, 8.0))?;
     let mut second = composition.frame_renderer(motion_core::Size::new(16.0, 8.0))?;
@@ -613,12 +615,13 @@ fn shared_context_texture_target_self_check_and_device_loss_are_real() -> motion
         first.render_frame(0, |_| node.clone())?.packed_rgb(),
         second.render_frame(0, |_| node.clone())?.packed_rgb()
     );
-    assert_eq!(
-        first.backend_decision().unwrap().renderer,
-        crate::Renderer::Gpu
-    );
+    assert_eq!(first.backend_kind(), crate::BackendKind::Gpu);
     context.device().destroy();
     let _ = wait_for_gpu(context.device(), None);
+    assert!(
+        context.self_check().is_err(),
+        "Cached success must not hide device loss"
+    );
     let error = first
         .render_frame(1, |_| node.clone())
         .expect_err("lost device fails");

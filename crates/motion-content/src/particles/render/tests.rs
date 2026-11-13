@@ -8,7 +8,7 @@ use motion_core::{Drawable, Point, Transform};
 use motion_render::RenderPrepare;
 
 fn original_coverage(batch: &ParticleBatch, point: Point, antialias: f64) -> f32 {
-    let instance = &batch.instances[0];
+    let instance = &batch.instances.slice()[0];
     let particle = instance.particle;
     let radius = f64::from(batch.radius * particle.size);
     let relative = [
@@ -78,6 +78,8 @@ fn bokeh_focus_and_history_capacity_are_explicit() -> motion_core::Result {
         },
         &context,
         states.clone(),
+        None,
+        None,
         |_| Ok(states.clone()),
     )?;
     let list = node.compile(
@@ -124,6 +126,8 @@ fn bokeh_focus_and_history_capacity_are_explicit() -> motion_core::Result {
             }),
             &context,
             instances.clone(),
+            None,
+            None,
             |_| {
                 samples.set(samples.get() + 1);
                 Ok(instances.clone())
@@ -230,7 +234,7 @@ fn support_checks_preserve_original_samples_and_compositor_errors() -> motion_co
                             align: false,
                             sprite: None,
                             bounds: Rect::default(),
-                            index: Arc::from([]),
+                            analytic: None,
                         };
                         for antialias in
                             [1e-10, 0.125, 1.0, 8.0, 0.0, -1.0, f64::INFINITY, f64::NAN]
@@ -343,7 +347,7 @@ fn zero_identity_sampling_preserves_order_errors_and_signed_zero_destination() -
             align: false,
             sprite: None,
             bounds: Rect::default(),
-            index: Arc::from([]),
+            analytic: None,
         };
         for space in [
             motion_core::BlendSpace::LinearRgb,
@@ -465,18 +469,21 @@ fn spatial_index_preserves_order_and_charges_retained_storage() -> motion_core::
                 align: false,
                 sprite: None,
                 bounds: Rect::default(),
-                index: Arc::from([]),
+                analytic: None,
             };
             let base_bytes = batch.bytes();
-            batch.index = batch.build_spatial_index();
-            assert!(!batch.index.is_empty());
+            let ready = batch.instances.get().unwrap();
+            let index =
+                build_spatial_index(batch.kind, batch.radius, batch.width, &ready.instances);
+            assert!(!index.is_empty());
+            batch.instances = Instances::ready(ready.instances.clone(), index.clone());
             assert_eq!(
                 batch.bytes() - base_bytes,
-                batch.index.len() as u64 * std::mem::size_of::<SpatialNode>() as u64
+                batch.instances.index_len() as u64 * std::mem::size_of::<SpatialNode>() as u64
             );
             assert_eq!(
                 batch.work(),
-                batch.instances.len() as u64 * 64 + batch.index.len() as u64 * 16 + 1
+                batch.instances.len() as u64 * 64 + batch.instances.index_len() as u64 * 16 + 1
             );
             for antialias in [0.125, 1.0, 8.0, 0.0, -1.0, f64::INFINITY, f64::NAN] {
                 for row in -2..=10 {
@@ -528,7 +535,7 @@ fn cached_line_support_is_charged_without_changing_device_layout() {
         align: false,
         sprite: None,
         bounds: Rect::default(),
-        index: Arc::from([]),
+        analytic: None,
     };
     assert_eq!(
         batch.bytes(),
@@ -548,7 +555,7 @@ fn cached_line_support_is_charged_without_changing_device_layout() {
     }
 }
 
-fn prepared(node: Node) -> Result<motion_render::PreparedFrame, ValidationError> {
+fn prepared(node: Node) -> Result<motion_render::PreparedCpuFrame, ValidationError> {
     node.compile(
         Size::new(32.0, 24.0),
         PixelSize::new(64, 48),
@@ -874,7 +881,7 @@ mod gpu {
             align: false,
             sprite: None,
             bounds: Rect::new(0.0, 0.0, 32.0, 24.0),
-            index: Arc::from([]),
+            analytic: None,
         };
         let upload = batch.upload().unwrap().into_words();
         assert_eq!(upload.len(), 4 + 12);
@@ -911,7 +918,7 @@ mod gpu {
             align: false,
             sprite: None,
             bounds: Rect::new(10.0, 7.0, 21.0, 17.0),
-            index: Arc::from([]),
+            analytic: None,
         };
         let limits = RasterLimits::default();
         let mut gpu = motion_render::gpu::Gpu::new()?;

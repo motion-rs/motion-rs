@@ -4,11 +4,14 @@ use super::*;
 use motion_core::{PixelSize, ValidationError};
 
 mod coverage;
+mod device;
 mod items;
 mod schedule;
 mod sparse;
 mod steps;
 mod textures;
+
+pub(super) use device::DeviceCoverage;
 
 /// Packed storage, mapped readback and owned CPU output coexist until completion.
 const PACKED_PAYLOAD_COPIES: u64 = 3;
@@ -64,14 +67,14 @@ fn write_lut(target: &mut [f32], lut: Option<&motion_core::Lut3d>, input: motion
 impl Plan {
     /// Builds all operations and accounts for uploads, captures, staging and output.
     /// Unsupported precision or exhausted logical budgets fail before device access.
-    pub fn new(frame: &PreparedFrame, limits: RasterLimits) -> Result<Self, ValidationError> {
+    pub fn new(frame: &impl FrameInput, limits: RasterLimits) -> Result<Self, ValidationError> {
         Self::with_planning_limit(frame, limits, limits.max_bytes, None)
     }
 
     /// Plans a supported packed output without unused floating-point readback storage.
     /// Packed storage, mapped readback and CPU planes are admitted before optional batching.
     pub fn new_packed(
-        frame: &PreparedFrame,
+        frame: &impl FrameInput,
         limits: RasterLimits,
         format: crate::PixelFormat,
     ) -> Result<Self, ValidationError> {
@@ -82,16 +85,17 @@ impl Plan {
     /// Device/staging reservations are included conservatively in the planning charge.
     /// `packed` selects a packed output format; `None` plans floating-point readback.
     pub fn with_planning_limit(
-        frame: &PreparedFrame,
+        frame: &impl FrameInput,
         limits: RasterLimits,
         max_bytes: u64,
         packed: Option<crate::PixelFormat>,
     ) -> Result<Self, ValidationError> {
+        let frame = frame.gpu_view();
         let planning_limits = RasterLimits {
             max_bytes: limits.max_bytes.min(max_bytes),
             ..limits
         };
-        let budget = Self::admit(frame, planning_limits, packed)?;
+        let budget = Self::admit(&frame, planning_limits, packed)?;
         let mut planner = Planner {
             frame,
             steps: Vec::new(),
@@ -213,7 +217,7 @@ impl Plan {
 
     /// Admits the fixed costs of a frame (plan, staging, output, readback) and builds the budget.
     fn admit(
-        frame: &PreparedFrame,
+        frame: &FrameView<'_>,
         limits: RasterLimits,
         packed: Option<crate::PixelFormat>,
     ) -> Result<Budget, ValidationError> {
@@ -268,14 +272,16 @@ impl Plan {
         size: PixelSize,
         limits: RasterLimits,
     ) -> Result<Self, ValidationError> {
-        let coverage = if planner
-            .steps
-            .iter()
-            .any(|step| Planner::uses_direct_coverage(&step.data))
+        let (coverage, device) = if planner.frame.has_device_coverage()
+            || planner
+                .steps
+                .iter()
+                .any(|step| Planner::uses_direct_coverage(&step.data))
         {
-            planner.shared_coverage()?
+            let device = planner.device_coverage()?;
+            (planner.shared_coverage()?, device)
         } else {
-            Vec::new()
+            (Vec::new(), device::DeviceCoverage::default())
         };
         planner.budget.bytes(
             (planner.steps.len() as u64 + 1) * (size_of::<usize>() * 3 + size_of::<u64>()) as u64,
@@ -368,6 +374,7 @@ impl Plan {
             output,
             steps: planner.steps,
             coverage,
+            device,
             last_uses,
             texture_slots,
             texture_sizes,
@@ -455,12 +462,7 @@ fn packed_resources(
             "Output size/format requires linear fallback",
         ));
     }
-    let count = u64::from(size.width) * u64::from(size.height);
-    let packed_bytes = match format {
-        crate::PixelFormat::Yuv420 { bit_depth: 8 } => count * 3 / 2,
-        crate::PixelFormat::Yuv420 { bit_depth: 10 } => count * 3,
-        _ => count * 4,
-    };
+    let packed_bytes = packed_buffer_bytes(size, format);
     Ok(WorkStats {
         peak_bytes: packed_bytes * PACKED_PAYLOAD_COPIES
             + (size_of::<PendingOutputFrame>()
@@ -469,6 +471,56 @@ fn packed_resources(
                 + 32) as u64,
         work: crate::FrameBuffer::conversion_work(size, format),
     })
+}
+
+pub(super) fn packed_buffer_bytes(size: PixelSize, format: crate::PixelFormat) -> u64 {
+    let count = u64::from(size.width) * u64::from(size.height);
+    match format {
+        crate::PixelFormat::Yuv420 { bit_depth: 8 } => (count * 3 / 2).next_multiple_of(4),
+        crate::PixelFormat::Yuv420 { bit_depth: 10 } => count * 3,
+        _ => count * 4,
+    }
+}
+
+/// Count, sprite width, sprite height and packed stride/blend words.
+const INSTANCE_HEADER_WORDS: usize = 4;
+
+/// Low header bits encoding the checked twelve- or sixteen-word record stride.
+const INSTANCE_STRIDE_MASK: u32 = 31;
+
+impl Planner<'_> {
+    /// Admits the new host atlas before copying; the original upload remains live during the copy.
+    pub(in crate::gpu) fn particle_resource(
+        &mut self,
+        data: &mut Vec<f32>,
+    ) -> Result<Option<Vec<f32>>, ValidationError> {
+        let invalid = || {
+            ValidationError::invalid(
+                "gpu.particles",
+                "upload",
+                "Particle records exceed their checked upload",
+            )
+        };
+        if data.len() < INSTANCE_HEADER_WORDS {
+            return Err(invalid());
+        }
+        let stride = (data[3] as u32 & INSTANCE_STRIDE_MASK) as usize;
+        let first = (data[0] as usize)
+            .checked_mul(stride)
+            .and_then(|words| words.checked_add(INSTANCE_HEADER_WORDS))
+            .ok_or_else(invalid)?;
+        let atlas = data.get(first..).ok_or_else(invalid)?;
+        if atlas.is_empty() {
+            return Ok(None);
+        }
+        let mut words = self.data(atlas.len(), 0.0)?;
+        words.copy_from_slice(atlas);
+        let bytes = atlas.len() as u64 * size_of::<f32>() as u64;
+        data.truncate(first);
+        // Logical words, not vector capacity: per-draw staging and device uploads keep only records.
+        self.budget.release(bytes);
+        Ok(Some(words))
+    }
 }
 
 #[cfg(test)]

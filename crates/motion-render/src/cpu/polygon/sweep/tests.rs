@@ -1,4 +1,5 @@
 use super::*;
+use crate::prepared::PaintRecord;
 use motion_core::{Color, DisplayList, DrawCommand, Paint, PixelSize, ValidationLimits};
 
 fn prepared(
@@ -6,14 +7,14 @@ fn prepared(
     rule: FillRule,
     optimized: bool,
     limits: RasterLimits,
-) -> Result<PreparedFrame, ValidationError> {
+) -> Result<PreparedCpuFrame, ValidationError> {
     let size = PixelSize::new(16, 9);
     let mut budget = Budget::new(size, limits)?;
     budget.bytes(
-        size_of::<PreparedFrame>() as u64 + std::mem::size_of_val(edges) as u64,
+        size_of::<PreparedCpuFrame>() as u64 + std::mem::size_of_val(edges) as u64,
         "test",
     )?;
-    let mut frame = PreparedFrame {
+    let mut frame = FrameRecords {
         quality: motion_core::RenderQuality::Final,
         blend_space: motion_core::drawing::BlendSpace::LinearRgb,
         size,
@@ -104,7 +105,7 @@ fn prepared(
         peak_bytes: budget.peak_bytes(),
         work: budget.work_done(),
     };
-    Ok(frame)
+    Ok(PreparedCpuFrame(frame))
 }
 
 fn contour(points: &[Point], edges: &mut Vec<Edge>, budget: &mut Budget) {

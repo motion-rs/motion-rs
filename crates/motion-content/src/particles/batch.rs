@@ -1,5 +1,6 @@
 //! Validated particle instances and spatial indexing.
 
+use super::lazy::{Instances, Materialized};
 use super::*;
 use motion_core::{Drawable, Point, Rect, Transform};
 
@@ -66,14 +67,15 @@ impl SpatialNode {
 /// Validated opaque instance payload, consumed directly by CPU/GPU paths.
 #[derive(Clone, Debug)]
 pub struct ParticleBatch {
-    pub(super) instances: Arc<[Instance]>,
+    pub(super) instances: Instances,
     pub(super) kind: u32,
     pub(super) radius: f32,
     pub(super) width: f32,
     pub(super) align: bool,
     pub(super) sprite: Option<Arc<crate::ImageAsset>>,
     pub(super) bounds: Rect,
-    pub(super) index: Arc<[SpatialNode]>,
+    pub(super) analytic:
+        Option<Result<motion_core::instances::AnalyticInstanceUpload, ValidationError>>,
 }
 
 impl PartialEq for ParticleBatch {
@@ -85,6 +87,7 @@ impl PartialEq for ParticleBatch {
             && self.align == other.align
             && self.sprite.as_ref().map(Arc::as_ptr) == other.sprite.as_ref().map(Arc::as_ptr)
             && self.bounds == other.bounds
+            && self.analytic == other.analytic
     }
 }
 
@@ -106,7 +109,11 @@ impl ParticleBatch {
 
     pub(crate) fn bytes(&self) -> u64 {
         self.instances.len() as u64 * std::mem::size_of::<Instance>() as u64
-            + self.index.len() as u64 * std::mem::size_of::<SpatialNode>() as u64
+            + self.analytic.as_ref().map_or(0, |upload| match upload {
+                Ok(upload) => upload.bytes(),
+                Err(error) => (error.path.len() + error.field.len() + error.message.len()) as u64,
+            })
+            + self.instances.index_len() as u64 * std::mem::size_of::<SpatialNode>() as u64
             + std::mem::size_of::<Arc<[SpatialNode]>>() as u64
             + self.sprite.as_ref().map_or(0, |sprite| {
                 u64::from(sprite.width()) * u64::from(sprite.height()) * 16
@@ -114,73 +121,18 @@ impl ParticleBatch {
     }
 
     pub(crate) fn work(&self) -> u64 {
-        self.instances.len() as u64 * 64 + self.index.len() as u64 * 16 + 1
-    }
-
-    pub(super) fn build_spatial_index(&self) -> Arc<[SpatialNode]> {
-        if self.kind == 2 || self.instances.len() < 32 || self.instances.len() > MAX_INSTANCE_COUNT
-        {
-            return Arc::from([]);
-        }
-
-        fn append(batch: &ParticleBatch, nodes: &mut Vec<SpatialNode>, first: usize, end: usize) {
-            let mut bounds = Rect::new(
-                f64::INFINITY,
-                f64::INFINITY,
-                f64::NEG_INFINITY,
-                f64::NEG_INFINITY,
-            );
-            for instance in &batch.instances[first..end] {
-                let particle = instance.particle;
-                let radius = f64::from(batch.radius * particle.size);
-                let extent = if instance.line {
-                    let reach = f64::from(batch.width) * 0.5;
-                    Rect::new(
-                        f64::from(instance.line_bounds[0]) - reach,
-                        f64::from(instance.line_bounds[1]) - reach,
-                        f64::from(instance.line_bounds[2]) + reach,
-                        f64::from(instance.line_bounds[3]) + reach,
-                    )
-                } else {
-                    let reach = radius * if batch.kind == 1 { 3.0 } else { 1.0 };
-                    Rect::new(
-                        f64::from(particle.position[0]) - reach,
-                        f64::from(particle.position[1]) - reach,
-                        f64::from(particle.position[0]) + reach,
-                        f64::from(particle.position[1]) + reach,
-                    )
-                };
-                bounds.left = bounds.left.min(extent.left);
-                bounds.top = bounds.top.min(extent.top);
-                bounds.right = bounds.right.max(extent.right);
-                bounds.bottom = bounds.bottom.max(extent.bottom);
-            }
-            let guard = [bounds.left, bounds.top, bounds.right, bounds.bottom]
-                .into_iter()
-                .fold(1.0_f64, |scale, coordinate| scale.max(coordinate.abs()))
-                * (256.0 * f64::EPSILON);
-            let current = nodes.len();
-            let leaf = end - first <= 8;
-            nodes.push(SpatialNode {
-                bounds,
-                guard,
-                end,
-                next: 0,
-                leaf,
-            });
-            if !leaf {
-                let middle = first + (end - first) / 2;
-                append(batch, nodes, first, middle);
-                append(batch, nodes, middle, end);
-            }
-            nodes[current].next = nodes.len();
-        }
-        let mut nodes = Vec::with_capacity(self.instances.len().div_ceil(8) * 4);
-        append(self, &mut nodes, 0, self.instances.len());
-        nodes.into()
+        self.instances.len() as u64 * 64 + self.instances.index_len() as u64 * 16 + 1
     }
 
     pub(crate) fn validate(&self) -> Result<(), ValidationError> {
+        if self
+            .analytic
+            .as_ref()
+            .and_then(|program| program.as_ref().ok())
+            .is_some_and(|program| program.len() != self.len())
+        {
+            return Err(invalid("analytic", "Analytic initial-state count mismatch"));
+        }
         if self.instances.len() > MAX_INSTANCE_COUNT
             || !self.radius.is_finite()
             || self.radius < 0.0
@@ -191,8 +143,10 @@ impl ParticleBatch {
         {
             return Err(invalid("style", "Invalid particle style size/count"));
         }
-        for instance in self.instances.iter() {
-            instance.particle.validate()?;
+        if !self.instances.is_deferred() {
+            for instance in self.instances.get()?.instances.iter() {
+                instance.particle.validate()?;
+            }
         }
         motion_core::drawing::validate_rect(self.bounds, "particles", "bounds")
     }
@@ -248,7 +202,7 @@ impl ParticleBatch {
         };
         let indexed = selection.is_none()
             && ZERO_IS_IDENTITY
-            && !self.index.is_empty()
+            && !self.instances.get()?.index.is_empty()
             && antialias.is_finite()
             && antialias > 0.0
             && point.x.is_finite()
@@ -258,18 +212,19 @@ impl ParticleBatch {
         } else {
             0.0
         };
+        let Materialized { instances, index } = self.instances.get()?;
         let mut cursor = 0;
         let mut position = 0;
-        let count = selection.map_or(self.instances.len(), <[usize]>::len);
+        let count = selection.map_or(instances.len(), <[usize]>::len);
         let mut leaf_end = if indexed { 0 } else { count };
         while position < count {
             if indexed && position == leaf_end {
                 loop {
-                    let node = &self.index[cursor];
+                    let node = &index[cursor];
                     if node.outside(point, antialias * 0.5, index_guard) {
                         position = node.end;
                         cursor = node.next;
-                        if position == self.instances.len() {
+                        if position == instances.len() {
                             break;
                         }
                     } else {
@@ -280,11 +235,11 @@ impl ParticleBatch {
                         }
                     }
                 }
-                if position == self.instances.len() {
+                if position == instances.len() {
                     break;
                 }
             }
-            let instance = &self.instances[selection.map_or(position, |indices| indices[position])];
+            let instance = &instances[selection.map_or(position, |indices| indices[position])];
             position += 1;
             let particle = &instance.particle;
             let radius = f64::from(self.radius * particle.size);
@@ -404,8 +359,7 @@ impl ParticleBatch {
             .sprite
             .as_ref()
             .map_or([0, 0], |sprite| [sprite.width(), sprite.height()]);
-        let records = self.instances.iter().map(|instance| {
-            let particle = instance.particle;
+        let record = |particle: Particle, previous: [f32; 2], line: bool| {
             let rotation = f64::from(particle.rotation)
                 + if self.align && particle.velocity != [0.0; 2] {
                     libm::atan2(
@@ -417,12 +371,12 @@ impl ParticleBatch {
                 };
             InstanceRecord {
                 position: particle.position,
-                start: instance.previous,
+                start: previous,
                 color: particle.color,
                 radius: self.radius * particle.size,
                 rotation: rotation as f32,
                 width: self.width,
-                kind: if instance.line {
+                kind: if line {
                     InstanceKind::Segment
                 } else {
                     match self.kind {
@@ -432,7 +386,20 @@ impl ParticleBatch {
                     }
                 },
             }
-        });
+        };
+        // The analytic program overwrites positions and rotations on the GPU, so deferred
+        // records only carry the attributes that seeded trajectories leave at their defaults.
+        let records: Box<dyn ExactSizeIterator<Item = InstanceRecord> + '_> =
+            match &self.instances {
+                Instances::Ready(ready) => {
+                    Box::new(ready.instances.iter().map(|instance| {
+                        record(instance.particle, instance.previous, instance.line)
+                    }))
+                }
+                Instances::Deferred { len, .. } => {
+                    Box::new((0..*len).map(|_| record(Particle::default(), [0.0; 2], false)))
+                }
+            };
         let texels = self.sprite.iter().flat_map(|sprite| {
             (0..sprite.height()).flat_map(move |row| {
                 (0..sprite.width()).map(move |column| {
@@ -447,6 +414,18 @@ impl ParticleBatch {
 }
 
 impl motion_core::instances::InstanceBatch for ParticleBatch {
+    fn analytic_upload(&self) -> Option<&motion_core::instances::AnalyticInstanceUpload> {
+        self.analytic
+            .as_ref()
+            .and_then(|program| program.as_ref().ok())
+    }
+
+    fn analytic_fallback(&self) -> Option<&ValidationError> {
+        self.analytic
+            .as_ref()
+            .and_then(|program| program.as_ref().err())
+    }
+
     fn blend(&self) -> motion_core::instances::InstanceBlend {
         ParticleBatch::blend(self)
     }
@@ -468,7 +447,10 @@ impl motion_core::instances::InstanceBatch for ParticleBatch {
     }
 
     fn spatial(&self) -> Option<&dyn motion_core::instances::SpatialInstances> {
-        Some(self)
+        self.instances
+            .get()
+            .ok()
+            .map(|_| self as &dyn motion_core::instances::SpatialInstances)
     }
 
     fn validate(&self) -> Result<(), ValidationError> {
@@ -521,7 +503,14 @@ impl motion_core::instances::InstanceBatch for ParticleBatch {
 
 impl motion_core::instances::SpatialInstances for ParticleBatch {
     fn support(&self, index: usize, antialias: f64) -> Rect {
-        let instance = &self.instances[index];
+        let Some(instance) = self
+            .instances
+            .get()
+            .ok()
+            .and_then(|ready| ready.instances.get(index))
+        else {
+            return Rect::new(0.0, 0.0, 0.0, 0.0);
+        };
         let particle = instance.particle;
         let radius = f64::from(self.radius * particle.size);
         if radius == 0.0 || particle.color[3] == 0.0 {
@@ -576,6 +565,86 @@ impl motion_core::instances::SpatialInstances for ParticleBatch {
             Some(indices),
         )
     }
+}
+
+pub(super) fn build_spatial_index(
+    kind: u32,
+    radius: f32,
+    width: f32,
+    instances: &[Instance],
+) -> Arc<[SpatialNode]> {
+    if kind == 2 || instances.len() < 32 || instances.len() > MAX_INSTANCE_COUNT {
+        return Arc::from([]);
+    }
+
+    fn append(
+        style: (u32, f32, f32),
+        instances: &[Instance],
+        nodes: &mut Vec<SpatialNode>,
+        first: usize,
+        end: usize,
+    ) {
+        let (kind, radius, width) = style;
+        let mut bounds = Rect::new(
+            f64::INFINITY,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            f64::NEG_INFINITY,
+        );
+        for instance in &instances[first..end] {
+            let particle = instance.particle;
+            let radius = f64::from(radius * particle.size);
+            let extent = if instance.line {
+                let reach = f64::from(width) * 0.5;
+                Rect::new(
+                    f64::from(instance.line_bounds[0]) - reach,
+                    f64::from(instance.line_bounds[1]) - reach,
+                    f64::from(instance.line_bounds[2]) + reach,
+                    f64::from(instance.line_bounds[3]) + reach,
+                )
+            } else {
+                let reach = radius * if kind == 1 { 3.0 } else { 1.0 };
+                Rect::new(
+                    f64::from(particle.position[0]) - reach,
+                    f64::from(particle.position[1]) - reach,
+                    f64::from(particle.position[0]) + reach,
+                    f64::from(particle.position[1]) + reach,
+                )
+            };
+            bounds.left = bounds.left.min(extent.left);
+            bounds.top = bounds.top.min(extent.top);
+            bounds.right = bounds.right.max(extent.right);
+            bounds.bottom = bounds.bottom.max(extent.bottom);
+        }
+        let guard = [bounds.left, bounds.top, bounds.right, bounds.bottom]
+            .into_iter()
+            .fold(1.0_f64, |scale, coordinate| scale.max(coordinate.abs()))
+            * (256.0 * f64::EPSILON);
+        let current = nodes.len();
+        let leaf = end - first <= 8;
+        nodes.push(SpatialNode {
+            bounds,
+            guard,
+            end,
+            next: 0,
+            leaf,
+        });
+        if !leaf {
+            let middle = first + (end - first) / 2;
+            append(style, instances, nodes, first, middle);
+            append(style, instances, nodes, middle, end);
+        }
+        nodes[current].next = nodes.len();
+    }
+    let mut nodes = Vec::with_capacity(instances.len().div_ceil(8) * 4);
+    append(
+        (kind, radius, width),
+        instances,
+        &mut nodes,
+        0,
+        instances.len(),
+    );
+    nodes.into()
 }
 
 fn sprite_sample(sprite: &crate::ImageAsset, horizontal: f64, vertical: f64) -> [f32; 4] {

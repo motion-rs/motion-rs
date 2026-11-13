@@ -1,15 +1,16 @@
 //! Clip, rectangle and strip coverage emission plus the shared pixel-bounds and paint helpers
 //! used by preparation.
 
-use crate::prepared::{ClipRecord, PaintRecord, PixelRect, PreparedFrame, Span, Strip};
+use crate::prepared::{ClipRecord, PaintRecord, PixelRect, FrameRecords, Span, Strip};
 use crate::raster::{Band, RasterScope};
 use motion_core::budget::Budget;
 use motion_core::{Color, PixelSize, Rect, ValidationError};
 
-impl PreparedFrame {
-    pub(crate) fn prepare_clip(
+impl FrameRecords {
+    pub(in crate::raster) fn prepare_ir_clip(
         &mut self,
         clip: &motion_core::PathClip,
+        geometry: &crate::raster::frame_ir::IrPath<'_>,
         tolerance: f64,
         budget: &mut Budget,
         path: &str,
@@ -24,13 +25,8 @@ impl PreparedFrame {
             budget,
             path,
         )?;
-        let bounds = motion_core::display_list::mapped_bounds(
-            clip.path.bounding_box(),
-            clip.transform,
-            path,
-        )?;
         let record = ClipRecord {
-            bounds: pixel_bounds(bounds, self.size),
+            bounds: pixel_bounds(geometry.bounds, self.size),
             strips: strip_start..self.strips.len(),
             spans: span_start..self.spans.len(),
         };
@@ -144,6 +140,7 @@ impl PreparedFrame {
                 width: right - left,
                 height,
                 alpha_offset: offset,
+                device: false,
             },
             path,
         )?;

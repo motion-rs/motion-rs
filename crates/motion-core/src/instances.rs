@@ -4,6 +4,13 @@ use crate::drawing::BlendSpace;
 use crate::{Point, Rect, ValidationError};
 use std::{any::Any, fmt::Debug};
 
+mod analytic;
+
+pub use analytic::{
+    ANALYTIC_HEADER_WORDS, ANALYTIC_STATE_WORDS, AnalyticInstanceState, AnalyticInstanceUpload,
+    AnalyticTrajectoryKind,
+};
+
 /// Composites one already-covered linear-premultiplied instance sample.
 pub type InstanceComposite = fn(&mut [f32; 4], [f32; 4], BlendSpace) -> Result<(), ValidationError>;
 
@@ -85,7 +92,7 @@ pub enum InstanceBlend {
     Multiply,
 }
 
-/// Renderer-independent evaluated geometry, encoded as twelve device words.
+/// Backend-independent evaluated geometry, encoded as twelve device words.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct InstanceRecord {
     /// Circle center or segment endpoint in local coordinates.
@@ -399,6 +406,17 @@ pub trait InstanceBatch: Any + Debug + Send + Sync {
     /// Checked evaluated primitives, or None when only CPU sampling is available.
     fn upload(&self) -> Result<Option<InstanceUpload>, ValidationError> {
         Ok(None)
+    }
+
+    /// Optional checked seeded trajectory program replacing evaluated primitive positions.
+    /// Existing generic batches and fixed-step simulations retain their ordinary uploads.
+    fn analytic_upload(&self) -> Option<&AnalyticInstanceUpload> {
+        None
+    }
+
+    /// Explicit reason an otherwise analytic batch retains evaluated CPU primitives.
+    fn analytic_fallback(&self) -> Option<&ValidationError> {
+        None
     }
 
     /// Resolves concrete content only within its owning implementation.

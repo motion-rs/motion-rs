@@ -3,6 +3,52 @@
 use super::*;
 
 impl Gpu {
+    pub(super) fn particle_mask_pass(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        pipeline: &wgpu::ComputePipeline,
+        parameters: &wgpu::Buffer,
+        buffers: [&wgpu::Buffer; 3],
+        index_mask: &wgpu::Buffer,
+        workgroups: u32,
+    ) {
+        encoder.clear_buffer(index_mask, 0, None);
+        let entries = [
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: parameters.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 3,
+                resource: buffers[0].as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 4,
+                resource: buffers[1].as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 5,
+                resource: buffers[2].as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 13,
+                resource: index_mask.as_entire_binding(),
+            },
+        ];
+        let group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("particle index mask"),
+            layout: &pipeline.get_bind_group_layout(0),
+            entries: &entries,
+        });
+        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("Build ordered particle index mask"),
+            timestamp_writes: None,
+        });
+        pass.set_pipeline(pipeline);
+        pass.set_bind_group(0, &group, &[]);
+        pass.dispatch_workgroups(workgroups, 1, 1);
+    }
+
     pub(super) fn particle_bin_pass(
         &self,
         encoder: &mut wgpu::CommandEncoder,

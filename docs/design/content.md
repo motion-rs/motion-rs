@@ -27,6 +27,39 @@ Tick lookup, loop, ping-pong, trimming and reversal are stateless source-time
 operations; endpoint durations are not duplicated. Image storage, GPU working
 precision and output precision are separate boundaries.
 
+## Procedural paints
+
+Core owns the immutable procedural paint descriptions and mathematical definitions.
+`Paint::Mesh` retains a bounded control lattice rather than preparing an image.
+Each backend independently inverts bilinear patch geometry and blends straight
+Oklab and alpha using cubic smoothstep weights. Overlapping patches use lattice
+order, with the last matching patch owning a sample; uncovered mesh regions are
+transparent. Mesh coordinates map through the painted shape's local bounds.
+Analytic patches admit normalized coordinates up to an absolute million and
+Oklab components up to an absolute ten billion, keeping GPU intermediates finite.
+
+`AtmospherePaint` retains a canvas, explicit signed time, seed, tint, drift,
+amplitude-normalized Perlin fBm and a fog, dust or elliptical light-leak envelope.
+Its canvas defines pixel wavelengths and velocities; the shape's local bounds map
+to that canvas. The content recipe's `paint` operation captures this description
+without generating pixels. CPU and WGSL independently evaluate the same core
+formula, including wrapping mote hashes and the fixed dust neighborhood.
+Paint construction checks the full canvas's octave lattice support and shader
+envelope range, independent of visibility. Canvas axes are limited to 16384;
+normalized dust radii and light-leak extents must be at least `1e-15`.
+
+Preparation admits mesh descriptors and upload storage before allocation.
+Pixel work includes every candidate patch or every atmospheric noise octave and
+envelope. GPU uploads contain patch descriptors or atmospheric parameters, not
+CPU-evaluated procedural texels. Independent f32 GPU arithmetic is visually
+equivalent, not bit-identical to CPU f64 evaluation.
+
+Explicit `MeshGradient::rasterize`, `MeshGradient::pattern`, `MeshPaint::pattern`,
+and `Atmosphere::render`, `render_region` and `overlay` retain image baking.
+Existing image-based artwork is unchanged. Choosing authored analytic mesh paint
+instead of baking can change pixels because it removes image resolution,
+tessellation and bilinear image-filter quantization.
+
 ## SVG and Vector Trees
 
 SVG uses usvg's parsing layer, not resvg rendering. Supported paths, groups, images,

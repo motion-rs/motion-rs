@@ -71,15 +71,18 @@ impl FrameStats {
 }
 
 /// Everything observed about the latest frame: logical totals, opt-in timings and the
-/// backend that produced it. Each part is `None` until the corresponding data exists.
+/// renderer that produces it. Optional parts are `None` until the corresponding data exists.
 #[derive(Clone, Debug, Default)]
 pub struct FrameReport {
     /// Logical pipeline totals of the latest successful memory-output frame.
     pub stats: Option<FrameStats>,
     /// Opt-in stage observations.
     pub timings: Option<FrameTimings>,
-    /// Backend decision made for this session.
-    pub backend: Option<crate::BackendDecision>,
+    /// Backend kind fixed by the session's backend preference.
+    pub renderer: crate::BackendKind,
+    /// Latest completed GPU preparation attempt.
+    /// Available for memory, texture and preparation-only requests; cleared on the next request.
+    pub gpu_preparation: Option<crate::GpuPreparationStats>,
 }
 
 /// Composition-timed wrapper around a reusable RenderSession.
@@ -88,7 +91,7 @@ pub struct FrameReport {
 /// signed-tick SceneContext inputs and a session-owned entry-bounded scene cache.
 /// Also exposes typed memory and external-texture output. No implicit font discovery
 /// or encoding occurs. Backend/device work is deferred until execution; explicit
-/// GPU selection never silently falls back, while Automatic may choose CPU at startup.
+/// GPU selection never silently falls back to the CPU.
 pub struct FrameRenderer {
     pub(super) composition: Composition,
     pub(super) duration: Time,
@@ -117,6 +120,7 @@ impl FrameRenderer {
             time: None,
             limits: self.session.limits,
             device_packing: false,
+            preparation_backend: None,
             session: &mut self.session,
         }
     }
@@ -135,6 +139,7 @@ impl FrameRenderer {
     ) -> Result<FrameBuffer> {
         if self.composition.shutter().is_some() {
             self.last_stats = None;
+            self.gpu_preparation = None;
             self.asset_diagnostics.clear();
             return Err(motion_core::Error::from(ValidationError::unsupported(
                 "_frame",
@@ -167,6 +172,7 @@ impl FrameRenderer {
         build: impl FnMut(&SceneContext<'_>) -> Node,
     ) -> Result<FrameBuffer> {
         self.last_stats = None;
+        self.gpu_preparation = None;
         self.asset_diagnostics.clear();
         self.composition
             .validate_frame_index(index)
@@ -198,8 +204,43 @@ impl FrameRenderer {
         time: Time,
         background: Option<Color>,
         build: impl FnMut(&SceneContext<'_>) -> Node,
-    ) -> Result<(crate::PreparedFrame, RasterLimits)> {
-        self.execution().prepare_output_at(time, background, build)
+    ) -> Result<(crate::PreparedCpuFrame, RasterLimits)> {
+        let mut execution = self.execution();
+        execution.preparation_backend = Some(crate::BackendKind::Cpu);
+        let (prepared, limits) = execution.prepare_output_at(time, background, build)?;
+        match prepared {
+            super::execution::PreparedOutput::Cpu(frame) => Ok((frame, limits)),
+            #[cfg(feature = "gpu")]
+            super::execution::PreparedOutput::Gpu(_) => Err(motion_core::ValidationError::invalid(
+                "prepared",
+                "backend",
+                "CPU preparation returned a GPU frame",
+            )
+            .into()),
+        }
+    }
+
+    /// Prepares exact ticks for independent GPU planning without selecting or submitting a device.
+    /// Returned remaining work allowance excludes the preparation already performed.
+    #[cfg(feature = "gpu")]
+    pub fn prepare_gpu_output_at(
+        &mut self,
+        time: Time,
+        background: Option<Color>,
+        build: impl FnMut(&SceneContext<'_>) -> Node,
+    ) -> Result<(crate::gpu::PreparedGpuFrame, RasterLimits)> {
+        let mut execution = self.execution();
+        execution.preparation_backend = Some(crate::BackendKind::Gpu);
+        let (prepared, limits) = execution.prepare_output_at(time, background, build)?;
+        match prepared {
+            super::execution::PreparedOutput::Cpu(_) => Err(motion_core::ValidationError::invalid(
+                "prepared",
+                "backend",
+                "GPU preparation returned a CPU frame",
+            )
+            .into()),
+            super::execution::PreparedOutput::Gpu(frame) => Ok((frame, limits)),
+        }
     }
 
     /// Renders exact ticks to owned memory through the shared request executor.
@@ -238,6 +279,7 @@ impl FrameRenderer {
         build: impl FnMut(&SceneContext<'_>) -> Node,
     ) -> Result<()> {
         self.last_stats = None;
+        self.gpu_preparation = None;
         self.asset_diagnostics.clear();
         self.composition.validate_frame_index(index)?;
         let rate = self.composition.clock.rate;
@@ -269,6 +311,7 @@ impl FrameRenderer {
         build: impl FnMut(&SceneContext<'_>) -> Node,
     ) -> Result<crate::gpu::PendingTextureFrame> {
         self.last_stats = None;
+        self.gpu_preparation = None;
         self.asset_diagnostics.clear();
         self.composition.validate_frame_index(index)?;
         self.execution()
@@ -282,7 +325,6 @@ impl FrameRenderer {
     }
 
     /// Configured backend policy, without selecting or initializing a device.
-    /// Automatic remains Automatic after its startup decision has been made.
     pub fn requested_backend(&self) -> crate::BackendPreference {
         self.composition.options.backend
     }

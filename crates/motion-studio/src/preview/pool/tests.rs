@@ -43,7 +43,7 @@ fn seek_discards_inflight_thumbnail_before_new_thumbnail_completes() -> motion_c
     let worker = PreviewCoordinator::with_slots(scene, context, 65536, 2)?;
     let key = PreviewKey {
         frame: 3,
-        renderer: Renderer::Cpu,
+        renderer: BackendKind::Cpu,
     };
     worker.request_with_settings(key, PreviewSettings::default());
     super::super::tests::wait_for_preview(&worker, &updates, key).image?;
@@ -95,7 +95,7 @@ fn resource_failure_thumbnail_is_not_retained_as_healthy_artwork() -> motion_cor
     let worker = PreviewCoordinator::with_slots(scene, context, 65536, 2)?;
     let key = PreviewKey {
         frame: 3,
-        renderer: Renderer::Cpu,
+        renderer: BackendKind::Cpu,
     };
     worker.request_with_settings(key, PreviewSettings::default());
     super::super::tests::wait_for_preview(&worker, &updates, key).image?;
@@ -147,7 +147,7 @@ fn idle_prefetch_is_serial_and_thumbnails_never_replace_main_reply() -> motion_c
     let worker = PreviewCoordinator::with_slots(scene, context, 65536, 3)?;
     let key = PreviewKey {
         frame: 3,
-        renderer: Renderer::Cpu,
+        renderer: BackendKind::Cpu,
     };
     worker.request_idle(key, PreviewSettings::default());
     super::super::tests::wait_for_preview(&worker, &updates, key).image?;
@@ -181,7 +181,7 @@ fn thumbnail_cache_is_independent_small_and_entry_bounded() {
         cache.insert(
             PreviewKey {
                 frame,
-                renderer: Renderer::Cpu,
+                renderer: BackendKind::Cpu,
             },
             &image,
         );

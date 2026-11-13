@@ -1,7 +1,9 @@
 # Architecture
 
 The rendering path is `SceneContext -> Scene -> Node -> ValidatedDisplayList ->
-PreparedFrame -> CPU/GPU -> output`. A scene is a deterministic function of exact time and fixed
+FrameIr -> backend preparation -> CPU/GPU -> output`. CPU preparation produces
+`PreparedCpuFrame`; GPU preparation produces its own geometry and composition records.
+A scene is a deterministic function of exact time and fixed
 resources, not an object advanced by a playback clock.
 
 ## Evaluation and Ownership
@@ -17,9 +19,18 @@ retains structural requirements for later allowance checks; it is not proof of
 device availability or sufficient raster budgets. Image paints reference immutable
 pixels; prepared frames have no deferred image-production phase.
 
-Preparation resolves device-space curves, coverage, paints, clipping and filter
-domains into shared bounded data. Both renderers consume the same commands and
-resource contracts. Outputs are typed FrameBuffer (straight RGBA8 for transparent PNG), borrowed
+The internal FrameIr normalizes ordered scopes, paint and clip references, filter
+domains, padded dimensions and the output window before coverage allocation.
+It retains f64 device-space curves, conservative Wang segment upper bounds and
+admitted resource bytes, without coverage. A local-geometry recipe preserves CPU
+transform arithmetic and coverage-cache identities. Both preparations consume
+the same immutable semantics, not each other's results. CPU preparation emits
+coverage; GPU preparation flattens device curves independently for f32 device
+coverage and retains explicit CPU coverage for ineligible paths and clips.
+Normalization storage and work contribute to preparation statistics; the live
+IR overlaps backend preparation scratch and therefore increases its admitted peak.
+Both renderers preserve command semantics and resource contracts without
+requiring identical coverage values. Outputs are typed FrameBuffer (straight RGBA8 for transparent PNG), borrowed
 external RenderTarget (opaque white-backed frames are straight RGBA8 FrameBuffers) or an ordered Encoder.
 
 RenderOptions stores policy; RenderSession owns reusable caches, backend state and
@@ -54,8 +65,8 @@ sources; external RGBA16F output quantizes at its declared boundary. Only the fi
 working image resolves to a buffer for linear readback; packed and external-texture
 outputs read that texture directly without the full linear buffer.
 Particle metadata and coverage/paint uploads remain buffers. CPU determinism is
-unchanged; GPU blending uses the per-frame tolerance in [GPU rendering](gpu.md)
-and still requires byte-identical replay on the same device and driver.
+unchanged; GPU output is checked for visual equivalence with fixture-specific tolerances
+in [GPU rendering](rendering.md), not byte identity, including replay on the same device and driver.
 
 CPU memory output renders full-width adaptive regions with conservative filter
 dependency halos. Preparation caches the maximum nested filter-chain halo;

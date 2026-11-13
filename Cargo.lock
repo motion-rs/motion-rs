@@ -2903,6 +2903,7 @@ version = "0.1.0"
 dependencies = [
  "criterion",
  "libm",
+ "motion-core",
  "motion-gallery",
  "motion-rs",
  "serde",

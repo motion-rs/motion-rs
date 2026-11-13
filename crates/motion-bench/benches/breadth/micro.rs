@@ -6,7 +6,7 @@ use super::scenes::{artwork, teal, wave};
 use super::{DESIGN, support};
 use motion::extend::RenderPrepare;
 use motion::prelude::*;
-use motion::render::Renderer;
+use motion::render::BackendKind;
 use motion::render::{ValidationLimits, linear_to_srgb, srgb_to_linear};
 use std::hint::black_box;
 
@@ -217,7 +217,7 @@ pub(super) fn microbenchmarks(
 
     let size = PixelSize::new(1920, 1080);
     let frame = {
-        let composition = composition(size, Renderer::Cpu, resources)?;
+        let composition = composition(size, BackendKind::Cpu, resources)?;
         let mut session = composition.frame_renderer(DESIGN)?;
         session.render_frame(45, |context| artwork("gradient-linear", context))?;
         let list = Node::from(Rect::new(0.0, 0.0, 640.0, 360.0).fill(teal())).compile(

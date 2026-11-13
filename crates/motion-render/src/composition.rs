@@ -59,7 +59,7 @@ impl FrameClock {
 ///     DisplayList, RasterLimits, ResourceStore, ValidatedDisplayList, MAX_PATH_VERBS,
 ///     MAX_STROKE_VERBS, MAX_SVG_PATH_BYTES, sample_offsets,
 /// };
-/// use motion_render::{Composition, RenderPrepare, RenderOptions, Renderer, render_still};
+/// use motion_render::{Composition, RenderPrepare, RenderOptions, BackendKind, render_still};
 /// # fn main() -> motion_core::Result {
 /// let composition = Composition::new(640, 360, motion_render::FrameClock::new(fps!(30), 90));
 /// composition.render_frame(45, Size::new(640.0, 360.0), |context| {
@@ -344,10 +344,9 @@ impl Composition {
     ///
     /// Uses this composition's timing, structural policy and opaque RGB background;
     /// background alpha is ignored, as in the opaque `render_frame*` contract.
-    /// Renderer::Gpu requires the gpu feature, initializes lazily on the first
+    /// `BackendKind::Gpu` requires the gpu feature, initializes lazily on the first
     /// admitted render, and executes prepared coverage on f32 compute
-    /// buffers. Explicit GPU requests never fall back to CPU; Automatic policy may
-    /// select CPU during startup. Both backends implement the same output-format
+    /// buffers. GPU requests never fall back to CPU. Both backends implement the same output-format
     /// contract, but supported GPU formats use dedicated packing kernels.
     /// GPU f32 arithmetic is not bit-identical to CPU intermediates.
     /// Unrepresentable parameters or device limits fail explicitly.
@@ -362,7 +361,7 @@ impl Composition {
     ///     DisplayList, RasterLimits, ResourceStore, ValidatedDisplayList, MAX_PATH_VERBS,
     ///     MAX_STROKE_VERBS, MAX_SVG_PATH_BYTES, sample_offsets,
     /// };
-    /// use motion_render::{Composition, RenderPrepare, RenderOptions, Renderer, render_still};
+    /// use motion_render::{Composition, RenderPrepare, RenderOptions, BackendKind, render_still};
     /// let composition = Composition::new(8, 4, motion_render::FrameClock::new(fps!(30), 150)).with_options(motion_render::RenderOptions::default().background(Color::BLACK))?;
     /// let mut renderer = composition.frame_renderer(Size::new(8.0, 4.0))?;
     /// let snapshot = renderer.render_frame(0, |context| {

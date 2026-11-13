@@ -47,7 +47,7 @@ impl FrameQueue {
     /// frames are unchanged.
     pub fn submit(
         &mut self,
-        frame: &PreparedFrame,
+        frame: &PreparedCpuFrame,
         limits: RasterLimits,
     ) -> motion_core::Result<()> {
         let plan = Plan::new(frame, limits)?;
@@ -119,7 +119,24 @@ impl FrameQueue {
     /// Submits packed output under the three-slot and aggregate logical-peak policy.
     pub fn submit_output(
         &mut self,
-        frame: &PreparedFrame,
+        frame: &PreparedCpuFrame,
+        plan: OutputPlan,
+    ) -> motion_core::Result<()> {
+        self.submit_scene_output(frame, plan)
+    }
+
+    /// Submits independently prepared GPU output without constructing CPU coverage.
+    pub fn submit_gpu_output(
+        &mut self,
+        frame: &PreparedGpuFrame,
+        plan: OutputPlan,
+    ) -> motion_core::Result<()> {
+        self.submit_scene_output(&frame.records, plan)
+    }
+
+    fn submit_scene_output(
+        &mut self,
+        frame: &FrameRecords,
         plan: OutputPlan,
     ) -> motion_core::Result<()> {
         let OutputPlan { plan, format, .. } = plan;

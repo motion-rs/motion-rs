@@ -52,6 +52,10 @@ struct FailureStatus {
     code: atomic<u32>,
 }
 
+struct ParticleIndexMask {
+    words: array<atomic<u32>>,
+}
+
 // Keep the shared composition binding numbers while replacing color inputs with textures.
 @group(0) @binding(0)
 var<uniform> settings: GpuUniforms;
@@ -65,6 +69,10 @@ var<storage, read_write> output_pixels: Pixels;
 
 @group(0) @binding(4)
 var<storage, read> operation_data: OperationData;
+
+// Immutable image mip texels are independent of per-draw coverage and mappings.
+@group(0) @binding(11)
+var<storage, read> resource_data: OperationData;
 
 @group(0) @binding(5)
 var<storage, read_write> failure_status: FailureStatus;
@@ -85,6 +93,13 @@ var output_texture: texture_storage_2d<rgba32float, write>;
 // Shared original strip/span records and packed u8 alpha are uploaded once per frame.
 @group(0) @binding(10)
 var<storage, read> frame_coverage: FrameCoverage;
+
+// Generated f32 device coverage; fills address it by their strip's alpha offset.
+@group(0) @binding(12)
+var<storage, read> device_coverage: array<f32>;
+
+@group(0) @binding(13)
+var<storage, read_write> particle_index_mask: ParticleIndexMask;
 
 // Value rows preserve host-narrowed f32 bit patterns.
 fn value(index: u32) -> f32 {

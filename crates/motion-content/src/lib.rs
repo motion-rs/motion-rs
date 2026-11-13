@@ -67,7 +67,7 @@ pub mod prelude {
         PartStyle, Text, TextAlignment, TextGlyph, TextPart, TextSpan, TextSplit,
     };
     #[cfg(test)]
-    pub use motion_render::{Composition, RenderOptions, RenderPrepare, Renderer, render_still};
+    pub use motion_render::{BackendKind, Composition, RenderOptions, RenderPrepare, render_still};
 }
 
 /// Maximum accepted `.cube` LUT text size in bytes.

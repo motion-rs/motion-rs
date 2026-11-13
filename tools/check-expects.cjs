@@ -249,13 +249,7 @@ const policies = [
     "The same closure installs a renderer when absent; failed construction returns before the access.",
   ],
   [
-    "motion-render/src/composition/execution.rs",
-    ["selected native GPU"],
-    "invariant",
-    "Backend selection installs the GPU before recording a successful GPU decision; failed Automatic selection resets it before recording a CPU decision.",
-  ],
-  [
-    "motion-render/src/composition/execution/backend.rs",
+    "motion-render/src/composition/execution/gpu.rs",
     ["selected native GPU", "GPU initialized"],
     "invariant",
     "Backend selection installs the GPU before recording a successful GPU decision; failed Automatic selection resets it before recording a CPU decision.",
@@ -267,7 +261,7 @@ const policies = [
     "The local start instant is constructed only from Some(timings); the intervening stage does not disable timings.",
   ],
   [
-    "motion-render/src/composition/execution/backend.rs",
+    "motion-render/src/composition/execution/gpu.rs",
     ["enabled timings"],
     "invariant",
     "The local start instant is constructed only from Some(timings); the intervening stage does not disable timings.",
@@ -408,19 +402,13 @@ const policies = [
     "Source construction creates gradient geometry whenever its immutable paint is a gradient.",
   ],
   [
-    "motion-render/src/raster/polygon/shape_clip.rs",
+    "motion-render/src/cpu/polygon/shape_clip.rs",
     ["active clip interval"],
     "invariant",
     "The active-interval flag is set together with the preceding boundary in the same ordered sweep.",
   ],
   [
-    "motion-render/src/raster/prepare.rs",
-    ["validated filter support stack", "validated layer bounds stack"],
-    "invariant",
-    "DisplayList preflight checks layer/mask balance before these private matching push/pop walks.",
-  ],
-  [
-    "motion-render/src/raster/rect_clip.rs",
+    "motion-render/src/cpu/rect_clip.rs",
     ["nonempty convex polygon"],
     "invariant",
     "Empty polygons return before requesting the previous vertex from this same polygon.",
@@ -436,12 +424,6 @@ const policies = [
     ["prepared audio window"],
     "invariant",
     "The native-window branch is enabled only after installing its prepared window state.",
-  ],
-  [
-    "motion-studio/src/preview/backend.rs",
-    ["preview calibration entry"],
-    "invariant",
-    "position identifies an entry in the same deque while the calibration lock remains held.",
   ],
   [
     "motion-studio/src/preview/pool.rs",
@@ -510,7 +492,7 @@ const policies = [
     "Gradient paints are validated to have at least two stops, and the table holds a row of entries per stop.",
   ],
   [
-    "motion-render/src/raster/polygon.rs",
+    "motion-render/src/cpu/polygon.rs",
     ["inside span follows a crossing"],
     "invariant",
     "A span is inside only after a crossing has set the previous edge.",

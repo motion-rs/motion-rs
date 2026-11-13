@@ -46,7 +46,7 @@ type Point = (f64, f64);
 ///     DisplayList, RasterLimits, ResourceStore, ValidatedDisplayList, MAX_PATH_VERBS,
 ///     MAX_STROKE_VERBS, MAX_SVG_PATH_BYTES, sample_offsets,
 /// };
-/// use motion_render::{Composition, RenderPrepare, RenderOptions, Renderer, render_still};
+/// use motion_render::{Composition, RenderPrepare, RenderOptions, BackendKind, render_still};
 /// use motion_content::vector::ink::*;
 /// # fn main() -> motion_core::Result {
 /// let brush = Ink::new(17)

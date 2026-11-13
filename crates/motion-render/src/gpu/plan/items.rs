@@ -4,6 +4,15 @@ use super::*;
 use motion_core::ValidationError;
 use std::ops::Range;
 
+/// Per-draw pattern words, including bitcast offsets into immutable mip texels.
+const PATTERN_WORDS: usize = 8;
+
+/// Four two-coordinate corners followed by four Oklab-plus-alpha colors.
+const MESH_PATCH_WORDS: usize = 24;
+
+/// Atmospheric seed, envelope kind, canvas, phase, recipe and tint words.
+const ATMOSPHERE_WORDS: usize = 20;
+
 /// Walks prepared items while tracking the open layer stack.
 pub(super) struct ItemPlanner<'a> {
     pub(super) planner: Planner<'a>,
@@ -59,13 +68,41 @@ impl<'a> ItemPlanner<'a> {
                 "Primitive count or byte charge mismatch",
             ));
         }
-        let data = upload.into_words();
+        let mut data = upload.into_words();
+        let analytic = batch.analytic_upload();
+        if let Some(program) = analytic {
+            if program.len() != batch.len()
+                || (data[3] as u32 & 31) != 12
+                || (program.words()[3]
+                    == motion_core::instances::InstanceKind::Sprite as u32 as f32
+                    && (data[1] == 0.0 || data[2] == 0.0))
+            {
+                return Err(ValidationError::invalid(
+                    "gpu.particles",
+                    "analytic",
+                    "Analytic program requires matching twelve-word primitives",
+                ));
+            }
+            self.planner.admit_analytic_program(program)?;
+            // Only compute-generated positions reach support preparation and composition.
+            for record in data[4..4 + batch.len() * 12].as_chunks_mut::<12>().0 {
+                record[..4].fill(0.0);
+                record[9] = 0.0;
+            }
+        }
+        let resource = self.planner.particle_resource(&mut data)?;
         self.planner
             .budget
             .work(batch.len() as u64 * 128, "gpu.particle_states")?;
         layer.image = self
             .planner
             .step(layer.image, 0, parameters, data, batch.work())?;
+        if let Some(words) = resource {
+            self.planner.attach_resource(layer.image, words)?;
+        }
+        if let Some(step) = self.planner.steps.last_mut() {
+            step.analytic = analytic.cloned();
+        }
         Ok(())
     }
 
@@ -123,8 +160,15 @@ impl<'a> ItemPlanner<'a> {
             |source| matches!(&source.paint, motion_core::Paint::Pattern(pattern) if pattern.decal),
         );
         let mut parameters = GpuUniforms::new(frame, GpuOp::Fill, layer_bounds);
+        let device = frame
+            .device_fills
+            .iter()
+            .any(|fill| strips.contains(&fill.strip));
         // Only drawn quads name their record; a compute pass would scan every record per pixel.
-        let mut data = if !decal && !strips.is_empty() && parameters.operation.blend_space == 0 {
+        // Device samples exist only on the GPU, so their fills use direct records regardless.
+        let direct =
+            !decal && !strips.is_empty() && (parameters.operation.blend_space == 0 || device);
+        let mut data = if direct {
             self.planner
                 .direct_coverage(strips.clone(), spans.clone(), layer_bounds)?
         } else {
@@ -140,6 +184,7 @@ impl<'a> ItemPlanner<'a> {
             )?
         };
         parameters.values(&frame.paints[*paint].linear_premultiplied.map(f64::from))?;
+        let mut resource = None;
         if let Some(source) = &frame.paint_sources[*paint] {
             if let motion_core::Paint::Pattern(pattern) = &source.paint
                 && pattern.decal
@@ -147,6 +192,9 @@ impl<'a> ItemPlanner<'a> {
                 self.clip_decal_coverage(&mut data, pattern, source)?;
             }
             self.attach_spatial_paint(source, &mut data, &mut parameters)?;
+            if let motion_core::Paint::Pattern(pattern) = &source.paint {
+                resource = Some(pattern.image.clone());
+            }
         }
         let work = frame.paint_sources[*paint]
             .as_ref()
@@ -155,6 +203,9 @@ impl<'a> ItemPlanner<'a> {
         let scan = (data[0].to_bits() == DIRECT_COVERAGE).then(|| Planner::clip_work(&data));
         let layer = self.layers.last_mut().expect("validated root");
         layer.image = self.planner.step(layer.image, 0, parameters, data, work)?;
+        if let Some(image) = resource {
+            self.planner.attach_image(layer.image, image)?;
+        }
         self.push_quads(strips, spans, layer_bounds)?;
         if let (Some(scan), Some(step)) = (scan, self.planner.steps.last())
             && !super::schedule::bounded_fill(step)
@@ -221,19 +272,11 @@ impl<'a> ItemPlanner<'a> {
     ) -> Result<(), ValidationError> {
         use motion_core::drawing::paint::Geometry;
         let additional = source.paint.gradient().map_or_else(
-            || {
-                if let motion_core::Paint::Pattern(pattern) = &source.paint {
-                    let first = pattern.image.size(source.mip.0);
-                    let second = pattern.image.size(source.mip.1);
-                    6 + first.0 as usize * first.1 as usize * 4
-                        + if source.mip.2 > 0.0 {
-                            second.0 as usize * second.1 as usize * 4
-                        } else {
-                            0
-                        }
-                } else {
-                    0
-                }
+            || match &source.paint {
+                motion_core::Paint::Pattern(_) => PATTERN_WORDS,
+                motion_core::Paint::Mesh(_) => 1 + source.mesh_patches.len() * MESH_PATCH_WORDS,
+                motion_core::Paint::Atmosphere(_) => ATMOSPHERE_WORDS,
+                _ => 0,
             },
             |gradient| 1 + gradient.stops.len() + source.gradient_table.len() * 4,
         );
@@ -308,11 +351,82 @@ impl<'a> ItemPlanner<'a> {
                     0.0
                 },
             ]);
-            for level in [source.mip.0]
-                .into_iter()
-                .chain((source.mip.2 > 0.0).then_some(source.mip.1))
-            {
-                pattern.image.extend_level(level, data);
+            for selected in [source.mip.0, source.mip.1] {
+                let offset = (0..selected).try_fold(0u32, |offset, level| {
+                    let size = pattern.image.size(level);
+                    size.0
+                        .checked_mul(size.1)
+                        .and_then(|pixels| pixels.checked_mul(4))
+                        .and_then(|words| offset.checked_add(words))
+                        .ok_or_else(|| {
+                            ValidationError::limit(
+                                "gpu.paint",
+                                "max_bytes",
+                                "Image mip offsets exceed u32 storage",
+                            )
+                        })
+                })?;
+                data.push(f32::from_bits(offset));
+            }
+        } else if matches!(
+            source.paint,
+            motion_core::Paint::Mesh(_) | motion_core::Paint::Atmosphere(_)
+        ) {
+            parameters.gradient(
+                if matches!(source.paint, motion_core::Paint::Mesh(_)) {
+                    PaintKind::Mesh
+                } else {
+                    PaintKind::Atmosphere
+                },
+                motion_core::GradientUnits::ObjectBoundingBox,
+                motion_core::GradientExtend::Pad,
+            );
+            if let motion_core::Paint::Atmosphere(atmosphere) = &source.paint {
+                let recipe = atmosphere.parameters();
+                let (kind, envelope) = match recipe.kind {
+                    motion_core::AtmosphereKind::Fog { gradient } => {
+                        (0.0, [gradient[0], gradient[1], 0.0, 0.0])
+                    }
+                    motion_core::AtmosphereKind::Dust { radius, coverage } => {
+                        (1.0, [radius, coverage, 0.0, 0.0])
+                    }
+                    motion_core::AtmosphereKind::LightLeak { center, extent } => {
+                        (2.0, [center[0], center[1], extent[0], extent[1]])
+                    }
+                };
+                let phase = atmosphere.phase();
+                data.push(f32::from_bits(recipe.seed));
+                data.extend(
+                    [
+                        kind,
+                        atmosphere.canvas().width as f64,
+                        atmosphere.canvas().height as f64,
+                        phase[0],
+                        phase[1],
+                        recipe.scale,
+                        recipe.opacity,
+                        recipe.intensity,
+                        recipe.fractal.lacunarity,
+                        recipe.fractal.gain,
+                        f64::from(recipe.fractal.octaves),
+                    ]
+                    .map(|value| value as f32),
+                );
+                data.extend(
+                    recipe
+                        .color
+                        .to_linear_premultiplied()
+                        .map(|value| value as f32),
+                );
+                data.extend(envelope.map(|value| value as f32));
+            } else {
+                data.push(source.mesh_patches.len() as f32);
+                for patch in source.mesh_patches.iter() {
+                    for point in patch.positions() {
+                        data.extend([point.x as f32, point.y as f32]);
+                    }
+                    data.extend(patch.colors().iter().flatten().map(|value| *value as f32));
+                }
             }
         }
         let anchor = if parameters.is_pattern() {

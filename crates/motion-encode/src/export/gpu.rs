@@ -1,17 +1,15 @@
-//! Bounded CPU preparation followed by single-caller GPU submission and ordered encoding.
+//! Independent GPU preparation followed by single-caller submission and ordered encoding.
 
 use super::*;
 use motion_core::{FrameRate, Time};
 use motion_render::PixelFormat;
-use motion_render::gpu::OutputPlan;
 use std::ops::Range;
 
 #[cfg(test)]
 mod tests;
 
 /// True when the pipeline applies: the request allows the GPU, the output can be packed on
-/// it, and the backend actually selected for this renderer is the GPU. An Automatic request
-/// that resolves to the CPU keeps the CPU path.
+/// it, and the backend selected for this renderer is the GPU.
 pub(super) fn eligible(
     options: &ExportOptions,
     format: PixelFormat,
@@ -78,7 +76,7 @@ pub(super) fn render(
         .selected_gpu_context()?
         .ok_or_else(|| invalid("gpu", "Explicit GPU pipeline has no selected context"))?;
     let (first, limits) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        renderer.prepare_output_at(
+        renderer.prepare_gpu_output_at(
             Time::from_frame(range.start, rate),
             options.render.background,
             |context| timeline.render(context),
@@ -92,7 +90,8 @@ pub(super) fn render(
         ))
     })
     .map_err(|error| error.at_frame(range.start as u64))?;
-    let plan = OutputPlan::new(&first, limits, format)
+    let plan = first
+        .plan(limits, format)
         .and_then(|plan| plan.with_display(&options.render.display, range.start as u64))
         .map_err(|error| motion_core::Error::from(error).at_frame(range.start as u64))?;
     let peak = plan
@@ -103,7 +102,7 @@ pub(super) fn render(
         schedule(options, range.end - range.start - 1, preparation_peak, peak);
     let mut queue = motion_render::gpu::FrameQueue::new(context.clone(), queue_bytes)?;
     queue
-        .submit_output(&first, plan)
+        .submit_gpu_output(&first, plan)
         .map_err(|error| error.at_frame(range.start as u64))?;
     drop(first);
     let mut completed = range.start;
@@ -138,20 +137,16 @@ pub(super) fn render(
                 Ok(move |frame| {
                     let frame_index = frame;
                     match renderer
-                        .prepare_output_at(
+                        .prepare_gpu_output_at(
                             Time::from_frame(frame, rate),
                             slot_options.render.background,
                             |context| timeline.render(context),
                         )
                         .and_then(|(frame, mut limits)| {
                             limits.max_bytes = options.render.limits.max_bytes;
-                            let plan = OutputPlan::with_planning_limit(
-                                &frame,
-                                limits,
-                                preparation_bytes,
-                                format,
-                            )?
-                            .with_display(&options.render.display, frame_index as u64)?;
+                            let plan = frame
+                                .plan_with_planning_limit(limits, preparation_bytes, format)?
+                                .with_display(&options.render.display, frame_index as u64)?;
                             let charge = plan.peak_bytes()?;
                             Ok((frame, plan, charge))
                         }) {
@@ -188,7 +183,7 @@ pub(super) fn render(
                     encode_oldest(&mut queue)?;
                 }
                 queue
-                    .submit_output(&frame, plan)
+                    .submit_gpu_output(&frame, plan)
                     .map_err(|error| error.at_frame(index as u64))?;
                 Ok(true)
             },
@@ -203,7 +198,7 @@ pub(super) fn render(
         for index in resume..range.end {
             cancelled(progress)?;
             let (frame, limits) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                renderer.prepare_output_at(
+                renderer.prepare_gpu_output_at(
                     Time::from_frame(index, rate),
                     options.render.background,
                     |context| timeline.render(context),
@@ -217,10 +212,11 @@ pub(super) fn render(
                 ))
             })
             .map_err(|error| error.at_frame(index as u64))?;
-            let plan = OutputPlan::new(&frame, limits, format)
+            let plan = frame
+                .plan(limits, format)
                 .map_err(|error| motion_core::Error::from(error).at_frame(index as u64))?;
             queue
-                .submit_output(&frame, plan)
+                .submit_gpu_output(&frame, plan)
                 .map_err(|error| error.at_frame(index as u64))?;
             encode_oldest(&mut queue)?;
         }

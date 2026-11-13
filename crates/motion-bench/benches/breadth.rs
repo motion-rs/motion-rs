@@ -21,7 +21,7 @@
 use harness::{composition, flag, limits, load_resources, parse_sizes, ppm, verify_replay};
 use micro::microbenchmarks;
 use motion::prelude::*;
-use motion::render::Renderer;
+use motion::render::BackendKind;
 use recording::{cpu_stages, record_frame, record_memory_frame, record_sequences};
 use scenes::artwork;
 
@@ -199,7 +199,7 @@ fn main() -> motion::Result {
                 Ok(())
             })();
             skip_rejected(&name, &mut rejected, result)?;
-            if stages && renderer == Renderer::Cpu && STAGE_CASES.contains(&case.as_str()) {
+            if stages && renderer == BackendKind::Cpu && STAGE_CASES.contains(&case.as_str()) {
                 cpu_stages(&mut report, case, size, &resources, &settings)?;
             }
         }
@@ -269,7 +269,7 @@ mod _case_tests {
 
     fn render_cases(heavy: bool) -> motion::Result {
         let (resources, _) = load_resources()?;
-        let composition = composition(PixelSize::new(160, 90), Renderer::Cpu, &resources)?;
+        let composition = composition(PixelSize::new(160, 90), BackendKind::Cpu, &resources)?;
         for case in CASES.iter().filter(|case| HEAVY.contains(case) == heavy) {
             let configured = if *case == "display-transform" {
                 composition.clone().configure(|options| {

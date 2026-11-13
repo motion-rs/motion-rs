@@ -110,7 +110,7 @@ The GPU path ([`gpu.rs`](../../crates/motion-encode/src/export/gpu.rs), feature
 `gpu`) applies when the backend is not CPU, more than one frame is exported, the
 format can be packed on the GPU, and a GPU context was actually selected. CPU
 preparation slots feed a bounded `FrameQueue` whose results are completed and
-encoded in order. An Automatic request that resolves to CPU keeps the CPU path.
+encoded in order.
 
 ## Transactions and overwrite
 
@@ -167,7 +167,7 @@ tests use a recording `Encoder` to check ordering, cancellation and capabilities
 ## Related
 
 - [Tutorial: Export](../tutorial/11-export.md)
-- [Rendering and export](rendering.md), [Reliability](reliability.md), [GPU](gpu.md)
+- [Rendering and export](rendering.md), [Reliability](reliability.md), [GPU](rendering.md)
 - [Development checks](../development.md)
 - [`export.rs`](../../crates/motion-encode/src/export.rs),
   [`options.rs`](../../crates/motion-encode/src/export/options.rs),

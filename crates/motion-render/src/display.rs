@@ -667,7 +667,7 @@ mod tests {
 
     #[test]
     fn output_identity_alpha_and_display_budget() {
-        let frame = crate::cpu::LinearFrame::constant(
+        let frame = crate::linear::LinearFrame::constant(
             motion_core::PixelSize::new(8, 8),
             [0.5, 0.25, 2.0, 0.5],
         );

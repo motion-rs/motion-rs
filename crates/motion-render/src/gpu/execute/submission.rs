@@ -10,7 +10,7 @@ impl Gpu {
         match format {
             crate::PixelFormat::SrgbRgba8 { .. } => true,
             crate::PixelFormat::Yuv420 { bit_depth: 8 | 10 } => {
-                size.width.is_multiple_of(8) && size.height.is_multiple_of(2)
+                size.width.is_multiple_of(2) && size.height.is_multiple_of(2)
             }
             _ => false,
         }
@@ -20,7 +20,7 @@ impl Gpu {
     /// Accepts dedicated packed plans or conservative linear plans with extra packing charges.
     pub(crate) fn submit_output(
         &mut self,
-        frame: &PreparedFrame,
+        frame: &FrameRecords,
         mut plan: Plan,
         format: crate::PixelFormat,
     ) -> motion_core::Result<PendingOutputFrame> {
@@ -54,12 +54,18 @@ impl Gpu {
         };
         let size = frame.size();
         let count = u64::from(size.width) * u64::from(size.height);
+        let tiled = size.width.is_multiple_of(8);
         let (bytes, mode, invocations) = match format {
             crate::PixelFormat::SrgbRgba8 { premultiplied } => {
                 (count * 4, u32::from(premultiplied), count)
             }
-            crate::PixelFormat::Yuv420 { bit_depth: 8 } => (count * 3 / 2, 2, count / 16),
-            crate::PixelFormat::Yuv420 { bit_depth: 10 } => (count * 3, 3, count / 16),
+            crate::PixelFormat::Yuv420 { bit_depth: 8 } if tiled => (count * 3 / 2, 2, count / 16),
+            crate::PixelFormat::Yuv420 { bit_depth: 8 } => {
+                let bytes = (count * 3 / 2).next_multiple_of(4);
+                (bytes, 4, bytes / 4)
+            }
+            crate::PixelFormat::Yuv420 { bit_depth: 10 } if tiled => (count * 3, 3, count / 16),
+            crate::PixelFormat::Yuv420 { bit_depth: 10 } => (count * 3, 5, count * 3 / 4),
             _ => unreachable!("validated packing format"),
         };
         let packed = self
@@ -219,7 +225,7 @@ impl Gpu {
 
     pub(crate) fn render_output(
         &mut self,
-        frame: &PreparedFrame,
+        frame: &FrameRecords,
         plan: Plan,
         format: crate::PixelFormat,
     ) -> motion_core::Result<crate::FrameBuffer> {
@@ -237,7 +243,7 @@ impl Gpu {
     /// Submits without waiting for readback. The caller must bound all in-flight plans.
     pub(crate) fn submit_linear(
         &mut self,
-        frame: &PreparedFrame,
+        frame: &FrameRecords,
         plan: Plan,
     ) -> motion_core::Result<PendingLinearFrame> {
         if plan.packed_output.is_some() {
@@ -374,7 +380,7 @@ impl Gpu {
     /// Logical peak bytes and work of the plan [`Gpu::render_linear`] would execute, computed
     /// without a device.
     pub fn plan_stats(
-        frame: &PreparedFrame,
+        frame: &PreparedCpuFrame,
         limits: RasterLimits,
     ) -> Result<crate::WorkStats, ValidationError> {
         Ok(Plan::new(frame, limits)?.stats)
@@ -386,7 +392,7 @@ impl Gpu {
     /// Device loss, driver validation or nonfinite arithmetic fails the entire frame.
     pub fn render_linear(
         &mut self,
-        frame: &PreparedFrame,
+        frame: &PreparedCpuFrame,
         limits: RasterLimits,
     ) -> motion_core::Result<crate::FrameBuffer> {
         let linear = self.render(frame, Plan::new(frame, limits)?)?;
@@ -397,7 +403,7 @@ impl Gpu {
     /// Device loss, driver validation or nonfinite arithmetic fails the entire frame.
     pub(crate) fn render(
         &mut self,
-        frame: &PreparedFrame,
+        frame: &FrameRecords,
         plan: Plan,
     ) -> motion_core::Result<LinearFrame> {
         self.begin_timings();
@@ -419,13 +425,13 @@ impl Gpu {
             return Err(motion_core::Error::Gpu(Box::new(error)));
         }
         let (frame, timestamps) = result?;
-        super::super::timing::TimestampRecorder::publish(timestamps);
+        crate::gpu::timing::TimestampRecorder::publish(timestamps);
         Ok(frame)
     }
 
     pub(in crate::gpu) fn render_texture(
         &mut self,
-        frame: &PreparedFrame,
+        frame: &FrameRecords,
         plan: Plan,
         texture: &wgpu::Texture,
         format: crate::PixelFormat,
@@ -435,7 +441,7 @@ impl Gpu {
 
     pub(crate) fn submit_texture(
         &mut self,
-        frame: &PreparedFrame,
+        frame: &FrameRecords,
         plan: Plan,
         texture: &wgpu::Texture,
         format: crate::PixelFormat,
@@ -651,9 +657,9 @@ impl Gpu {
 
     fn submit(
         &mut self,
-        frame: &PreparedFrame,
+        frame: &FrameRecords,
         plan: &Plan,
-    ) -> motion_core::Result<(LinearFrame, Option<super::super::timing::CompletedTimings>)> {
+    ) -> motion_core::Result<(LinearFrame, Option<crate::gpu::timing::CompletedTimings>)> {
         let started = self.timing.as_ref().map(|_| std::time::Instant::now());
         let bytes = u64::from(plan.size.width) * u64::from(plan.size.height) * 16;
         let super::textures::EncodedLinear {
@@ -742,7 +748,7 @@ impl Gpu {
                 "Could not reserve native GPU output",
                 "Native GPU readback must remain finite",
             )?;
-            Ok(crate::cpu::LinearFrame::from_gpu(
+            Ok(crate::linear::LinearFrame::from_pixels_with_stats(
                 frame.size(),
                 pixels,
                 stats,
@@ -752,7 +758,7 @@ impl Gpu {
         status_readback.unmap();
         let timings = if result.is_ok() {
             timestamps
-                .map(super::super::timing::TimestampRecorder::finish)
+                .map(crate::gpu::timing::TimestampRecorder::finish)
                 .transpose()?
         } else {
             None

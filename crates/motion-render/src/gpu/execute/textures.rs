@@ -3,10 +3,11 @@
 use super::*;
 use uploads::BatchUploads;
 
+mod particle_states;
 mod uploads;
 
 /// Plan steps or batches recorded into one command encoder before it is submitted.
-const PASSES_PER_SUBMISSION: usize = 64;
+const PASSES_PER_SUBMISSION: usize = 16;
 
 struct TextureInputs<'a> {
     images: &'a [wgpu::Texture],
@@ -14,6 +15,7 @@ struct TextureInputs<'a> {
     status: &'a wgpu::Buffer,
     deferred: &'a [bool],
     coverage: &'a wgpu::Buffer,
+    device_coverage: &'a wgpu::Buffer,
 }
 
 pub(super) struct EncodedTexture {
@@ -24,7 +26,7 @@ pub(super) struct EncodedTexture {
     pub(super) status: wgpu::Buffer,
     pub(super) stats: WorkStats,
     pub(super) working: WorkingLease,
-    pub(super) timestamps: Option<super::super::timing::TimestampRecorder>,
+    pub(super) timestamps: Option<crate::gpu::timing::TimestampRecorder>,
 }
 
 pub(super) struct EncodedLinear {
@@ -33,7 +35,7 @@ pub(super) struct EncodedLinear {
     pub(super) status: wgpu::Buffer,
     pub(super) stats: WorkStats,
     pub(super) working: WorkingLease,
-    pub(super) timestamps: Option<super::super::timing::TimestampRecorder>,
+    pub(super) timestamps: Option<crate::gpu::timing::TimestampRecorder>,
 }
 
 impl Gpu {
@@ -129,6 +131,16 @@ impl Gpu {
             .map_err(|_| {
                 ValidationError::limit("gpu.pool", "max_bytes", "Could not reserve texture leases")
             })?;
+        working
+            .resident
+            .try_reserve_exact(plan.steps.len())
+            .map_err(|_| {
+                ValidationError::limit(
+                    "gpu.pool",
+                    "max_bytes",
+                    "Could not reserve resident buffer leases",
+                )
+            })?;
         let mut images = Vec::new();
         images.try_reserve_exact(sizes.len()).map_err(|_| {
             ValidationError::limit("gpu.pool", "max_bytes", "Could not reserve texture handles")
@@ -166,7 +178,12 @@ impl Gpu {
             &[0; 16],
             wgpu::BufferUsages::STORAGE,
         );
-        working.extend([status.clone(), dummy.clone()]);
+        let empty_particle_mask = self.upload_buffer(
+            "unused particle index mask",
+            &[0; 4],
+            wgpu::BufferUsages::STORAGE,
+        );
+        working.extend([status.clone(), dummy.clone(), empty_particle_mask.clone()]);
         let coverage = if plan.coverage.is_empty() {
             dummy.clone()
         } else {
@@ -178,15 +195,38 @@ impl Gpu {
             working.push(buffer.clone());
             buffer
         };
+        let device_coverage = if plan.device.samples == 0 {
+            dummy.clone()
+        } else {
+            let buffer = self.working_buffer(
+                "Device coverage samples",
+                u64::from(plan.device.samples) * 4,
+                wgpu::BufferUsages::STORAGE,
+            );
+            working.push(buffer.clone());
+            buffer
+        };
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("Texture working images"),
             });
         let timestamps =
-            super::super::timing::TimestampRecorder::new(&self.context, self.timing.clone());
+            crate::gpu::timing::TimestampRecorder::new(&self.context, self.timing.clone());
         if let Some(timestamps) = &timestamps {
             timestamps.write(&mut encoder, 0);
+        }
+        if plan.device.samples != 0 {
+            self.encode_device_coverage(
+                &mut encoder,
+                &plan.device,
+                &device_coverage,
+                &mut working,
+                timestamps.as_ref(),
+            );
+            // Coverage depends only on prepared geometry: let the GPU run it while the
+            // remaining steps are still being encoded.
+            self.submit_recorded(&mut encoder);
         }
         let mut budget = Budget::resume(
             plan.limits,
@@ -218,6 +258,7 @@ impl Gpu {
                         status: &status,
                         deferred: &deferred,
                         coverage: &coverage,
+                        device_coverage: &device_coverage,
                     },
                     &mut encoder,
                     &mut working,
@@ -242,6 +283,13 @@ impl Gpu {
                 wgpu::BufferUsages::STORAGE,
             );
             working.extend([parameters.clone(), data.clone()]);
+            let resource = if let Some(resource) = &step.resource {
+                let buffer = self.context.resource_buffer(resource)?;
+                working.resident.push(buffer.clone());
+                buffer
+            } else {
+                dummy.clone()
+            };
             let first = images[slots[step.first]].create_view(&Default::default());
             let second = images[slots[step.second]].create_view(&Default::default());
             let output = images[slots[position + 1]].create_view(&Default::default());
@@ -253,6 +301,11 @@ impl Gpu {
                     &mut encoder,
                     &mut budget,
                 )?;
+                let particle_states = states.as_ref().map_or(&dummy, |buffers| &buffers.states);
+                let particle_mask = states
+                    .as_ref()
+                    .and_then(|buffers| buffers.index_mask.as_ref())
+                    .unwrap_or(&empty_particle_mask);
                 let pipeline = if step.parameters.flags.particle_tiles != 0 {
                     &self.textures.particles
                 } else {
@@ -268,7 +321,7 @@ impl Gpu {
                         },
                         wgpu::BindGroupEntry {
                             binding: 2,
-                            resource: states.as_ref().unwrap_or(&dummy).as_entire_binding(),
+                            resource: particle_states.as_entire_binding(),
                         },
                         wgpu::BindGroupEntry {
                             binding: 4,
@@ -294,6 +347,18 @@ impl Gpu {
                             binding: 10,
                             resource: coverage.as_entire_binding(),
                         },
+                        wgpu::BindGroupEntry {
+                            binding: 11,
+                            resource: resource.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 12,
+                            resource: device_coverage.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 13,
+                            resource: particle_mask.as_entire_binding(),
+                        },
                     ],
                 });
                 let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
@@ -304,7 +369,10 @@ impl Gpu {
                 pass.set_bind_group(0, &group, &[]);
                 pass.dispatch_workgroups(size.width.div_ceil(8), size.height.div_ceil(8), 1);
                 if let Some(states) = states {
-                    working.push(states);
+                    working.push(states.states);
+                    if let Some(index_mask) = states.index_mask {
+                        working.push(index_mask);
+                    }
                 }
             }
         }
@@ -355,6 +423,7 @@ impl Gpu {
             status,
             deferred,
             coverage,
+            device_coverage,
         } = inputs;
         let step = &plan.steps[range.start];
         let accumulating = slots[step.first] == slots[range.end];
@@ -457,6 +526,13 @@ impl Gpu {
         }
         let mut data_offset = 0u64;
         for (index, step) in plan.steps[range.clone()].iter().enumerate() {
+            let resource = if let Some(resource) = &step.resource {
+                let buffer = self.context.resource_buffer(resource)?;
+                working.resident.push(buffer.clone());
+                buffer
+            } else {
+                coverage.clone()
+            };
             let mut uniforms = step.parameters;
             uniforms.flags.second_deferred = u32::from(deferred[step.second]);
             let parameters = if let Some(parameters) = &shared_parameters {
@@ -547,6 +623,14 @@ impl Gpu {
                     wgpu::BindGroupEntry {
                         binding: 10,
                         resource: coverage.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 11,
+                        resource: resource.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 12,
+                        resource: device_coverage.as_entire_binding(),
                     },
                 ],
             });
@@ -652,121 +736,5 @@ impl Gpu {
                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
         Ok(())
-    }
-
-    fn texture_particle_states(
-        &self,
-        step: &Step,
-        buffers: [&wgpu::Buffer; 3],
-        encoder: &mut wgpu::CommandEncoder,
-        budget: &mut Budget,
-    ) -> motion_core::Result<Option<wgpu::Buffer>> {
-        let [parameters, data, status] = buffers;
-        if step.parameters.operation.code != GpuOp::Particles as u32 {
-            return Ok(None);
-        }
-        let count = step.data[0] as u32;
-        let tiles = ParticleTiles::new(step.parameters.image_bounds(2), count)?;
-        let tiled = step.parameters.flags.particle_tiles != 0;
-        let initial = if tiled {
-            tiles.bytes
-        } else {
-            (u64::from(count) * 48).max(16)
-        };
-        let limit_bytes = self
-            .device
-            .limits()
-            .max_storage_buffer_binding_size
-            .min(self.device.limits().max_buffer_size);
-        if initial > limit_bytes {
-            return Err(ValidationError::limit(
-                "gpu.particle_tiles",
-                "max_bytes",
-                "Particle metadata exceeds device storage size",
-            )
-            .into());
-        }
-        let states = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Particle states"),
-            size: initial,
-            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
-            mapped_at_creation: false,
-        });
-        let group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("Particle state bindings"),
-            layout: &self.particle_states.get_bind_group_layout(0),
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: parameters.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: states.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 4,
-                    resource: data.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 5,
-                    resource: status.as_entire_binding(),
-                },
-            ],
-        });
-        {
-            let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("Precompute particles"),
-                timestamp_writes: None,
-            });
-            pass.set_pipeline(&self.particle_states);
-            pass.set_bind_group(0, &group, &[]);
-            pass.dispatch_workgroups(count.div_ceil(64).max(1), 1, 1);
-        }
-        if !tiled {
-            return Ok(Some(states));
-        }
-        for (pipeline, groups) in [
-            (&self.particle_bins[0], tiles.tiles.div_ceil(64).max(1)),
-            (&self.particle_bins[1], 1),
-        ] {
-            self.particle_bin_pass(
-                encoder,
-                pipeline,
-                parameters,
-                [&states, data, status],
-                groups,
-            );
-        }
-        let summary = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Particle summary"),
-            size: 16,
-            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-        encoder.copy_buffer_to_buffer(&states, tiles.summary, &summary, 0, 16);
-        let next = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Particle composition"),
-            });
-        self.queue
-            .submit([std::mem::replace(encoder, next).finish()]);
-        let bytes = tiles.admit(self.particle_summary(&summary)?, budget, limit_bytes)?;
-        let indexed = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Particle indices"),
-            size: bytes,
-            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-        encoder.copy_buffer_to_buffer(&states, 0, &indexed, 0, tiles.bytes);
-        self.particle_bin_pass(
-            encoder,
-            &self.particle_bins[2],
-            parameters,
-            [&indexed, data, status],
-            tiles.tiles.div_ceil(64).max(1),
-        );
-        Ok(Some(indexed))
     }
 }

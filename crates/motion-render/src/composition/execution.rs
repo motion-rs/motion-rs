@@ -1,16 +1,67 @@
 //! One-frame render entry points and output conversion; scene preparation and backend
-//! dispatch live in the `preparation` and `backend` submodules.
+//! dispatch live in `preparation` and backend methods on [`FrameExecution`].
 //!
 //! CPU and GPU backends use only explicitly supplied fonts; nothing is discovered implicitly.
 
 use super::*;
-use crate::{RasterLimits, RenderContext, Renderer, WorkStats};
+#[cfg(feature = "gpu")]
+use crate::gpu::PreparedGpuFrame;
+use crate::prepared::{FrameRecords, PreparedCpuFrame};
+use crate::{BackendKind, RasterLimits, RenderContext, WorkStats};
 use motion_core::{Color, Node, Result, SceneContext, Shape, Time, ValidationError};
 
-mod backend;
+#[cfg(feature = "gpu")]
+mod gpu;
+#[cfg(not(feature = "gpu"))]
+#[path = "execution/no_gpu.rs"]
+mod gpu;
 mod preparation;
 
 use preparation::remaining;
+
+pub(in crate::composition) enum PreparedOutput {
+    Cpu(PreparedCpuFrame),
+    #[cfg(feature = "gpu")]
+    Gpu(PreparedGpuFrame),
+}
+
+impl PreparedOutput {
+    /// Reference-path frame; GPU preparation is never converted to CPU coverage.
+    pub(super) fn into_cpu(self) -> motion_core::Result<Self> {
+        match self {
+            Self::Cpu(_) => Ok(self),
+            #[cfg(feature = "gpu")]
+            Self::Gpu(_) => Err(motion_core::ValidationError::unsupported(
+                "prepared",
+                "backend",
+                "GPU preparation cannot be rendered by the CPU backend",
+            )
+            .into()),
+        }
+    }
+}
+
+impl std::ops::Deref for PreparedOutput {
+    type Target = FrameRecords;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::Cpu(frame) => &frame.0,
+            #[cfg(feature = "gpu")]
+            Self::Gpu(frame) => &frame.records,
+        }
+    }
+}
+
+#[cfg(feature = "gpu")]
+impl crate::gpu::frame::FrameInput for PreparedOutput {
+    fn gpu_view(&self) -> crate::gpu::frame::FrameView<'_> {
+        match self {
+            Self::Cpu(frame) => frame.gpu_view(),
+            Self::Gpu(frame) => frame.gpu_view(),
+        }
+    }
+}
 
 pub(super) struct FrameExecution<'a> {
     pub(super) composition: Composition,
@@ -18,6 +69,7 @@ pub(super) struct FrameExecution<'a> {
     pub(super) time: Option<Time>,
     pub(super) limits: RasterLimits,
     pub(super) device_packing: bool,
+    pub(super) preparation_backend: Option<BackendKind>,
     pub(super) session: &'a mut RenderSession,
 }
 
@@ -63,11 +115,12 @@ impl FrameExecution<'_> {
         time: Time,
         background: Option<Color>,
         mut build: impl FnMut(&SceneContext<'_>) -> Node,
-    ) -> Result<(crate::PreparedFrame, RasterLimits)> {
+    ) -> Result<(PreparedOutput, RasterLimits)> {
         let rate = self.composition.clock.rate;
         let end = self.duration;
         if time < Time::ZERO || time >= end {
             self.last_stats = None;
+            self.gpu_preparation = None;
             self.asset_diagnostics.clear();
             return Err(ValidationError::invalid(
                 "_frame",
@@ -108,16 +161,13 @@ impl FrameExecution<'_> {
     fn finish_prepared_output(
         &mut self,
         index: u32,
-        prepared: crate::PreparedFrame,
+        prepared: PreparedOutput,
         limits: RasterLimits,
         format: crate::PixelFormat,
     ) -> Result<crate::FrameBuffer> {
         self.output_pool.trim(limits.max_bytes / 8);
         let started = self.timings.map(|_| std::time::Instant::now());
-        let cpu = self.backend.as_ref().map_or_else(
-            || self.composition.options.backend == crate::BackendPreference::Cpu,
-            |decision| decision.renderer == Renderer::Cpu,
-        );
+        let cpu = self.backend_kind() == BackendKind::Cpu;
         let display = self.composition.options.display.clone();
         if cpu && (!prepared.items.is_empty() || !display.is_identity()) {
             self.select_backend()?;
@@ -190,68 +240,8 @@ impl FrameExecution<'_> {
             }
             return Ok(frame);
         }
-        #[cfg(feature = "gpu")]
-        if !cpu
-            && (format == (crate::PixelFormat::Yuv420 { bit_depth: 10 })
-                || self.device_packing
-                    && format
-                        == (crate::PixelFormat::SrgbRgba8 {
-                            premultiplied: false,
-                        }))
-            && crate::gpu::Gpu::supports_packed_output(prepared.size(), format)
-        {
-            let started = self.timings.map(|_| std::time::Instant::now());
-            let plan = match crate::gpu::Plan::new_packed(&prepared, limits, format) {
-                Ok(plan) => Some(plan.with_display(&display, u64::from(index))?),
-                Err(error)
-                    if self.backend.is_none()
-                        && matches!(
-                            self.composition.options.backend,
-                            crate::BackendPreference::Automatic { .. }
-                        ) =>
-                {
-                    self.backend = Some(crate::BackendDecision {
-                        renderer: Renderer::Cpu,
-                        reason: Some(error.to_string()),
-                    });
-                    None
-                }
-                Err(error) => {
-                    return Err(motion_core::Error::from(error).at_frame(u64::from(index)));
-                }
-            };
-            if let Some(started) = started {
-                self.timings.as_mut().expect("enabled timings").plan += started.elapsed();
-            }
-            if let Some(plan) = plan
-                && self.select_backend()? == Renderer::Gpu
-            {
-                let stats = plan.packed_stats(prepared.size(), format)?;
-                let output_work = crate::FrameBuffer::display_conversion_work(
-                    prepared.size(),
-                    format,
-                    Some(&display),
-                );
-                let frame = self
-                    .gpu
-                    .as_mut()
-                    .expect("selected native GPU")
-                    .render_output(&prepared, plan, format)
-                    .map_err(|error| error.at_frame(u64::from(index)))?;
-                self.record_gpu_timings();
-                self.last_stats = Some(FrameStats {
-                    preparation: prepared.stats(),
-                    linear: crate::WorkStats {
-                        peak_bytes: stats.peak_bytes,
-                        work: stats.work - output_work,
-                    },
-                    output: WorkStats {
-                        peak_bytes: stats.peak_bytes,
-                        work: output_work,
-                    },
-                });
-                return Ok(frame);
-            }
+        if let Some(frame) = self.render_packed_output(index, &prepared, limits, format)? {
+            return Ok(frame);
         }
         let linear = self.render_prepared(index, prepared, limits)?;
         let started = self.timings.map(|_| std::time::Instant::now());
@@ -268,11 +258,11 @@ impl FrameExecution<'_> {
                 )
             })
             .map_err(|error| motion_core::Error::from(error).at_frame(u64::from(index)));
-        linear.recycle(&mut self.cpu_pool);
+        self.cpu_pool.put(linear.into_pixels());
         let frame = frame?;
         stats.output = WorkStats {
             peak_bytes: linear_bytes
-                + std::mem::size_of::<crate::cpu::LinearFrame>() as u64
+                + std::mem::size_of::<crate::linear::LinearFrame>() as u64
                 + frame.retained_bytes(),
             work: crate::FrameBuffer::display_conversion_work(frame.size(), format, Some(&display)),
         };
@@ -281,6 +271,56 @@ impl FrameExecution<'_> {
             self.timings.as_mut().expect("enabled timings").output += started.elapsed();
         }
         Ok(frame)
+    }
+
+    pub(in crate::composition) fn select_backend(&mut self) -> Result<crate::BackendKind> {
+        let renderer = self.backend_kind();
+        if renderer == BackendKind::Cpu || self.backend_ready {
+            return Ok(renderer);
+        }
+        match self.init_gpu() {
+            Ok(()) => {
+                self.backend_ready = true;
+                Ok(BackendKind::Gpu)
+            }
+            Err(error) => {
+                self.gpu_reset();
+                Err(error)
+            }
+        }
+    }
+
+    pub(super) fn render_prepared(
+        &mut self,
+        index: u32,
+        prepared: PreparedOutput,
+        limits: RasterLimits,
+    ) -> Result<crate::linear::LinearFrame> {
+        let result = (|| -> Result<_> {
+            let plan = self.plan_gpu(&prepared, limits)?;
+            let (linear, preparation) = match self.select_backend()? {
+                BackendKind::Cpu => {
+                    let prepared = prepared.into_cpu()?;
+                    let started = self.timings.map(|_| std::time::Instant::now());
+                    let linear = prepared.render_linear_pooled(limits, &mut self.cpu_pool)?;
+                    if let Some(started) = started {
+                        self.timings.as_mut().expect("enabled timings").composition +=
+                            started.elapsed();
+                    }
+                    (linear, prepared.stats())
+                }
+                BackendKind::Gpu => (self.render_gpu(&prepared, plan, limits)?, prepared.stats()),
+            };
+            let stats = FrameStats {
+                preparation,
+                linear: linear.stats(),
+                output: WorkStats::default(),
+            };
+            Ok((linear, stats))
+        })()
+        .map_err(|error| error.at_frame(u64::from(index)))?;
+        self.last_stats = Some(result.1);
+        Ok(result.0)
     }
 }
 
@@ -293,6 +333,10 @@ mod scene_output_tests {
     fn opt_in_timings_preserve_output_work_and_reset_attempts() {
         let mut renderer =
             Composition::new(8, 8, crate::FrameClock::new(motion_core::fps!(30), 150))
+                .with_options(
+                    crate::RenderOptions::default().backend(crate::BackendPreference::Cpu),
+                )
+                .unwrap()
                 .frame_renderer(Size::new(8.0, 8.0))
                 .unwrap();
         let build = |_: &SceneContext<'_>| {
@@ -325,7 +369,7 @@ mod scene_output_tests {
     #[ignore = "requires native GPU; verifies frame-stage observations without latency assertions"]
     fn native_frame_stage_timings_preserve_output_and_logical_stats() -> motion_core::Result {
         let mut renderer = Composition::new(8, 8, crate::FrameClock::new(motion_core::fps!(30), 2))
-            .with_options(crate::RenderOptions::default().backend(Renderer::Gpu.into()))?
+            .with_options(crate::RenderOptions::default().backend(crate::BackendPreference::gpu()))?
             .frame_renderer(Size::new(8.0, 8.0))?;
         let build = |_: &SceneContext<'_>| {
             Node::from(motion_core::Rect::new(0.0, 0.0, 4.0, 8.0).fill(Color::WHITE))

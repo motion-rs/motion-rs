@@ -50,6 +50,10 @@ struct FailureStatus {
     code: atomic<u32>,
 }
 
+struct ParticleIndexMask {
+    words: array<atomic<u32>>,
+}
+
 @group(0) @binding(0)
 var<uniform> settings: GpuUniforms;
 
@@ -67,15 +71,26 @@ var<storage, read_write> output_pixels: Pixels;
 @group(0) @binding(4)
 var<storage, read> operation_data: OperationData;
 
+// Immutable image mip texels are independent of per-draw coverage and mappings.
+@group(0) @binding(11)
+var<storage, read> resource_data: OperationData;
+
 @group(0) @binding(5)
 var<storage, read_write> failure_status: FailureStatus;
 
 @group(0) @binding(6)
 var layer_texture: texture_2d<f32>;
 
-// One frame payload: counts and alpha base, six-word strips, four-word spans, packed alpha bytes.
+// One frame payload: counts and alpha base, five-word strips, four-word spans, packed alpha bytes.
 @group(0) @binding(10)
 var<storage, read> frame_coverage: FrameCoverage;
+
+// Generated f32 device coverage; fills address it by their strip's alpha offset.
+@group(0) @binding(12)
+var<storage, read> device_coverage: array<f32>;
+
+@group(0) @binding(13)
+var<storage, read_write> particle_index_mask: ParticleIndexMask;
 
 // Values are host-narrowed f32 lanes; indexing retains their stored bits.
 fn value(index: u32) -> f32 {
@@ -395,10 +410,10 @@ fn paint_texel(column: i32, row: i32, width: i32, height: i32, base: u32) -> vec
 
     let offset = base + 4u * u32(coordinate.y * width + coordinate.x);
     return vec4f(
-            operation_data.values[offset],
-            operation_data.values[offset + 1u],
-            operation_data.values[offset + 2u],
-            operation_data.values[offset + 3u],
+            resource_data.values[offset],
+            resource_data.values[offset + 1u],
+            resource_data.values[offset + 2u],
+            resource_data.values[offset + 3u],
         );
 }
 
@@ -475,21 +490,26 @@ fn frame_record_coverage_at(base: u32, record: u32, coordinate: vec2u) -> f32 {
     let strip_start = bitcast<u32>(operation_data.values[base + 6u]);
     let strip_count = bitcast<u32>(operation_data.values[base + 7u]) - strip_start;
     if record < strip_count {
-        let offset = 4u + (strip_start + record) * 6u;
+        let offset = 4u + (strip_start + record) * 5u;
         let origin = vec2u(frame_coverage.values[offset], frame_coverage.values[offset + 1u]);
-        let size = vec2u(frame_coverage.values[offset + 2u], frame_coverage.values[offset + 3u]);
+        let height_word = frame_coverage.values[offset + 3u];
+        let size = vec2u(frame_coverage.values[offset + 2u], height_word & 0x7fffffffu);
         if any(coordinate < origin) || any(coordinate >= origin + size) {
             return 0.0;
         }
 
         let local = coordinate - origin;
         let index = frame_coverage.values[offset + 4u] + local.y * size.x + local.x;
+        // Bit 31 of the height word selects generated device samples or packed CPU alpha bytes.
+        if (height_word >> 31u) != 0u {
+            return device_coverage[index];
+        }
         let packed = frame_coverage.values[frame_coverage.values[3u] + index / 4u];
         return coverage_alpha((packed >> ((index % 4u) * 8u)) & 255u);
     }
 
     let span_start = bitcast<u32>(operation_data.values[base + 8u]);
-    let offset = 4u + frame_coverage.values[0u] * 6u + (span_start + record - strip_count) * 4u;
+    let offset = 4u + frame_coverage.values[0u] * 5u + (span_start + record - strip_count) * 4u;
     let origin = vec2u(frame_coverage.values[offset], frame_coverage.values[offset + 1u]);
     let end = vec2u(
             frame_coverage.values[offset + 2u],
@@ -660,6 +680,157 @@ fn fill_source(coordinate: vec2u, record: u32) -> vec4f {
 }
 
 // Evaluate paints at pixel centers after mapping global coordinates into paint space.
+fn paint_word4(offset: u32) -> vec4f {
+    return vec4f(
+            operation_data.values[offset], operation_data.values[offset + 1u],
+            operation_data.values[offset + 2u], operation_data.values[offset + 3u],
+        );
+}
+
+fn mesh_cross(first: vec2f, second: vec2f) -> f32 {
+    return first.x * second.y - first.y * second.x;
+}
+
+// Twin of motion_core::drawing::mesh::MeshPatch: inverse bilinear geometry,
+// cubic smoothstep Oklab interpolation, straight alpha, then linear premultiplication.
+fn mesh_patch(point: vec2f, base: u32) -> vec4f {
+    let first = paint_word4(base);
+    let second = paint_word4(base + 4u);
+    let a = first.xy;
+    let b = first.zw - a;
+    let c = second.xy - a;
+    let d = second.zw - a - b - c;
+    let q = point - a;
+    let aa = -mesh_cross(b, d);
+    let bb = mesh_cross(q, d) - mesh_cross(b, c);
+    let cc = mesh_cross(q, c);
+    let scale = max(abs(aa), max(abs(bb), abs(cc)));
+    if scale == 0.0 {
+        return vec4f(0.0, 0.0, 0.0, -1.0);
+    }
+    var roots = vec2f(0.0);
+    if abs(aa) <= scale * 1e-12 {
+        if abs(bb) <= scale * 1e-12 {
+            return vec4f(0.0, 0.0, 0.0, -1.0);
+        }
+        roots = vec2f(-cc / bb);
+    } else {
+        let discriminant = bb * bb - 4.0 * aa * cc;
+        if discriminant < 0.0 {
+            return vec4f(0.0, 0.0, 0.0, -1.0);
+        }
+        let root = sqrt(discriminant);
+        // Stable quadratic roots preserve small roots of nearly affine patches.
+        let quotient = -0.5 * (bb + select(-root, root, bb >= 0.0));
+        if quotient == 0.0 {
+            roots = vec2f(0.0);
+        } else if bb >= 0.0 {
+            roots = vec2f(cc / quotient, quotient / aa);
+        } else {
+            roots = vec2f(quotient / aa, cc / quotient);
+        }
+    }
+    for (var index = 0u; index < 2u; index += 1u) {
+        let u = roots[index];
+        let direction = c + d * u;
+        let axis = select(0u, 1u, abs(direction.y) > abs(direction.x));
+        if direction[axis] == 0.0 {
+            continue;
+        }
+        let v = (q[axis] - b[axis] * u) / direction[axis];
+        if u < -1e-6 || u > 1.000001 || v < -1e-6 || v > 1.000001 {
+            continue;
+        }
+        let uv = clamp(vec2f(u, v), vec2f(0.0), vec2f(1.0));
+        let amount = uv * uv * (vec2f(3.0) - 2.0 * uv);
+        let top = mix(paint_word4(base + 8u), paint_word4(base + 12u), amount.x);
+        let bottom = mix(paint_word4(base + 16u), paint_word4(base + 20u), amount.x);
+        let lab = mix(top, bottom, amount.y);
+        let lms = vec3f(
+                dot(vec3f(0.9999999984505201, 0.3963377921737678, 0.21580375806075877), lab.xyz),
+                dot(vec3f(1.0000000088817607, -0.10556134232365634, -0.0638541747717059), lab.xyz),
+                dot(vec3f(1.0000000546724108, -0.08948418209496575, -1.2914855378640917), lab.xyz),
+            );
+        let cube = lms * lms * lms;
+        let rgb = vec3f(
+                dot(vec3f(4.076741661347994, -3.3077115904081937, 0.2309699287294278), cube),
+                dot(vec3f(-1.2684380040921763, 2.609757400663372, -0.34131939631021957), cube),
+                dot(vec3f(-0.004196086541837074, -0.7034186144594495, 1.7076147009309446), cube),
+            );
+        return checked(vec4f(rgb * lab.a, lab.a));
+    }
+    return vec4f(0.0, 0.0, 0.0, -1.0);
+}
+
+fn mesh_paint(point: vec2f, base: u32) -> vec4f {
+    var result = vec4f(0.0);
+    let count = u32(operation_data.values[base]);
+    // Lattice order preserves last-patch ownership where warped patches overlap.
+    for (var index = 0u; index < count; index += 1u) {
+        let color = mesh_patch(point, base + 1u + index * 24u);
+        if color.a >= 0.0 {
+            result = color;
+        }
+    }
+    return result;
+}
+
+// Twin of core atmosphere dust: fixed 3x3 lattice neighborhood, shared wrapping hashes.
+fn atmosphere_dust(point: vec2f, seed: u32, radius: f32, coverage: f32) -> f32 {
+    let cell = vec2i(floor(point));
+    var result = 0.0;
+    for (var dy = -1; dy <= 1; dy += 1) {
+        for (var dx = -1; dx <= 1; dx += 1) {
+            let neighbor = cell + vec2i(dx, dy);
+            let hash = noise_hash2(neighbor, seed);
+            if f32(hash) / 4294967295.0 >= coverage {
+                continue;
+            }
+            let center = vec2f(neighbor) + vec2f(
+                    f32(noise_hash32(hash ^ 0xa511e9b3u)), f32(noise_hash32(hash ^ 0x63d83595u)),
+                ) / 4294967295.0;
+            let mote_radius = radius * (0.6 + 0.4 * f32(noise_hash32(hash ^ 0x9e3779b9u)) / 4294967295.0);
+            let offset = point - center;
+            let weight = max(1.0 - dot(offset, offset) / (mote_radius * mote_radius), 0.0);
+            result = max(result, weight * weight);
+        }
+    }
+    return result;
+}
+
+// Twin of core AtmosphereParameters::sample. Pixels/wavelength/phase are canvas-local;
+// all inputs are admitted before execution, and no image or random history is shared.
+fn atmosphere_paint(local: vec2f, base: u32) -> vec4f {
+    let seed = bitcast<u32>(operation_data.values[base]);
+    let kind = operation_data.values[base + 1u];
+    let canvas = vec2f(operation_data.values[base + 2u], operation_data.values[base + 3u]);
+    let phase = vec2f(operation_data.values[base + 4u], operation_data.values[base + 5u]);
+    let scale = operation_data.values[base + 6u];
+    let opacity = operation_data.values[base + 7u];
+    let intensity = operation_data.values[base + 8u];
+    let lacunarity = operation_data.values[base + 9u];
+    let gain = operation_data.values[base + 10u];
+    let octaves = u32(operation_data.values[base + 11u]);
+    let tint = paint_word4(base + 12u);
+    let envelope = paint_word4(base + 16u);
+    let pixel = local * canvas;
+    let point = (pixel + phase) / scale;
+    let cloud = clamp(0.5 + 0.5 * noise_fbm(point, seed, octaves, lacunarity, gain, 1u), 0.0, 1.0);
+    var density = 0.0;
+    if kind == 0.0 {
+        let gradient = envelope.x * (1.0 - local.y) + envelope.y * local.y;
+        density = 1.0 - exp(-opacity * gradient * (0.35 + cloud));
+    } else if kind == 1.0 {
+        density = opacity * atmosphere_dust(point, seed, envelope.x / scale, envelope.y) * (0.7 + 0.3 * cloud);
+    } else {
+        let displacement = (local - envelope.xy) / envelope.zw;
+        density = opacity * exp(-2.0 * dot(displacement, displacement)) * (0.6 + 0.4 * cloud);
+    }
+    let alpha = clamp(density * tint.a, 0.0, 1.0);
+    let rgb = tint.rgb * intensity * clamp(density, 0.0, 1.0);
+    return checked(vec4f(rgb, alpha));
+}
+
 fn spatial_paint(coordinate: vec2u) -> vec4f {
     let point = vec2f(coordinate) + vec2f(0.5) - vec2f(value(14u), value(15u));
     var local = vec2f(
@@ -679,7 +850,10 @@ fn spatial_paint(coordinate: vec2u) -> vec4f {
         let first_size = vec2f(operation_data.values[base], operation_data.values[base + 1u]);
         let second_size = vec2f(operation_data.values[base + 2u], operation_data.values[base + 3u]);
         let blend = operation_data.values[base + 4u];
-        let first = image_level(uv, first_size, base + 6u, operation_data.values[base + 5u] != 0.0);
+        let first = image_level(
+                uv, first_size, bitcast<u32>(operation_data.values[base + 6u]),
+                operation_data.values[base + 5u] != 0.0,
+            );
         if blend == 0.0 {
             return first;
         }
@@ -687,7 +861,7 @@ fn spatial_paint(coordinate: vec2u) -> vec4f {
         let second = image_level(
                 uv,
                 second_size,
-                base + 6u + u32(first_size.x * first_size.y) * 4u,
+                bitcast<u32>(operation_data.values[base + 7u]),
                 false,
             );
         return checked(mix(first, second, blend));
@@ -695,6 +869,13 @@ fn spatial_paint(coordinate: vec2u) -> vec4f {
 
     if settings.operation.detail == 0u {
         local = (local - vec2f(value(6u), value(7u))) / vec2f(value(8u), value(9u));
+    }
+
+    if settings.operation.kind == 6u {
+        return mesh_paint(clamp(local, vec2f(0.0), vec2f(1.0)), base);
+    }
+    if settings.operation.kind == 7u {
+        return atmosphere_paint(local, base);
     }
 
     var position = 0.0;
@@ -1237,6 +1418,102 @@ fn particle_intersects(support: vec4f, tile: vec4f) -> bool {
         && all(tile.xy <= support.zw);
 }
 
+const PARTICLE_TILE_BITSET: u32 = 2u;
+
+fn particle_device_point(point: vec2f, determinant: f32) -> vec2f {
+    let relative = point - vec2f(value(4u), value(5u));
+    return checked(
+            vec4f(
+                (value(3u) * relative.x - value(2u) * relative.y) / determinant,
+                (-value(1u) * relative.x + value(0u) * relative.y) / determinant,
+                0.0,
+                0.0,
+            ),
+        ).xy;
+}
+
+fn particle_device_bounds(support: vec4f) -> vec4f {
+    let determinant = value(0u) * value(3u) - value(1u) * value(2u);
+    let first = particle_device_point(support.xy, determinant);
+    let second = particle_device_point(vec2f(support.z, support.y), determinant);
+    let third = particle_device_point(vec2f(support.x, support.w), determinant);
+    let fourth = particle_device_point(support.zw, determinant);
+    let lower = min(min(first, second), min(third, fourth));
+    let upper = max(max(first, second), max(third, fourth));
+    let local_scale = max(
+        max(abs(support.xy), abs(support.zw)),
+        vec2f(abs(value(4u)), abs(value(5u))),
+    );
+    let arithmetic_scale = vec2f(
+            (abs(value(3u)) * local_scale.x + abs(value(2u)) * local_scale.y)
+                / abs(determinant),
+            (abs(value(1u)) * local_scale.x + abs(value(0u)) * local_scale.y)
+                / abs(determinant),
+        );
+    let guard = max(
+            max(max(abs(lower), abs(upper)), arithmetic_scale),
+            vec2f(1.0),
+        ) * 0.000244140625
+        + vec2f(2.0);
+    return checked(vec4f(lower - guard, upper + guard));
+}
+
+// Each invocation sets its source-order bit in every conservatively covered tile.
+fn add_particle_to_tiles(index: u32, support: vec4f) {
+    if particle_tile_count() == 0u || !all(support.xy <= support.zw) {
+        return;
+    }
+
+    let origin = vec2u(settings.sources[2].x, settings.sources[2].y);
+    let end = vec2u(settings.sources[2].z, settings.sources[2].w);
+    let extent = end - origin;
+    let columns = (extent.x + 15u) / 16u;
+    let rows = (extent.y + 15u) / 16u;
+    let lower = max(support.xy, vec2f(origin));
+    let upper = min(support.zw, vec2f(end));
+    if any(lower > upper) {
+        return;
+    }
+
+    let maximum = vec2u(columns - 1u, rows - 1u);
+    let first = min(vec2u(floor((lower - vec2f(origin)) / 16.0)), maximum);
+    let last = min(vec2u(floor((upper - vec2f(origin)) / 16.0)), maximum);
+    let count = u32(operation_data.values[0u]);
+    let words_per_tile = (count + 31u) / 32u;
+    var row = first.y;
+    loop {
+        var column = first.x;
+        loop {
+            let tile = row * columns + column;
+            let word = tile * words_per_tile + index / 32u;
+            atomicOr(&particle_index_mask.words[word], 1u << (index % 32u));
+            if column == last.x {
+                break;
+            }
+            column += 1u;
+        }
+        if row == last.y {
+            break;
+        }
+        row += 1u;
+    }
+}
+
+// Particle-index workgroups scatter into a zeroed atomic mask; bit positions preserve order.
+@compute @workgroup_size(64)
+fn build_particle_index_mask(
+    @builtin(global_invocation_id) invocation: vec3u,
+) {
+    let index = invocation.x;
+    let count = u32(operation_data.values[0u]);
+    if index >= count {
+        return;
+    }
+
+    let support = output_pixels.values[index * 3u + 2u];
+    add_particle_to_tiles(index, particle_device_bounds(support));
+}
+
 // One invocation owns each tile's metadata vec4; integer fields travel as f32 bit patterns.
 @compute @workgroup_size(64)
 fn count_particle_tiles(@builtin(global_invocation_id) invocation: vec3u) {
@@ -1309,15 +1586,15 @@ fn fill_particle_tiles(@builtin(global_invocation_id) invocation: vec3u) {
 fn particle_texel(column: i32, row: i32, base: u32, width: i32, height: i32) -> vec4f {
     let offset = base + u32(clamp(row, 0, height - 1) * width + clamp(column, 0, width - 1)) * 4u;
     return vec4f(
-            operation_data.values[offset],
-            operation_data.values[offset + 1u],
-            operation_data.values[offset + 2u],
-            operation_data.values[offset + 3u],
+            resource_data.values[offset],
+            resource_data.values[offset + 1u],
+            resource_data.values[offset + 2u],
+            resource_data.values[offset + 3u],
         );
 }
 
-// Sprite RGBA follows the particle records and is bilinearly sampled at texel centers.
-fn particle_sprite(uv: vec2f, count: u32, cell: vec4f) -> vec4f {
+// Immutable sprite RGBA is separate from changing records and sampled at texel centers.
+fn particle_sprite(uv: vec2f, cell: vec4f) -> vec4f {
     let width = i32(operation_data.values[1u]);
     let height = i32(operation_data.values[2u]);
     let dimensions = vec2f(f32(width), f32(height));
@@ -1327,7 +1604,7 @@ fn particle_sprite(uv: vec2f, count: u32, cell: vec4f) -> vec4f {
     }
     let origin = vec2i(floor(position));
     let fraction = position - floor(position);
-    let base = 4u + count * particle_stride();
+    let base = 0u;
     let high = min(origin + vec2i(1), vec2i(cell.zw * dimensions - vec2f(1.0)));
     let top_left = particle_texel(origin.x, origin.y, base, width, height);
     let top_right = particle_texel(high.x, origin.y, base, width, height);
@@ -1347,21 +1624,51 @@ fn particle_batch(backdrop: vec4f, coordinate: vec2u) -> vec4f {
     let count = u32(operation_data.values[0u]);
     var result = backdrop;
     var metadata = vec4u(count, 0u, 0u, 0u);
+    var tile = 0u;
 
-    // Untiled mode visits every particle; tiled mode reads count/offset metadata from the state buffer.
+    // Tiled mode selects either the ordered membership bitset or exact list metadata.
     if PARTICLE_TILES {
         let origin = vec2u(settings.sources[2].x, settings.sources[2].y);
         let columns = (settings.sources[2].z - origin.x + 15u) / 16u;
-        let tile = ((coordinate.y - origin.y) / 16u) * columns + (coordinate.x - origin.x) / 16u;
-        metadata = bitcast<vec4u>(second_pixels.values[count * 3u + tile]);
+        tile = ((coordinate.y - origin.y) / 16u) * columns + (coordinate.x - origin.x) / 16u;
+        if settings.flags.particle_tiles != PARTICLE_TILE_BITSET {
+            metadata = bitcast<vec4u>(second_pixels.values[count * 3u + tile]);
+        }
     }
 
     let indices = count * 3u + particle_tile_count() + 1u;
-    for(var cursor = 0u; cursor < metadata.x; cursor++) {
+    let words_per_tile = (count + 31u) / 32u;
+    var cursor = 0u;
+    var mask_word = 0u;
+    var mask_value = 0u;
+    if PARTICLE_TILES && settings.flags.particle_tiles == PARTICLE_TILE_BITSET {
+        mask_value = atomicLoad(&particle_index_mask.words[tile * words_per_tile]);
+    }
+    loop {
         var index = cursor;
-        if PARTICLE_TILES {
-            index = bitcast<u32>(second_pixels.values[indices + metadata.y + cursor].x);
+        if PARTICLE_TILES && settings.flags.particle_tiles == PARTICLE_TILE_BITSET {
+            if mask_value == 0u {
+                mask_word += 1u;
+                if mask_word >= words_per_tile {
+                    break;
+                }
+                mask_value = atomicLoad(
+                    &particle_index_mask.words[tile * words_per_tile + mask_word],
+                );
+                continue;
+            }
+            let lowest = mask_value & (0u - mask_value);
+            index = mask_word * 32u + countOneBits(lowest - 1u);
+            mask_value &= mask_value - 1u;
+        } else {
+            if cursor >= metadata.x {
+                break;
+            }
+            if PARTICLE_TILES {
+                index = bitcast<u32>(second_pixels.values[indices + metadata.y + cursor].x);
+            }
         }
+        cursor += 1u;
 
         let base = 4u + index * particle_stride();
         let kind = u32(operation_data.values[base + 11u]);
@@ -1437,7 +1744,7 @@ fn particle_batch(backdrop: vec4f, coordinate: vec2u) -> vec4f {
             } else {
                 let cell = select(vec4f(0.0, 0.0, 1.0, 1.0), extra, kind == 4u);
                 let uv = local / (2.0 * vec2f(radius * aspect, radius)) + vec2f(0.5);
-                color *= particle_sprite(cell.xy + uv * (cell.zw - cell.xy), count, cell);
+                color *= particle_sprite(cell.xy + uv * (cell.zw - cell.xy), cell);
                 coverage = 1.0;
             }
         } else if kind >= 6u && kind <= 11u {

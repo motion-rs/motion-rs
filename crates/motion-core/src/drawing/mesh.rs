@@ -1,4 +1,4 @@
-//! Mesh gradients: lattices of colored control points rasterized into backend-shared patterns.
+//! Mesh gradients with analytic paint descriptors and explicit image baking.
 
 use std::any::Any;
 use std::sync::Arc;
@@ -9,6 +9,10 @@ use crate::{
     Sampling, Transform, ValidationError,
 };
 
+mod evaluate;
+
+pub use evaluate::MeshPatch;
+
 #[cfg(test)]
 mod tests;
 
@@ -17,6 +21,65 @@ pub const MAX_MESH_POINTS_PER_AXIS: u32 = 64;
 
 /// Maximum subdivisions per lattice cell edge when rasterizing a [`MeshGradient`].
 pub const MAX_MESH_SUBDIVISIONS: u32 = 32;
+
+/// A [`MeshGradient`] evaluated independently by each paint backend.
+///
+/// Size and subdivisions remain the resolution of the explicit [`Self::pattern`] bake;
+/// they do not quantize analytic paint evaluation.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MeshPaint {
+    /// Control lattice to paint with.
+    pub mesh: MeshGradient,
+    /// Baked image size in pixels.
+    pub size: PixelSize,
+    /// Subdivisions per lattice cell edge, in `1..=`[`MAX_MESH_SUBDIVISIONS`].
+    pub subdivisions: u32,
+}
+
+impl MeshPaint {
+    /// Pairs a mesh with its bake resolution.
+    pub fn new(mesh: MeshGradient, size: PixelSize, subdivisions: u32) -> Self {
+        Self {
+            mesh,
+            size,
+            subdivisions,
+        }
+    }
+
+    /// Checks the bake parameters without allocating.
+    pub fn validate(&self) -> Result<(), ValidationError> {
+        if !(1..=MAX_MESH_SUBDIVISIONS).contains(&self.subdivisions) {
+            return Err(ValidationError::limit(
+                LABEL,
+                "subdivisions",
+                "Subdivisions must be between 1 and 32",
+            ));
+        }
+        if self.size.width == 0 || self.size.height == 0 {
+            return Err(ValidationError::invalid(
+                LABEL,
+                "size",
+                "Mesh image must have positive dimensions",
+            ));
+        }
+        for row in 0..self.mesh.rows() - 1 {
+            for column in 0..self.mesh.columns() - 1 {
+                self.mesh.patch(column, row)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Bakes the mesh over `bounds` as an extend-padded bilinear pattern.
+    pub fn pattern(
+        &self,
+        bounds: Rect,
+        limits: RasterLimits,
+    ) -> Result<ImagePattern, ValidationError> {
+        self.mesh
+            .pattern(bounds, self.size, self.subdivisions, limits)
+    }
+}
 
 /// Barycentric slack that keeps pixels on shared triangle edges covered.
 const EDGE_SLACK: f64 = 1e-9;
@@ -37,8 +100,9 @@ pub struct MeshVertex {
 /// Each cell blends its four corner colors in Oklab with smoothstep weights, so color
 /// is continuous across cells and flat at every control point. Cell geometry is the
 /// bilinear patch of its corner positions; moving control points warps the colors.
-/// Alpha interpolates linearly. Rasterization produces a premultiplied linear image
-/// that the shared image-pattern path samples, so CPU and GPU output agree.
+/// Alpha interpolates linearly. Authored paints evaluate inverse-bilinear patches
+/// independently on CPU/GPU; explicit rasterization retains the tessellated image
+/// baking path for existing artwork.
 ///
 /// ```
 /// use motion_core::{
@@ -140,6 +204,21 @@ impl MeshGradient {
     /// Row-major control points.
     pub fn vertices(&self) -> &[MeshVertex] {
         &self.vertices
+    }
+
+    /// Creates one admitted analytic patch without allocating an image or lattice.
+    ///
+    /// Rejects out-of-range indices or coordinates/colors outside shared shader support.
+    pub fn patch(&self, column: u32, row: u32) -> Result<MeshPatch, ValidationError> {
+        if column >= self.columns - 1 || row >= self.rows - 1 {
+            return Err(ValidationError::invalid(
+                LABEL,
+                "patch",
+                "Patch index is outside the mesh",
+            ));
+        }
+        let at = |dx, dy| self.vertices[((row + dy) * self.columns + column + dx) as usize];
+        MeshPatch::new([at(0, 0), at(1, 0), at(0, 1), at(1, 1)])
     }
 
     /// Rasterizes the unit square into a `size` image, splitting every cell edge into

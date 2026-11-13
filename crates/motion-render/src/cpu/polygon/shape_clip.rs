@@ -82,6 +82,24 @@ impl Region {
     pub(crate) fn bytes(&self) -> u64 {
         self.edges.len() as u64 * size_of::<Edge>() as u64
     }
+
+    /// The rule and every edge as exact bits, for content-addressed coverage reuse.
+    pub(crate) fn fingerprint(&self) -> impl Iterator<Item = u64> + '_ {
+        [
+            u64::from(self.rule == FillRule::EvenOdd),
+            self.edges.len() as u64,
+        ]
+        .into_iter()
+        .chain(self.edges.iter().flat_map(|edge| {
+            [
+                edge.top.x.to_bits(),
+                edge.top.y.to_bits(),
+                edge.bottom.x.to_bits(),
+                edge.bottom.y.to_bits(),
+                i64::from(edge.winding) as u64,
+            ]
+        }))
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -92,7 +110,7 @@ struct Boundary {
 }
 
 pub(crate) fn rasterize(
-    frame: &mut PreparedFrame,
+    frame: &mut FrameRecords,
     base: &[Point],
     regions: &[&Region],
     tolerance: f64,

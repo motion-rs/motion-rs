@@ -3,6 +3,18 @@
 use super::*;
 use motion_core::ValidationError;
 
+/// Width and height of an ordered particle tile, in output pixels.
+const PARTICLE_TILE_SIZE: u32 = 16;
+
+/// Number of particle membership bits stored in one mask word.
+const PARTICLES_PER_MASK_WORD: u32 = 32;
+
+/// Conservative work units for converting one particle support to device bounds.
+const PARTICLE_MASK_SETUP_WORK_PER_INSTANCE: u64 = 128;
+
+/// Uniform mode selecting ordered particle-index bitsets.
+pub(super) const PARTICLE_TILE_BITSET: u32 = 2;
+
 pub(super) struct ParticleTiles {
     pub(super) count: u32,
     pub(super) tiles: u32,
@@ -19,8 +31,8 @@ impl ParticleTiles {
                 "Particle tile count exceeds the instance protocol",
             ));
         }
-        let columns = (bounds.right - bounds.left).div_ceil(16);
-        let rows = (bounds.bottom - bounds.top).div_ceil(16);
+        let columns = (bounds.right - bounds.left).div_ceil(PARTICLE_TILE_SIZE);
+        let rows = (bounds.bottom - bounds.top).div_ceil(PARTICLE_TILE_SIZE);
         let tiles = columns.checked_mul(rows).ok_or_else(|| {
             ValidationError::limit(
                 "gpu.particle_tiles",
@@ -35,6 +47,51 @@ impl ParticleTiles {
             summary,
             bytes: summary + 16,
         })
+    }
+
+    pub(super) fn state_bytes(&self) -> u64 {
+        (u64::from(self.count) * 48).max(16)
+    }
+
+    pub(super) fn mask_bytes(&self) -> Option<u64> {
+        let words = u64::from(self.count.div_ceil(PARTICLES_PER_MASK_WORD));
+        u64::from(self.tiles)
+            .checked_mul(words)?
+            .checked_mul(4)
+            .map(|bytes| bytes.max(4))
+    }
+
+    pub(super) fn mask_composition_work(&self, pixels: u64) -> Option<u64> {
+        let words = u64::from(self.count.div_ceil(PARTICLES_PER_MASK_WORD));
+        let per_pixel = u64::from(self.count).checked_mul(64)?.checked_add(words)?;
+        pixels.checked_mul(per_pixel)
+    }
+
+    pub(super) fn mask_build_work(&self) -> Option<u64> {
+        let overlap_work = u64::from(self.tiles).checked_mul(u64::from(self.count) * 32 + 64)?;
+        let setup_work =
+            u64::from(self.count).checked_mul(PARTICLE_MASK_SETUP_WORK_PER_INSTANCE)?;
+        overlap_work.checked_add(setup_work)
+    }
+
+    pub(super) fn exceeds_device_limits(&self, limits: &wgpu::Limits, bitset: bool) -> bool {
+        let storage_limit = limits
+            .max_storage_buffer_binding_size
+            .min(limits.max_buffer_size);
+        let state_bytes = if bitset {
+            self.state_bytes()
+        } else {
+            self.bytes
+        };
+        let tile_groups = if bitset {
+            1
+        } else {
+            self.tiles.div_ceil(64).max(1)
+        };
+        state_bytes > storage_limit
+            || (bitset && self.mask_bytes().is_none_or(|bytes| bytes > storage_limit))
+            || tile_groups > limits.max_compute_workgroups_per_dimension
+            || self.count.div_ceil(64) > limits.max_compute_workgroups_per_dimension
     }
 
     pub(super) fn admit(
@@ -88,6 +145,16 @@ mod tests {
         )?;
         assert_eq!(layout.tiles, 6);
         assert_eq!(layout.summary, (30_000 + 6) * 16);
+        assert_eq!(layout.state_bytes(), 10_000 * 48);
+        assert_eq!(layout.mask_bytes(), Some(6 * 313 * 4));
+        assert_eq!(
+            layout.mask_composition_work(33 * 17),
+            Some(33 * 17 * (10_000 * 64 + 313))
+        );
+        assert_eq!(
+            layout.mask_build_work(),
+            Some(6 * (10_000 * 32 + 64) + 10_000 * 128)
+        );
         let mut budget = Budget::new(PixelSize::new(32, 48), RasterLimits::default())?;
         assert_eq!(
             layout.admit([12, 42, 0, 0], &mut budget, u64::MAX)?,

@@ -1,64 +1,60 @@
-//! Device-space coverage preparation and filter bounds.
-//!
-//! This module turns display lists into prepared frames; filter padding lives in `filters`
-//! and rectangle, strip and clip coverage emission in `coverage`.
+//! CPU preparation APIs and shared consumption of normalized frame semantics.
 
-use motion_core::{
-    DisplayList, DrawCommand, PixelSize, SceneLimits, ValidationError, ValidationLimits,
+use super::frame_ir::{
+    COMMAND_PATH_BYTES, FrameIr, GeometrySource, IrClip, IrItem, IrPaint, IrPath,
 };
-
-use super::{CoverageCache, RasterScope, rect_clip};
-use crate::prepared::*;
-use filters::{command_filter_bytes, copy_filters, filter_padding, filter_support, shift_command};
+use super::paint::TableCache;
+use super::{CoverageCache, PreparationCache, RasterScope};
+use crate::cpu::coverage_cache::ClipCache;
+use crate::cpu::rect_clip;
+use crate::prepared::{
+    FrameRecords, PreparationStats, PreparedCpuFrame, PreparedFilters, PreparedItem, PreparedLayer,
+    RasterLimits,
+};
 use motion_core::budget::Budget;
-use std::fmt::Write;
+use motion_core::{DisplayList, SceneLimits, ValidationError, ValidationLimits};
 use std::mem::size_of;
 
 mod coverage;
-mod filters;
+pub(in crate::raster) mod filters;
+mod layers;
 
 pub(crate) use coverage::{paint_record, pixel_bounds};
 
-/// Bounded raster preparation for editable or validated core commands.
-/// Editable lists are fully validated first; validated snapshots reuse measured
-/// requirements when the requested structural limits allow them. Prepared paints
-/// reference immutable pixels and gradient tables shared by both renderers.
+/// Bounded CPU coverage preparation for editable or validated core commands.
+///
+/// The complete source preflights before backend-neutral normalization, even for
+/// invisible and offscreen content. Returned frames always contain CPU coverage;
+/// preparing one never selects a device.
 pub trait RenderPrepare {
-    /// Prepares coverage using the default device-pixel tolerance.
+    /// Prepares CPU coverage using the default 1/256 device-pixel tolerance.
     fn prepare(
         &self,
         validation: ValidationLimits,
         limits: RasterLimits,
-    ) -> Result<PreparedFrame, ValidationError>;
+    ) -> Result<PreparedCpuFrame, ValidationError>;
 
-    /// Prepares coverage with combined structural and raster allowances.
-    fn prepare_within(&self, limits: SceneLimits) -> Result<PreparedFrame, ValidationError> {
+    /// Prepares CPU coverage with combined structural and raster allowances.
+    fn prepare_within(&self, limits: SceneLimits) -> Result<PreparedCpuFrame, ValidationError> {
         self.prepare(limits.structure, limits.raster)
     }
 
-    /// Prepares coverage using an explicit positive device-pixel tolerance.
+    /// Prepares CPU coverage using a finite positive device-pixel curve tolerance.
+    ///
+    /// Curves retain f64 control points until bounded Wang subdivision. Linear
+    /// contours close implicitly; four-row active-edge scheduling and analytic
+    /// area integration round coverage once to u8. Visible cancelling projections
+    /// retain the 1e-7 device-pixel precision guard. No supersampling occurs.
     fn prepare_with_tolerance(
         &self,
         validation: ValidationLimits,
         limits: RasterLimits,
         tolerance: f64,
-    ) -> Result<PreparedFrame, ValidationError>;
+    ) -> Result<PreparedCpuFrame, ValidationError>;
 }
 
 impl RenderPrepare for DisplayList {
-    /// Prepares bounded coverage with 1/256 device-pixel curve tolerance.
-    ///
-    /// The full source list preflights first, even when invisible/offscreen.
-    /// Independent raster limits admit output dimensions, live logical bytes
-    /// and work. Linear contours are implicitly closed and split at crossings
-    /// before integrating filled trapezoids; coverage is rounded once to u8.
-    /// Four-row active-edge scheduling excludes unrelated edges and skips empty
-    /// bands while preserving original edge order within the shared integrator.
-    /// Filled intervals are integrated analytically using shared scalar geometry;
-    /// this is not multisample rasterization or a separate backend tessellator.
-    /// Severely cancelling visible edge projections fail a conservative 1e-7
-    /// device-pixel precision guard rather than silently losing subpixel shape.
-    /// No supersampling or f32 geometry conversion occurs.
+    /// Prepares bounded CPU coverage at 1/256 device-pixel tolerance.
     ///
     /// ```
     /// use motion_render::prelude::*;
@@ -67,7 +63,7 @@ impl RenderPrepare for DisplayList {
     ///     DisplayList, RasterLimits, ResourceStore, ValidatedDisplayList, MAX_PATH_VERBS,
     ///     MAX_STROKE_VERBS, MAX_SVG_PATH_BYTES, sample_offsets,
     /// };
-    /// use motion_render::{Composition, RenderPrepare, RenderOptions, Renderer, render_still};
+    /// use motion_render::{Composition, RenderPrepare, RenderOptions, BackendKind, render_still};
     /// let node = Node::group([
     ///     Node::from(Rect::new(0.0, 0.0, 4.0, 4.0).fill(Color::WHITE)),
     ///     Node::from(Rect::new(2.0, 0.0, 6.0, 4.0).fill(Color::WHITE)),
@@ -89,17 +85,11 @@ impl RenderPrepare for DisplayList {
         &self,
         validation: ValidationLimits,
         limits: RasterLimits,
-    ) -> Result<PreparedFrame, ValidationError> {
+    ) -> Result<PreparedCpuFrame, ValidationError> {
         self.prepare_with_tolerance(validation, limits, 1.0 / 256.0)
     }
 
-    /// Prepares coverage with a finite positive device-pixel Bezier tolerance.
-    ///
-    /// Control points transform before conservative Wang-based uniform subdivision.
-    /// The tolerance bounds chord geometry, not pixel-area error or topology below
-    /// that scale. Both fill rules use the shared linear edges. Generated work and
-    /// live storage are admitted against raster limits; a conservative arithmetic
-    /// guard rejects coordinates that cannot resolve the requested tolerance.
+    /// Prepares bounded curves with an explicit positive device-pixel tolerance.
     ///
     /// ```
     /// use motion_render::prelude::*;
@@ -108,7 +98,7 @@ impl RenderPrepare for DisplayList {
     ///     DisplayList, RasterLimits, ResourceStore, ValidatedDisplayList, MAX_PATH_VERBS,
     ///     MAX_STROKE_VERBS, MAX_SVG_PATH_BYTES, sample_offsets,
     /// };
-    /// use motion_render::{Composition, RenderPrepare, RenderOptions, Renderer, render_still};
+    /// use motion_render::{Composition, RenderPrepare, RenderOptions, BackendKind, render_still};
     /// let path = Path2D::builder()
     ///     .move_to(Point::ORIGIN)
     ///     .quadratic_to(Point::new(0.5, 2.0), Point::new(1.0, 0.0))
@@ -119,9 +109,7 @@ impl RenderPrepare for DisplayList {
     ///     ValidationLimits::default(),
     /// )?;
     /// let frame = list.prepare_with_tolerance(
-    ///     ValidationLimits::default(),
-    ///     RasterLimits::default(),
-    ///     1.0 / 1024.0,
+    ///     ValidationLimits::default(), RasterLimits::default(), 1.0 / 1024.0,
     /// )?;
     /// assert_eq!(
     ///     frame.render_linear(RasterLimits::default())?.linear_pixel(0, 0),
@@ -134,7 +122,7 @@ impl RenderPrepare for DisplayList {
         validation: ValidationLimits,
         limits: RasterLimits,
         tolerance: f64,
-    ) -> Result<PreparedFrame, ValidationError> {
+    ) -> Result<PreparedCpuFrame, ValidationError> {
         prepare_with_cache(self, validation, limits, tolerance, None)
     }
 }
@@ -144,8 +132,8 @@ pub(crate) fn prepare_with_cache(
     validation: ValidationLimits,
     limits: RasterLimits,
     tolerance: f64,
-    cache: Option<&mut CoverageCache>,
-) -> Result<PreparedFrame, ValidationError> {
+    cache: Option<&mut PreparationCache>,
+) -> Result<PreparedCpuFrame, ValidationError> {
     let source = source.clone().validate(validation)?;
     prepare_validated_with_cache(&source, validation, limits, tolerance, cache)
 }
@@ -155,7 +143,7 @@ impl RenderPrepare for motion_core::ValidatedDisplayList {
         &self,
         validation: ValidationLimits,
         limits: RasterLimits,
-    ) -> Result<PreparedFrame, ValidationError> {
+    ) -> Result<PreparedCpuFrame, ValidationError> {
         prepare_validated_with_cache(self, validation, limits, 1.0 / 256.0, None)
     }
 
@@ -164,7 +152,7 @@ impl RenderPrepare for motion_core::ValidatedDisplayList {
         validation: ValidationLimits,
         limits: RasterLimits,
         tolerance: f64,
-    ) -> Result<PreparedFrame, ValidationError> {
+    ) -> Result<PreparedCpuFrame, ValidationError> {
         prepare_validated_with_cache(self, validation, limits, tolerance, None)
     }
 }
@@ -174,129 +162,116 @@ pub(crate) fn prepare_validated_with_cache(
     validation: ValidationLimits,
     limits: RasterLimits,
     tolerance: f64,
-    mut cache: Option<&mut CoverageCache>,
-) -> Result<PreparedFrame, ValidationError> {
-    source.preflight(validation)?;
-    let source = source.display_list();
-    let (mut frame, mut budget, padding) = initialize_frame(source, limits, tolerance)?;
-    let mut filter_chain = 0_u32;
-    let mut filter_stack = Vec::new();
-    let mut has_plus_layers = false;
-    let mut rectangles = rect_clip::Preparation::default();
-    let mut path = String::new();
-    for (index, command) in source.commands.iter().enumerate() {
-        path.clear();
-        let _ = write!(path, "display_list.commands[{index}]");
-        budget.work(1, &path)?;
-        let shifted;
-        let temporary = if padding == 0 {
-            0
-        } else {
-            command_filter_bytes(command)
-        };
-        budget.bytes(temporary, &path)?;
-        let command = if padding == 0 {
-            command
-        } else {
-            shifted = shift_command(command, f64::from(padding), &path)?;
-            &shifted
-        };
-        let Some(item) = prepare_command(
-            &mut frame,
-            command,
-            tolerance,
-            cache.as_deref_mut(),
-            &mut rectangles,
-            &mut RasterScope::new(&mut budget, &path),
-        )?
-        else {
-            continue;
-        };
-        match &item {
-            PreparedItem::PushLayer { layer } => {
-                has_plus_layers |= layer.filters.is_none()
-                    && matches!(
-                        layer.blend_mode,
-                        motion_core::BlendMode::Plus | motion_core::BlendMode::LinearPlus
-                    );
-                budget.push(&mut filter_stack, filter_chain, &path)?;
-                if let Some(filters) = &layer.filters {
-                    filter_chain =
-                        filter_chain.saturating_add(filter_support(&filters.operations)?);
-                    frame.filter_halo = frame.filter_halo.max(filter_chain);
-                }
-            }
-            PreparedItem::BeginMask { .. } => {
-                budget.push(&mut filter_stack, filter_chain, &path)?;
-            }
-            PreparedItem::PopLayer | PreparedItem::EndMask => {
-                filter_chain = filter_stack.pop().expect("validated filter support stack");
-                budget.release(size_of::<u32>() as u64);
-            }
-            _ => {}
-        }
-        budget.push(&mut frame.items, item, &path)?;
-        budget.release(temporary);
-    }
-    rectangles.release(&mut budget)?;
-    if has_plus_layers {
-        trim_plus_layers(&mut frame, &mut budget)?;
-    }
-    frame.stats = PreparationStats {
-        retained_bytes: budget.live_bytes(),
-        peak_bytes: budget.peak_bytes(),
-        work: budget.work_done(),
-    };
-    Ok(frame)
+    cache: Option<&mut PreparationCache>,
+) -> Result<PreparedCpuFrame, ValidationError> {
+    let ir = FrameIr::build(source, validation, limits, tolerance)?;
+    prepare_ir(&ir, limits, cache)
 }
 
-fn initialize_frame(
-    source: &DisplayList,
+pub(crate) fn prepare_ir(
+    ir: &FrameIr<'_>,
     limits: RasterLimits,
-    tolerance: f64,
-) -> Result<(PreparedFrame, Budget, u32), ValidationError> {
-    if !tolerance.is_finite() || tolerance <= 0.0 {
-        return Err(ValidationError::invalid(
-            "prepared",
-            "tolerance",
-            "Curve tolerance must be finite and positive",
-        ));
+    cache: Option<&mut PreparationCache>,
+) -> Result<PreparedCpuFrame, ValidationError> {
+    Ok(PreparedCpuFrame(prepare_scene(
+        ir,
+        limits,
+        &mut CpuBackend { cache },
+    )?))
+}
+
+/// The parts of a scene walk where CPU and GPU preparation differ.
+pub(crate) trait SceneBackend {
+    /// Fixed result storage beyond the shared scene.
+    fn fixed_bytes(&self) -> u64;
+
+    /// IR resource bytes that stay live in the prepared result.
+    fn kept_resource_bytes(&self, ir: &FrameIr<'_>) -> u64;
+
+    /// Paint table cache shared across frames, if any.
+    fn paint_cache(&mut self) -> Option<&mut TableCache>;
+
+    /// Shape clip coverage cache shared across frames, if any.
+    fn clip_cache(&self) -> Option<ClipCache>;
+
+    /// Observes a particle batch before it is recorded.
+    fn particles(&mut self, analytic_fallback: bool);
+
+    /// Generates the coverage of one fill into `frame`.
+    fn fill(
+        &mut self,
+        frame: &mut FrameRecords,
+        geometry: &IrPath<'_>,
+        paint: &IrPaint<'_>,
+        tolerance: f64,
+        scope: &mut RasterScope<'_>,
+    ) -> Result<(), ValidationError>;
+}
+
+/// Preparation that borrows immutable resources and flattens every fill on the CPU.
+struct CpuBackend<'a> {
+    cache: Option<&'a mut PreparationCache>,
+}
+
+impl SceneBackend for CpuBackend<'_> {
+    fn fixed_bytes(&self) -> u64 {
+        0
     }
-    let padding = filter_padding(&source.commands)?;
-    let dimension = |value: u32| value.checked_add(padding.checked_mul(2)?);
-    let size = PixelSize::new(
-        dimension(source.output_size.width).ok_or_else(|| {
-            ValidationError::limit(
-                "prepared.filters",
-                "max_pixels",
-                "Filter raster width overflow",
-            )
-        })?,
-        dimension(source.output_size.height).ok_or_else(|| {
-            ValidationError::limit(
-                "prepared.filters",
-                "max_pixels",
-                "Filter raster height overflow",
-            )
-        })?,
-    );
-    let mut budget = Budget::new(size, limits)?;
-    budget.bytes(size_of::<PreparedFrame>() as u64, "prepared")?;
-    let frame = PreparedFrame {
+
+    fn kept_resource_bytes(&self, _: &FrameIr<'_>) -> u64 {
+        0
+    }
+
+    fn paint_cache(&mut self) -> Option<&mut TableCache> {
+        self.cache.as_deref_mut().map(|cache| &mut cache.paints)
+    }
+
+    fn clip_cache(&self) -> Option<ClipCache> {
+        self.cache.as_deref().map(|cache| cache.coverage.clips())
+    }
+
+    fn particles(&mut self, _: bool) {}
+
+    fn fill(
+        &mut self,
+        frame: &mut FrameRecords,
+        geometry: &IrPath<'_>,
+        _: &IrPaint<'_>,
+        tolerance: f64,
+        scope: &mut RasterScope<'_>,
+    ) -> Result<(), ValidationError> {
+        prepare_geometry(
+            frame,
+            geometry,
+            tolerance,
+            self.cache.as_deref_mut().map(|cache| &mut cache.coverage),
+            scope,
+        )
+    }
+}
+
+/// A single scope walk shares semantics, not backend preparation results.
+pub(crate) fn prepare_scene(
+    ir: &FrameIr<'_>,
+    limits: RasterLimits,
+    backend: &mut impl SceneBackend,
+) -> Result<FrameRecords, ValidationError> {
+    let mut budget = Budget::new(ir.size(), limits)?;
+    let ir_stats = ir.stats();
+    budget.bytes(ir_stats.retained_bytes, "frame_ir")?;
+    budget.work(ir_stats.work, "frame_ir")?;
+    budget.merge_peak(ir_stats.peak_bytes);
+    budget.bytes(size_of::<PreparedCpuFrame>() as u64, "prepared")?;
+    if backend.fixed_bytes() > 0 {
+        budget.bytes(backend.fixed_bytes(), "prepared.gpu")?;
+    }
+    let mut frame = FrameRecords {
         quality: motion_core::RenderQuality::Final,
         blend_space: motion_core::drawing::BlendSpace::LinearRgb,
-        size,
-        output_bounds: PixelRect {
-            left: padding,
-            top: padding,
-            right: padding + source.output_size.width,
-            bottom: padding + source.output_size.height,
-        },
-        filter_halo: 0,
-        background: source
-            .background
-            .map(|color| paint_record(color, "prepared.background"))
-            .transpose()?,
+        size: ir.size(),
+        output_bounds: ir.output_bounds(),
+        filter_halo: ir.filter_halo(),
+        background: ir.background(),
         items: Vec::new(),
         strips: Vec::new(),
         spans: Vec::new(),
@@ -306,377 +281,234 @@ fn initialize_frame(
         clips: Vec::new(),
         stats: PreparationStats::default(),
     };
-
-    Ok((frame, budget, padding))
-}
-
-fn prepare_command(
-    frame: &mut PreparedFrame,
-    command: &DrawCommand,
-    tolerance: f64,
-    mut cache: Option<&mut CoverageCache>,
-    rectangles: &mut rect_clip::Preparation,
-    scope: &mut RasterScope<'_>,
-) -> Result<Option<PreparedItem>, ValidationError> {
-    let size = frame.size;
-    let budget = &mut *scope.budget;
-    let path = scope.path;
-    let item = match command {
-        DrawCommand::ParticleInstances { batch, transform } => {
-            if transform.inverse().is_none() {
-                return Ok(None);
+    let mut rectangles = rect_clip::Preparation::new(backend.clip_cache());
+    let mut has_plus_layers = false;
+    for (index, item) in ir.items().iter().enumerate() {
+        budget.bytes(COMMAND_PATH_BYTES, "prepared.commands")?;
+        let path = format!("display_list.commands[{index}]");
+        budget.work(1, &path)?;
+        let item = match item {
+            IrItem::ParticleInstances { batch, transform } => {
+                backend.particles(batch.analytic_fallback().is_some());
+                if transform.inverse().is_none() {
+                    budget.release(COMMAND_PATH_BYTES);
+                    continue;
+                }
+                // Resources remain shared; the live IR charge already admits this payload.
+                PreparedItem::ParticleInstances {
+                    batch: batch.clone(),
+                    transform: *transform,
+                }
             }
-            budget.bytes(batch.bytes(), path)?;
-            PreparedItem::ParticleInstances {
-                batch: batch.clone(),
-                transform: *transform,
+            IrItem::PushLayer {
+                layer,
+                alpha_clip,
+                rectangle_clip,
+                shape_clip,
+            } => {
+                if layer.filters.is_some() {
+                    rectangles.begin_mask();
+                }
+                let mut layer = copy_layer(layer, &mut budget, &path)?;
+                if layer.filters.is_none() {
+                    prepare_layer_clips(
+                        ir,
+                        &mut layer,
+                        [*alpha_clip, *rectangle_clip, *shape_clip],
+                        &mut frame,
+                        &mut rectangles,
+                        &mut budget,
+                        &path,
+                    )?;
+                }
+                has_plus_layers |= layer.filters.is_none()
+                    && matches!(
+                        layer.blend_mode,
+                        motion_core::BlendMode::Plus | motion_core::BlendMode::LinearPlus
+                    );
+                PreparedItem::PushLayer { layer }
             }
-        }
-        DrawCommand::PushFilterLayer { bounds, filters } => {
-            rectangles.begin_mask();
-            let mut capture = *bounds;
-            let mut current = *bounds;
-            for filter in filters {
-                budget.work(filter.structural_cost() as u64, path)?;
-                let (output, intermediate) = filter.extent(current, path)?;
-                capture = motion_core::filter::union(capture, intermediate);
-                current = output;
-                budget.bytes(
-                    size_of::<motion_core::Filter>() as u64 + filter.heap_bytes(),
-                    path,
+            IrItem::PopLayer => {
+                rectangles.pop();
+                PreparedItem::PopLayer
+            }
+            IrItem::BeginMask { mode } => {
+                rectangles.begin_mask();
+                PreparedItem::BeginMask { mode: *mode }
+            }
+            IrItem::EndMask => {
+                rectangles.pop();
+                PreparedItem::EndMask
+            }
+            IrItem::Fill {
+                path: geometry,
+                paint,
+            } => {
+                let geometry = ir.path(*geometry);
+                let paint = ir.paint(*paint);
+                let strip_start = frame.strips.len();
+                let span_start = frame.spans.len();
+                let mut scope = RasterScope::new(&mut budget, &path);
+                backend.fill(&mut frame, geometry, paint, ir.tolerance(), &mut scope)?;
+                let paint = frame.add_paint(
+                    paint.source,
+                    paint.bounds,
+                    paint.transform,
+                    &mut budget,
+                    &path,
+                    backend.paint_cache(),
                 )?;
+                PreparedItem::Fill {
+                    strips: strip_start..frame.strips.len(),
+                    spans: span_start..frame.spans.len(),
+                    paint,
+                }
             }
-            PreparedItem::PushLayer {
-                layer: PreparedLayer {
-                    bounds: pixel_bounds(capture, size),
-                    opacity: 1.0,
-                    blend_mode: motion_core::BlendMode::SourceOver,
-                    alpha_clip: None,
-                    geometric_clip: None,
-                    filters: Some(PreparedFilters {
-                        source_bounds: *bounds,
-                        operations: copy_filters(filters, path)?,
-                    }),
-                },
-            }
-        }
-        DrawCommand::PushLayer { .. }
-        | DrawCommand::PushRectLayer { .. }
-        | DrawCommand::PushShapeLayer { .. } => {
-            prepare_layer(frame, command, tolerance, rectangles, scope)?
-        }
-        DrawCommand::PopLayer => {
-            rectangles.pop();
-            PreparedItem::PopLayer
-        }
-        DrawCommand::BeginMask { mode } => {
-            rectangles.begin_mask();
-            PreparedItem::BeginMask { mode: *mode }
-        }
-        DrawCommand::EndMask => {
-            rectangles.pop();
-            PreparedItem::EndMask
-        }
-        DrawCommand::FillRect { .. } => {
-            prepare_fill_rect(frame, command, tolerance, cache.as_deref_mut(), scope)?
-        }
-        DrawCommand::Fill { .. } => prepare_fill_path(frame, command, tolerance, cache, scope)?,
-        _ => {
-            return Err(ValidationError::unsupported(
-                path,
-                "command",
-                "Unsupported drawing command",
-            ));
-        }
-    };
-    Ok(Some(item))
-}
-
-fn prepare_layer(
-    frame: &mut PreparedFrame,
-    command: &DrawCommand,
-    tolerance: f64,
-    rectangles: &mut rect_clip::Preparation,
-    scope: &mut RasterScope<'_>,
-) -> Result<PreparedItem, ValidationError> {
-    let size = frame.size;
-    let budget = &mut *scope.budget;
-    let path = scope.path;
-    match command {
-        DrawCommand::PushLayer {
-            opacity,
-            bounds,
-            blend_mode,
-            clip,
-        }
-        | DrawCommand::PushRectLayer {
-            opacity,
-            bounds,
-            blend_mode,
-            clip,
-            ..
-        }
-        | DrawCommand::PushShapeLayer {
-            opacity,
-            bounds,
-            blend_mode,
-            clip,
-            ..
-        } => Ok({
-            let clip = clip
-                .as_ref()
-                .map(|clip| frame.prepare_clip(clip, tolerance, budget, &format!("{path}.clip")))
-                .transpose()?;
-            let rectangle = match command {
-                DrawCommand::PushRectLayer { rect_clip, .. } => Some(rect_clip),
-                DrawCommand::PushShapeLayer { rect_clip, .. } => rect_clip.as_ref(),
-                _ => None,
-            };
-            let shape = if let DrawCommand::PushShapeLayer { shape_clip, .. } = command {
-                Some(shape_clip)
-            } else {
-                None
-            };
-            let geometric = rectangles.push(rectangle, shape, frame, tolerance, budget, path)?;
-            PreparedItem::PushLayer {
-                layer: PreparedLayer {
-                    opacity: *opacity,
-                    bounds: pixel_bounds(*bounds, size),
-                    blend_mode: *blend_mode,
-                    alpha_clip: clip,
-                    geometric_clip: geometric.filter(|_| shape.is_some() || rectangle.is_some()),
-                    filters: None,
-                },
-            }
-        }),
-        _ => Err(ValidationError::unsupported(
-            path,
-            "command",
-            "Unsupported drawing command",
-        )),
+        };
+        budget.push(&mut frame.items, item, &path)?;
+        budget.release(COMMAND_PATH_BYTES);
     }
+    rectangles.release(&mut budget)?;
+    if has_plus_layers {
+        layers::trim_plus_layers(&mut frame, &mut budget)?;
+    }
+    // The IR dies after preparation. Only a GPU frame keeps its admitted resource bytes for
+    // upload; a CPU frame borrows the immutable resources and owns no copy of them.
+    budget.release(ir_stats.retained_bytes - backend.kept_resource_bytes(ir));
+    frame.stats = PreparationStats {
+        retained_bytes: budget.live_bytes(),
+        peak_bytes: budget.peak_bytes(),
+        work: budget.work_done(),
+    };
+    Ok(frame)
 }
 
-fn prepare_fill_rect(
-    frame: &mut PreparedFrame,
-    command: &DrawCommand,
+/// Resolves a layer's alpha, rectangle and shape clips into prepared storage and geometry.
+fn prepare_layer_clips(
+    ir: &FrameIr<'_>,
+    layer: &mut PreparedLayer,
+    [alpha_clip, rectangle_clip, shape_clip]: [Option<usize>; 3],
+    frame: &mut FrameRecords,
+    rectangles: &mut rect_clip::Preparation,
+    budget: &mut Budget,
+    path: &str,
+) -> Result<(), ValidationError> {
+    layer.alpha_clip = alpha_clip
+        .map(|index| match ir.clip(index) {
+            IrClip::Alpha {
+                source,
+                path: geometry,
+            } => frame.prepare_ir_clip(source, ir.path(*geometry), ir.tolerance(), budget, path),
+            _ => Err(ValidationError::invalid(
+                path,
+                "clip",
+                "Expected alpha clip",
+            )),
+        })
+        .transpose()?;
+    let rectangle = rectangle_clip
+        .map(|index| match ir.clip(index) {
+            IrClip::Rectangle {
+                source,
+                path: geometry,
+            } => {
+                debug_assert!(ir.path(*geometry).segment_upper_bound > 0);
+                Ok(source)
+            }
+            _ => Err(ValidationError::invalid(
+                path,
+                "clip",
+                "Expected rectangle clip",
+            )),
+        })
+        .transpose()?;
+    let shape = shape_clip
+        .map(|index| match ir.clip(index) {
+            IrClip::Shape {
+                source,
+                path: geometry,
+            } => {
+                debug_assert!(ir.path(*geometry).segment_upper_bound > 0);
+                Ok(source)
+            }
+            _ => Err(ValidationError::invalid(
+                path,
+                "clip",
+                "Expected shape clip",
+            )),
+        })
+        .transpose()?;
+    let geometric = rectangles.push(rectangle, shape, frame, ir.tolerance(), budget, path)?;
+    layer.geometric_clip = geometric.filter(|_| shape.is_some() || rectangle.is_some());
+    Ok(())
+}
+
+fn copy_layer(
+    layer: &PreparedLayer,
+    budget: &mut Budget,
+    path: &str,
+) -> Result<PreparedLayer, ValidationError> {
+    let filters = if let Some(filters) = &layer.filters {
+        for filter in &filters.operations {
+            budget.bytes(
+                size_of::<motion_core::Filter>() as u64 + filter.heap_bytes(),
+                path,
+            )?;
+        }
+        Some(PreparedFilters {
+            source_bounds: filters.source_bounds,
+            operations: filters::copy_filters(&filters.operations, path)?,
+        })
+    } else {
+        None
+    };
+    Ok(PreparedLayer {
+        opacity: layer.opacity,
+        bounds: layer.bounds,
+        blend_mode: layer.blend_mode,
+        alpha_clip: None,
+        geometric_clip: None,
+        filters,
+    })
+}
+
+pub(crate) fn prepare_geometry(
+    frame: &mut FrameRecords,
+    geometry: &super::frame_ir::IrPath<'_>,
     tolerance: f64,
     cache: Option<&mut CoverageCache>,
     scope: &mut RasterScope<'_>,
-) -> Result<PreparedItem, ValidationError> {
-    let budget = &mut *scope.budget;
-    let path = scope.path;
-    match command {
-        DrawCommand::FillRect {
-            bounds,
-            transform,
-            paint: source_paint,
-        } => Ok({
+) -> Result<(), ValidationError> {
+    let transform = geometry.transform;
+    match geometry.source {
+        GeometrySource::Rectangle(bounds) => {
             let [xx, yx, xy, yy, _, _] = transform.coefficients();
-            let strip_start = frame.strips.len();
-            let span_start = frame.spans.len();
             if (xy == 0.0 && yx == 0.0) || (xx == 0.0 && yy == 0.0) {
-                let bounds = motion_core::display_list::mapped_bounds(*bounds, *transform, path)?;
-                frame.rectangle(bounds, budget, path)?;
+                frame.rectangle(geometry.bounds, scope.budget, scope.path)
             } else {
-                use motion_core::{PathVerb, Point};
-                let verbs = [
-                    PathVerb::MoveTo(Point::new(bounds.left, bounds.top)),
-                    PathVerb::LineTo(Point::new(bounds.right, bounds.top)),
-                    PathVerb::LineTo(Point::new(bounds.right, bounds.bottom)),
-                    PathVerb::LineTo(Point::new(bounds.left, bounds.bottom)),
-                    PathVerb::Close,
-                ];
                 frame.polygon(
-                    verbs.into_iter(),
-                    *transform,
-                    motion_core::FillRule::NonZero,
+                    super::frame_ir::rectangle_verbs(bounds).into_iter(),
+                    transform,
+                    geometry.rule,
                     tolerance,
-                    budget,
-                    path,
-                )?;
+                    scope.budget,
+                    scope.path,
+                )
             }
-            let paint = frame.add_paint(
-                source_paint,
-                *bounds,
-                *transform,
-                budget,
-                path,
-                cache.map(|cache| &mut cache.paints),
-            )?;
-            PreparedItem::Fill {
-                strips: strip_start..frame.strips.len(),
-                spans: span_start..frame.spans.len(),
-                paint,
-            }
-        }),
-        _ => Err(ValidationError::unsupported(
-            path,
-            "command",
-            "Unsupported drawing command",
-        )),
-    }
-}
-
-fn prepare_fill_path(
-    frame: &mut PreparedFrame,
-    command: &DrawCommand,
-    tolerance: f64,
-    mut cache: Option<&mut CoverageCache>,
-    scope: &mut RasterScope<'_>,
-) -> Result<PreparedItem, ValidationError> {
-    let budget = &mut *scope.budget;
-    let path = scope.path;
-    match command {
-        DrawCommand::Fill {
-            path: geometry,
-            transform,
-            paint: source_paint,
-            rule,
-        } => Ok({
-            let strip_start = frame.strips.len();
-            let span_start = frame.spans.len();
-            if let Some(cache) = cache.as_deref_mut() {
-                cache.polygon(
-                    frame,
-                    geometry,
-                    *transform,
-                    *rule,
-                    tolerance,
-                    &mut RasterScope::new(budget, path),
-                )?;
+        }
+        GeometrySource::Path(source) => {
+            if let Some(cache) = cache {
+                cache.polygon(frame, source, transform, geometry.rule, tolerance, scope)
             } else {
-                frame.polygon_path(geometry, *transform, *rule, tolerance, budget, path)?;
-            }
-            let paint = frame.add_paint(
-                source_paint,
-                geometry.bounding_box(),
-                *transform,
-                budget,
-                path,
-                cache.map(|cache| &mut cache.paints),
-            )?;
-            PreparedItem::Fill {
-                strips: strip_start..frame.strips.len(),
-                spans: span_start..frame.spans.len(),
-                paint,
-            }
-        }),
-        _ => Err(ValidationError::unsupported(
-            path,
-            "command",
-            "Unsupported drawing command",
-        )),
-    }
-}
-
-fn trim_plus_layers(frame: &mut PreparedFrame, budget: &mut Budget) -> Result<(), ValidationError> {
-    struct Capture {
-        index: Option<usize>,
-        content: Option<PixelRect>,
-    }
-    let union = |content: &mut Option<PixelRect>, bounds: PixelRect| {
-        if bounds.pixels() > 0 {
-            *content = Some(content.map_or(bounds, |old| PixelRect {
-                left: old.left.min(bounds.left),
-                top: old.top.min(bounds.top),
-                right: old.right.max(bounds.right),
-                bottom: old.bottom.max(bounds.bottom),
-            }));
-        }
-    };
-    let mut captures: Vec<Capture> = Vec::new();
-    budget.work(frame.items.len() as u64, "prepared.layers")?;
-    for index in 0..frame.items.len() {
-        match &frame.items[index] {
-            PreparedItem::PushLayer { .. } => budget.push(
-                &mut captures,
-                Capture {
-                    index: Some(index),
-                    content: None,
-                },
-                "prepared.layers",
-            )?,
-            PreparedItem::BeginMask { .. } => {
-                if let Some(capture) = captures.last_mut()
-                    && let Some(owner) = capture.index
-                    && let PreparedItem::PushLayer { layer } = &frame.items[owner]
-                {
-                    capture.content = Some(layer.bounds);
-                }
-                budget.push(
-                    &mut captures,
-                    Capture {
-                        index: None,
-                        content: None,
-                    },
-                    "prepared.layers",
-                )?;
-            }
-            PreparedItem::EndMask | PreparedItem::PopLayer => {
-                let capture = captures.pop().expect("validated layer bounds stack");
-                budget.release(size_of::<Capture>() as u64);
-                if let Some(owner) = capture.index {
-                    let PreparedItem::PushLayer { layer } = &mut frame.items[owner] else {
-                        unreachable!("validated layer capture")
-                    };
-                    if layer.filters.is_none()
-                        && layer.alpha_clip.is_none()
-                        && layer.geometric_clip.is_none()
-                        && matches!(
-                            layer.blend_mode,
-                            motion_core::BlendMode::Plus | motion_core::BlendMode::LinearPlus
-                        )
-                    {
-                        layer.bounds =
-                            layer.bounds.intersect(capture.content.unwrap_or(PixelRect {
-                                left: 0,
-                                top: 0,
-                                right: 0,
-                                bottom: 0,
-                            }));
-                    }
-                    if let Some(parent) = captures.last_mut() {
-                        union(&mut parent.content, layer.bounds);
-                    }
-                }
-            }
-            PreparedItem::Fill { strips, spans, .. } => {
-                budget.work((strips.len() + spans.len()) as u64, "prepared.layers")?;
-                if let Some(capture) = captures.last_mut() {
-                    for strip in &frame.strips[strips.clone()] {
-                        union(
-                            &mut capture.content,
-                            PixelRect {
-                                left: strip.x,
-                                top: strip.y,
-                                right: strip.x + strip.width,
-                                bottom: strip.y + strip.height,
-                            },
-                        );
-                    }
-                    for span in &frame.spans[spans.clone()] {
-                        union(
-                            &mut capture.content,
-                            PixelRect {
-                                left: span.start_x,
-                                top: span.y,
-                                right: span.end_x,
-                                bottom: span.y + span.height,
-                            },
-                        );
-                    }
-                }
-            }
-            PreparedItem::ParticleInstances { .. } => {
-                if let Some(capture) = captures.last_mut()
-                    && let Some(owner) = capture.index
-                    && let PreparedItem::PushLayer { layer } = &frame.items[owner]
-                {
-                    capture.content = Some(layer.bounds);
-                }
+                frame.polygon_path(
+                    source,
+                    transform,
+                    geometry.rule,
+                    tolerance,
+                    scope.budget,
+                    scope.path,
+                )
             }
         }
     }
-    Ok(())
 }

@@ -1,0 +1,92 @@
+//! GPU-specific preparation results, independent of public CPU prepared frames.
+
+use super::device::DeviceGeometry;
+use crate::cpu::coverage_cache::ClipCache;
+use crate::gpu::PreparedGpuFrame;
+use crate::prepared::FrameRecords;
+use crate::raster::frame_ir::{FrameIr, GeometrySource, IrPaint, IrPath};
+use crate::raster::paint::TableCache;
+use crate::raster::prepare::{SceneBackend, prepare_geometry, prepare_scene};
+use crate::raster::{PreparationCache, RasterScope};
+use motion_core::{RasterLimits, ValidationError, ValidationLimits};
+use std::mem::size_of;
+
+impl PreparedGpuFrame {
+    pub(crate) fn prepare(
+        ir: &FrameIr<'_>,
+        limits: RasterLimits,
+        cache: Option<&mut PreparationCache>,
+    ) -> Result<Self, ValidationError> {
+        let mut geometry = DeviceGeometry::default();
+        let scene = prepare_scene(
+            ir,
+            limits,
+            &mut DeviceBackend {
+                geometry: &mut geometry,
+                cache,
+            },
+        )?;
+        Ok(Self {
+            records: scene,
+            geometry,
+        })
+    }
+}
+
+/// Preparation that keeps resources for upload and emits device coverage when admitted.
+struct DeviceBackend<'a> {
+    geometry: &'a mut DeviceGeometry,
+    cache: Option<&'a mut PreparationCache>,
+}
+
+impl SceneBackend for DeviceBackend<'_> {
+    fn fixed_bytes(&self) -> u64 {
+        size_of::<DeviceGeometry>() as u64
+    }
+
+    fn kept_resource_bytes(&self, ir: &FrameIr<'_>) -> u64 {
+        ir.resource_bytes()
+    }
+
+    fn paint_cache(&mut self) -> Option<&mut TableCache> {
+        self.cache.as_deref_mut().map(|cache| &mut cache.paints)
+    }
+
+    fn clip_cache(&self) -> Option<ClipCache> {
+        self.cache.as_deref().map(|cache| cache.coverage.clips())
+    }
+
+    fn particles(&mut self, analytic_fallback: bool) {
+        self.geometry.analytic_cpu_fallbacks += u64::from(analytic_fallback);
+    }
+
+    fn fill(
+        &mut self,
+        frame: &mut FrameRecords,
+        geometry: &IrPath<'_>,
+        paint: &IrPaint<'_>,
+        tolerance: f64,
+        scope: &mut RasterScope<'_>,
+    ) -> Result<(), ValidationError> {
+        // Rectangles and decal patterns keep analytic strips: decals reject samples in f64 against
+        // CPU coverage. Every other fill is device coverage or an error.
+        let decal = matches!(paint.source, motion_core::Paint::Pattern(pattern) if pattern.decal);
+        if decal || !matches!(geometry.source, GeometrySource::Path(_)) {
+            let cache = self.cache.as_deref_mut().map(|cache| &mut cache.coverage);
+            return prepare_geometry(frame, geometry, tolerance, cache, scope);
+        }
+        self.geometry.device_fill(frame, geometry, tolerance, scope)
+    }
+}
+
+/// GPU preparation has its own output and never constructs a CPU prepared frame.
+pub(crate) fn prepare_validated_device(
+    source: &motion_core::ValidatedDisplayList,
+    validation: ValidationLimits,
+    limits: RasterLimits,
+    tolerance: f64,
+    cache: Option<&mut PreparationCache>,
+) -> Result<PreparedGpuFrame, ValidationError> {
+    let ir = FrameIr::build(source, validation, limits, tolerance)?;
+    PreparedGpuFrame::prepare(&ir, limits, cache)
+}

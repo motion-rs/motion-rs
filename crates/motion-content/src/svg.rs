@@ -7,7 +7,7 @@
 //!     DisplayList, RasterLimits, ResourceStore, ValidatedDisplayList, MAX_PATH_VERBS,
 //!     MAX_STROKE_VERBS, MAX_SVG_PATH_BYTES, sample_offsets,
 //! };
-//! use motion_render::{Composition, RenderPrepare, RenderOptions, Renderer, render_still};
+//! use motion_render::{Composition, RenderPrepare, RenderOptions, BackendKind, render_still};
 //! use motion_content::{Svg, SvgAsset};
 //! use std::sync::Arc;
 //! let asset = Arc::new(SvgAsset::from_bytes(br#"<svg xmlns="http://www.w3.org/2000/svg" width="8" height="4"><rect id="mark" width="8" height="4" fill="blue"/></svg>"#)?);

@@ -152,7 +152,7 @@ fn finite(value: f64, path: &str) -> Result<(), ValidationError> {
     }
 }
 
-fn positive(value: f64, path: &str) -> Result<(), ValidationError> {
+fn nonnegative(value: f64, path: &str) -> Result<(), ValidationError> {
     finite(value, path)?;
     if value >= 0.0 {
         Ok(())
@@ -162,7 +162,7 @@ fn positive(value: f64, path: &str) -> Result<(), ValidationError> {
 }
 
 fn sigma(value: f64, path: &str) -> Result<(), ValidationError> {
-    positive(value, path)?;
+    nonnegative(value, path)?;
     finite(value * 3.0, path)
 }
 
@@ -328,8 +328,8 @@ impl FilterOperation {
                 finite(*y, path)
             }
             Self::ColorMatrix(matrix) => matrix.iter().try_for_each(|value| finite(*value, path)),
-            Self::Threshold { value } => positive(*value, path),
-            Self::Noise { amplitude, .. } => positive(*amplitude, path),
+            Self::Threshold { value } => nonnegative(*value, path),
+            Self::Noise { amplitude, .. } => nonnegative(*amplitude, path),
             Self::ChannelOffset { red, green, blue } => {
                 vector(*red, path)?;
                 vector(*green, path)?;
@@ -400,7 +400,7 @@ impl Filter {
         sigma_y: f64,
         tint: Color,
     ) -> Result<Self, ValidationError> {
-        positive(intensity, "anamorphic")?;
+        nonnegative(intensity, "anamorphic")?;
         sigma(sigma_x, "anamorphic")?;
         sigma(sigma_y, "anamorphic")?;
         let tint = tint.to_linear_premultiplied();
@@ -429,7 +429,7 @@ impl Filter {
 
     /// Red-orange highlight halation composed from existing primitives.
     pub fn halation(strength: f64, radius: f64) -> Result<Self, ValidationError> {
-        positive(strength, "halation")?;
+        nonnegative(strength, "halation")?;
         sigma(radius, "halation")?;
         Ok(Self::Custom(vec![
             FilterOperation::Threshold { value: 0.9 },
@@ -481,11 +481,11 @@ impl Filter {
                 if !(1..=8).contains(levels) {
                     return Err(invalid(path, "Bloom levels must be in 1..=8"));
                 }
-                positive(*threshold, path)?;
-                positive(*knee, path)?;
-                positive(*falloff, path)?;
+                nonnegative(*threshold, path)?;
+                nonnegative(*knee, path)?;
+                nonnegative(*falloff, path)?;
                 finite(libm::pow(*falloff, f64::from(*levels - 1)), path)?;
-                positive(*intensity, path)?;
+                nonnegative(*intensity, path)?;
                 sigma(*radius * f64::from(1u32 << (*levels - 1)), path)
             }
             Self::DropShadow {
@@ -501,9 +501,9 @@ impl Filter {
                 sigma: value,
                 intensity,
             } => {
-                positive(*threshold, path)?;
+                nonnegative(*threshold, path)?;
                 sigma(*value, path)?;
-                positive(*intensity, path)
+                nonnegative(*intensity, path)
             }
             Self::ColorAdjust {
                 exposure,
@@ -516,8 +516,8 @@ impl Filter {
                 if !gain.is_finite() || gain == 0.0 {
                     return Err(invalid(path, "Exposure gain must be finite and positive"));
                 }
-                positive(*contrast, path)?;
-                positive(*saturation, path)?;
+                nonnegative(*contrast, path)?;
+                nonnegative(*saturation, path)?;
                 finite(*hue_degrees, path)
             }
             Self::Custom(operations) => {

@@ -1,11 +1,11 @@
-//! Immutable shared coverage and paint records.
+//! CPU preparation results and common immutable composition records.
 
-pub(crate) use crate::cpu::LinearFrame;
-pub use crate::cpu::WorkStats;
-pub(crate) use crate::raster::coverage_cache::CoverageCache;
+#[cfg(any(feature = "gpu", test))]
+pub(crate) use crate::linear::LinearFrame;
+pub use crate::linear::WorkStats;
+pub(crate) use crate::raster::PreparationCache;
 use crate::raster::paint;
 pub use crate::raster::prepare::RenderPrepare;
-pub(crate) use crate::raster::prepare::prepare_validated_with_cache;
 pub use motion_core::RasterLimits;
 use motion_core::{PixelSize, Rect};
 use std::ops::Range;
@@ -67,8 +67,10 @@ pub(crate) struct Strip {
     pub(crate) width: u32,
     /// Number of rows, in 1..=4 and contained in the output.
     pub(crate) height: u32,
-    /// Row-major start in PreparedFrame::alphas; no padding between rows.
+    /// Row-major start in PreparedCpuFrame::alphas, or in the device f32 sample block for a device fill.
     pub(crate) alpha_offset: usize,
+    /// Whether the GPU generates this strip's f32 coverage instead of reading packed alphas.
+    pub(crate) device: bool,
 }
 
 /// A fully covered interval in a band of up to four rows.
@@ -85,7 +87,7 @@ pub(crate) struct Span {
 }
 
 /// A finite linear-sRGB premultiplied f32 constant paint record.
-/// Spatial descriptors are retained separately; use PreparedFrame::paint_at
+/// Spatial descriptors are retained separately; use PreparedCpuFrame::paint_at
 /// for a sample that also resolves gradients or image patterns.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct PaintRecord {
@@ -177,13 +179,67 @@ pub struct PreparationStats {
     pub work: u64,
 }
 
-/// Immutable coverage shared by future CPU/GPU consumers.
+/// Device-independent observations from a completed GPU preparation attempt.
+///
+/// Counts describe admitted work, not GPU timings, actual driver allocations or
+/// cross-frame residency.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct GpuPreparationStats {
+    /// Logical host preparation storage and work, including rectangle and clip coverage.
+    pub preparation: PreparationStats,
+    /// Admitted edge slots, including Wang-sized edges generated on the GPU.
+    pub segment_count: u64,
+    /// Admitted 16-by-16 coverage tiles, including fully interior tiles.
+    pub tile_count: u64,
+    /// Conservative edge-index capacity; actual GPU bin populations can be smaller.
+    pub tile_index_capacity: u64,
+    /// Bytes of fill, line and curve descriptors plus the coverage uniform uploaded for binning.
+    ///
+    /// Excludes CPU coverage, paints, textures, output parameters and zeroed scratch.
+    pub geometry_upload_bytes: u64,
+    /// Analytic batches retaining CPU-evaluated primitives for an explicit precision reason.
+    pub analytic_cpu_fallbacks: u64,
+}
+
+/// Immutable CPU coverage, paints and composition semantics.
 ///
 /// Supports transformed rectangles, bounded flattened Bezier contours with either
 /// fill rule and isolated linear-blended layers.
 /// Private storage prevents callers forging ranges or editing validated geometry.
 #[derive(Clone, Debug, PartialEq)]
-pub struct PreparedFrame {
+pub struct PreparedCpuFrame(pub(crate) FrameRecords);
+
+impl std::ops::Deref for PreparedCpuFrame {
+    type Target = FrameRecords;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl std::ops::DerefMut for PreparedCpuFrame {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl AsRef<FrameRecords> for PreparedCpuFrame {
+    fn as_ref(&self) -> &FrameRecords {
+        &self.0
+    }
+}
+
+/// Common composition records shared by both backends.
+///
+/// `strips`, `spans` and `alphas` are analytic coverage: the CPU composes every fill from them,
+/// while the GPU reads them only for rectangles, decal patterns and clips. Device-generated fill
+/// coverage lives in the GPU frame's own geometry, never here.
+///
+/// This type is exposed only as the dereference target of [`PreparedCpuFrame`].
+/// Its storage cannot be constructed or edited outside this crate.
+#[doc(hidden)]
+#[derive(Clone, Debug, PartialEq)]
+pub struct FrameRecords {
     pub(crate) quality: motion_core::RenderQuality,
     pub(crate) blend_space: motion_core::drawing::BlendSpace,
     pub(crate) size: PixelSize,
@@ -200,7 +256,7 @@ pub struct PreparedFrame {
     pub(crate) stats: PreparationStats,
 }
 
-impl PreparedFrame {
+impl PreparedCpuFrame {
     /// Selects approximate Draft filter kernels; default preparation remains Final.
     pub fn quality(mut self, quality: motion_core::RenderQuality) -> Self {
         self.quality = quality;
@@ -213,6 +269,74 @@ impl PreparedFrame {
         self
     }
 
+    /// Final integer output dimensions, excluding filter guard bands.
+    pub fn size(&self) -> PixelSize {
+        self.0.size()
+    }
+
+    /// Internal raster dimensions, including any filter guard band.
+    pub fn raster_size(&self) -> PixelSize {
+        self.0.raster_size()
+    }
+
+    /// Output window in raster coordinates; coverage includes guard bands.
+    pub fn output_bounds(&self) -> PixelRect {
+        self.0.output_bounds()
+    }
+
+    /// Number of independent path-mask and geometric clip regions.
+    pub fn clip_count(&self) -> usize {
+        self.0.clip_count()
+    }
+
+    /// Number of edge coverage strips belonging to fills and clips.
+    pub fn strip_count(&self) -> usize {
+        self.0.strip_count()
+    }
+
+    /// Number of fully covered interior spans.
+    pub fn span_count(&self) -> usize {
+        self.0.span_count()
+    }
+
+    /// Logical retained/peak storage and admitted preparation work.
+    pub fn stats(&self) -> PreparationStats {
+        self.0.stats()
+    }
+
+    /// Composes CPU coverage and converts to the requested format.
+    pub fn render_buffer(
+        &self,
+        format: crate::PixelFormat,
+        limits: RasterLimits,
+    ) -> Result<crate::FrameBuffer, motion_core::ValidationError> {
+        self.0.render_buffer(format, limits)
+    }
+
+    /// Composes unquantized linear-premultiplied f32 output on the CPU.
+    pub fn render_linear(
+        &self,
+        limits: RasterLimits,
+    ) -> Result<crate::FrameBuffer, motion_core::ValidationError> {
+        self.0.render_linear(limits)
+    }
+
+    /// Samples a prepared paint at a finite device-space point.
+    pub fn paint_at(
+        &self,
+        index: usize,
+        point: motion_core::Point,
+    ) -> Result<[f32; 4], motion_core::ValidationError> {
+        self.0.paint_at(index, point)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn has_device_coverage(&self) -> bool {
+        false
+    }
+}
+
+impl FrameRecords {
     /// Final integer output dimensions, excluding filter guard bands.
     pub fn size(&self) -> PixelSize {
         PixelSize::new(

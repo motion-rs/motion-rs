@@ -11,7 +11,6 @@ impl PreviewWorker {
     pub(super) fn spawn(
         source: StudioScene,
         context: Context,
-        calibration: backend::Calibration,
         #[cfg(feature = "gpu")] textures: textures::TextureRing,
         notify_completed: Option<Arc<dyn Fn() + Send + Sync>>,
     ) -> io::Result<Self> {
@@ -23,7 +22,6 @@ impl PreviewWorker {
                 run_preview_worker(
                     source,
                     context,
-                    calibration,
                     #[cfg(feature = "gpu")]
                     textures,
                     worker,
@@ -57,12 +55,11 @@ impl PreviewWorker {
 fn run_preview_worker(
     source: StudioScene,
     context: Context,
-    calibration: backend::Calibration,
     #[cfg(feature = "gpu")] textures: textures::TextureRing,
     worker: Arc<(Mutex<PreviewRequestQueue>, Condvar)>,
     notify_completed: Option<Arc<dyn Fn() + Send + Sync>>,
 ) {
-    let mut cache: Option<(Renderer, PreviewSettings, PreviewRenderer)> = None;
+    let mut cache: Option<(BackendKind, PreviewSettings, PreviewRenderer)> = None;
     let mut inflight = std::collections::VecDeque::<(
         PreviewRequest,
         motion_core::Result<PreviewSubmission>,
@@ -132,7 +129,6 @@ fn run_preview_worker(
                     &source,
                     request,
                     &mut cache,
-                    &calibration,
                     #[cfg(feature = "gpu")]
                     &textures,
                 )
@@ -177,7 +173,7 @@ fn preview_result(
     result: PreviewResult,
     source: &StudioScene,
     request: PreviewRequest,
-    cache: &mut Option<(Renderer, PreviewSettings, PreviewRenderer)>,
+    cache: &mut Option<(BackendKind, PreviewSettings, PreviewRenderer)>,
 ) -> (
     motion_core::Result<PreviewImage>,
     Vec<Arc<motion_core::Error>>,
@@ -207,8 +203,7 @@ fn preview_result(
 fn submit_preview(
     source: &StudioScene,
     request: PreviewRequest,
-    cache: &mut Option<(Renderer, PreviewSettings, PreviewRenderer)>,
-    calibration: &backend::Calibration,
+    cache: &mut Option<(BackendKind, PreviewSettings, PreviewRenderer)>,
     #[cfg(feature = "gpu")] textures: &textures::TextureRing,
 ) -> motion_core::Result<(PreviewSubmission, Vec<Arc<motion_core::Error>>)> {
     let key = request.key;
@@ -228,31 +223,15 @@ fn submit_preview(
                     ((u64::from(size.height) * u64::from(request.settings.scale)) / 100).max(1)
                         as u32,
                 ))?;
-            if let Some(preference) = request.settings.backend {
-                scene.composition = scene
-                    .composition
-                    .configure(|options| options.backend(preference));
-            }
             scene.composition = scene
                 .composition
                 .configure(|options| options.quality(request.settings.quality));
         }
-        let choice = if matches!(
-            request.settings.backend,
-            Some(motion_render::BackendPreference::Automatic { .. })
-        ) {
-            Some(calibration.choose(source, request.settings, key.frame))
-        } else {
-            None
-        };
-        if let Some(choice) = &choice {
-            scene.composition = scene
-                .composition
-                .configure(|options| options.backend(choice.backend));
-        }
-        let mut renderer = PreviewRenderer::new(&scene, key.renderer)?;
-        renderer.automatic = choice.is_some();
-        renderer.selection_reason = choice.map(|choice| choice.reason);
+        let backend = request
+            .settings
+            .backend
+            .unwrap_or_else(|| motion_render::BackendPreference::from_kind(key.renderer));
+        let renderer = PreviewRenderer::new(&scene, backend)?;
         #[cfg(feature = "gpu")]
         let renderer = {
             let mut renderer = renderer;
@@ -265,10 +244,7 @@ fn submit_preview(
         .as_mut()
         .ok_or_else(|| io::Error::other("Preview renderer was not initialized"))?
         .2;
-    let mut snapshot = renderer.begin_preview(source, key.frame, request.settings)?;
-    if let Some(reason) = &renderer.selection_reason {
-        snapshot.annotate(reason);
-    }
+    let snapshot = renderer.begin_preview(source, key.frame, request.settings)?;
     let diagnostics = renderer.diagnostics();
     Ok((snapshot, diagnostics))
 }

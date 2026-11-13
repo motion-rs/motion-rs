@@ -11,19 +11,25 @@ mod abi;
 mod context;
 mod device;
 mod execute;
+pub(crate) mod frame;
 mod layout;
 mod output_plan;
 mod particle_tiles;
 mod plan;
+pub(crate) mod raster;
+mod residency;
 #[cfg(test)]
 mod target_tests;
 #[cfg(test)]
 mod tests;
 mod timing;
+mod visual;
 
 pub use device::*;
+pub use frame::PreparedGpuFrame;
 pub use output_plan::OutputPlan;
-pub use timing::{GpuTimingHandle, GpuTimings};
+pub use residency::GpuResidencyStats;
+pub use timing::{GpuTimestamp, GpuTimestampStatus, GpuTimingHandle, GpuTimings};
 
 pub(crate) use abi::output_shader;
 use abi::{
@@ -31,7 +37,8 @@ use abi::{
     shader_constants,
 };
 
-use particle_tiles::ParticleTiles;
+use frame::{FrameInput, FrameView};
+use particle_tiles::{PARTICLE_TILE_BITSET, ParticleTiles};
 
 const DIRECT_COVERAGE: u32 = u32::MAX - 2;
 
@@ -44,7 +51,9 @@ struct Step {
     second: usize,
     parameters: GpuUniforms,
     data: Vec<f32>,
+    resource: Option<residency::ResidentResource>,
     quads: Vec<[f32; 4]>,
+    analytic: Option<motion_core::instances::AnalyticInstanceUpload>,
 }
 
 const SPARSE_COVERAGE: u32 = u32::MAX;
@@ -70,6 +79,7 @@ pub(crate) struct Plan {
     output: usize,
     steps: Vec<Step>,
     coverage: Vec<u32>,
+    device: plan::DeviceCoverage,
     last_uses: Vec<usize>,
     texture_slots: Vec<usize>,
     texture_sizes: Vec<PixelSize>,
@@ -90,7 +100,7 @@ pub(crate) struct Plan {
 }
 
 struct Planner<'a> {
-    frame: &'a PreparedFrame,
+    frame: FrameView<'a>,
     steps: Vec<Step>,
 
     budget: Budget,
@@ -119,16 +129,19 @@ pub struct GpuContext {
     submissions: std::sync::Arc<std::sync::Mutex<()>>,
 
     particle_states: std::sync::Arc<wgpu::ComputePipeline>,
-    particle_bins: [std::sync::Arc<wgpu::ComputePipeline>; 3],
+    particle_bins: [std::sync::Arc<wgpu::ComputePipeline>; 4],
     textures: std::sync::Arc<TexturePipelines>,
     present_shader: std::sync::Arc<std::sync::OnceLock<wgpu::ShaderModule>>,
     present: std::sync::Arc<[std::sync::OnceLock<wgpu::RenderPipeline>; 3]>,
     present_check: std::sync::Arc<std::sync::OnceLock<wgpu::ComputePipeline>>,
     packing: std::sync::Arc<std::sync::OnceLock<wgpu::ComputePipeline>>,
+    device_coverage: std::sync::Arc<std::sync::OnceLock<CoveragePipelines>>,
+    analytic_particles: std::sync::Arc<std::sync::OnceLock<wgpu::ComputePipeline>>,
     timestamp_marker: std::sync::Arc<std::sync::OnceLock<wgpu::ComputePipeline>>,
     alpha_thresholds: std::sync::Arc<std::sync::OnceLock<wgpu::Buffer>>,
 
     working_pool: std::sync::Arc<std::sync::Mutex<WorkingResourceStore>>,
+    residency: std::sync::Arc<std::sync::Mutex<residency::ResidentStore>>,
 
     self_check_result: std::sync::Arc<std::sync::OnceLock<Result<(), String>>>,
 
@@ -183,6 +196,11 @@ struct TexturePipelines {
 }
 
 type ScopedError = std::pin::Pin<Box<dyn std::future::Future<Output = Option<wgpu::Error>>>>;
+
+struct CoveragePipelines {
+    layout: wgpu::BindGroupLayout,
+    passes: [wgpu::ComputePipeline; 8],
+}
 
 /// Submitted same-device texture rendering. Finish checks status and scoped errors
 /// before publication; resources stay leased until its own submission completes.
@@ -251,6 +269,7 @@ struct StagingBuffer {
 struct WorkingLease {
     buffers: Vec<wgpu::Buffer>,
     textures: Vec<wgpu::Texture>,
+    resident: Vec<wgpu::Buffer>,
 }
 
 impl std::ops::Deref for WorkingLease {

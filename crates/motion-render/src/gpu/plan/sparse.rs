@@ -26,7 +26,7 @@ impl Planner<'_> {
         let words = frame
             .strips
             .len()
-            .checked_mul(6)
+            .checked_mul(5)
             .and_then(|words| {
                 frame
                     .spans
@@ -50,7 +50,7 @@ impl Planner<'_> {
             u64::from(words) * 2 + frame.alphas.len() as u64,
             "gpu.frame_coverage",
         )?;
-        let alpha_base = 4 + frame.strips.len() * 6 + frame.spans.len() * 4;
+        let alpha_base = 4 + frame.strips.len() * 5 + frame.spans.len() * 4;
         let mut data = Vec::new();
         data.try_reserve_exact(words as usize).map_err(|_| {
             ValidationError::limit(
@@ -79,9 +79,9 @@ impl Planner<'_> {
                 strip.x,
                 strip.y,
                 strip.width,
-                strip.height,
+                // Bit 31 of the height word selects generated device samples.
+                strip.height | (u32::from(strip.device) << 31),
                 checked(strip.alpha_offset)?,
-                0,
             ]);
         }
         for span in &frame.spans {
@@ -92,6 +92,7 @@ impl Planner<'_> {
             packed[..bytes.len()].copy_from_slice(bytes);
             data.push(u32::from_le_bytes(packed));
         }
+        data.resize(words as usize, 0);
         Ok(data)
     }
 
@@ -178,7 +179,11 @@ impl Planner<'_> {
             {
                 let offset = strip.alpha_offset
                     + ((row - strip.y) * strip.width + column - strip.x) as usize;
-                return f32::from(self.frame.alphas[offset]) / 255.0;
+                return self
+                    .frame
+                    .alphas
+                    .get(offset)
+                    .map_or(0.0, |alpha| f32::from(*alpha) / 255.0);
             }
         }
         let spans = data[8].to_bits() as usize..data[9].to_bits() as usize;

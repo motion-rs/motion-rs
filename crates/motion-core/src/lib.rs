@@ -79,17 +79,19 @@ pub use color::math::{
     linear_to_srgb, premultiply, rec709_luminance, srgb_to_linear, unpremultiply,
 };
 pub use display_list::{DisplayList, PixelSize, ValidatedDisplayList};
+pub use drawing::{AtmosphereKind, AtmospherePaint, AtmosphereParameters};
 pub use drawing::{
     BlendMode, BlendSpace, Canvas, ClipMode, DeferredContent, DrawCommand, DrawContext, Drawable,
     Evaluation, FillRule, IntoShapeClip, LineCap, LineJoin, MAX_STROKE_VERBS, MaskMode, Paint,
     PathClip, RectClip, RenderQuality, Shape, ShapeClip, StrokeStyle, Styled,
 };
 pub use drawing::{
-    GradientExtend, GradientSpace, GradientUnits, ImagePattern, LinearGradient, RadialGradient,
-    SweepGradient,
+    GradientExtend, GradientSpace, GradientUnits, ImagePattern, LinearGradient, PatternImage,
+    RadialGradient, SweepGradient, WeakPatternImage,
 };
 pub use drawing::{
-    MAX_MESH_POINTS_PER_AXIS, MAX_MESH_SUBDIVISIONS, MeshGradient, MeshImage, MeshVertex,
+    MAX_MESH_POINTS_PER_AXIS, MAX_MESH_SUBDIVISIONS, MeshGradient, MeshImage, MeshPaint, MeshPatch,
+    MeshVertex,
 };
 pub use error::{BoxedError, Error, ErrorKind};
 pub use filter::{Filter, FilterOperation};
@@ -137,6 +139,10 @@ pub mod prelude {
         Asset, AssetState, Assets, AudioClip, AudioSource, Handle, LoadContext, RequestDiagnostics,
         Source,
     };
+    pub use crate::{
+        AtmosphereKind, AtmospherePaint, AtmosphereParameters, MeshGradient, MeshImage, MeshPaint,
+        MeshVertex,
+    };
     pub use crate::{BlendMode, BlendSpace, Filter, FilterOperation, MaskMode, PixelSize};
     pub use crate::{
         Bone, BonePose, BoneTransform, Camera, Direction, Pose, SceneCache, SceneContext, Skeleton,
@@ -170,7 +176,6 @@ pub mod prelude {
         GradientExtend, GradientSpace, GradientUnits, ImagePattern, LinearGradient, RadialGradient,
         SweepGradient,
     };
-    pub use crate::{MeshGradient, MeshImage, MeshVertex};
     pub use crate::{MorphPath, Path2D, PathBooleanOp, PathBooleanOptions, PathVerb};
     pub use crate::{group, scene};
     pub use crate::{linear_to_srgb, premultiply, rec709_luminance, srgb_to_linear, unpremultiply};

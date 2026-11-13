@@ -28,7 +28,7 @@ Benchmark workloads, commands and recorded results live in
 [current measurements](benchmarks.md#current-measurements), with per-case changes against
 both the previous step and the initial baseline. Do not create per-step reports.
 Contracts that already exist are in [rendering](design/rendering.md),
-[GPU rendering](design/gpu.md) and [architecture](design/architecture.md).
+[GPU rendering](design/rendering.md) and [architecture](design/architecture.md).
 
 Performance measurements are paused. Four merged deliverables remain from earlier reviews,
 while R12 comes from the Gallery profile in review 7, which also lists
@@ -48,7 +48,7 @@ restoration are implemented; their functional gates do not establish timing gain
 first-review L shortcut is tracked as R7. Streaming native encoding, measured frame
 workers, pooled GPU textures, shared content caches and CPU pixel/encoded-plane pooling are
 implemented, not new tasks. Full-frame linear APIs remain supported; automatic subtree
-raster caching and DisplayList/PreparedFrame object pooling are not implied by storage
+raster caching and DisplayList/PreparedCpuFrame object pooling are not implied by storage
 reuse. Further locality, preview wait reduction and decode scratch tuning need profiling
 after measurements resume, without changing geometry, density, alpha or replay.
 
@@ -81,6 +81,41 @@ production compatibility paths.
   regression fixtures but still needs native UI acceptance.
 
 ## Feature Extensions
+
+### Independent GPU preparation
+
+The v3 backend split has normalized FrameIr semantics and separate CPU/GPU preparation
+results. FrameIr retains admitted f64 device curves, Wang segment bounds, ordered
+scopes, paints, clips and filter domains without coverage. Eligible GPU curves are
+flattened into statically bounded edge storage on the device, followed by
+GPU-generated f32 coverage, not a CPU PreparedCpuFrame.
+GPU coverage uses bounded 16-by-16 tile binning with signed row carries.
+Preparation reports expose segment/tile counts, geometry-upload bytes and classified
+explicit unsupported-path errors (no CPU coverage fallback); the GPU startup self-check
+exercises independent CPU/GPU preparation with visual comparisons.
+Immutable image/mip/atlas buffers have bounded context-local cross-frame residency.
+Eligible analytic particles generate the consumed primitive records on the GPU;
+CPU materialization remains available for unsupported or imprecise cases.
+Mesh and generated atmosphere paints retain descriptors and evaluate independently
+on CPU/GPU; explicit image-baking APIs preserve their existing behavior.
+Remaining acceptance:
+
+1. Add a large-scene native fixture that shares the breadth benchmark scenes: text,
+   SVG paths with gradients, holes, clipping and filters, crossing paths under nested
+   clips, and analytic particles with blur, mesh paint and procedural atmosphere.
+   Render several frames at 640x360, 1920x1080 and 3840x2160, compare each with the
+   [visual acceptance](design/reliability.md#visual-acceptance) tiers, and precede
+   each replay with an unrelated seek. It needs an explicit logical byte allowance
+   without changing the breadth benchmark budget.
+2. Move the remaining CPU/GPU parity fixtures (Bloom, text, frame-renderer sessions,
+   particles and procedural paints) from their local per-channel or f32 checks to the
+   named levels and tiers, sharing the comparator across crates. Align
+   `VisualCheckPolicy::max_rgb_difference` with the tiers.
+3. Validate complex text, SVG, clipping and filtered scenes at larger resolutions
+   before claiming performance gains. Functional GPU flattening, procedural evaluation
+   and residency do not establish throughput acceptance.
+
+### Additional capabilities
 
 1. Expand output codecs/presets, alpha-capable output and color-management options.
    Each combination needs explicit capability checks and decoded-output fixtures.

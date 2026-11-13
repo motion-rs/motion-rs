@@ -4,7 +4,7 @@
 use super::scenes::artwork;
 use super::{MAX_NODES, invalid, support};
 use motion::prelude::*;
-use motion::render::Renderer;
+use motion::render::BackendKind;
 use motion::render::{Composition, RasterLimits, RenderContext, ValidationLimits};
 
 pub(super) fn checksum(pixels: &[u32]) -> u64 {
@@ -41,7 +41,7 @@ fn render_context() -> motion::Result<RenderContext> {
 
 pub(super) fn composition(
     size: PixelSize,
-    renderer: Renderer,
+    renderer: BackendKind,
     resources: &Assets,
 ) -> motion::Result<Composition> {
     Composition::new(
@@ -51,7 +51,7 @@ pub(super) fn composition(
     )
     .with_options(
         motion::render::RenderOptions::default()
-            .backend(renderer.into())
+            .backend(motion::render::BackendPreference::from_kind(renderer))
             .quality(motion::RenderQuality::Final)
             .context(render_context()?)
             .resources(resources.clone())

@@ -75,19 +75,12 @@ thumbnail replies never replace the main preview or pin GPU frame textures.
 Seek/setting changes cancel pending thumbnail requests and reject old-generation
 completions. Resource-error placeholders are not retained as healthy thumbnails.
 
-Automatic calibrates CPU and GPU with one untimed warm-up frame and two representative
-frames each for the scene/settings combination, including output completion. It selects
-the lower time per presented frame: CPU latency is divided across the playback slots,
-which render in parallel, while GPU latency is not, because slots contend for one GPU
-and its submissions are serialized on shared devices (ties prefer CPU). A shared, 16-entry calibration cache
-avoids repeating the work in each slot. The status shows observations and selection reason.
-CPU is sampled before GPU using shared author/material caches; there is no alternating
-control order. The observations are a runtime heuristic, not an unbiased CPU/GPU
-throughput comparison.
-This happens at runtime, not through a benchmark or FPS acceptance gate. Automatic
-GPU `max_bytes` admission failures can fall back to CPU; explicit GPU requests and
-device loss retain typed errors. Frame-cache capacity is separate from per-frame
-GPU storage allowance.
+The preview uses the GPU when the window's device is available and the CPU otherwise;
+the backend selector lists only CPU and GPU. GPU admission failures, including
+`max_bytes`, and device loss are typed errors and never switch the preview to the CPU.
+The backend selector controls the preview workers independently of export settings;
+changing it rebuilds their renderers and invalidates previews from the previous selection.
+Frame-cache capacity is separate from per-frame GPU storage allowance.
 
 Playback is real-time only: Play waits for its first frame (at most two seconds),
 whose neighbors render in parallel with it, and then starts the clock and sound without

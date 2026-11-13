@@ -2,6 +2,8 @@
 
 use super::*;
 
+mod analytic;
+mod device_coverage;
 mod particles;
 mod pending;
 mod queue;

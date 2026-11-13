@@ -3,7 +3,7 @@
 //! CPU and GPU backends use only explicitly supplied fonts; nothing is discovered implicitly.
 
 use super::*;
-use crate::{RasterLimits, RenderContext, Renderer};
+use crate::{BackendKind, RasterLimits, RenderContext};
 use motion_core::{
     Color, Node, PixelSize, Result, SceneCache, SceneContext, Size, Time, ValidationError,
 };
@@ -19,18 +19,20 @@ pub struct RenderSession {
     pub(super) options: crate::RenderOptions,
     pub(super) design_size: Size,
     pub(super) size: PixelSize,
-    pub(super) backend: Option<crate::BackendDecision>,
+    /// Whether the GPU of a GPU request passed policy validation and its self-check.
+    pub(super) backend_ready: bool,
     #[cfg(feature = "gpu")]
     pub(super) gpu: Option<crate::gpu::Gpu>,
 
     pub(super) scene_cache: std::sync::Arc<SceneCache>,
     pub(super) layout_cache: std::sync::Arc<SceneCache>,
-    pub(super) coverage_cache: crate::prepared::CoverageCache,
+    pub(super) preparation_cache: crate::prepared::PreparationCache,
     pub(super) cpu_pool: crate::cpu::pool::SurfacePool,
     pub(super) output_pool: crate::output::OutputPool,
     pub(super) limits: RasterLimits,
 
     pub(super) last_stats: Option<FrameStats>,
+    pub(super) gpu_preparation: Option<crate::GpuPreparationStats>,
     pub(super) timings: Option<FrameTimings>,
     pub(super) asset_diagnostics: Vec<std::sync::Arc<motion_core::Error>>,
     pub(super) diagnostics: motion_core::RequestDiagnostics,
@@ -90,7 +92,7 @@ impl RenderSession {
             .cache
             .partition(crate::CachePartition::Paragraph)
             .clone();
-        let coverage_cache = crate::prepared::CoverageCache::new(&options.cache);
+        let preparation_cache = crate::prepared::PreparationCache::new(&options.cache);
         let limits = options.limits;
         #[cfg(feature = "gpu")]
         let gpu = options
@@ -101,16 +103,17 @@ impl RenderSession {
             options,
             design_size,
             size,
-            backend: None,
+            backend_ready: false,
             #[cfg(feature = "gpu")]
             gpu,
             scene_cache,
             layout_cache,
-            coverage_cache,
+            preparation_cache,
             cpu_pool: crate::cpu::pool::SurfacePool::default(),
             output_pool: crate::output::OutputPool::default(),
             limits,
             last_stats: None,
+            gpu_preparation: None,
             timings: None,
             asset_diagnostics: Vec::new(),
             diagnostics: motion_core::RequestDiagnostics::default(),
@@ -128,6 +131,7 @@ impl RenderSession {
         build: impl FnMut(&SceneContext<'_>) -> Node,
     ) -> Result<()> {
         self.last_stats = None;
+        self.gpu_preparation = None;
         self.asset_diagnostics.clear();
         self.diagnostics = motion_core::RequestDiagnostics::default();
         let time = match request.at {
@@ -194,6 +198,7 @@ impl RenderSession {
             time: Some(time),
             limits,
             device_packing: request.device_packing,
+            preparation_backend: None,
             session: self,
         };
         match request.target {
@@ -228,20 +233,9 @@ impl RenderSession {
         &self.options.context
     }
 
-    /// Startup backend decision and optional fallback reason.
-    pub fn backend_decision(&self) -> Option<&crate::BackendDecision> {
-        self.backend.as_ref()
-    }
-
-    /// Initial configured renderer, without initializing a device.
-    /// Automatic reports CPU here even after selecting GPU; use backend_decision
-    /// for the actual startup choice and any fallback reason.
-    pub fn renderer(&self) -> Renderer {
-        if matches!(self.options.backend, crate::BackendPreference::Gpu { .. }) {
-            Renderer::Gpu
-        } else {
-            Renderer::Cpu
-        }
+    /// Backend kind fixed by the configured backend, without initializing a device.
+    pub fn backend_kind(&self) -> BackendKind {
+        self.options.backend.kind()
     }
 
     /// Initialized adapter metadata without probing a new device.
@@ -283,13 +277,13 @@ impl RenderSession {
     /// Retained coverage-cache logical payload, independent of active frame storage.
     /// Allocator/node capacity and overhead are not process RSS accounting.
     pub fn cached_coverage_bytes(&self) -> u64 {
-        self.coverage_cache.retained_bytes()
+        self.preparation_cache.retained_coverage_bytes()
     }
 
     /// Retained logical gradient-table payload, excluding allocator capacity.
     /// This session cache is separate from active-frame accounting and process RSS.
     pub fn cached_paint_bytes(&self) -> u64 {
-        self.coverage_cache.retained_paint_bytes()
+        self.preparation_cache.retained_paint_bytes()
     }
 
     /// Idle reusable CPU pixel capacity, separate from active frame payload totals.
@@ -330,13 +324,14 @@ impl RenderSession {
         self.timings
     }
 
-    /// Aggregates [`RenderSession::last_stats`], [`RenderSession::timings`] and the backend
-    /// decision into one report.
+    /// Aggregates [`RenderSession::last_stats`], [`RenderSession::timings`] and the renderer
+    /// into one report.
     pub fn report(&self) -> FrameReport {
         FrameReport {
             stats: self.last_stats,
             timings: self.timings,
-            backend: self.backend.clone(),
+            renderer: self.backend_kind(),
+            gpu_preparation: self.gpu_preparation,
         }
     }
 

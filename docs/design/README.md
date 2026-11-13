@@ -15,11 +15,10 @@ Learn authoring through the [tutorial](../tutorial/README.md); consult
 | [Architecture](architecture.md) | Evaluation pipeline, package ownership, dependency direction and features |
 | [Core authoring](core.md) | Numeric rules, time, animation, snapshots, layout and recording |
 | [Content](content.md) | Assets, images, vectors, text, Typst and audio preparation |
-| [Rendering and export](rendering.md) | Coverage, output formats, caches, budgets, concurrency and encoding |
+| [Rendering and export](rendering.md) | Coverage, GPU device ownership, scheduling and completion, output formats, caches, budgets, concurrency and encoding; [Chinese translation](rendering.zh-CN.md) |
 | [Export and FFmpeg](export.md) | Codec matrix, native encoder boundary, transactional output, cancellation and ordering |
 | [Audio](audio.md) | Clips, buses, effects, master chain, analysis, synthesis and offline preparation |
 | [Resources](resources.md) | Asset and font ownership, explicit IO, caches, limits and failure behavior |
-| [GPU](gpu.md) | Device ownership, working textures, uploads, scheduling and completion |
 | [Particles](particles.md) | Evaluated-instance protocol, ordered tiling and admission |
 | [Reliability](reliability.md) | Failure, determinism, ownership and transaction guarantees |
 | [Documents](documents.md) | Declarative JSON format, versioning, resource paths, compilation and diagnostics |
@@ -41,8 +40,9 @@ The documentation uses these terms consistently; Rustdoc defines the exact types
 | Project | The facade registry (`Project`) that names timelines and provides the command line |
 | Composition | Low-level fixed-output render configuration (`Composition`), used with a scene or a timeline |
 | Display list | Flat validated drawing commands (`DisplayList`) compiled from a node tree |
-| Prepared frame | Display list plus coverage, paints and budgets (`PreparedFrame`), consumed by either backend |
-| Backend | The CPU backend or the GPU backend; both consume the same prepared frame |
+| Frame IR | Internal admitted device-space curves, ordered scopes, paints, clips, filter domains and output window, without coverage (`FrameIr`) |
+| Prepared frame | CPU coverage, paints and preparation statistics (`PreparedCpuFrame`); GPU preparation has its own result |
+| Backend | The CPU backend or the GPU backend; GPU sessions may compute fill coverage independently |
 | Still | One rendered frame, saved as an image or returned as a bitmap |
 | Film | An exported video file, with or without an audio mix |
 | Look | A reusable recipe (`Look`) pairing scene-side `SceneEffects` (filters, shutter, gate drift) with an output `DisplayTransform` |
@@ -73,8 +73,9 @@ perspective-mapped.
    static preparation without freezing custom callbacks.
 3. Traits serve open extension points such as Scene, Drawable, DeferredContent, Asset, AudioSource
    and Encoder. Closed command/backend protocols use exhaustive enums.
-4. Shared CPU preparation generates coverage for both backends. GPU composition
-   does not imply GPU path rasterization or automatic speedup.
+4. Backend-neutral frame facts precede backend-aware preparation. Eligible GPU
+   fills use device-flattened curves or line uploads and GPU-generated coverage; other coverage stays
+   on the CPU. Independent GPU work does not imply automatic speedup.
 5. SVG, text and formulas share vector machinery, effects and coverage rather than
    separate rendering engines.
 6. Numerical and resource contracts have explicit boundaries. Same-environment

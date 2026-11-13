@@ -1,7 +1,8 @@
 //! Deterministic advected fog, sparse dust and HDR light-leak image generators.
 //!
-//! Generated assets use the ordinary CPU/GPU image path. Time and global pixel
-//! coordinates are explicit; these are 2D overlays, not volumetric scattering.
+//! Explicitly generated assets use the ordinary CPU/GPU image path; [`Atmosphere::paint`]
+//! instead captures independent procedural evaluation without baking. Time and global
+//! pixel coordinates are explicit; these are 2D overlays, not volumetric scattering.
 //!
 //! ```
 //! use motion_content::{Image, atmosphere::Atmosphere};
@@ -23,137 +24,109 @@ use motion_core::{
 
 use crate::ImageAsset;
 
-/// Spatial envelope applied to shared fractal noise.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum AtmosphereKind {
-    /// Soft fog with top-to-bottom nonnegative density multipliers.
-    Fog {
-        /// Density at the top and bottom of the full canvas, in 0..=8.
-        gradient: [f64; 2],
-    },
-    /// Sparse soft discs, one possible dust mote per noise cell.
-    Dust {
-        /// Maximum mote radius in pixels, at most half the cell scale.
-        radius: f64,
-        /// Probability of a mote in each cell, in 0..=1.
-        coverage: f64,
-    },
-    /// Elliptical edge-light envelope multiplied by moving fractal noise.
-    LightLeak {
-        /// Center in normalized full-canvas coordinates, in -1..=2.
-        center: [f64; 2],
-        /// Positive elliptical extents in canvas fractions, at most 4.
-        extent: [f64; 2],
-    },
-}
+pub use motion_core::{AtmosphereKind, AtmosphereParameters};
 
 /// Editable bounded recipe; sampling retains no playback or random state.
+///
+/// The parameters are shared with the core paint, and the recipe dereferences to them so
+/// fields such as `opacity` remain directly editable. This type adds presets, baking and
+/// blend-mode selection.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Atmosphere {
-    /// Envelope and effect-specific parameters.
-    pub kind: AtmosphereKind,
-    /// Explicit noise and mote seed.
-    pub seed: u32,
-    /// Encoded-sRGB tint, converted once to linear light.
-    pub color: Color,
-    /// Alpha/density multiplier, in 0..=1.
-    pub opacity: f64,
-    /// Straight-linear RGB multiplier, in 0..=64; values above one are HDR.
-    pub intensity: f64,
-    /// Base noise wavelength / dust-cell spacing in pixels, in 0.25..=1000000.
-    pub scale: f64,
-    /// Pattern velocity in pixels per second.
-    pub drift: [f64; 2],
-    /// Shared amplitude-normalized fBm parameters, with at most eight octaves.
-    pub fractal: Fractal,
+    parameters: AtmosphereParameters,
+}
+
+impl std::ops::Deref for Atmosphere {
+    type Target = AtmosphereParameters;
+
+    fn deref(&self) -> &Self::Target {
+        &self.parameters
+    }
+}
+
+impl std::ops::DerefMut for Atmosphere {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.parameters
+    }
 }
 
 impl Atmosphere {
+    /// Wraps explicit parameters; they are validated when the recipe is painted or rendered.
+    pub const fn new(parameters: AtmosphereParameters) -> Self {
+        Self { parameters }
+    }
+
     /// A pale, low-contrast fog layer, denser near the bottom edge.
     pub fn fog(seed: u32) -> Self {
         Self {
-            kind: AtmosphereKind::Fog {
-                gradient: [0.15, 1.0],
+            parameters: AtmosphereParameters {
+                kind: AtmosphereKind::Fog {
+                    gradient: [0.15, 1.0],
+                },
+                seed,
+                color: Color::rgb(220, 233, 230),
+                opacity: 0.45,
+                intensity: 1.0,
+                scale: 96.0,
+                drift: [6.0, -2.0],
+                fractal: Fractal::default(),
             },
-            seed,
-            color: Color::rgb(220, 233, 230),
-            opacity: 0.45,
-            intensity: 1.0,
-            scale: 96.0,
-            drift: [6.0, -2.0],
-            fractal: Fractal::default(),
         }
     }
 
     /// Sparse warm HDR dust, suitable for Plus or Screen composition.
     pub fn dust(seed: u32) -> Self {
         Self {
-            kind: AtmosphereKind::Dust {
-                radius: 2.0,
-                coverage: 0.3,
+            parameters: AtmosphereParameters {
+                kind: AtmosphereKind::Dust {
+                    radius: 2.0,
+                    coverage: 0.3,
+                },
+                seed,
+                color: Color::rgb(255, 238, 209),
+                opacity: 0.65,
+                intensity: 4.0,
+                scale: 24.0,
+                drift: [5.0, -12.0],
+                fractal: Fractal::default(),
             },
-            seed,
-            color: Color::rgb(255, 238, 209),
-            opacity: 0.65,
-            intensity: 4.0,
-            scale: 24.0,
-            drift: [5.0, -12.0],
-            fractal: Fractal::default(),
         }
     }
 
     /// Warm HDR light entering from the left edge.
     pub fn light_leak(seed: u32) -> Self {
         Self {
-            kind: AtmosphereKind::LightLeak {
-                center: [0.0, 0.5],
-                extent: [0.3, 0.65],
+            parameters: AtmosphereParameters {
+                kind: AtmosphereKind::LightLeak {
+                    center: [0.0, 0.5],
+                    extent: [0.3, 0.65],
+                },
+                seed,
+                color: Color::rgb(255, 100, 32),
+                opacity: 0.8,
+                intensity: 3.0,
+                scale: 128.0,
+                drift: [2.0, 1.0],
+                fractal: Fractal::default(),
             },
-            seed,
-            color: Color::rgb(255, 100, 32),
-            opacity: 0.8,
-            intensity: 3.0,
-            scale: 128.0,
-            drift: [2.0, 1.0],
-            fractal: Fractal::default(),
         }
     }
 
     /// Validates the full recipe before noise evaluation or allocation.
     pub fn validate(&self) -> Result<(), ValidationError> {
-        self.fractal.validate()?;
-        let bounded =
-            |value: f64, min: f64, max: f64| value.is_finite() && (min..=max).contains(&value);
-        let valid_kind = match self.kind {
-            AtmosphereKind::Fog { gradient } => {
-                gradient.into_iter().all(|value| bounded(value, 0.0, 8.0))
-            }
-            AtmosphereKind::Dust { radius, coverage } => {
-                radius.is_finite()
-                    && radius > 0.0
-                    && radius <= self.scale * 0.5
-                    && bounded(coverage, 0.0, 1.0)
-            }
-            AtmosphereKind::LightLeak { center, extent } => {
-                center.into_iter().all(|value| bounded(value, -1.0, 2.0))
-                    && extent
-                        .into_iter()
-                        .all(|value| value.is_finite() && value > 0.0 && value <= 4.0)
-            }
-        };
-        if !valid_kind
-            || !bounded(self.opacity, 0.0, 1.0)
-            || !bounded(self.intensity, 0.0, 64.0)
-            || !bounded(self.scale, 0.25, 1e6)
-            || self.drift.into_iter().any(|value| !value.is_finite())
-        {
-            return Err(ValidationError::invalid(
-                "atmosphere",
-                "parameters",
-                "Require finite bounded envelope, opacity, intensity, scale and drift",
-            ));
-        }
-        Ok(())
+        self.parameters.validate()
+    }
+
+    /// Captures the same recipe as an independently evaluated CPU/GPU paint.
+    ///
+    /// Canvas pixels determine wavelength, drift and envelope coordinates; painted
+    /// shape bounds map to that canvas. This does not bake or allocate an image.
+    pub fn paint(
+        &self,
+        canvas: PixelSize,
+        time: Time,
+    ) -> Result<motion_core::AtmospherePaint, ValidationError> {
+        motion_core::AtmospherePaint::new(self.parameters, canvas, time)
     }
 
     /// Blend mode that composes this recipe without darkening: Screen for fog, Plus for HDR light.
@@ -250,15 +223,7 @@ impl Atmosphere {
             pixels * (u64::from(self.fractal.octaves) * 192 + 256) + mip_pixels * 128,
             "atmosphere",
         )?;
-        let tint = self.color.to_linear_premultiplied();
-        let alpha = tint[3];
-        let rgb = [tint[0], tint[1], tint[2]].map(|value| {
-            if alpha > 0.0 {
-                value / alpha * self.intensity
-            } else {
-                0.0
-            }
-        });
+        let parameters = self.parameters;
         let mut values = Vec::new();
         values.try_reserve_exact(pixels as usize).map_err(|_| {
             ValidationError::limit(
@@ -273,68 +238,11 @@ impl Atmosphere {
                     f64::from(origin[0] + column) + 0.5,
                     f64::from(origin[1] + row) + 0.5,
                 ];
-                let point = [
-                    (pixel[0] + phase[0]) / self.scale,
-                    (pixel[1] + phase[1]) / self.scale,
-                ];
-                let cloud = (0.5
-                    + 0.5
-                        * noise::fbm(
-                            |point| noise::perlin2(point, self.seed),
-                            point,
-                            self.fractal,
-                        )?)
-                .clamp(0.0, 1.0);
-                let envelope = match self.kind {
-                    AtmosphereKind::Fog { gradient } => {
-                        let vertical = pixel[1] / f64::from(canvas.height);
-                        let density = gradient[0] * (1.0 - vertical) + gradient[1] * vertical;
-                        1.0 - libm::exp(-self.opacity * density * (0.35 + cloud))
-                    }
-                    AtmosphereKind::Dust { radius, coverage } => {
-                        self.opacity
-                            * dust(point, self.seed, radius / self.scale, coverage)
-                            * (0.7 + 0.3 * cloud)
-                    }
-                    AtmosphereKind::LightLeak { center, extent } => {
-                        let horizontal =
-                            (pixel[0] / f64::from(canvas.width) - center[0]) / extent[0];
-                        let vertical =
-                            (pixel[1] / f64::from(canvas.height) - center[1]) / extent[1];
-                        self.opacity
-                            * libm::exp(-2.0 * (horizontal * horizontal + vertical * vertical))
-                            * (0.6 + 0.4 * cloud)
-                    }
-                };
-                values.push([rgb[0], rgb[1], rgb[2], (envelope * alpha).clamp(0.0, 1.0)]);
+                values.push(parameters.sample(pixel, canvas, phase)?);
             }
         }
         ImageAsset::from_rgba_float(size.width, size.height, values)
     }
-}
-
-fn dust(point: [f64; 2], seed: u32, radius: f64, coverage: f64) -> f64 {
-    let cell = point.map(|value| value.floor() as i32);
-    let unit = |value: u32| f64::from(value) / f64::from(u32::MAX);
-    let mut result: f64 = 0.0;
-    for dy in -1i32..=1 {
-        for dx in -1i32..=1 {
-            let horizontal = cell[0].wrapping_add(dx);
-            let vertical = cell[1].wrapping_add(dy);
-            let hash = noise::hash2(horizontal, vertical, seed);
-            if unit(hash) >= coverage {
-                continue;
-            }
-            let center = [
-                f64::from(horizontal) + unit(noise::hash32(hash ^ 0xa511_e9b3)),
-                f64::from(vertical) + unit(noise::hash32(hash ^ 0x63d8_3595)),
-            ];
-            let radius = radius * (0.6 + 0.4 * unit(noise::hash32(hash ^ 0x9e37_79b9)));
-            let distance = (point[0] - center[0]).powi(2) + (point[1] - center[1]).powi(2);
-            result = result.max((1.0 - distance / (radius * radius)).max(0.0).powi(2));
-        }
-    }
-    result
 }
 
 #[cfg(test)]
@@ -342,12 +250,43 @@ mod tests {
     use super::*;
     use motion_core::Shape;
     use motion_core::{BlendMode, Node, NodeModifiers, Rect, Size, TimeLiteral};
-    use motion_render::{Composition, Renderer};
+    use motion_render::{BackendKind, Composition};
+
+    #[test]
+    fn procedural_paint_preserves_recipe_time_and_unquantized_bake_reference() -> motion_core::Result
+    {
+        let size = PixelSize::new(32, 24);
+        let time = 0.75.seconds().after_origin();
+        for recipe in [
+            Atmosphere::fog(42),
+            Atmosphere::dust(42),
+            Atmosphere::light_leak(42),
+        ] {
+            let paint = recipe.paint(size, time)?;
+            assert_eq!(paint.parameters(), &recipe.parameters);
+            assert_eq!(paint.time(), time);
+            assert_eq!(paint.canvas(), size);
+            let image = recipe.render(size, time, RasterLimits::default())?;
+            for row in 0..size.height {
+                for column in 0..size.width {
+                    let analytic = paint.sample(motion_core::Point::new(
+                        (f64::from(column) + 0.5) / f64::from(size.width),
+                        (f64::from(row) + 0.5) / f64::from(size.height),
+                    ))?;
+                    let baked = image.levels()[0].pixel(column, row).unwrap();
+                    for (analytic, baked) in analytic.into_iter().zip(baked) {
+                        assert!((analytic - baked).abs() <= 2e-3);
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
 
     fn compose(
         recipe: Atmosphere,
         mode: BlendMode,
-        renderer: Renderer,
+        renderer: BackendKind,
         time: Time,
     ) -> motion_core::Result<motion_render::FrameBuffer> {
         let size = PixelSize::new(64, 48);
@@ -357,7 +296,10 @@ mod tests {
             48,
             motion_render::FrameClock::new(motion_core::fps!(30), 150),
         )
-        .with_options(motion_render::RenderOptions::default().backend(renderer.into()))?
+        .with_options(
+            motion_render::RenderOptions::default()
+                .backend(motion_render::BackendPreference::from_kind(renderer)),
+        )?
         .render_frame(0, Size::new(64.0, 48.0), |_| {
             Node::group([
                 Rect::new(0.0, 0.0, 64.0, 48.0)
@@ -386,7 +328,10 @@ mod tests {
                 48,
                 motion_render::FrameClock::new(motion_core::fps!(30), 150),
             )
-            .with_options(motion_render::RenderOptions::default().backend(Renderer::Cpu.into()))?
+            .with_options(
+                motion_render::RenderOptions::default()
+                    .backend(motion_render::BackendPreference::Cpu),
+            )?
             .render_frame(0, Size::new(64.0, 48.0), |_| {
                 Node::group([
                     Rect::new(0.0, 0.0, 64.0, 48.0)
@@ -398,15 +343,13 @@ mod tests {
             let manual = compose(
                 recipe,
                 recipe.blend_mode(),
-                Renderer::Cpu,
+                BackendKind::Cpu,
                 1.seconds().after_origin(),
             )?;
             assert_eq!(frame.packed_rgb(), manual.packed_rgb());
         }
-        let invalid = Atmosphere {
-            opacity: 2.0,
-            ..Atmosphere::fog(1)
-        };
+        let mut invalid = Atmosphere::fog(1);
+        invalid.opacity = 2.0;
         assert!(
             invalid
                 .overlay(size, 0.seconds().after_origin(), RasterLimits::default())
@@ -423,14 +366,16 @@ mod tests {
             Atmosphere::light_leak(42),
         ] {
             for mode in [BlendMode::Plus, BlendMode::Screen] {
-                let frame = compose(recipe, mode, Renderer::Cpu, 0.seconds().after_origin())?;
+                let frame = compose(recipe, mode, BackendKind::Cpu, 0.seconds().after_origin())?;
                 assert_eq!(
                     frame.packed_rgb(),
-                    compose(recipe, mode, Renderer::Cpu, 0.seconds().after_origin())?.packed_rgb()
+                    compose(recipe, mode, BackendKind::Cpu, 0.seconds().after_origin())?
+                        .packed_rgb()
                 );
                 assert_ne!(
                     frame.packed_rgb(),
-                    compose(recipe, mode, Renderer::Cpu, 1.seconds().after_origin())?.packed_rgb()
+                    compose(recipe, mode, BackendKind::Cpu, 1.seconds().after_origin())?
+                        .packed_rgb()
                 );
                 assert!(
                     frame
@@ -452,11 +397,12 @@ mod tests {
             Atmosphere::light_leak(42),
         ] {
             for mode in [BlendMode::Plus, BlendMode::Screen] {
-                let cpu = compose(recipe, mode, Renderer::Cpu, 1.seconds().after_origin())?;
-                let gpu = compose(recipe, mode, Renderer::Gpu, 1.seconds().after_origin())?;
+                let cpu = compose(recipe, mode, BackendKind::Cpu, 1.seconds().after_origin())?;
+                let gpu = compose(recipe, mode, BackendKind::Gpu, 1.seconds().after_origin())?;
                 assert_eq!(
                     gpu.packed_rgb(),
-                    compose(recipe, mode, Renderer::Gpu, 1.seconds().after_origin())?.packed_rgb()
+                    compose(recipe, mode, BackendKind::Gpu, 1.seconds().after_origin())?
+                        .packed_rgb()
                 );
                 for (cpu, gpu) in cpu.packed_rgb().iter().zip(gpu.packed_rgb()) {
                     for (cpu, gpu) in cpu.to_le_bytes().into_iter().zip(gpu.to_le_bytes()) {
@@ -570,30 +516,27 @@ mod tests {
             )
             .is_err()
         );
+        let edited = |edit: &dyn Fn(&mut Atmosphere)| {
+            let mut recipe = base;
+            edit(&mut recipe);
+            recipe
+        };
         for recipe in [
-            Atmosphere { scale: 0.0, ..base },
-            Atmosphere {
-                intensity: f64::NAN,
-                ..base
-            },
-            Atmosphere {
-                drift: [f64::MAX, 0.0],
-                ..base
-            },
-            Atmosphere {
-                fractal: Fractal {
+            edited(&|recipe| recipe.scale = 0.0),
+            edited(&|recipe| recipe.intensity = f64::NAN),
+            edited(&|recipe| recipe.drift = [f64::MAX, 0.0]),
+            edited(&|recipe| {
+                recipe.fractal = Fractal {
                     octaves: 9,
                     ..Fractal::default()
-                },
-                ..base
-            },
-            Atmosphere {
-                kind: AtmosphereKind::Dust {
+                }
+            }),
+            edited(&|recipe| {
+                recipe.kind = AtmosphereKind::Dust {
                     radius: 100.0,
                     coverage: 0.5,
-                },
-                ..base
-            },
+                }
+            }),
         ] {
             assert!(
                 recipe

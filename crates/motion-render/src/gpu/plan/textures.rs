@@ -344,6 +344,8 @@ mod tests {
                     parameters: GpuUniforms::default(),
                     data: vec![1.0; 10],
                     quads: Vec::new(),
+                    analytic: None,
+                    resource: None,
                 })
                 .collect::<Vec<_>>();
             let mut budget = Budget::new(PixelSize::new(1, 1), RasterLimits::default())?;
@@ -372,6 +374,8 @@ mod tests {
                 parameters: GpuUniforms::default(),
                 data: vec![1.0; words],
                 quads: Vec::new(),
+                analytic: None,
+                resource: None,
             })
             .collect::<Vec<_>>();
         for (maximum, work, expected, peak) in
@@ -410,6 +414,8 @@ mod tests {
             parameters: GpuUniforms::default(),
             data: vec![1.0; words],
             quads: Vec::new(),
+            analytic: None,
+            resource: None,
         });
         for (alignment, bytes) in [(4, 56), (16, 76), (64, 140), (256, 524)] {
             assert_eq!(

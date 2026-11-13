@@ -2,7 +2,7 @@
 
 use super::{FrameBuffer, PixelFormat};
 use crate::RasterLimits;
-use crate::cpu::LinearFrame;
+use crate::linear::LinearFrame;
 use motion_core::ValidationError;
 use std::fs::File;
 use std::io::{self, BufWriter, Write};

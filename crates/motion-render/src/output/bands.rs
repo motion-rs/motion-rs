@@ -1,7 +1,10 @@
 //! Banded frame conversion that renders prepared frames in bounded horizontal strips.
 
 use super::*;
-use crate::{PixelRect, PreparedFrame, WorkStats};
+#[cfg(test)]
+use crate::PreparedCpuFrame;
+use crate::prepared::FrameRecords;
+use crate::{PixelRect, WorkStats};
 use motion_core::budget::Budget;
 
 #[cfg(test)]
@@ -21,7 +24,7 @@ fn band_height(halo: u32, height: u32) -> u32 {
 
 impl FrameBuffer {
     pub(crate) fn from_prepared(
-        prepared: &PreparedFrame,
+        prepared: &FrameRecords,
         format: PixelFormat,
         limits: RasterLimits,
         surfaces: &mut crate::cpu::pool::SurfacePool,
@@ -38,7 +41,7 @@ impl FrameBuffer {
     }
 
     pub(crate) fn from_prepared_display(
-        prepared: &PreparedFrame,
+        prepared: &FrameRecords,
         format: PixelFormat,
         limits: RasterLimits,
         surfaces: &mut crate::cpu::pool::SurfacePool,
@@ -62,7 +65,7 @@ impl FrameBuffer {
     }
 
     fn from_prepared_banded(
-        prepared: &PreparedFrame,
+        prepared: &FrameRecords,
         format: PixelFormat,
         limits: RasterLimits,
         surfaces: &mut crate::cpu::pool::SurfacePool,
@@ -80,7 +83,7 @@ impl FrameBuffer {
     }
 
     fn from_prepared_transformed(
-        prepared: &PreparedFrame,
+        prepared: &FrameRecords,
         format: PixelFormat,
         limits: RasterLimits,
         surfaces: &mut crate::cpu::pool::SurfacePool,
@@ -246,7 +249,7 @@ impl FrameBuffer {
             );
             let source =
                 linear.pixels().len() as u64 * 16 + std::mem::size_of::<LinearFrame>() as u64;
-            linear.recycle(surfaces);
+            surfaces.put(linear.into_pixels());
             let encoded = match encoded {
                 Err(error)
                     if error.field == "max_bytes"

@@ -16,7 +16,7 @@ particles = ["motion/particles"]
 audio = ["motion/audio"]
 ink = ["motion/ink"]
 diagram = ["motion/diagram"]
-gpu = ["motion/gpu", "motion-gallery/gpu", "dep:wgpu"]
+gpu = ["motion/gpu", "motion-gallery/gpu", "dep:motion-core", "dep:wgpu"]
 ffmpeg = ["motion/ffmpeg", "motion-gallery/ffmpeg"]
 formula = ["motion/formula", "motion-gallery/formula"]
 typst = ["motion/typst", "motion-gallery/typst"]
@@ -28,10 +28,12 @@ serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["float_roundtrip"] }
 libm = "0.2"
 tempfile = "3"
+motion-core = { path = "../motion-core", optional = true }
 wgpu = { version = "30.0.1", default-features = false, features = ["std", "dx12", "metal", "wgsl"], optional = true }
 
 [dev-dependencies]
 criterion = { version = "0.8", default-features = false }
+motion-core = { path = "../motion-core" }
 
 [[bench]]
 name = "performance"

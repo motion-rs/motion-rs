@@ -1,6 +1,6 @@
 //! Shared native GPU creation, adapter identity and device-loss monitoring.
 
-use crate::{GpuBackend, GpuInfo, Renderer};
+use crate::{BackendKind, GpuBackend, GpuInfo};
 use motion_core::sync::MutexExt;
 
 use motion_core::Result;
@@ -11,9 +11,9 @@ const GPU_WAIT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60)
 
 /// Creates a Metal/Vulkan/DX12 instance for an explicit GPU request.
 /// Rejects CPU renderer requests and unsupported browser targets before requesting an adapter.
-pub fn instance(renderer: Renderer) -> Result<wgpu::Instance> {
+pub fn instance(renderer: BackendKind) -> Result<wgpu::Instance> {
     let backends = match renderer {
-        Renderer::Gpu if !cfg!(target_arch = "wasm32") => {
+        BackendKind::Gpu if !cfg!(target_arch = "wasm32") => {
             wgpu::Backends::METAL | wgpu::Backends::VULKAN | wgpu::Backends::DX12
         }
         _ => {

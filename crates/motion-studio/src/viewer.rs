@@ -328,8 +328,20 @@ impl crate::app::StudioApp {
                             ("Composition", gpu.composition),
                             ("Output", gpu.output),
                             ("Readback copy", gpu.readback_copy),
+                            ("Flatten", gpu.coverage[0]),
+                            ("Count", gpu.coverage[1]),
+                            ("Prefix", gpu.coverage[2]),
+                            ("Scatter", gpu.coverage[3]),
+                            ("Carry", gpu.coverage[4]),
+                            ("Coverage", gpu.coverage[5]),
                         ] {
-                            stat(ui, stage, &format!("{:.2} ms", time.as_secs_f64() * 1000.0));
+                            let value = match time.duration {
+                                Some(duration) => {
+                                    format!("{:.2} ms", duration.as_secs_f64() * 1000.0)
+                                }
+                                None => format!("{:?}", time.status),
+                            };
+                            stat(ui, stage, &value);
                         }
                         stat(
                             ui,

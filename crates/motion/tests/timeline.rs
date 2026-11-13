@@ -437,7 +437,7 @@ mod scenes {
             ])
         }
 
-        fn compare(renderer: Renderer) -> motion::Result {
+        fn compare(renderer: BackendKind) -> motion::Result {
             let rate = motion::fps!(30);
             let duration = Duration::from_frame(8, rate);
             let overlap = Duration::from_frame(4, rate);
@@ -470,7 +470,10 @@ mod scenes {
                     48,
                     motion::render::FrameClock::new(motion::fps!(30), 24),
                 )
-                .with_options(motion::render::RenderOptions::default().backend(renderer.into()))?
+                .with_options(
+                    motion::render::RenderOptions::default()
+                        .backend(motion::render::BackendPreference::from_kind(renderer)),
+                )?
                 .frame_renderer(size)?;
                 let mut replay = None;
                 let mut held = None;
@@ -541,14 +544,14 @@ mod scenes {
         #[test]
         fn timelines_match_independent_clip_selection_easing_remapping_and_replay() -> motion::Result
         {
-            compare(Renderer::Cpu)
+            compare(BackendKind::Cpu)
         }
 
         #[cfg(feature = "gpu")]
         #[test]
         #[ignore = "requires native GPU; no fonts, window or encoder"]
         fn gpu_timelines_match_independent_selection_and_replay() -> motion::Result {
-            compare(Renderer::Gpu)
+            compare(BackendKind::Gpu)
         }
     }
 
@@ -1556,13 +1559,13 @@ mod scenes {
         #[test]
         #[ignore = "requires native GPU when enabled; no fonts or window"]
         fn camera_pixels_keep_viewport_hud_and_seek_replay() -> motion::Result {
-            use motion::render::{Composition, Renderer, SceneCache};
+            use motion::render::{BackendKind, Composition, SceneCache};
             use motion::{Color, Node, NodeModifiers, Point, Rect, SceneContext, Size, Time};
 
             #[cfg(feature = "gpu")]
-            let backends = [Renderer::Cpu, Renderer::Gpu];
+            let backends = [BackendKind::Cpu, BackendKind::Gpu];
             #[cfg(not(feature = "gpu"))]
-            let backends = [Renderer::Cpu];
+            let backends = [BackendKind::Cpu];
             let mut software = std::collections::BTreeMap::<u32, Vec<u32>>::new();
             let marker_color = Color::from_hex(0xd45d49);
             for backend in backends {
@@ -1573,7 +1576,7 @@ mod scenes {
                 )
                 .with_options(
                     motion::render::RenderOptions::default()
-                        .backend(backend.into())
+                        .backend(motion::render::BackendPreference::from_kind(backend))
                         .background(Color::WHITE),
                 )?;
                 let mut renderer = composition.frame_renderer(Size::new(64.0, 64.0))?;
@@ -1668,7 +1671,7 @@ mod scenes {
                         assert!(pixels == *reference, "camera replay at {index}");
                     }
                     references.insert(index, pixels.to_vec());
-                    if backend == Renderer::Cpu {
+                    if backend == BackendKind::Cpu {
                         software.insert(index, pixels.to_vec());
                     } else {
                         let reference = &software[&index];

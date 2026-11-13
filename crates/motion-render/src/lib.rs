@@ -9,13 +9,14 @@ pub(crate) mod cpu;
 pub mod display;
 #[cfg(feature = "gpu")]
 pub mod gpu;
+pub(crate) mod linear;
 pub mod look;
 pub mod options;
 pub mod output;
 pub mod prepared;
 pub(crate) mod raster;
 
-pub use backend::{BackendDecision, BackendPreference, Renderer};
+pub use backend::{BackendKind, BackendPreference};
 pub use composition::{
     Composition, FrameAt, FrameClock, FrameRenderer, FrameReport, FrameRequest, FrameStats,
     RenderSession,
@@ -29,18 +30,19 @@ pub use motion_core::{CachePartition, RenderCache, RenderQuality};
 pub use options::{RenderOptions, render_still};
 pub use output::{FrameBuffer, PixelFormat, PixelPlane, RenderTarget};
 pub use prepared::{
-    PixelRect, PreparationStats, PreparedFrame, RasterLimits, RenderPrepare, WorkStats,
+    GpuPreparationStats, PixelRect, PreparationStats, PreparedCpuFrame, RasterLimits, RenderPrepare,
+    WorkStats,
 };
 
 /// Rendering contracts used alongside core authoring values.
 pub mod prelude {
     pub use crate::{
+        BackendKind, FrameBuffer, PixelFormat, PixelPlane, PreparedCpuFrame, RenderContext,
+        RenderPrepare, RenderTarget,
+    };
+    pub use crate::{
         BackendPreference, FrameAt, FrameClock, FrameRenderer, FrameRequest, FrameStats,
         RenderOptions, RenderQuality, RenderSession, render_still,
     };
     pub use crate::{Cdl, DisplayTransform, FilmGrain, OutputTransfer, ToneMap};
-    pub use crate::{
-        FrameBuffer, PixelFormat, PixelPlane, PreparedFrame, RenderContext, RenderPrepare,
-        RenderTarget, Renderer,
-    };
 }

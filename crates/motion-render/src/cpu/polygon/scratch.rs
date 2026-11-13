@@ -12,7 +12,7 @@ pub(crate) const MAX_IDLE_SCRATCH_BYTES: usize = 1024 * 1024;
 /// admission is charged exactly as for fresh vectors.
 #[derive(Default)]
 pub(crate) struct PolygonScratch {
-    pub(in crate::raster) areas: Vec<f64>,
+    pub(in crate::cpu) areas: Vec<f64>,
     pub(super) starts: Vec<usize>,
     pub(super) live: Vec<usize>,
     pub(super) active: Vec<Edge>,

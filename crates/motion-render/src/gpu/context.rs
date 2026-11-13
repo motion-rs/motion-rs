@@ -2,9 +2,9 @@
 
 use super::*;
 use motion_core::sync::MutexExt;
-use motion_core::{PixelSize, Shape, ValidationError};
+use motion_core::{PixelSize, ValidationError};
 
-mod batch;
+mod self_check;
 pub(in crate::gpu) mod textures;
 
 /// Timestamps are written as the start of tiny marker passes, which only needs
@@ -17,7 +17,31 @@ pub(super) fn timestamp_features(available: wgpu::Features) -> wgpu::Features {
 
 impl Plan {
     pub(super) fn validate_device(&self, limits: &wgpu::Limits) -> Result<(), ValidationError> {
-        let coverage_bytes = self.coverage.len() as u64 * 4;
+        if self.device.samples != 0 {
+            if self.device.buffer_sizes().iter().any(|bytes| {
+                *bytes > limits.max_storage_buffer_binding_size || *bytes > limits.max_buffer_size
+            }) {
+                return Err(device_error(
+                    "buffer_size",
+                    "Coverage tile buffers exceed device limits",
+                ));
+            }
+            let maximum_groups = u64::from(limits.max_compute_workgroups_per_dimension).pow(2);
+            let groups = [
+                u64::from(self.device.edge_count).div_ceil(64),
+                (self.device.curves.len() as u64).div_ceil(64),
+                self.device.fills.len() as u64,
+                u64::from(self.device.rows).div_ceil(64),
+                u64::from(self.device.tiles),
+            ];
+            if groups.iter().any(|count| *count > maximum_groups) {
+                return Err(device_error(
+                    "dispatch",
+                    "Coverage tile dispatch exceeds device limits",
+                ));
+            }
+        }
+        let coverage_bytes = (self.coverage.len() as u64).max(u64::from(self.device.samples)) * 4;
         if coverage_bytes > limits.max_storage_buffer_binding_size
             || coverage_bytes > limits.max_buffer_size
         {
@@ -26,13 +50,16 @@ impl Plan {
                 "Shared coverage exceeds device buffer limits",
             ));
         }
-        let raster_bytes = u64::from(self.size.width) * u64::from(self.size.height) * 16;
-        if raster_bytes > limits.max_storage_buffer_binding_size
-            || raster_bytes > limits.max_buffer_size
+        let output_bytes = self.packed_output.map_or_else(
+            || u64::from(self.size.width) * u64::from(self.size.height) * 16,
+            |(size, format)| super::plan::packed_buffer_bytes(size, format),
+        );
+        if output_bytes > limits.max_storage_buffer_binding_size
+            || output_bytes > limits.max_buffer_size
         {
             return Err(device_error(
                 "buffer_size",
-                "Native GPU raster exceeds the selected device buffer limits",
+                "Native GPU output exceeds the selected device buffer limits",
             ));
         }
         if self.size.width.div_ceil(8) > limits.max_compute_workgroups_per_dimension
@@ -46,6 +73,10 @@ impl Plan {
         if self.steps.iter().any(|step| {
             step.data.len() as u64 * 4 > limits.max_storage_buffer_binding_size
                 || step.data.len() as u64 * 4 > limits.max_buffer_size
+                || step.resource.as_ref().is_some_and(|resource| {
+                    resource.len() as u64 * 4 > limits.max_storage_buffer_binding_size
+                        || resource.len() as u64 * 4 > limits.max_buffer_size
+                })
         }) {
             return Err(device_error(
                 "buffer_size",
@@ -53,15 +84,24 @@ impl Plan {
             ));
         }
         for step in &self.steps {
+            if let Some(program) = &step.analytic
+                && (program.bytes() > limits.max_storage_buffer_binding_size
+                    || program.bytes() > limits.max_buffer_size
+                    || (program.len() as u64).div_ceil(64)
+                        > u64::from(limits.max_compute_workgroups_per_dimension).pow(2))
+            {
+                return Err(device_error(
+                    "analytic_particles",
+                    "Analytic upload or dispatch exceeds device limits",
+                ));
+            }
             if step.parameters.operation.code == GpuOp::Particles as u32 {
                 let tiles =
                     ParticleTiles::new(step.parameters.image_bounds(2), step.data[0] as u32)?;
-                if tiles.bytes
-                    > limits
-                        .max_storage_buffer_binding_size
-                        .min(limits.max_buffer_size)
-                    || tiles.tiles.div_ceil(64) > limits.max_compute_workgroups_per_dimension
-                {
+                if tiles.exceeds_device_limits(
+                    limits,
+                    step.parameters.flags.particle_tiles == PARTICLE_TILE_BITSET,
+                ) {
                     return Err(device_error(
                         "particle_tiles",
                         "Native GPU particle metadata or dispatch exceeds device limits",
@@ -96,7 +136,7 @@ impl GpuContext {
     /// Creates a context with the requested adapter power preference.
     pub fn create(power: wgpu::PowerPreference) -> motion_core::Result<Self> {
         pollster::block_on(async {
-            let instance = crate::gpu::instance(crate::Renderer::Gpu)?;
+            let instance = crate::gpu::instance(crate::BackendKind::Gpu)?;
             let adapter = instance
                 .request_adapter(&wgpu::RequestAdapterOptions {
                     power_preference: power,
@@ -117,7 +157,7 @@ impl GpuContext {
                     .contains(wgpu::TextureFormatFeatureFlags::BLENDABLE);
             let (device, queue) = adapter
                 .request_device(&wgpu::DeviceDescriptor {
-                    label: Some("Motion PreparedFrame compute"),
+                    label: Some("Motion PreparedCpuFrame compute"),
                     required_features: if hardware_fills {
                         wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES
                     } else {
@@ -190,7 +230,7 @@ impl GpuContext {
     /// The caller must finish the returned frame before publishing the texture.
     pub fn submit_texture(
         &self,
-        frame: &PreparedFrame,
+        frame: &PreparedCpuFrame,
         texture: &wgpu::Texture,
         format: crate::PixelFormat,
         limits: RasterLimits,
@@ -204,7 +244,7 @@ impl GpuContext {
     /// for encoded RGBA8; no implicit alpha loss or CPU pixel roundtrip occurs.
     pub fn render(
         &self,
-        frame: &PreparedFrame,
+        frame: &PreparedCpuFrame,
         target: crate::RenderTarget<'_>,
         format: crate::PixelFormat,
         limits: RasterLimits,
@@ -289,6 +329,7 @@ impl GpuContext {
                 "count_particle_tiles",
                 "prefix_particle_tiles",
                 "fill_particle_tiles",
+                "build_particle_index_mask",
             ]
             .map(|entry| {
                 std::sync::Arc::new(device.create_compute_pipeline(
@@ -342,9 +383,12 @@ impl GpuContext {
                 present_shader: Default::default(),
                 present_check: Default::default(),
                 packing: Default::default(),
+                device_coverage: Default::default(),
+                analytic_particles: Default::default(),
                 timestamp_marker: Default::default(),
                 alpha_thresholds: Default::default(),
                 working_pool: Default::default(),
+                residency: Default::default(),
                 present: std::sync::Arc::new(std::array::from_fn(|_| std::sync::OnceLock::new())),
                 info,
                 submissions: std::sync::Arc::new(std::sync::Mutex::new(())),
@@ -361,6 +405,7 @@ impl GpuContext {
         let validation_scope = self.device.push_error_scope(wgpu::ErrorFilter::Validation);
         self.alpha_thresholds();
         self.packing_pipeline();
+        self.coverage_pipelines();
         self.present_check_pipeline();
         for format in [
             wgpu::TextureFormat::Rgba16Float,
@@ -565,6 +610,70 @@ impl GpuContext {
         })
     }
 
+    pub(super) fn coverage_pipelines(&self) -> &CoveragePipelines {
+        self.device_coverage.get_or_init(|| {
+            let shader = self
+                .device
+                .create_shader_module(wgpu::ShaderModuleDescriptor {
+                    label: Some("GPU fill coverage"),
+                    source: wgpu::ShaderSource::Wgsl(include_str!("shaders/coverage.wgsl").into()),
+                });
+            let entries = (0..8)
+                .map(|binding| wgpu::BindGroupLayoutEntry {
+                    binding,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: if binding == 0 {
+                            wgpu::BufferBindingType::Uniform
+                        } else {
+                            wgpu::BufferBindingType::Storage {
+                                read_only: binding == 1 || binding == 7,
+                            }
+                        },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                })
+                .collect::<Vec<_>>();
+            let layout = self
+                .device
+                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    label: Some("GPU coverage tiles"),
+                    entries: &entries,
+                });
+            let pipeline_layout =
+                self.device
+                    .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                        label: Some("GPU coverage tiles"),
+                        bind_group_layouts: &[Some(&layout)],
+                        immediate_size: 0,
+                    });
+            let passes = [
+                "flatten_curves",
+                "count_tiles",
+                "prefix_tiles",
+                "prefix_block_sums",
+                "prefix_add_bases",
+                "fill_tiles",
+                "carry_rows",
+                "coverage_pass",
+            ]
+            .map(|entry| {
+                self.device
+                    .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                        label: Some(entry),
+                        layout: Some(&pipeline_layout),
+                        module: &shader,
+                        entry_point: Some(entry),
+                        compilation_options: Default::default(),
+                        cache: None,
+                    })
+            });
+            CoveragePipelines { layout, passes }
+        })
+    }
+
     pub(super) fn packing_pipeline(&self) -> &wgpu::ComputePipeline {
         self.packing.get_or_init(|| {
             let shader = self
@@ -674,84 +783,5 @@ impl GpuContext {
     /// Idle reusable working-buffer payload retained by this shared context.
     pub fn pooled_working_bytes(&self) -> u64 {
         self.working_pool.lock_unpoisoned().bytes
-    }
-
-    /// Runs a shared once-only native/CPU parity scene, including alpha, geometry,
-    /// spatial paints and group blending. Failure is sticky for this context.
-    pub fn self_check(&self) -> motion_core::Result<()> {
-        self.loss.check()?;
-        let result = self.self_check_result.get_or_init(|| {
-            use motion_core::NodeModifiers;
-            let limits = RasterLimits::default();
-            let node = motion_core::Node::group([
-                motion_core::Node::from(
-                    motion_core::Rect::new(0.25, 0.5, 12.75, 9.25).fill(
-                        motion_core::LinearGradient::new(
-                            motion_core::Point::ORIGIN,
-                            motion_core::Point::new(1.0, 1.0),
-                        )
-                        .stop(0.0, motion_core::Color::rgb(235, 30, 75))
-                        .stop(1.0, motion_core::Color::rgb(20, 190, 230)),
-                    ),
-                )
-                .opacity(0.7),
-                motion_core::Node::from(
-                    motion_core::Rect::new(4.5, 3.25, 15.0, 12.0).fill(motion_core::Color::WHITE),
-                )
-                .opacity(0.4)
-                .blend_mode(motion_core::BlendMode::Multiply),
-            ])
-            .opacity(0.8);
-            let frame = node
-                .compile(
-                    motion_core::Size::new(16.0, 12.0),
-                    PixelSize::new(16, 12),
-                    motion_core::ValidationLimits::default(),
-                )
-                .and_then(|list| list.prepare(motion_core::ValidationLimits::default(), limits))
-                .map_err(|error| error.to_string())?;
-            let expected = frame
-                .compose_linear(limits)
-                .and_then(|frame| crate::FrameBuffer::from_linear_rgba8(&frame, limits))
-                .map_err(|error| error.to_string())?;
-            let actual = Gpu::from_context(self.clone())
-                .render(
-                    &frame,
-                    Plan::new(&frame, limits).map_err(|error| error.to_string())?,
-                )
-                .and_then(|frame| {
-                    crate::FrameBuffer::from_linear_rgba8(&frame, limits).map_err(Into::into)
-                })
-                .map_err(|error| error.to_string())?;
-            let differences = expected
-                .bytes()
-                .as_chunks::<4>()
-                .0
-                .iter()
-                .zip(actual.bytes().as_chunks::<4>().0)
-                .map(|(expected, actual)| {
-                    expected
-                        .iter()
-                        .zip(actual)
-                        .map(|(a, b)| a.abs_diff(*b))
-                        .max()
-                        .unwrap_or(0)
-                })
-                .collect::<Vec<_>>();
-            if differences.iter().any(|difference| *difference > 2)
-                || differences
-                    .iter()
-                    .filter(|difference| **difference > 1)
-                    .count()
-                    * 1000
-                    >= differences.len()
-            {
-                return Err("Native GPU self-check exceeded CPU parity tolerance".into());
-            }
-            Ok(())
-        });
-        result.clone().map_err(|message| {
-            motion_core::Error::GpuUnavailable(Box::new(std::io::Error::other(message)))
-        })
     }
 }

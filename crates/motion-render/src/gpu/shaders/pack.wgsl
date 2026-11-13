@@ -100,6 +100,41 @@ fn sample_yuv(x: u32, y: u32) -> vec3f {
     return vec3f(luma, (rgb.b - luma) / 1.8556, (rgb.r - luma) / 1.5748);
 }
 
+// Limited-range luma code for one pixel, matching the tiled path.
+fn yuv_luma(x: u32, y: u32, ten: bool) -> u32 {
+    let scale = select(1.0, 4.0, ten);
+    let offset = select(
+            0.0,
+            display_dither(vec2u(x, y) + settings.first.xy),
+            settings.display[4].x != 0u,
+        );
+    let color = sample_yuv(x, y);
+    return u32(
+            clamp(
+                floor((16.0 + 219.0 * color.x) * scale + offset + 0.5),
+                16.0 * scale,
+                235.0 * scale,
+            ),
+        );
+}
+
+// Limited-range Cb and Cr codes averaged over the 2x2 block at chroma coordinate (x, y).
+fn yuv_chroma(x: u32, y: u32, ten: bool) -> vec2u {
+    let scale = select(1.0, 4.0, ten);
+    var chroma = vec2f(0.0);
+    for(var vertical = 0u; vertical < 2u; vertical++) {
+        for(var horizontal = 0u; horizontal < 2u; horizontal++) {
+            chroma += sample_yuv(x * 2u + horizontal, y * 2u + vertical).yz * 0.25;
+        }
+    }
+    let code = clamp(
+            floor((128.0 + 224.0 * chroma) * scale + 0.5),
+            vec2f(16.0 * scale),
+            vec2f(240.0 * scale),
+        );
+    return vec2u(code);
+}
+
 @compute @workgroup_size(64)
 fn pack(@builtin(global_invocation_id) id: vec3u) {
     let width = settings.first.z;
@@ -181,6 +216,37 @@ fn pack(@builtin(global_invocation_id) id: vec3u) {
         }
 
         output[index] = word(vec4u(quantized, alpha));
+        return;
+    }
+
+    // Modes 4 and 5 are 8-bit and 10-bit YUV420 for any even size. One invocation owns one
+    // output word, so planes that straddle rows or end mid-word never race.
+    if mode >= 4u {
+        let ten = mode == 5u;
+        let samples_per_word = select(4u, 2u, ten);
+        let count = width * height;
+        let chroma_width = width / 2u;
+        let chroma_count = count / 4u;
+        var packed = 0u;
+        for(var lane = 0u; lane < samples_per_word; lane++) {
+            let sample = index * samples_per_word + lane;
+            if sample >= count + 2u * chroma_count {
+                break;
+            }
+            var value = 0u;
+            if sample < count {
+                value = yuv_luma(sample % width, sample / width, ten);
+            } else {
+                let plane = sample - count;
+                let chroma = plane % chroma_count;
+                let color = yuv_chroma(chroma % chroma_width, chroma / chroma_width, ten);
+                value = select(color.x, color.y, plane >= chroma_count);
+            }
+            packed |= value << (lane * select(8u, 16u, ten));
+        }
+        if index * samples_per_word < count + 2u * chroma_count {
+            output[index] = packed;
+        }
         return;
     }
 

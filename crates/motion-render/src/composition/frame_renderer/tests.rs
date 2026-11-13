@@ -1,6 +1,6 @@
 use super::*;
 use crate::raster::prepare::RenderPrepare;
-use crate::{RenderContext, Renderer};
+use crate::{BackendKind, RenderContext};
 use motion_core::Shape;
 use motion_core::ValidationErrorKind;
 use motion_core::{Color, Filter, NodeModifiers, Rect, ValidationLimits};
@@ -27,10 +27,10 @@ fn public_yuv10_output_uses_packing_and_preserves_unaligned_fallback() -> Result
         let base = Composition::new(width, 6, crate::FrameClock::new(motion_core::fps!(24), 2));
         let mut cpu = base
             .clone()
-            .configure(|options| options.backend(Renderer::Cpu.into()))
+            .configure(|options| options.backend(crate::BackendPreference::Cpu))
             .frame_renderer(size)?;
         let mut gpu = base
-            .configure(|options| options.backend(Renderer::Gpu.into()))
+            .configure(|options| options.backend(crate::BackendPreference::gpu()))
             .frame_renderer(size)?;
         let expected = cpu.render_output_at(Time::ZERO, Some(Color::BLACK), format, source)?;
         let actual = gpu.render_output_at(Time::ZERO, Some(Color::BLACK), format, source)?;
@@ -242,7 +242,11 @@ fn global_shutter_averages_complete_frames_and_preserves_old_once_contract() -> 
 
 fn composition() -> Composition {
     Composition::new(8, 4, crate::FrameClock::new(motion_core::fps!(24), 12))
-        .with_options(crate::RenderOptions::default().background(Color::rgb(20, 40, 60)))
+        .with_options(
+            crate::RenderOptions::default()
+                .backend(crate::BackendPreference::Cpu)
+                .background(Color::rgb(20, 40, 60)),
+        )
         .unwrap()
 }
 
@@ -708,7 +712,7 @@ fn cpu_invalid_configuration_and_index_fail_before_evaluation() -> Result {
 #[test]
 fn gpu_selection_is_explicit_and_lazy_without_a_device() -> Result {
     let selected = composition()
-        .configure(|options| options.backend(Renderer::Gpu.into()))
+        .configure(|options| options.backend(crate::BackendPreference::gpu()))
         .frame_renderer(Size::new(8.0, 4.0));
     #[cfg(not(feature = "gpu"))]
     {
@@ -721,7 +725,7 @@ fn gpu_selection_is_explicit_and_lazy_without_a_device() -> Result {
     #[cfg(feature = "gpu")]
     {
         let mut selected = selected?;
-        assert_eq!(selected.renderer(), Renderer::Gpu);
+        assert_eq!(selected.backend_kind(), BackendKind::Gpu);
         assert!(selected.gpu_info().is_none());
         assert!(
             selected
@@ -763,6 +767,49 @@ fn gpu_selection_is_explicit_and_lazy_without_a_device() -> Result {
 
 #[test]
 #[cfg(feature = "gpu")]
+fn gpu_output_preparation_is_independent_and_device_free() -> Result {
+    use crate::gpu::frame::FrameInput;
+    let mut renderer = composition()
+        .configure(|options| options.backend(crate::BackendPreference::gpu()))
+        .frame_renderer(Size::new(8.0, 4.0))?;
+    let build = |_: &SceneContext<'_>| {
+        Node::from(
+            motion_core::Circle::new(motion_core::Point::new(4.0, 2.0), 1.75)
+                .unwrap()
+                .fill(Color::WHITE),
+        )
+    };
+    let (gpu, limits) = renderer.prepare_gpu_output_at(Time::ZERO, None, build)?;
+    assert!(renderer.gpu_info().is_none());
+    assert_eq!(renderer.cached_coverage_bytes(), 0);
+    assert!(!gpu.gpu_view().items.is_empty());
+    assert!(gpu.gpu_view().alphas.is_empty());
+    assert_eq!(gpu.size(), PixelSize::new(8, 4));
+    let stats = gpu.gpu_stats();
+    assert_eq!(stats.preparation, gpu.stats());
+    assert!(stats.segment_count > 0);
+    assert_eq!(stats.tile_count, 1);
+    assert_eq!(renderer.report().gpu_preparation, Some(stats));
+    let plan = gpu.plan(limits, crate::PixelFormat::Yuv420 { bit_depth: 8 })?;
+    assert!(plan.peak_bytes()? >= gpu.stats().retained_bytes);
+    assert!(renderer.gpu_info().is_none());
+    let (cpu, _) = renderer.prepare_output_at(Time::ZERO, None, build)?;
+    assert!(renderer.report().gpu_preparation.is_none());
+    assert!(!cpu.alphas.is_empty());
+    assert!(renderer.cached_coverage_bytes() > 0);
+    assert!(renderer.gpu_info().is_none());
+    assert!(gpu.gpu_view().alphas.is_empty());
+    assert!(
+        renderer
+            .prepare_gpu_output_at(Time::from_ticks(-1), None, build)
+            .is_err()
+    );
+    assert!(renderer.report().gpu_preparation.is_none());
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "gpu")]
 #[ignore = "requires separate authorization to initialize native GPU devices"]
 fn gpu_device_session_seek_budget_and_recovery_match_cpu() -> Result {
     for (width, height) in [(8, 4), (65, 37), (127, 73)] {
@@ -776,7 +823,7 @@ fn gpu_device_session_seek_budget_and_recovery_match_cpu() -> Result {
         )?;
         let mut cpu = composition.frame_renderer(Size::new(8.0, 4.0))?;
         let mut gpu = composition
-            .configure(|options| options.backend(Renderer::Gpu.into()))
+            .configure(|options| options.backend(crate::BackendPreference::gpu()))
             .frame_renderer(Size::new(8.0, 4.0))?;
         assert!(gpu.gpu_info().is_none());
         let mut first = None;
@@ -858,12 +905,22 @@ fn gpu_device_session_seek_budget_and_recovery_match_cpu() -> Result {
             },
         ] {
             gpu.raster_limits(limits)?;
-            let error = diagnostic(gpu.render_frame(2, build).err().unwrap());
-            assert_eq!(
-                (error.kind, error.frame),
-                (ValidationErrorKind::StructuralLimit, Some(2))
-            );
-            assert!(gpu.last_stats().is_none());
+            match gpu.render_frame(2, build) {
+                Ok(frame) => {
+                    // Optional batch-data aggregation is dropped to fit a tighter work allowance.
+                    assert!(limits.max_work < exact.max_work);
+                    assert!(gpu.last_stats().unwrap().work() <= limits.max_work);
+                    assert_eq!(frame.packed_rgb(), expected.packed_rgb());
+                }
+                Err(error) => {
+                    let error = diagnostic(error);
+                    assert_eq!(
+                        (error.kind, error.frame),
+                        (ValidationErrorKind::StructuralLimit, Some(2))
+                    );
+                    assert!(gpu.last_stats().is_none());
+                }
+            }
             assert_eq!(gpu.gpu_info().unwrap().name, info.name);
             gpu.raster_limits(exact)?;
             assert_eq!(

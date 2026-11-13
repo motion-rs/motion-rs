@@ -1,7 +1,7 @@
 //! Validated memory targets and shared CPU/GPU output conversion.
 
 use crate::RasterLimits;
-use crate::cpu::LinearFrame;
+use crate::linear::LinearFrame;
 use motion_core::{PixelSize, ValidationError};
 
 mod bands;

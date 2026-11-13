@@ -10,7 +10,7 @@ motion-rs is a programmable motion graphics library for Rust. Scene functions de
 
 ```rust,no_run
 use motion::prelude::*;
-use motion::render::{DisplayList, ValidatedDisplayList, FrameBuffer, PreparedFrame};
+use motion::render::{DisplayList, ValidatedDisplayList, FrameBuffer, PreparedCpuFrame};
 use motion::extend::{Encoder};
 use motion::vector::{Morph};
 use motion::particles::{Particle};
@@ -36,7 +36,7 @@ From the application author's perspective:
 ```text
 SceneContext -> scene function -> Node
     -> record and validate drawing commands -> ValidatedDisplayList
-    -> PreparedFrame -> CPU/GPU -> FrameBuffer/texture/Encoder
+    -> PreparedCpuFrame -> CPU/GPU -> FrameBuffer/texture/Encoder
 ```
 
 `DisplayList` is an editable low-level command container. Compiling an ordinary `Node` directly produces a `ValidatedDisplayList`; applications need not construct every intermediate object manually.
@@ -46,7 +46,7 @@ SceneContext -> scene function -> Node
 | `SceneContext` | Local/global time, logical size, resources, randomness, authoring cache | A playback clock or GPU command queue |
 | `Node` | Scene structure, transforms, layers, content | Already-rendered pixels |
 | `ValidatedDisplayList` | Immutable, structurally validated drawing commands | GPU availability or sufficient budget |
-| `PreparedFrame` | Device-space coverage, paint sources, clip and filter data | A task already submitted to the GPU |
+| `PreparedCpuFrame` | Device-space coverage, paint sources, clip and filter data | A task already submitted to the GPU |
 | `FrameBuffer` | Frame data with an explicit pixel format, including transparent straight RGBA8 stills and PNG output | Identical memory layouts for all formats |
 | `Encoder` | Consume ordered frames and complete the output transaction | Scene construction or user interface |
 

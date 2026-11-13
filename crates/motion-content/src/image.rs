@@ -43,7 +43,7 @@ mod tests {
     use motion_core::{Node, Size};
     #[cfg(feature = "svg")]
     use motion_render::RenderPrepare;
-    use motion_render::{Composition, Renderer};
+    use motion_render::{BackendKind, Composition};
 
     #[test]
     #[cfg(feature = "svg")]
@@ -368,16 +368,19 @@ mod tests {
             motion_core::fps!(30),
         )?);
         for backend in [
-            Renderer::Cpu,
+            BackendKind::Cpu,
             #[cfg(feature = "gpu")]
-            Renderer::Gpu,
+            BackendKind::Gpu,
         ] {
             let composition = Composition::new(
                 8,
                 8,
                 motion_render::FrameClock::new(motion_core::fps!(30), 20),
             )
-            .with_options(motion_render::RenderOptions::default().backend(backend.into()))?;
+            .with_options(
+                motion_render::RenderOptions::default()
+                    .backend(motion_render::BackendPreference::from_kind(backend)),
+            )?;
             let mut actual = composition.frame_renderer(Size::new(8.0, 8.0))?;
             let mut manual = composition.frame_renderer(Size::new(8.0, 8.0))?;
             for (mode, expected) in [

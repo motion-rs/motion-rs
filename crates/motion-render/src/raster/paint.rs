@@ -5,11 +5,16 @@ use motion_core::drawing::paint::{Geometry, Gradient, GradientExtend};
 use motion_core::{Paint, Point, Rect, Transform, ValidationError};
 
 #[cfg(test)]
+mod procedural_tests;
+#[cfg(test)]
 mod tests;
 
 pub(crate) const TABLE_STEPS: usize = 256;
 
-pub(super) struct TableCache {
+/// Conservative inverse-bilinear solve, Oklab interpolation and conversion work per patch.
+const MESH_PATCH_WORK: u64 = 512;
+
+pub(crate) struct TableCache {
     entries: std::sync::Arc<motion_core::SceneCache>,
 }
 
@@ -126,10 +131,16 @@ pub(crate) struct Source {
     pub(crate) bounds: Rect,
     pub(crate) gradient_table: std::sync::Arc<[[f32; 4]]>,
     pub(crate) mip: (usize, usize, f32),
+    pub(crate) mesh_patches: std::sync::Arc<[motion_core::MeshPatch]>,
 }
 
 impl Source {
     pub(crate) fn work_per_pixel(&self) -> u64 {
+        match &self.paint {
+            Paint::Mesh(_) => return self.mesh_patches.len() as u64 * MESH_PATCH_WORK,
+            Paint::Atmosphere(atmosphere) => return atmosphere.work_per_pixel(),
+            _ => {}
+        }
         self.paint
             .gradient()
             .map_or(24, |gradient| gradient.stops.len() as u64 + 24)
@@ -219,6 +230,27 @@ impl Source {
         } else {
             (0, 0, 0.0)
         };
+        let mut mesh_patches = Vec::new();
+        if let Paint::Mesh(mesh) = paint {
+            let count = ((mesh.mesh.columns() - 1) * (mesh.mesh.rows() - 1)) as usize;
+            mesh_patches.try_reserve_exact(count).map_err(|_| {
+                ValidationError::limit(
+                    "paint.mesh",
+                    "max_bytes",
+                    "Could not reserve analytic patches",
+                )
+            })?;
+            for row in 0..mesh.mesh.rows() - 1 {
+                for column in 0..mesh.mesh.columns() - 1 {
+                    mesh_patches.push(mesh.mesh.patch(column, row)?);
+                }
+            }
+        }
+        if matches!(paint, Paint::Mesh(_) | Paint::Atmosphere(_))
+            && (bounds.width() == 0.0 || bounds.height() == 0.0)
+        {
+            invertible = false;
+        }
         Ok(Self {
             paint: paint.clone(),
             inverse,
@@ -230,6 +262,7 @@ impl Source {
             bounds,
             gradient_table: table,
             mip,
+            mesh_patches: mesh_patches.into(),
         })
     }
 
@@ -246,7 +279,28 @@ impl Source {
             let position = gradient.position(point, self.bounds)? as f32;
             return Ok(self.gradient_color(gradient, position));
         }
+        if matches!(self.paint, Paint::Mesh(_) | Paint::Atmosphere(_)) {
+            return self.sample_procedural(point);
+        }
         self.sample_pattern(point)
+    }
+
+    fn sample_procedural(&self, point: Point) -> Result<[f32; 4], ValidationError> {
+        let point = Point::new(
+            (point.x - self.bounds.left) / self.bounds.width(),
+            (point.y - self.bounds.top) / self.bounds.height(),
+        );
+        if let Paint::Atmosphere(atmosphere) = &self.paint {
+            return atmosphere.sample(point);
+        }
+        let point = Point::new(point.x.clamp(0.0, 1.0), point.y.clamp(0.0, 1.0));
+        let mut color = [0.0; 4];
+        for patch in self.mesh_patches.iter() {
+            if let Some(sample) = patch.sample(point)? {
+                color = sample;
+            }
+        }
+        Ok(color)
     }
 
     fn gradient_color(&self, gradient: &Gradient, position: f32) -> [f32; 4] {
@@ -326,6 +380,9 @@ impl PaintRow<'_> {
             self.horizontal[1] + self.vertical[1] + ty,
         );
         let Some(gradient) = source.paint.gradient() else {
+            if matches!(source.paint, Paint::Mesh(_) | Paint::Atmosphere(_)) {
+                return source.sample_procedural(point);
+            }
             return source.sample_pattern(point);
         };
         if gradient.units == motion_core::GradientUnits::ObjectBoundingBox {
@@ -416,7 +473,7 @@ fn sample_image(
     }))
 }
 
-impl PreparedFrame {
+impl FrameRecords {
     pub(crate) fn paint_row(&self, index: usize, column: u32, row: u32) -> PaintRow<'_> {
         let source = self.paint_sources[index].as_ref();
         let ready = source.is_none_or(|source| source.invertible);
@@ -456,6 +513,15 @@ impl PreparedFrame {
         let (record, source) = match paint {
             Paint::Solid(color) => (paint_record(*color, path)?, None),
             _ => {
+                if let Paint::Mesh(mesh) = paint {
+                    let patches = u64::from((mesh.mesh.columns() - 1) * (mesh.mesh.rows() - 1));
+                    budget.bytes(
+                        patches * std::mem::size_of::<motion_core::MeshPatch>() as u64 * 2,
+                        path,
+                    )?;
+                    budget.bytes(std::mem::size_of_val(mesh.mesh.vertices()) as u64, path)?;
+                    budget.work(patches * MESH_PATCH_WORK, path)?;
+                }
                 let entries = paint.gradient().map_or(0, |gradient| {
                     gradient.stops.len().saturating_sub(1) * (TABLE_STEPS + 1)
                 });
@@ -475,8 +541,8 @@ impl PreparedFrame {
         Ok(index)
     }
 
-    /// Samples a validated paint at a device-space point. Spatial paints
-    /// share immutable linear-premultiplied tables/pixels with the GPU backend.
+    /// Samples a validated paint at a device-space point. Gradients and patterns
+    /// retain immutable tables/pixels; procedural paints evaluate core descriptors.
     pub fn paint_at(&self, index: usize, point: Point) -> Result<[f32; 4], ValidationError> {
         if !point.x.is_finite() || !point.y.is_finite() {
             return Err(ValidationError::invalid(

@@ -1,5 +1,5 @@
 use super::*;
-use crate::prepared::PreparedLayer;
+use crate::prepared::{PixelRect, PreparedLayer};
 use motion_core::{
     Color, DisplayList, DrawCommand, Paint, PixelSize, Rect, ValidationError, ValidationErrorKind,
     ValidationLimits,
@@ -19,11 +19,11 @@ fn list(bounds: Rect, transform: Transform) -> DisplayList {
     }
 }
 
-fn prepare(list: &DisplayList) -> Result<PreparedFrame, ValidationError> {
+fn prepare(list: &DisplayList) -> Result<PreparedCpuFrame, ValidationError> {
     list.prepare(ValidationLimits::default(), RasterLimits::default())
 }
 
-pub(crate) fn coverage(frame: &PreparedFrame) -> Vec<u8> {
+pub(crate) fn coverage(frame: &PreparedCpuFrame) -> Vec<u8> {
     let mut result = vec![0; (frame.size.width * frame.size.height) as usize];
     let mut visits = result.clone();
     for strip in &frame.strips {
@@ -189,7 +189,7 @@ fn pixel_byte_and_work_limits_reject_one_unit_short_and_recover() {
     let frame = prepare(&source).unwrap();
     let exact = RasterLimits {
         max_pixels: 144,
-        max_bytes: frame.stats.retained_bytes,
+        max_bytes: frame.stats.peak_bytes,
         max_work: frame.stats.work,
     };
     assert_eq!(
@@ -312,4 +312,63 @@ fn linear_paints_keep_extended_channels_and_reject_working_overflow() {
             .linear_premultiplied,
         [0.0; 4]
     );
+}
+
+#[test]
+fn mesh_paint_evaluates_analytic_patches_and_validates_explicit_bake_resolution() {
+    use motion_core::{MeshGradient, MeshPaint};
+    let mesh = MeshGradient::grid(
+        2,
+        2,
+        &[
+            Color::from_hex(0xff0000),
+            Color::from_hex(0x00ff00),
+            Color::from_hex(0x0000ff),
+            Color::WHITE,
+        ],
+    )
+    .unwrap();
+    let bounds = Rect::new(2.0, 1.0, 14.0, 8.0);
+    let size = PixelSize::new(16, 16);
+    let mut source = list(bounds, Transform::IDENTITY);
+    let pattern = mesh
+        .pattern(bounds, size, 4, RasterLimits::default())
+        .unwrap();
+    source.commands = vec![DrawCommand::FillRect {
+        bounds,
+        transform: Transform::IDENTITY,
+        paint: Paint::Pattern(pattern),
+    }];
+    let explicit = prepare(&source).unwrap();
+    source.commands = vec![DrawCommand::FillRect {
+        bounds,
+        transform: Transform::IDENTITY,
+        paint: Paint::Mesh(MeshPaint::new(mesh.clone(), size, 4)),
+    }];
+    let analytic = prepare(&source).unwrap();
+    let patch = mesh.patch(0, 0).unwrap();
+    let mut differs_from_bake = false;
+    for point in [(3.0, 2.0), (8.5, 4.5), (13.5, 7.5)] {
+        let point = motion_core::Point::new(point.0, point.1);
+        let expected = patch
+            .sample(motion_core::Point::new(
+                (point.x - bounds.left) / bounds.width(),
+                (point.y - bounds.top) / bounds.height(),
+            ))
+            .unwrap()
+            .unwrap();
+        assert_eq!(analytic.paint_at(0, point).unwrap(), expected);
+        differs_from_bake |=
+            analytic.paint_at(0, point).unwrap() != explicit.paint_at(0, point).unwrap();
+    }
+    assert!(
+        differs_from_bake,
+        "Authored meshes must not sample a baked image"
+    );
+    source.commands = vec![DrawCommand::FillRect {
+        bounds,
+        transform: Transform::IDENTITY,
+        paint: Paint::Mesh(MeshPaint::new(mesh, size, 0)),
+    }];
+    assert!(prepare(&source).is_err());
 }

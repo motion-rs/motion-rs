@@ -1,7 +1,14 @@
 //! Polygon path rasterization into sparse strips and spans using exact area coverage.
 
-use super::*;
-use motion_core::{FillRule, PathVerb, Point, Rect, Transform, ValidationError};
+use crate::prepared::{PixelRect, FrameRecords, Span, Strip};
+#[cfg(test)]
+use crate::prepared::{PreparationStats, PreparedCpuFrame, PreparedItem, RenderPrepare};
+use crate::raster::{Band, RasterScope, coverage_to_byte, pixel_bounds};
+#[cfg(test)]
+use motion_core::RasterLimits;
+use motion_core::budget::Budget;
+use motion_core::{FillRule, PathVerb, Point, Transform, ValidationError};
+use std::mem::size_of;
 
 mod intersections;
 pub(crate) mod scratch;
@@ -10,7 +17,7 @@ mod sweep;
 #[cfg(test)]
 mod tests;
 
-pub use motion_core::geometry::flatten::{Edge, path_edges};
+pub use motion_core::geometry::flatten::{Edge, edge_bounds, path_edges};
 use scratch::{ColumnScratch, PolygonScratch, RowScratch};
 
 #[cfg(test)]
@@ -24,7 +31,7 @@ pub(super) struct Crossing {
     horizontal: f64,
 }
 
-impl PreparedFrame {
+impl FrameRecords {
     pub(crate) fn polygon_path(
         &mut self,
         geometry: &motion_core::Path2D,
@@ -147,31 +154,34 @@ impl PreparedFrame {
     ) -> Result<(), ValidationError> {
         let (budget, path) = (&mut *scope.budget, scope.path);
         let edges = path_edges(verbs, transform, tolerance, budget, path)?;
-        let mut bounds = Rect::new(
-            f64::INFINITY,
-            f64::INFINITY,
-            f64::NEG_INFINITY,
-            f64::NEG_INFINITY,
-        );
+        self.polygon_edges(&edges, rule, scratch, scope)?;
+        scope
+            .budget
+            .release((edges.len() * size_of::<Edge>()) as u64);
+        Ok(())
+    }
+
+    /// Rasterizes already flattened edges; the caller owns their storage charge.
+    pub(crate) fn polygon_edges(
+        &mut self,
+        edges: &[Edge],
+        rule: FillRule,
+        scratch: &mut PolygonScratch,
+        scope: &mut RasterScope<'_>,
+    ) -> Result<(), ValidationError> {
+        let (budget, path) = (&mut *scope.budget, scope.path);
         budget.work(edges.len() as u64, path)?;
-        for edge in &edges {
-            bounds.left = bounds.left.min(edge.top.x).min(edge.bottom.x);
-            bounds.right = bounds.right.max(edge.top.x).max(edge.bottom.x);
-            bounds.top = bounds.top.min(edge.top.y);
-            bounds.bottom = bounds.bottom.max(edge.bottom.y);
-        }
-        let pixels = pixel_bounds(bounds, self.size);
+        let pixels = pixel_bounds(edge_bounds(edges), self.size);
         if !pixels.is_empty() {
             sweep::rasterize_with_scratch(
                 self,
-                &edges,
+                edges,
                 pixels,
                 rule,
                 scratch,
                 &mut RasterScope::new(budget, path),
             )?;
         }
-        budget.release((edges.len() * size_of::<Edge>()) as u64);
         Ok(())
     }
 
@@ -269,6 +279,7 @@ impl PreparedFrame {
                         width: column - start,
                         height,
                         alpha_offset,
+                        device: false,
                     },
                     path,
                 )?;

@@ -98,15 +98,34 @@ fixtures additionally require MOTION_TEST_EMOJI_FONT as described in the fixture
 README. Select ignored tests by their full names. Do not equate an ignored
 test, a zero-test filter or a successful compile with runtime acceptance.
 
-Pixel checks require nonblank subject regions, declared CPU/GPU tolerances and exact
-same-backend seek replay. Audio fixtures inspect actual decoded samples and timing;
+Pixel checks require nonblank subject regions, a named
+[visual acceptance](design/reliability.md#visual-acceptance) level or tier, exact CPU
+seek replay and Replay-tier GPU replay. Audio fixtures inspect actual decoded samples and timing;
 video fixtures decode frame counts and metadata. No test should invoke ffmpeg/ffprobe
 executables. Native-window interaction, real output devices and other platforms need
 separate validation. Current gaps and acceptance criteria are in [the plan](plan.md).
 
+### Independent backend acceptance
+
+Native GPU fixtures prepare CPU and GPU coverage independently and compare them with
+the [visual acceptance](design/reliability.md#visual-acceptance) tiers; geometry cases
+must report independent GPU coverage.
+
+```sh
+cargo test --locked --offline -p motion-render --all-features --lib gpu:: -- --include-ignored --test-threads=1
+```
+
+The renderer suite includes 24 fixed random seeds under both winding rules,
+exact duplicate even-odd cancellation, tile seams,
+large coordinates, guard-band filters, procedural paints, analytic trajectories,
+residency and exact byte/work/device-limit admission. Existing CPU reference
+tests and goldens remain unchanged. GPU fixtures certify only the adapter actually
+used. Large-scene acceptance across text, SVG, clipping and particles is
+[planned](plan.md#independent-gpu-preparation).
+
 ## Frame timing diagnostics
 
-The breadth benchmark accepts `MOTION_BENCH_TIMINGS=1` to collect per-frame host
+The breadth and performance benchmarks accept `MOTION_BENCH_TIMINGS=1` to collect per-frame host
 stage observations and available GPU timestamps. This is separate from
 `MOTION_BENCH_STAGES`, which measures selected CPU pipeline stages. Timing
 diagnostics require `MOTION_BENCH_ITERATIONS=1`, exclude warmups from the recorded
@@ -118,7 +137,9 @@ Host encoding includes command encoding/submission; host readback includes
 completion waits, mapping and extraction. Device intervals overlap these host
 observations and must not be added to them. Preserve all raw device values, but
 flag an interval longer than its enclosing frame wall time as untrusted. Plausible
-values alone do not establish timestamp correctness. Instrumentation payload is
+values alone do not establish timestamp correctness. The diagnostic JSON preserves raw
+ticks and distinguishes invalid intervals, passes that did not execute and devices
+without timestamp support. Instrumentation payload is
 reported separately from logical raster budgets and is not a physical-memory
 measurement. Check free space before building heavyweight optional features, and
 do not delete frozen benchmark artifacts to make room without an explicit decision.

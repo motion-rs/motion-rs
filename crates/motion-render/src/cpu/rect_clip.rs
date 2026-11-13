@@ -1,8 +1,12 @@
 //! Bounded geometric clip domains, with convex rectangle and general Shape paths.
 
+use super::coverage_cache::ClipCache;
 use super::polygon::shape_clip::{self, Region};
-use super::*;
+use crate::prepared::{ClipRecord, FrameRecords};
+use crate::raster::pixel_bounds;
+use motion_core::budget::Budget;
 use motion_core::{PathVerb, Point, Rect, RectClip, ValidationError};
+use std::mem::size_of;
 
 struct Geometry {
     points: Vec<Point>,
@@ -15,24 +19,25 @@ pub(crate) struct Preparation {
     stack: [Option<usize>; 129],
     depth: usize,
     geometry: Vec<Geometry>,
+    cache: Option<ClipCache>,
 }
 
-impl Default for Preparation {
-    fn default() -> Self {
+impl Preparation {
+    /// Starts an empty clip stack that reuses shape clip coverage through `cache` when given.
+    pub(crate) fn new(cache: Option<ClipCache>) -> Self {
         Self {
             stack: [None; 129],
             depth: 0,
             geometry: Vec::new(),
+            cache,
         }
     }
-}
 
-impl Preparation {
     pub(crate) fn push(
         &mut self,
         clip: Option<&RectClip>,
         shape: Option<&motion_core::ShapeClip>,
-        frame: &mut PreparedFrame,
+        frame: &mut FrameRecords,
         tolerance: f64,
         budget: &mut Budget,
         path: &str,
@@ -69,7 +74,7 @@ impl Preparation {
         &mut self,
         clip: &RectClip,
         parent: Option<usize>,
-        frame: &mut PreparedFrame,
+        frame: &mut FrameRecords,
         tolerance: f64,
         budget: &mut Budget,
         path: &str,
@@ -148,7 +153,7 @@ impl Preparation {
         &mut self,
         region: Region,
         parent: Option<usize>,
-        frame: &mut PreparedFrame,
+        frame: &mut FrameRecords,
         tolerance: f64,
         budget: &mut Budget,
         path: &str,
@@ -177,7 +182,10 @@ impl Preparation {
                     break;
                 }
             }
-            let bounds = shape_clip::rasterize(frame, base, &regions, tolerance, budget, path)?;
+            let bounds = match &self.cache {
+                Some(cache) => cache.rasterize(frame, base, &regions, tolerance, budget, path)?,
+                None => shape_clip::rasterize(frame, base, &regions, tolerance, budget, path)?,
+            };
             budget.release(regions.len() as u64 * size_of::<&Region>() as u64);
             bounds
         };

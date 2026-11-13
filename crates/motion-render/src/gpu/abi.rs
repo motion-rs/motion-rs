@@ -1,9 +1,63 @@
 //! Host side of the GPU uniform ABI: operation codes, paint kinds, the `GpuUniforms`
 //! record shared with WGSL, and the generated shader constants that mirror them.
 
-use crate::prepared::{PixelRect, PreparedFrame};
+use crate::prepared::{PixelRect, FrameRecords};
 use motion_core::ValidationError;
 use motion_core::drawing::BlendMode;
+
+#[derive(Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]
+#[repr(C)]
+pub(in crate::gpu) struct CoverageParams {
+    pub(in crate::gpu) fills: u32,
+    pub(in crate::gpu) edges: u32,
+    pub(in crate::gpu) tiles: u32,
+    pub(in crate::gpu) rows: u32,
+}
+
+#[derive(Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]
+#[repr(C)]
+pub(in crate::gpu) struct CoverageFill {
+    pub(in crate::gpu) size: [u32; 2],
+    pub(in crate::gpu) coverage: u32,
+    pub(in crate::gpu) rule: u32,
+    pub(in crate::gpu) first_edge: u32,
+    pub(in crate::gpu) edge_count: u32,
+    pub(in crate::gpu) first_tile: u32,
+    pub(in crate::gpu) columns: u32,
+    pub(in crate::gpu) first_index: u32,
+    pub(in crate::gpu) index_capacity: u32,
+    pub(in crate::gpu) first_row: u32,
+    pub(in crate::gpu) tile_rows: u32,
+}
+
+#[derive(Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]
+#[repr(C)]
+pub(in crate::gpu) struct CoverageEdge {
+    pub(in crate::gpu) points: [f32; 4],
+    pub(in crate::gpu) fill: u32,
+    pub(in crate::gpu) reserved: [u32; 3],
+}
+
+/// One cubic control hull expanded into an admitted disjoint edge range.
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+pub(in crate::gpu) struct CoverageCurve {
+    pub(in crate::gpu) first: [f32; 4],
+    pub(in crate::gpu) second: [f32; 4],
+    pub(in crate::gpu) first_edge: u32,
+    pub(in crate::gpu) segments: u32,
+    pub(in crate::gpu) fill: u32,
+    pub(in crate::gpu) reserved: u32,
+}
+
+#[derive(Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]
+#[repr(C)]
+pub(in crate::gpu) struct CoverageTile {
+    pub(in crate::gpu) count: u32,
+    pub(in crate::gpu) offset: u32,
+    pub(in crate::gpu) cursor: u32,
+    pub(in crate::gpu) reserved: u32,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u32)]
@@ -39,6 +93,8 @@ pub(super) enum PaintKind {
     Sweep = 3,
     Pattern = 4,
     RadialFocal = 5,
+    Mesh = 6,
+    Atmosphere = 7,
 }
 
 #[derive(Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]
@@ -102,7 +158,12 @@ pub(super) struct GpuUniforms {
 }
 
 impl GpuUniforms {
-    pub(super) fn new(frame: &PreparedFrame, operation: GpuOp, bounds: PixelRect) -> Self {
+    pub(super) fn new(
+        frame: impl AsRef<FrameRecords>,
+        operation: GpuOp,
+        bounds: PixelRect,
+    ) -> Self {
+        let frame = frame.as_ref();
         Self {
             frame: FrameHeader {
                 width: frame.size.width,

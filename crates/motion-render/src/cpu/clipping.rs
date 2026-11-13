@@ -10,7 +10,7 @@ pub(crate) struct ClipMask {
 
 impl ClipMask {
     pub(crate) fn new(
-        frame: &PreparedFrame,
+        frame: &FrameRecords,
         record: &ClipRecord,
         bounds: PixelRect,
         budget: &mut Budget,

@@ -7,7 +7,7 @@
 //!     DisplayList, RasterLimits, ResourceStore, ValidatedDisplayList, MAX_PATH_VERBS,
 //!     MAX_STROKE_VERBS, MAX_SVG_PATH_BYTES, sample_offsets,
 //! };
-//! use motion_render::{Composition, RenderPrepare, RenderOptions, Renderer, render_still};
+//! use motion_render::{Composition, RenderPrepare, RenderOptions, BackendKind, render_still};
 //! use motion_content::particles::*;
 //! let cache = SceneCache::new(16);
 //! let context = SceneContext::new(
@@ -49,17 +49,15 @@ mod curves;
 mod events;
 mod extended;
 mod forces;
+mod lazy;
 mod neighbors;
 pub mod presets;
 mod render;
+mod simulation;
 mod sprites;
 mod style;
 #[cfg(test)]
 mod tests;
-
-use batch::Instance;
-
-mod simulation;
 mod trajectory;
 
 pub use batch::ParticleBatch;

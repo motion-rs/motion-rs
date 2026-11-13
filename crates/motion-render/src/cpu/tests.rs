@@ -2,7 +2,7 @@ use super::*;
 use motion_core::Shape;
 use motion_core::{Color, Node, NodeModifiers, Rect, ValidationLimits};
 
-fn frame(node: &Node) -> PreparedFrame {
+fn frame(node: &Node) -> PreparedCpuFrame {
     node.compile(
         motion_core::Size::new(8.0, 4.0),
         PixelSize::new(8, 4),
@@ -153,7 +153,7 @@ fn pooled_render_clears_previous_layers_and_recovers_after_budget_failure() {
     let reference = prepared.compose_linear(limits).unwrap();
     let first = prepared.render_linear_pooled(limits, &mut pool).unwrap();
     assert_eq!(first, reference);
-    first.recycle(&mut pool);
+    pool.put(first.into_pixels());
     assert!(pool.bytes() > 0);
     assert!(
         prepared
@@ -170,7 +170,7 @@ fn pooled_render_clears_previous_layers_and_recovers_after_budget_failure() {
     let actual = empty.render_linear_pooled(limits, &mut pool).unwrap();
     assert_eq!(actual, empty.compose_linear(limits).unwrap());
     assert!(actual.pixels().iter().all(|pixel| *pixel == [0.0; 4]));
-    actual.recycle(&mut pool);
+    pool.put(actual.into_pixels());
     assert!(pool.bytes() <= 64 * 1024 * 1024);
     assert_eq!(
         prepared.render_linear_pooled(limits, &mut pool).unwrap(),
@@ -294,8 +294,8 @@ fn captures_use_clipped_bounds_and_release_before_the_next_sibling() {
     let one = single.compose_linear(RasterLimits::default()).unwrap();
     let two = pair.compose_linear(RasterLimits::default()).unwrap();
     assert_eq!(
-        one.stats.peak_bytes - single.stats.retained_bytes,
-        two.stats.peak_bytes - pair.stats.retained_bytes
+        one.stats().peak_bytes - single.stats.retained_bytes,
+        two.stats().peak_bytes - pair.stats.retained_bytes
     );
     let hidden = frame(&tile(Color::WHITE).translate(1000.0, 1000.0).opacity(0.0))
         .compose_linear(RasterLimits::default())
@@ -314,8 +314,8 @@ fn live_surface_bytes_pixels_and_work_have_exact_independent_budgets() {
     let output = prepared.compose_linear(RasterLimits::default()).unwrap();
     let exact = RasterLimits {
         max_pixels: 32,
-        max_bytes: output.stats.peak_bytes,
-        max_work: output.stats.work,
+        max_bytes: output.stats().peak_bytes,
+        max_work: output.stats().work,
     };
     assert_eq!(prepared.compose_linear(exact).unwrap(), output);
     for (limits, field) in [

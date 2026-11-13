@@ -116,6 +116,8 @@ fn image_lifetimes_keep_sources_and_final_output_until_their_last_read() {
         parameters: GpuUniforms::new(&frame, GpuOp::Clear, frame.output_bounds),
         data: vec![1.0],
         quads: Vec::new(),
+        analytic: None,
+        resource: None,
     };
     let chain = vec![step(0, 0), step(1, 0), step(2, 0), step(3, 0)];
     let last = Plan::last_uses(&chain, 4, &mut budget).unwrap();
@@ -154,6 +156,8 @@ fn local_images_schedule_capacities_without_live_aliases_and_charge_work() {
             parameters,
             data: vec![1.0],
             quads: Vec::new(),
+            analytic: None,
+            resource: None,
         });
     }
     let mut budget = Budget::new(frame.size, limits).unwrap();
@@ -345,11 +349,15 @@ fn gpu_shader_validates_without_a_device() {
         module.types[uniform.ty].inner,
         wgpu::naga::TypeInner::Struct { span: 256, .. }
     ));
-    assert_eq!(module.entry_points.len(), 10);
+    assert_eq!(module.entry_points.len(), 11);
     for (name, stage) in [
         ("texture_main", wgpu::naga::ShaderStage::Compute),
         ("texture_check", wgpu::naga::ShaderStage::Compute),
         ("prepare_particle_states", wgpu::naga::ShaderStage::Compute),
+        (
+            "build_particle_index_mask",
+            wgpu::naga::ShaderStage::Compute,
+        ),
         ("count_particle_tiles", wgpu::naga::ShaderStage::Compute),
         ("prefix_particle_tiles", wgpu::naga::ShaderStage::Compute),
         ("fill_particle_tiles", wgpu::naga::ShaderStage::Compute),
@@ -370,6 +378,7 @@ fn gpu_shader_validates_without_a_device() {
                 if name == "prefix_particle_tiles" {
                     [1, 1, 1]
                 } else if name == "prepare_particle_states"
+                    || name == "build_particle_index_mask"
                     || name == "count_particle_tiles"
                     || name == "fill_particle_tiles"
                 {
@@ -399,7 +408,7 @@ fn gpu_plan_admits_prepared_layers_without_a_device() {
     assert_eq!(plan.size, PixelSize::new(2, 1));
 }
 
-fn prepared(node: Node) -> PreparedFrame {
+fn prepared(node: Node) -> PreparedCpuFrame {
     node.compile(
         Size::new(8.0, 4.0),
         PixelSize::new(8, 4),
@@ -545,7 +554,7 @@ fn gpu_plan_retains_shared_coverage_and_conditional_geometric_clips() {
         [CONDITIONAL_COVERAGE, layer.data.len() as u32, 0, 0, 8, 4]
     );
     let planner = Planner {
-        frame: &frame,
+        frame: frame.gpu_view(),
         steps: Vec::new(),
         budget: Budget::new(frame.size, RasterLimits::default()).unwrap(),
     };
@@ -588,7 +597,7 @@ fn compact_coverage_uploads_do_not_expand_solid_or_small_shapes_to_canvas() {
                 .unwrap();
             assert!(fill.data.len() < 128, "{width}: {}", fill.data.len());
             let planner = Planner {
-                frame: &frame,
+                frame: frame.gpu_view(),
                 steps: Vec::new(),
                 budget: Budget::new(size, RasterLimits::default()).unwrap(),
             };
@@ -752,7 +761,7 @@ fn gpu_plan_covers_all_filters_and_preserves_input_snapshot_and_guard_band() {
             );
             if matches!(step.parameters.operation.code, 1 | 2) && step.data.len() > 1 {
                 let planner = Planner {
-                    frame: &frame,
+                    frame: frame.gpu_view(),
                     steps: Vec::new(),
                     budget: Budget::new(frame.raster_size(), RasterLimits::default()).unwrap(),
                 };

@@ -2,8 +2,8 @@
 
 use motion::encode::NoProgress;
 use motion::prelude::*;
+use motion::render::BackendKind;
 use motion::render::FrameBuffer;
-use motion::render::Renderer;
 use serde_json::json;
 use std::hint::black_box;
 
@@ -202,7 +202,8 @@ fn main() -> motion::Result {
     let sequences = std::env::var("MOTION_BENCH_SEQUENCES").unwrap_or_else(|_| "1".into()) == "1";
     let video = std::env::var("MOTION_BENCH_VIDEO").unwrap_or_default() == "1";
     let textures = std::env::var("MOTION_BENCH_TEXTURES").unwrap_or_default() == "1";
-    if textures && (!cfg!(feature = "gpu") || !sequences || video || backends != [Renderer::Gpu]) {
+    if textures && (!cfg!(feature = "gpu") || !sequences || video || backends != [BackendKind::Gpu])
+    {
         return Err(support::invalid(
             "Native texture mode requires GPU-only sequences",
         ));
@@ -287,7 +288,7 @@ fn main() -> motion::Result {
         let timeline = project.build(film, Some(parameters.clone()))?;
         for backend in &backends {
             let mut selected = options.clone();
-            selected.backend = if *backend == Renderer::Gpu {
+            selected.backend = if *backend == BackendKind::Gpu {
                 BackendPreference::gpu()
             } else {
                 BackendPreference::Cpu

@@ -17,6 +17,7 @@ decoded on a device unless the author asked for it. The tutorial walkthrough is
 | Decoded `Arc<A>` | Immutable decoded value | Can outlive every owner and handle; it is then no longer store-accounted |
 | `FontLibrary` | Font database, shaping engine, glyph/layout caches, usage log | Cloned libraries share one frozen snapshot |
 | `RenderCache` | Compute cache: seven independently bounded partitions | Shared by clones, sessions and export workers until `clear` |
+| `GpuContext` | Device-local immutable image/mip/atlas buffers and encoded comparison words | Shared by context clones; bounded LRU retention is separate from frame leases |
 | `SceneCache` | Compute cache (LRU) of pure author computations keyed by call site, type and key | Per cache; entries are LRU-evicted |
 
 `ResourceStore` keeps only `Weak` references: it does not keep decoded data alive.
@@ -79,12 +80,20 @@ needs one or the other. See [`font.rs`](../../crates/motion-content/src/font.rs)
 | Glyph outline | font `snapshot_id`, face id, weight, glyph |
 | Formula | source, size, family, fill, caller `revision`, `FORMULA_BACKEND_VERSION`, compiler `environment` |
 | `SceneCache` | call site, key type, key equality (after hashing) |
+| GPU immutable resource | encoded mip/atlas metadata and every texel's exact `f32` bits; hash matches require full equality |
 
 Anything that changes decoding or layout must be in the key. Pure scene values
 should put resource revisions in the author key. `SceneCache` builders may run
 more than once (concurrent misses, eviction, `clear`, disabled cache), so they must
 be pure. Sharing a `ResourceStore` never lets owners with different roots, sources
 or font snapshots reuse each other's entries.
+
+GPU residency does not include per-draw transforms, coverage or instance records.
+Identical immutable words can be reused across frames and separately decoded
+sources without retaining an asset pointer as identity. At most four equal-hash
+resources are retained; further collisions bypass retention rather than aliasing
+content or causing unbounded comparison work. Cache hits, eviction, clearing and
+disabled retention do not change resource interpretation or rendered pixels.
 
 ## Limits and Accounting
 
@@ -98,6 +107,7 @@ overhead, parser scratch and external `Arc` pins are excluded.
 | Image decode | 16384 px per side, 16,777,216 pixels | Static PNG/JPEG/WebP only; stored as linear-premultiplied RGBA16F with mips |
 | SVG source | 8 MiB, XML depth 64, 100,000 nodes | DTDs disallowed |
 | `RenderCache` partitions | Coverage 2048/16 MiB, Paragraph 256/8 MiB, Glyph 2048/16 MiB, Gradient 64/8 MiB, Formula 32/32 MiB, Ink 64/32 MiB, Scene 256/8 MiB | `RenderCache::with_limits` applies one limit to all; `fork_partition` isolates one |
+| GPU immutable residency | 64 entries, 64 MiB | Combined encoded host comparison words, owner/entry records and device payload; `GpuContext::set_residency_limits` accepts `CacheLimits`, with at most 4096 entries; zero entries or bytes disables retention |
 | `SceneCache::new` | entries only | Byte accounting requires `with_limits` plus `cache_with_cost`; oversized values are returned without retention |
 | `FormulaCompiler` | 32 entries, 64 MiB | Source up to 8192 bytes |
 | `RasterLimits::authoring()` | 16,777,216 px, 256 MiB live bytes, no work cap | `sandbox()` adds 200,000,000 work units |
@@ -108,12 +118,27 @@ bound preparation, not Rust callbacks or Typst evaluation time. See
 [`budget.rs`](../../crates/motion-core/src/budget.rs) and
 [`cache.rs`](../../crates/motion-core/src/authoring/context/cache.rs).
 
+Every frame conservatively admits an immutable resource miss, including upload
+storage and bounded hashing/lookup/collision work, even when the device cache is
+warm. Cache occupancy therefore does not change frame admission. The cache's
+retention allowance is independent of `RasterLimits`: an oversized resource may
+render without being retained if its frame admits it. Queued frames pin their
+resident buffers outside the mutable working-buffer pool, so eviction or a limit
+reduction cannot recycle a buffer still in use. These in-flight pins are covered
+by their frames, not by the idle-retention allowance.
+
+`GpuContext::residency_stats` reports cumulative hits, misses, uploaded device
+bytes, evictions and bypasses alongside current retained entries and logical
+bytes. Clearing resources releases cache ownership but does not reset cumulative
+counters or invalidate pending work. Residency is per device context, never a
+global cache or a mechanism for discovering or decoding resources.
+
 ## Deferred and Eager Content
 
 | Deferred (retains source/options) | Eager (does the work now) |
 | --- | --- |
 | `Assets::load`, `Image::open`, `Svg::open`, `Svg::new(handle)` | `ImageAsset::from_bytes`, `SvgAsset::from_bytes_with_fonts`, `Assets::preload` |
-| `Formula::typst` | `Formula::compile`, `FormulaCompiler::compile` |
+| `Formula::typst` | `Formula::asset`, `FormulaCompiler::compile` |
 | `Text` shaping at compilation | `Text::layout(&fonts)` for inspection |
 
 `Handle::state()` returns an `AssetState` without loading; it moves `Unloaded` → `Loading` → `Ready(Arc<A>)` or `Failed(Arc<Error>)`. Failure is

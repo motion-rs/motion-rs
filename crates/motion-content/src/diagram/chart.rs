@@ -40,7 +40,7 @@ impl Label {
 ///     DisplayList, RasterLimits, ResourceStore, ValidatedDisplayList, MAX_PATH_VERBS,
 ///     MAX_STROKE_VERBS, MAX_SVG_PATH_BYTES, sample_offsets,
 /// };
-/// use motion_render::{Composition, RenderPrepare, RenderOptions, Renderer, render_still};
+/// use motion_render::{Composition, RenderPrepare, RenderOptions, BackendKind, render_still};
 /// use motion_content::diagram::*;
 /// let labels = [Label::new(Point::new(50.0, 50.0), Size::new(40.0, 30.0))];
 /// let positions = LabelLayout::new(Rect::new(0.0, 0.0, 100.0, 100.0))
