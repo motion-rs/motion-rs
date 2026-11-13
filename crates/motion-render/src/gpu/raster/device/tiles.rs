@@ -1,7 +1,7 @@
 //! Conservative tile storage and work admission before device coverage is selected.
 
 use crate::prepared::PixelRect;
-use kurbo::ParamCurve;
+use kurbo::{ParamCurve, ParamCurveDeriv};
 use motion_core::ValidationError;
 use motion_core::budget::Budget;
 use motion_core::geometry::flatten::Edge;
@@ -37,6 +37,9 @@ const MAX_TILE_EDGES: u32 = 4096;
 
 /// Maximum control hulls used to admit one curve, without generating its line segments.
 const CURVE_ADMISSION_HULLS: u32 = 8;
+
+/// Pixels the whole control polygon must clear tile seams by to admit all hulls at once.
+const SINGLE_TILE_MARGIN: f64 = 1.0 / 256.0;
 
 /// Conservative scalar work for one cubic subsegment's control polygon.
 const CURVE_HULL_WORK: u64 = 128;
@@ -88,70 +91,121 @@ impl TileLayout {
             ValidationError::limit(path, "max_bytes", "Could not reserve curve tile admission")
         })?;
         counts.resize(tile_count as usize, 0);
+        // Per-row difference counts: a hull adds its segments at its first column and removes
+        // them past its last. Tile sums never exceed `indices`, so once that fits in u32 the
+        // wrapping prefix sums below are exact.
         let mut indices = 0_u64;
-        let mut crowded = false;
+        let tile = |value: f64, maximum: u32| {
+            (value / f64::from(COVERAGE_TILE_SIZE))
+                .floor()
+                .clamp(0.0, f64::from(maximum - 1)) as u32
+        };
+        let mut add = |left: u32, right: u32, top: u32, bottom: u32, added: u32| {
+            for row in top..=bottom {
+                let base = (row * columns) as usize;
+                counts[base + left as usize] = counts[base + left as usize].wrapping_add(added);
+                if right + 1 < columns {
+                    let next = base + right as usize + 1;
+                    counts[next] = counts[next].wrapping_sub(added);
+                }
+            }
+        };
         for curve in curves {
             let parts = curve.segments.min(CURVE_ADMISSION_HULLS);
             budget.work(u64::from(parts) * CURVE_HULL_WORK, path)?;
+            // Subcurve hulls lie in the control polygon up to rounding far below the margin,
+            // and f32 rounding, floor and clamp are monotone: if the widened polygon stays in
+            // one tile on both axes, every hull admits the same tiles.
+            let single = |axis: fn(&motion_core::Point) -> f64, origin: u32, maximum: u32| {
+                let (low, high) = curve
+                    .points
+                    .iter()
+                    .fold((f64::INFINITY, f64::NEG_INFINITY), |(low, high), point| {
+                        (low.min(axis(point)), high.max(axis(point)))
+                    });
+                let origin = f64::from(origin);
+                let low = tile(
+                    f64::from((low - origin - SINGLE_TILE_MARGIN) as f32),
+                    maximum,
+                );
+                let high = tile(
+                    f64::from((high - origin + SINGLE_TILE_MARGIN) as f32),
+                    maximum,
+                );
+                (low == high).then_some(low)
+            };
+            let finite = curve
+                .points
+                .iter()
+                .all(|point| point.x.is_finite() && point.y.is_finite());
+            if let (true, Some(column), Some(row)) = (
+                finite,
+                single(|point| point.x, bounds.left, columns),
+                single(|point| point.y, bounds.top, rows),
+            ) {
+                let (left, right) = (column.saturating_sub(1), (column + 1).min(columns - 1));
+                let (top, bottom) = (row.saturating_sub(1), (row + 1).min(rows - 1));
+                let spans = u64::from(right - left + 1) * u64::from(bottom - top + 1);
+                budget.work(u64::from(parts) * spans, path)?;
+                add(left, right, top, bottom, curve.segments);
+                indices += spans * u64::from(curve.segments);
+                continue;
+            }
             let points = curve
                 .points
                 .map(|point| kurbo::Point::new(point.x, point.y));
             let cubic = kurbo::CubicBez::new(points[0], points[1], points[2], points[3]);
+            let derivative = cubic.deriv();
+            let segments = f64::from(curve.segments);
+            // Shared hull endpoints are evaluated once, with the operations of
+            // `kurbo::CubicBez::subsegment`.
+            let sample = |index: u64| {
+                let time = index as f64 / segments;
+                (time, cubic.eval(time), derivative.eval(time).to_vec2())
+            };
+            let mut first = 0_u64;
+            let mut start = sample(first);
             for part in 0..parts {
-                let first = u64::from(part) * u64::from(curve.segments) / u64::from(parts);
                 let last = u64::from(part + 1) * u64::from(curve.segments) / u64::from(parts);
-                let hull = cubic.subsegment(
-                    first as f64 / f64::from(curve.segments)
-                        ..last as f64 / f64::from(curve.segments),
-                );
-                let points = [hull.p0, hull.p1, hull.p2, hull.p3];
+                let end = sample(last);
+                let scale = (end.0 - start.0) * (1.0 / 3.0);
+                let hull = [
+                    start.1,
+                    start.1 + scale * start.2,
+                    end.1 - scale * end.2,
+                    end.1,
+                ];
                 // Split on the GPU's segment boundaries. Each generated chord is in its
                 // subcurve hull; the seam tile also covers f32 evaluation/parameter error.
-                let axis = |x: bool, minimum: bool| {
-                    points
-                        .iter()
-                        .map(|point| {
-                            let value = if x {
-                                point.x - f64::from(bounds.left)
-                            } else {
-                                point.y - f64::from(bounds.top)
-                            };
-                            f64::from(value as f32)
-                        })
-                        .fold(
-                            if minimum {
-                                f64::INFINITY
-                            } else {
-                                f64::NEG_INFINITY
-                            },
-                            |a, b| if minimum { a.min(b) } else { a.max(b) },
-                        )
-                };
-                let tile = |value: f64, maximum: u32| {
-                    (value / f64::from(COVERAGE_TILE_SIZE))
-                        .floor()
-                        .clamp(0.0, f64::from(maximum - 1)) as u32
-                };
-                let left = tile(axis(true, true), columns).saturating_sub(1);
-                let right = (tile(axis(true, false), columns) + 1).min(columns - 1);
-                let top = tile(axis(false, true), rows).saturating_sub(1);
-                let bottom = (tile(axis(false, false), rows) + 1).min(rows - 1);
-                budget.work(
-                    u64::from(right - left + 1) * u64::from(bottom - top + 1),
-                    path,
-                )?;
-                for row in top..=bottom {
-                    for column in left..=right {
-                        let count = &mut counts[(row * columns + column) as usize];
-                        *count = count.saturating_add((last - first) as u32);
-                        crowded |= *count > MAX_TILE_EDGES;
-                        indices += last - first;
-                    }
+                let [mut x_min, mut y_min] = [f64::INFINITY; 2];
+                let [mut x_max, mut y_max] = [f64::NEG_INFINITY; 2];
+                for point in hull {
+                    let x = f64::from((point.x - f64::from(bounds.left)) as f32);
+                    let y = f64::from((point.y - f64::from(bounds.top)) as f32);
+                    (x_min, x_max) = (x_min.min(x), x_max.max(x));
+                    (y_min, y_max) = (y_min.min(y), y_max.max(y));
                 }
+                let left = tile(x_min, columns).saturating_sub(1);
+                let right = (tile(x_max, columns) + 1).min(columns - 1);
+                let top = tile(y_min, rows).saturating_sub(1);
+                let bottom = (tile(y_max, rows) + 1).min(rows - 1);
+                let spans = u64::from(right - left + 1) * u64::from(bottom - top + 1);
+                budget.work(spans, path)?;
+                add(left, right, top, bottom, (last - first) as u32);
+                indices += spans * (last - first);
+                (first, start) = (last, end);
             }
         }
+        let crowded = indices > u64::from(u32::MAX)
+            || counts.chunks_exact(columns as usize).any(|row| {
+                let mut count = 0_u32;
+                row.iter().any(|delta| {
+                    count = count.wrapping_add(*delta);
+                    count > MAX_TILE_EDGES
+                })
+            });
         budget.release(tile_count * 4);
-        if crowded || indices > u64::from(u32::MAX) {
+        if crowded {
             return Ok(None);
         }
         Ok(Some(Self {
@@ -235,5 +289,132 @@ impl TileLayout {
 
     pub(crate) fn tile_count(self) -> u64 {
         u64::from(self.columns) * u64::from(self.rows)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::gpu::raster::device::DeviceCurve;
+    use motion_core::{PixelSize, Point, RasterLimits};
+
+    /// Hull-by-hull admission with `kurbo::CubicBez::subsegment` and per-tile counting.
+    fn reference(curves: &[DeviceCurve], bounds: PixelRect) -> (Option<TileLayout>, u64) {
+        let columns = bounds.width().div_ceil(COVERAGE_TILE_SIZE);
+        let rows = bounds.height().div_ceil(COVERAGE_TILE_SIZE);
+        let tile_count = u64::from(columns) * u64::from(rows);
+        let mut work = tile_count + curves.len() as u64;
+        let mut counts = vec![0_u32; tile_count as usize];
+        let (mut indices, mut crowded) = (0_u64, false);
+        let tile = |value: f64, maximum: u32| {
+            (value / f64::from(COVERAGE_TILE_SIZE))
+                .floor()
+                .clamp(0.0, f64::from(maximum - 1)) as u32
+        };
+        for curve in curves {
+            let parts = curve.segments.min(CURVE_ADMISSION_HULLS);
+            work += u64::from(parts) * CURVE_HULL_WORK;
+            let [p0, p1, p2, p3] = curve
+                .points
+                .map(|point| kurbo::Point::new(point.x, point.y));
+            let cubic = kurbo::CubicBez::new(p0, p1, p2, p3);
+            for part in 0..parts {
+                let first = u64::from(part) * u64::from(curve.segments) / u64::from(parts);
+                let last = u64::from(part + 1) * u64::from(curve.segments) / u64::from(parts);
+                let segments = f64::from(curve.segments);
+                let hull = cubic.subsegment(first as f64 / segments..last as f64 / segments);
+                let points = [hull.p0, hull.p1, hull.p2, hull.p3];
+                let x = points.map(|point| f64::from((point.x - f64::from(bounds.left)) as f32));
+                let y = points.map(|point| f64::from((point.y - f64::from(bounds.top)) as f32));
+                let low = |values: [f64; 4]| values.into_iter().fold(f64::INFINITY, f64::min);
+                let high = |values: [f64; 4]| values.into_iter().fold(f64::NEG_INFINITY, f64::max);
+                let left = tile(low(x), columns).saturating_sub(1);
+                let right = (tile(high(x), columns) + 1).min(columns - 1);
+                let top = tile(low(y), rows).saturating_sub(1);
+                let bottom = (tile(high(y), rows) + 1).min(rows - 1);
+                work += u64::from(right - left + 1) * u64::from(bottom - top + 1);
+                for row in top..=bottom {
+                    for column in left..=right {
+                        let count = &mut counts[(row * columns + column) as usize];
+                        *count = count.saturating_add((last - first) as u32);
+                        crowded |= *count > MAX_TILE_EDGES;
+                        indices += last - first;
+                    }
+                }
+            }
+        }
+        let layout = (!crowded && indices <= u64::from(u32::MAX)).then(|| TileLayout {
+            columns,
+            rows,
+            indices: indices as u32,
+            work: TileLayout::work_for(indices, tile_count, bounds),
+        });
+        (layout, work)
+    }
+
+    #[test]
+    fn curve_admission_matches_hull_by_hull_reference() -> motion_core::Result {
+        let bounds = PixelRect {
+            left: 3,
+            top: 5,
+            right: 163,
+            bottom: 125,
+        };
+        // Deterministic control points on, just inside and just outside tile seams,
+        // plus interior and offscreen points.
+        let mut state = 0x9e37_79b9_7f4a_7c15_u64;
+        let mut next = || {
+            state = state
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            state >> 33
+        };
+        let mut curves = Vec::new();
+        for index in 0..400 {
+            let mut coordinate = |origin: u32, extent: u32| {
+                let seams = u64::from(extent / COVERAGE_TILE_SIZE + 2);
+                let seam = (next() % seams) as f64 * 16.0 - 8.0;
+                let offsets = [0.0, 1e-9, -1e-9, 1.0 / 512.0, -1.0 / 512.0, 0.3, 7.9];
+                let offset = offsets[next() as usize % offsets.len()];
+                let jitter = if next() % 3 == 0 {
+                    (next() % 1000) as f64 / 100.0
+                } else {
+                    0.0
+                };
+                f64::from(origin) + seam + offset + jitter
+            };
+            let anchor = Point::new(coordinate(bounds.left, 160), coordinate(bounds.top, 120));
+            let spread = if index % 2 == 0 { 0.004 } else { 20.0 };
+            let mut step = || ((next() % 2001) as f64 / 1000.0 - 1.0) * spread;
+            let mut corner = || Point::new(anchor.x + step(), anchor.y + step());
+            curves.push(DeviceCurve {
+                points: [anchor, corner(), corner(), corner()],
+                segments: [0, 1, 3, 8, 13, 64][index % 6],
+                tolerance: 0.25,
+            });
+        }
+        let size = PixelSize::new(bounds.right, bounds.bottom);
+        for length in [1, 7, curves.len()] {
+            let mut budget = Budget::new(size, RasterLimits::default())?;
+            let layout =
+                TileLayout::admit_curves(&curves[..length], bounds, &mut budget, "curves")?;
+            assert_eq!(
+                (layout, budget.work_done()),
+                reference(&curves[..length], bounds)
+            );
+        }
+        // Enough stacked single-tile curves to exceed the tile edge cap.
+        let crowded = (0..=MAX_TILE_EDGES / 64)
+            .map(|_| DeviceCurve {
+                points: curves[0].points,
+                segments: 64,
+                tolerance: 0.25,
+            })
+            .collect::<Vec<_>>();
+        let mut budget = Budget::new(size, RasterLimits::default())?;
+        let layout = TileLayout::admit_curves(&crowded, bounds, &mut budget, "curves")?;
+        assert_eq!(layout, None);
+        assert_eq!((layout, budget.work_done()), reference(&crowded, bounds));
+        Ok(())
     }
 }

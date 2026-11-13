@@ -7,7 +7,7 @@ mod particle_states;
 mod uploads;
 
 /// Plan steps or batches recorded into one command encoder before it is submitted.
-const PASSES_PER_SUBMISSION: usize = 64;
+const PASSES_PER_SUBMISSION: usize = 16;
 
 struct TextureInputs<'a> {
     images: &'a [wgpu::Texture],
@@ -224,6 +224,9 @@ impl Gpu {
                 &mut working,
                 timestamps.as_ref(),
             );
+            // Coverage depends only on prepared geometry: let the GPU run it while the
+            // remaining steps are still being encoded.
+            self.submit_recorded(&mut encoder);
         }
         let mut budget = Budget::resume(
             plan.limits,
