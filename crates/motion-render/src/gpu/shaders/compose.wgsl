@@ -50,6 +50,10 @@ struct FailureStatus {
     code: atomic<u32>,
 }
 
+struct ParticleIndexMask {
+    words: array<atomic<u32>>,
+}
+
 @group(0) @binding(0)
 var<uniform> settings: GpuUniforms;
 
@@ -84,6 +88,9 @@ var<storage, read> frame_coverage: FrameCoverage;
 // Generated f32 device coverage; fills address it by their strip's alpha offset.
 @group(0) @binding(12)
 var<storage, read> device_coverage: array<f32>;
+
+@group(0) @binding(13)
+var<storage, read_write> particle_index_mask: ParticleIndexMask;
 
 // Values are host-narrowed f32 lanes; indexing retains their stored bits.
 fn value(index: u32) -> f32 {
@@ -1411,6 +1418,102 @@ fn particle_intersects(support: vec4f, tile: vec4f) -> bool {
         && all(tile.xy <= support.zw);
 }
 
+const PARTICLE_TILE_BITSET: u32 = 2u;
+
+fn particle_device_point(point: vec2f, determinant: f32) -> vec2f {
+    let relative = point - vec2f(value(4u), value(5u));
+    return checked(
+            vec4f(
+                (value(3u) * relative.x - value(2u) * relative.y) / determinant,
+                (-value(1u) * relative.x + value(0u) * relative.y) / determinant,
+                0.0,
+                0.0,
+            ),
+        ).xy;
+}
+
+fn particle_device_bounds(support: vec4f) -> vec4f {
+    let determinant = value(0u) * value(3u) - value(1u) * value(2u);
+    let first = particle_device_point(support.xy, determinant);
+    let second = particle_device_point(vec2f(support.z, support.y), determinant);
+    let third = particle_device_point(vec2f(support.x, support.w), determinant);
+    let fourth = particle_device_point(support.zw, determinant);
+    let lower = min(min(first, second), min(third, fourth));
+    let upper = max(max(first, second), max(third, fourth));
+    let local_scale = max(
+        max(abs(support.xy), abs(support.zw)),
+        vec2f(abs(value(4u)), abs(value(5u))),
+    );
+    let arithmetic_scale = vec2f(
+            (abs(value(3u)) * local_scale.x + abs(value(2u)) * local_scale.y)
+                / abs(determinant),
+            (abs(value(1u)) * local_scale.x + abs(value(0u)) * local_scale.y)
+                / abs(determinant),
+        );
+    let guard = max(
+            max(max(abs(lower), abs(upper)), arithmetic_scale),
+            vec2f(1.0),
+        ) * 0.000244140625
+        + vec2f(2.0);
+    return checked(vec4f(lower - guard, upper + guard));
+}
+
+// Each invocation sets its source-order bit in every conservatively covered tile.
+fn add_particle_to_tiles(index: u32, support: vec4f) {
+    if particle_tile_count() == 0u || !all(support.xy <= support.zw) {
+        return;
+    }
+
+    let origin = vec2u(settings.sources[2].x, settings.sources[2].y);
+    let end = vec2u(settings.sources[2].z, settings.sources[2].w);
+    let extent = end - origin;
+    let columns = (extent.x + 15u) / 16u;
+    let rows = (extent.y + 15u) / 16u;
+    let lower = max(support.xy, vec2f(origin));
+    let upper = min(support.zw, vec2f(end));
+    if any(lower > upper) {
+        return;
+    }
+
+    let maximum = vec2u(columns - 1u, rows - 1u);
+    let first = min(vec2u(floor((lower - vec2f(origin)) / 16.0)), maximum);
+    let last = min(vec2u(floor((upper - vec2f(origin)) / 16.0)), maximum);
+    let count = u32(operation_data.values[0u]);
+    let words_per_tile = (count + 31u) / 32u;
+    var row = first.y;
+    loop {
+        var column = first.x;
+        loop {
+            let tile = row * columns + column;
+            let word = tile * words_per_tile + index / 32u;
+            atomicOr(&particle_index_mask.words[word], 1u << (index % 32u));
+            if column == last.x {
+                break;
+            }
+            column += 1u;
+        }
+        if row == last.y {
+            break;
+        }
+        row += 1u;
+    }
+}
+
+// Particle-index workgroups scatter into a zeroed atomic mask; bit positions preserve order.
+@compute @workgroup_size(64)
+fn build_particle_index_mask(
+    @builtin(global_invocation_id) invocation: vec3u,
+) {
+    let index = invocation.x;
+    let count = u32(operation_data.values[0u]);
+    if index >= count {
+        return;
+    }
+
+    let support = output_pixels.values[index * 3u + 2u];
+    add_particle_to_tiles(index, particle_device_bounds(support));
+}
+
 // One invocation owns each tile's metadata vec4; integer fields travel as f32 bit patterns.
 @compute @workgroup_size(64)
 fn count_particle_tiles(@builtin(global_invocation_id) invocation: vec3u) {
@@ -1521,21 +1624,51 @@ fn particle_batch(backdrop: vec4f, coordinate: vec2u) -> vec4f {
     let count = u32(operation_data.values[0u]);
     var result = backdrop;
     var metadata = vec4u(count, 0u, 0u, 0u);
+    var tile = 0u;
 
-    // Untiled mode visits every particle; tiled mode reads count/offset metadata from the state buffer.
+    // Tiled mode selects either the ordered membership bitset or exact list metadata.
     if PARTICLE_TILES {
         let origin = vec2u(settings.sources[2].x, settings.sources[2].y);
         let columns = (settings.sources[2].z - origin.x + 15u) / 16u;
-        let tile = ((coordinate.y - origin.y) / 16u) * columns + (coordinate.x - origin.x) / 16u;
-        metadata = bitcast<vec4u>(second_pixels.values[count * 3u + tile]);
+        tile = ((coordinate.y - origin.y) / 16u) * columns + (coordinate.x - origin.x) / 16u;
+        if settings.flags.particle_tiles != PARTICLE_TILE_BITSET {
+            metadata = bitcast<vec4u>(second_pixels.values[count * 3u + tile]);
+        }
     }
 
     let indices = count * 3u + particle_tile_count() + 1u;
-    for(var cursor = 0u; cursor < metadata.x; cursor++) {
+    let words_per_tile = (count + 31u) / 32u;
+    var cursor = 0u;
+    var mask_word = 0u;
+    var mask_value = 0u;
+    if PARTICLE_TILES && settings.flags.particle_tiles == PARTICLE_TILE_BITSET {
+        mask_value = atomicLoad(&particle_index_mask.words[tile * words_per_tile]);
+    }
+    loop {
         var index = cursor;
-        if PARTICLE_TILES {
-            index = bitcast<u32>(second_pixels.values[indices + metadata.y + cursor].x);
+        if PARTICLE_TILES && settings.flags.particle_tiles == PARTICLE_TILE_BITSET {
+            if mask_value == 0u {
+                mask_word += 1u;
+                if mask_word >= words_per_tile {
+                    break;
+                }
+                mask_value = atomicLoad(
+                    &particle_index_mask.words[tile * words_per_tile + mask_word],
+                );
+                continue;
+            }
+            let lowest = mask_value & (0u - mask_value);
+            index = mask_word * 32u + countOneBits(lowest - 1u);
+            mask_value &= mask_value - 1u;
+        } else {
+            if cursor >= metadata.x {
+                break;
+            }
+            if PARTICLE_TILES {
+                index = bitcast<u32>(second_pixels.values[indices + metadata.y + cursor].x);
+            }
         }
+        cursor += 1u;
 
         let base = 4u + index * particle_stride();
         let kind = u32(operation_data.values[base + 11u]);

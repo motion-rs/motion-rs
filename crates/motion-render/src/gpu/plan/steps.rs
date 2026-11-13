@@ -9,6 +9,9 @@ const ANALYTIC_WORK_PER_INSTANCE: u64 = 256;
 /// Simultaneous analytic staging and device payload copies; host facts remain in the admitted IR.
 const ANALYTIC_DEVICE_COPIES: u64 = 2;
 
+/// Keep the bitmap path bounded; larger layouts use exact-size ordered indices.
+const MAX_PARTICLE_MASK_BYTES: u64 = 32 * 1024 * 1024;
+
 impl Planner<'_> {
     pub(in crate::gpu) fn admit_analytic_program(
         &mut self,
@@ -89,16 +92,47 @@ impl Planner<'_> {
         }
         parameters.images([first_bounds, second_bounds, bounds]);
         let tiled = parameters.operation.code == GpuOp::Particles as u32 && data[0] >= 256.0;
-        parameters.flags.particle_tiles = u32::from(tiled);
         if parameters.operation.code == GpuOp::Particles as u32 {
             let layout = ParticleTiles::new(bounds, data[0] as u32)?;
             if tiled {
-                self.budget
-                    .bytes(layout.bytes * 2 + 16, "gpu.particle_tiles")?;
-                self.budget.work(
-                    u64::from(layout.tiles) * (u64::from(layout.count) * 32 + 64),
-                    "gpu.particle_tiles",
-                )?;
+                let size = image_size(bounds);
+                let pixels = u64::from(size.width) * u64::from(size.height);
+                let mask_bytes = layout.mask_bytes();
+                let tile_work = u64::from(layout.tiles) * (u64::from(layout.count) * 32 + 64);
+                let mask_work = layout
+                    .mask_composition_work(pixels)
+                    .and_then(|work| layout.mask_build_work()?.checked_add(work));
+                let step_bytes = data.len() as u64 * 4 + size_of::<GpuUniforms>() as u64;
+                let required_bytes = layout
+                    .state_bytes()
+                    .checked_add(mask_bytes.unwrap_or(u64::MAX))
+                    .and_then(|bytes| bytes.checked_add(step_bytes))
+                    .and_then(|bytes| bytes.checked_add(self.budget.live_bytes()));
+                let required_work = mask_work
+                    .and_then(|work| work.checked_add(pixels))
+                    .and_then(|work| work.checked_add(self.budget.work_done()));
+                let bitset = matches!(
+                    (mask_bytes, mask_work, required_bytes, required_work),
+                    (
+                        Some(bytes),
+                        Some(_),
+                        Some(required_bytes),
+                        Some(required_work)
+                    ) if bytes <= MAX_PARTICLE_MASK_BYTES
+                        && required_bytes <= self.budget.limits.max_bytes
+                        && required_work <= self.budget.limits.max_work
+                );
+                if bitset && let (Some(mask_bytes), Some(mask_work)) = (mask_bytes, mask_work) {
+                    self.budget
+                        .bytes(layout.state_bytes() + mask_bytes, "gpu.particle_tiles")?;
+                    self.budget.work(mask_work, "gpu.particle_tiles")?;
+                    parameters.flags.particle_tiles = PARTICLE_TILE_BITSET;
+                } else {
+                    self.budget
+                        .bytes(layout.bytes * 2 + 16, "gpu.particle_tiles")?;
+                    self.budget.work(tile_work, "gpu.particle_tiles")?;
+                    parameters.flags.particle_tiles = 1;
+                }
             } else {
                 self.budget.bytes(
                     (u64::from(layout.count) * 48).max(16),

@@ -38,7 +38,7 @@ use abi::{
 };
 
 use frame::{FrameInput, FrameView};
-use particle_tiles::ParticleTiles;
+use particle_tiles::{PARTICLE_TILE_BITSET, ParticleTiles};
 
 const DIRECT_COVERAGE: u32 = u32::MAX - 2;
 
@@ -129,7 +129,7 @@ pub struct GpuContext {
     submissions: std::sync::Arc<std::sync::Mutex<()>>,
 
     particle_states: std::sync::Arc<wgpu::ComputePipeline>,
-    particle_bins: [std::sync::Arc<wgpu::ComputePipeline>; 3],
+    particle_bins: [std::sync::Arc<wgpu::ComputePipeline>; 4],
     textures: std::sync::Arc<TexturePipelines>,
     present_shader: std::sync::Arc<std::sync::OnceLock<wgpu::ShaderModule>>,
     present: std::sync::Arc<[std::sync::OnceLock<wgpu::RenderPipeline>; 3]>,

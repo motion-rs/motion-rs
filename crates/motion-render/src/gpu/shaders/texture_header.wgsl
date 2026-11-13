@@ -52,6 +52,10 @@ struct FailureStatus {
     code: atomic<u32>,
 }
 
+struct ParticleIndexMask {
+    words: array<atomic<u32>>,
+}
+
 // Keep the shared composition binding numbers while replacing color inputs with textures.
 @group(0) @binding(0)
 var<uniform> settings: GpuUniforms;
@@ -93,6 +97,9 @@ var<storage, read> frame_coverage: FrameCoverage;
 // Generated f32 device coverage; fills address it by their strip's alpha offset.
 @group(0) @binding(12)
 var<storage, read> device_coverage: array<f32>;
+
+@group(0) @binding(13)
+var<storage, read_write> particle_index_mask: ParticleIndexMask;
 
 // Value rows preserve host-narrowed f32 bit patterns.
 fn value(index: u32) -> f32 {

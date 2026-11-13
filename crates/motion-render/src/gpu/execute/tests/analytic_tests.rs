@@ -149,7 +149,25 @@ fn analytic_planning_zeros_reference_positions_and_admits_exact_boundaries() -> 
         .iter()
         .find(|step| step.analytic.is_some())
         .unwrap();
-    assert_eq!(step.parameters.flags.particle_tiles, 1);
+    assert_eq!(step.parameters.flags.particle_tiles, 2);
+    let bounded = Plan::new(
+        &frame,
+        RasterLimits {
+            max_work: 1_000_000,
+            ..limits
+        },
+    )?;
+    assert_eq!(
+        bounded
+            .steps
+            .iter()
+            .find(|step| step.analytic.is_some())
+            .unwrap()
+            .parameters
+            .flags
+            .particle_tiles,
+        1
+    );
     assert_eq!(step.analytic.as_ref().unwrap().len(), 257);
     assert!(
         step.data[4..]

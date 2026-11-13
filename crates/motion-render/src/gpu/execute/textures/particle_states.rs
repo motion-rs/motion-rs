@@ -2,6 +2,11 @@
 
 use super::*;
 
+pub(super) struct ParticleStateBuffers {
+    pub(super) states: wgpu::Buffer,
+    pub(super) index_mask: Option<wgpu::Buffer>,
+}
+
 impl Gpu {
     pub(super) fn texture_particle_states(
         &self,
@@ -9,7 +14,7 @@ impl Gpu {
         buffers: [&wgpu::Buffer; 3],
         encoder: &mut wgpu::CommandEncoder,
         budget: &mut Budget,
-    ) -> motion_core::Result<Option<wgpu::Buffer>> {
+    ) -> motion_core::Result<Option<ParticleStateBuffers>> {
         let [parameters, data, status] = buffers;
         if step.parameters.operation.code != GpuOp::Particles as u32 {
             return Ok(None);
@@ -19,11 +24,15 @@ impl Gpu {
             self.encode_analytic_particles(program, data, status, encoder);
         }
         let tiles = ParticleTiles::new(step.parameters.image_bounds(2), count)?;
-        let tiled = step.parameters.flags.particle_tiles != 0;
-        let initial = if tiled {
+        let tile_mode = step.parameters.flags.particle_tiles;
+        let tiled = tile_mode != 0;
+        let bitset = tile_mode == 2;
+        let initial = if bitset {
+            tiles.state_bytes()
+        } else if tiled {
             tiles.bytes
         } else {
-            (u64::from(count) * 48).max(16)
+            tiles.state_bytes()
         };
         let limit_bytes = self
             .device
@@ -76,7 +85,45 @@ impl Gpu {
             pass.dispatch_workgroups(count.div_ceil(64).max(1), 1, 1);
         }
         if !tiled {
-            return Ok(Some(states));
+            return Ok(Some(ParticleStateBuffers {
+                states,
+                index_mask: None,
+            }));
+        }
+        if bitset {
+            let size = tiles.mask_bytes().ok_or_else(|| {
+                ValidationError::limit(
+                    "gpu.particle_tiles",
+                    "max_bytes",
+                    "Particle index mask size overflow",
+                )
+            })?;
+            if size > limit_bytes {
+                return Err(ValidationError::limit(
+                    "gpu.particle_tiles",
+                    "max_bytes",
+                    "Particle index mask exceeds device storage size",
+                )
+                .into());
+            }
+            let index_mask = self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("Particle index mask"),
+                size,
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            self.particle_mask_pass(
+                encoder,
+                &self.particle_bins[3],
+                parameters,
+                [&states, data, status],
+                &index_mask,
+                count.div_ceil(64).max(1),
+            );
+            return Ok(Some(ParticleStateBuffers {
+                states,
+                index_mask: Some(index_mask),
+            }));
         }
         for (pipeline, groups) in [
             (&self.particle_bins[0], tiles.tiles.div_ceil(64).max(1)),
@@ -119,6 +166,9 @@ impl Gpu {
             [&indexed, data, status],
             tiles.tiles.div_ceil(64).max(1),
         );
-        Ok(Some(indexed))
+        Ok(Some(ParticleStateBuffers {
+            states: indexed,
+            index_mask: None,
+        }))
     }
 }

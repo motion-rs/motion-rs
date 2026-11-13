@@ -178,7 +178,12 @@ impl Gpu {
             &[0; 16],
             wgpu::BufferUsages::STORAGE,
         );
-        working.extend([status.clone(), dummy.clone()]);
+        let empty_particle_mask = self.upload_buffer(
+            "unused particle index mask",
+            &[0; 4],
+            wgpu::BufferUsages::STORAGE,
+        );
+        working.extend([status.clone(), dummy.clone(), empty_particle_mask.clone()]);
         let coverage = if plan.coverage.is_empty() {
             dummy.clone()
         } else {
@@ -293,6 +298,11 @@ impl Gpu {
                     &mut encoder,
                     &mut budget,
                 )?;
+                let particle_states = states.as_ref().map_or(&dummy, |buffers| &buffers.states);
+                let particle_mask = states
+                    .as_ref()
+                    .and_then(|buffers| buffers.index_mask.as_ref())
+                    .unwrap_or(&empty_particle_mask);
                 let pipeline = if step.parameters.flags.particle_tiles != 0 {
                     &self.textures.particles
                 } else {
@@ -308,7 +318,7 @@ impl Gpu {
                         },
                         wgpu::BindGroupEntry {
                             binding: 2,
-                            resource: states.as_ref().unwrap_or(&dummy).as_entire_binding(),
+                            resource: particle_states.as_entire_binding(),
                         },
                         wgpu::BindGroupEntry {
                             binding: 4,
@@ -342,6 +352,10 @@ impl Gpu {
                             binding: 12,
                             resource: device_coverage.as_entire_binding(),
                         },
+                        wgpu::BindGroupEntry {
+                            binding: 13,
+                            resource: particle_mask.as_entire_binding(),
+                        },
                     ],
                 });
                 let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
@@ -352,7 +366,10 @@ impl Gpu {
                 pass.set_bind_group(0, &group, &[]);
                 pass.dispatch_workgroups(size.width.div_ceil(8), size.height.div_ceil(8), 1);
                 if let Some(states) = states {
-                    working.push(states);
+                    working.push(states.states);
+                    if let Some(index_mask) = states.index_mask {
+                        working.push(index_mask);
+                    }
                 }
             }
         }

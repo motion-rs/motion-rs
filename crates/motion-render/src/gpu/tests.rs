@@ -349,11 +349,15 @@ fn gpu_shader_validates_without_a_device() {
         module.types[uniform.ty].inner,
         wgpu::naga::TypeInner::Struct { span: 256, .. }
     ));
-    assert_eq!(module.entry_points.len(), 10);
+    assert_eq!(module.entry_points.len(), 11);
     for (name, stage) in [
         ("texture_main", wgpu::naga::ShaderStage::Compute),
         ("texture_check", wgpu::naga::ShaderStage::Compute),
         ("prepare_particle_states", wgpu::naga::ShaderStage::Compute),
+        (
+            "build_particle_index_mask",
+            wgpu::naga::ShaderStage::Compute,
+        ),
         ("count_particle_tiles", wgpu::naga::ShaderStage::Compute),
         ("prefix_particle_tiles", wgpu::naga::ShaderStage::Compute),
         ("fill_particle_tiles", wgpu::naga::ShaderStage::Compute),
@@ -374,6 +378,7 @@ fn gpu_shader_validates_without_a_device() {
                 if name == "prefix_particle_tiles" {
                     [1, 1, 1]
                 } else if name == "prepare_particle_states"
+                    || name == "build_particle_index_mask"
                     || name == "count_particle_tiles"
                     || name == "fill_particle_tiles"
                 {

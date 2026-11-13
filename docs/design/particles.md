@@ -48,7 +48,14 @@ the batch's `analytic_fallback` observation and preparation's
 A separate 64-thread compute pass derives conservative local support in a
 48-byte metadata record from either form of primitive storage.
 Batches below 256 instances retain the full-loop path to avoid fixed
-binning/synchronization overhead. Larger batches use ordered 16x16 tile lists.
+binning/synchronization overhead. Larger batches use ordered 16x16 tiles. When
+the bitset layout and its conservative work bound fit the budgets, one 64-thread
+compute pass assigns an invocation to each particle. It transforms the
+particle's conservative support to device space and atomically sets that
+particle's source-order bit in every overlapped tile. Composition enumerates
+set bits from low to high, preserving source order without a GPU summary
+readback. If the bitset is too large or cannot be admitted, the exact-size
+count/prefix/fill list path remains available.
 
 `InstanceUpload::new` accepts typed `InstanceRecord` values: Disc, Glow, Sprite or
 Segment. The upload is a four-word header (record stride in the low five bits of word three,
@@ -80,15 +87,19 @@ quotas remain separate. Plexus uses deterministic spatial hashing up to 65,536 s
 A native regression renders and replays 65,537 instances. The 48-byte GPU metadata
 record is separate charged storage, not a second name for the upload record.
 
-Separate count, prefix and fill passes keep each tile's original instance order;
-there is no unordered atomic append. A 16-byte prefix summary is read back before
+Bit positions encode the original indices, so atomic writes do not introduce
+unordered compositing. The complete state and bitset storage, worst-case
+particle-to-tile build work and conservative maximum composition work are
+admitted before execution. The fallback uses separate count, prefix and fill
+passes to retain original instance order; it reads back a 16-byte summary before
 allocating exact index storage and admitting actual tile-instance pixel work.
-Each reference has an independent 16-byte storage record to avoid concurrent
-read/modify/write races between packed vector components. Metadata, scan work,
-duplicate state storage and references all count toward logical budgets. Index,
-device-storage or work overflow fails the frame before public output commits;
-indices are never silently truncated. Returned frame stats include dynamic work
-and storage; the internal GPU plan statistics contain static admission charges only.
+Each fallback reference has an independent 16-byte storage record to avoid
+concurrent read/modify/write races between packed vector components. Metadata,
+scan work, duplicate state storage and references all count toward logical
+budgets. Index, device-storage or work overflow fails the frame before public
+output commits; indices are never silently truncated. Returned frame stats
+include path-specific work and storage; the internal GPU plan statistics
+contain static admission charges only.
 
 Tile composition has a separate shader-specialized pipeline. Ordinary scenes
 and small batches do not execute the tile lookup. Scalar WGSL coverage, blend

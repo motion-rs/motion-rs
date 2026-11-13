@@ -98,13 +98,10 @@ impl Plan {
             if step.parameters.operation.code == GpuOp::Particles as u32 {
                 let tiles =
                     ParticleTiles::new(step.parameters.image_bounds(2), step.data[0] as u32)?;
-                if tiles.bytes
-                    > limits
-                        .max_storage_buffer_binding_size
-                        .min(limits.max_buffer_size)
-                    || tiles.tiles.div_ceil(64) > limits.max_compute_workgroups_per_dimension
-                    || tiles.count.div_ceil(64) > limits.max_compute_workgroups_per_dimension
-                {
+                if tiles.exceeds_device_limits(
+                    limits,
+                    step.parameters.flags.particle_tiles == PARTICLE_TILE_BITSET,
+                ) {
                     return Err(device_error(
                         "particle_tiles",
                         "Native GPU particle metadata or dispatch exceeds device limits",
@@ -332,6 +329,7 @@ impl GpuContext {
                 "count_particle_tiles",
                 "prefix_particle_tiles",
                 "fill_particle_tiles",
+                "build_particle_index_mask",
             ]
             .map(|entry| {
                 std::sync::Arc::new(device.create_compute_pipeline(
