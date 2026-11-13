@@ -231,16 +231,18 @@ docking implementation.
 
 A scene registered with `StudioScene::reloadable(watch, load)` is rebuilt while the
 workbench runs. `Project` registers it for declarative documents: `studio film.json`, or a
-timeline added with `Project::document`, watches the document and every file it referred
-to when Studio started. The watched files' modification times are polled four times a
+timeline added with `Project::document`, watches the document and every file it refers
+to. The watched files' modification times and lengths are polled four times a
 second; once a change has been quiet for 200 ms, `load` runs on a worker thread.
 
 A successful reload replaces the scene and keeps the playhead, cues, preview settings and
 export settings, clamped to the new length. Cached frames are dropped and playback is
 paused. A failure keeps the previous scene, shows the error in the header and adds it to
 the diagnostics list, so a file saved halfway through an edit never blanks the preview.
-Exports already queued or running keep the scene they started with. Resources that appear
-only after launch are not watched, and the per-scene GPU context requested by
+Successful document reloads update the watched dependencies, including newly referenced
+resources. A change observed during compilation discards that stale result and queues a
+fresh rebuild. Exports already queued or running keep the scene they started with.
+The per-scene GPU context requested by
 `MOTION_STUDIO_SHARED_GPU` applies to the launch scene only.
 
 See [Gallery](../gallery/README.md), [rendering](design/rendering.md) and

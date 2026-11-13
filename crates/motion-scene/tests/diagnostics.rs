@@ -113,3 +113,50 @@ fn loaded_documents_report_lines_for_compile_errors_and_list_resources() {
         film.resources()
     );
 }
+
+#[cfg(feature = "particles")]
+#[test]
+fn particle_preset_diagnostics_identify_inputs_and_source_lines() {
+    for (changes, field) in [
+        (json!({"density": 0}), "density"),
+        (json!({"speed": 17}), "speed"),
+        (json!({"intensity": 65}), "intensity"),
+        (json!({"bounds": [0, 0, 0, 48]}), "bounds"),
+        (json!({"kind": "logo_assemble"}), "logo"),
+    ] {
+        let mut preset = json!({"kind":"sparks", "bounds":[0,0,64,48]});
+        preset
+            .as_object_mut()
+            .unwrap()
+            .extend(changes.as_object().unwrap().clone());
+        let text =
+            scene(&json!({"particles":{"seed":17,"duration":4,"preset":preset}}).to_string());
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("film.json");
+        std::fs::write(&path, text).unwrap();
+        let error = load(&path).unwrap_err();
+        let expected = format!("tracks[0].items[0].scene.content.particles.preset.{field}");
+        assert!(
+            error
+                .errors()
+                .iter()
+                .filter_map(|error| error.downcast_ref::<motion_core::ValidationError>())
+                .any(|error| format!("{}.{}", error.path, error.field) == expected),
+            "{}",
+            message(error)
+        );
+    }
+    let text = scene(
+        r#"{"particles":{"seed":17,"duration":4,"preset":{
+      "kind":"sparks",
+      "bounds":[0,0,64,48],
+      "density":0
+    }}}"#,
+    );
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("film.json");
+    std::fs::write(&path, text).unwrap();
+    let error = message(load(&path).unwrap_err());
+    assert!(error.contains("preset.density"), "{error}");
+    assert!(error.contains("(line 4,"), "{error}");
+}

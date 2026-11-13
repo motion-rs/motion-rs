@@ -581,3 +581,25 @@ fn scenes_without_a_reload_source_are_never_watched() -> motion_core::Result<()>
     assert!(app.reload.is_none() && app.reload_status.is_none());
     Ok(())
 }
+
+#[test]
+fn replacement_scenes_update_the_watched_dependencies() -> motion_core::Result<()> {
+    let directory = tempfile::tempdir().unwrap();
+    let original = directory.path().join("original.txt");
+    let dependency = directory.path().join("dependency.txt");
+    std::fs::write(&original, "30").unwrap();
+    std::fs::write(&dependency, "45").unwrap();
+    let context = egui::Context::default();
+    let creation = eframe::CreationContext::_new_kittest(context.clone());
+    let scene = reloadable(&original);
+    let clock = StudioClock::new(&scene.composition)?;
+    let mut app = StudioApp::with_persistence(&creation, scene, clock, false)?;
+    app.replace_scene(&context, reloadable(&dependency))?;
+    assert_eq!(
+        app.scene.reload.as_ref().unwrap().watch,
+        vec![dependency.clone()]
+    );
+    rewrite(&dependency, "60", 5);
+    settle(&mut app, &context, |app| app.clock.frame_count() == 60);
+    Ok(())
+}

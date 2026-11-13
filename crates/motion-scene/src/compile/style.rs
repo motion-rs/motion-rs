@@ -10,6 +10,9 @@ use motion_core::{
 };
 use std::sync::Arc;
 
+/// Maximum full-turn rounding excess in radians after converting document degrees.
+const FULL_TURN_ROUNDING_TOLERANCE: f64 = 4.0 * f64::EPSILON * std::f64::consts::TAU;
+
 /// Applies optional space, units and extension to any gradient builder.
 macro_rules! with_options {
     ($gradient:expr, $options:expr) => {{
@@ -28,22 +31,32 @@ macro_rules! with_options {
     }};
 }
 
-/// Paint that is fixed or carries an animated solid color.
+/// A gradient sampled at scene-local time before validation.
+type GradientSampler = Arc<dyn Fn(Time) -> Paint + Send + Sync>;
+
+/// Paint that is fixed, carries an animated solid color or samples an animated gradient.
 pub(crate) enum PaintProp {
     Solid(Prop<Color>),
     Fixed(Paint),
+    /// An animated gradient, validated again at every sampled time.
+    Sampled(Arc<dyn Fn(Time) -> Result<Paint, ValidationError> + Send + Sync>),
 }
 
 impl PaintProp {
-    fn at(&self, time: Time) -> Paint {
+    pub(super) fn at(&self, time: Time) -> Result<Paint, ValidationError> {
         match self {
-            Self::Solid(color) => Paint::Solid(color.at(time)),
-            Self::Fixed(paint) => paint.clone(),
+            Self::Solid(color) => Ok(Paint::Solid(color.at(time))),
+            Self::Fixed(paint) => Ok(paint.clone()),
+            Self::Sampled(sample) => sample(time),
         }
     }
 
-    fn varying(&self) -> bool {
-        matches!(self, Self::Solid(color) if color.varying())
+    pub(super) fn varying(&self) -> bool {
+        match self {
+            Self::Solid(color) => color.varying(),
+            Self::Fixed(_) => false,
+            Self::Sampled(_) => true,
+        }
     }
 }
 
@@ -66,25 +79,31 @@ impl Style {
     }
 
     /// Paints geometry; compilation guarantees at least one of fill or stroke.
-    /// Invalid geometry becomes a node that reports its error when prepared.
+    /// Invalid geometry or sampled paint becomes a node that reports its error when prepared.
     pub(crate) fn shape<Geometry: Shape + 'static>(
         &self,
         geometry: Result<Geometry, ValidationError>,
         time: Time,
     ) -> Node {
-        let geometry = match geometry {
-            Ok(geometry) => geometry,
-            Err(error) => return super::failure::failure(error),
-        };
+        self.try_shape(geometry, time)
+            .unwrap_or_else(super::failure::failure)
+    }
+
+    fn try_shape<Geometry: Shape + 'static>(
+        &self,
+        geometry: Result<Geometry, ValidationError>,
+        time: Time,
+    ) -> Result<Node, ValidationError> {
+        let geometry = geometry?;
         let mut styled = match (&self.fill, &self.stroke) {
-            (Some(fill), _) => geometry.fill(fill.at(time)),
-            (None, Some(stroke)) => geometry.stroke(stroke.width.at(time), stroke.paint.at(time)),
+            (Some(fill), _) => geometry.fill(fill.at(time)?),
+            (None, Some(stroke)) => geometry.stroke(stroke.width.at(time), stroke.paint.at(time)?),
             (None, None) => geometry.fill(Color::TRANSPARENT),
         };
         if let Some(stroke) = &self.stroke {
             let width = stroke.width.at(time);
             if self.fill.is_some() {
-                styled = styled.stroke(width, stroke.paint.at(time));
+                styled = styled.stroke(width, stroke.paint.at(time)?);
             }
             styled = styled.stroke_style(StrokeStyle {
                 width,
@@ -101,20 +120,24 @@ impl Style {
         if let Some(rule) = self.rule {
             styled = styled.fill_rule(rule);
         }
-        Node::from(styled)
+        Ok(Node::from(styled))
     }
 
-    /// Applies fill and stroke paint to text.
+    /// Applies fill and stroke paint to text, failing when sampled paint is invalid.
     #[cfg(feature = "text")]
-    pub(crate) fn text(&self, text: motion_content::Text, time: Time) -> motion_content::Text {
+    pub(crate) fn text(
+        &self,
+        text: motion_content::Text,
+        time: Time,
+    ) -> Result<motion_content::Text, ValidationError> {
         let mut text = text;
         if let Some(fill) = &self.fill {
-            text = text.fill(fill.at(time));
+            text = text.fill(fill.at(time)?);
         }
         if let Some(stroke) = &self.stroke {
-            text = text.stroke(stroke.width.at(time), stroke.paint.at(time));
+            text = text.stroke(stroke.width.at(time), stroke.paint.at(time)?);
         }
-        text
+        Ok(text)
     }
 }
 
@@ -241,47 +264,97 @@ impl Compiler<'_> {
     pub(crate) fn paint(&mut self, paint: &PaintSpec, path: &str) -> Option<PaintProp> {
         match paint {
             PaintSpec::Solid(color) => self.animated(color, path).map(PaintProp::Solid),
-            PaintSpec::Gradient(gradient) => self.gradient(gradient, path).map(PaintProp::Fixed),
+            PaintSpec::Gradient(gradient) => self.gradient(gradient, path),
         }
     }
 
-    fn gradient(&mut self, gradient: &GradientSpec, path: &str) -> Option<Paint> {
-        let paint = match gradient {
+    fn gradient(&mut self, gradient: &GradientSpec, path: &str) -> Option<PaintProp> {
+        let (varying, sample): (bool, GradientSampler) = match gradient {
             GradientSpec::Linear(spec) => {
-                let mut gradient = LinearGradient::new(spec.start, spec.end);
-                for stop in &spec.stops {
-                    gradient = gradient.stop(stop.offset, stop.color);
-                }
-                Paint::Linear(with_options!(gradient, spec.options))
+                let start = self.animated(&spec.start, &format!("{path}.linear.start"));
+                let end = self.animated(&spec.end, &format!("{path}.linear.end"));
+                let (start, end) = (start?, end?);
+                let spec = spec.clone();
+                (
+                    start.varying() || end.varying(),
+                    Arc::new(move |time| {
+                        let mut gradient = LinearGradient::new(start.at(time), end.at(time));
+                        for stop in &spec.stops {
+                            gradient = gradient.stop(stop.offset, stop.color);
+                        }
+                        Paint::Linear(with_options!(gradient, spec.options))
+                    }),
+                )
             }
             GradientSpec::Radial(spec) => {
-                let mut gradient = RadialGradient::new(spec.center, spec.radius);
-                if let Some(focal) = spec.focal {
-                    gradient = gradient.focal(focal);
-                }
-                for stop in &spec.stops {
-                    gradient = gradient.stop(stop.offset, stop.color);
-                }
-                Paint::Radial(with_options!(gradient, spec.options))
+                let center = self.animated(&spec.center, &format!("{path}.radial.center"));
+                let radius = self.animated(&spec.radius, &format!("{path}.radial.radius"));
+                let focal = spec
+                    .focal
+                    .as_ref()
+                    .map(|focal| self.animated(focal, &format!("{path}.radial.focal")));
+                let (center, radius, focal) = (center?, radius?, focal.lift()?);
+                let spec = spec.clone();
+                (
+                    center.varying()
+                        || radius.varying()
+                        || focal.as_ref().is_some_and(Prop::varying),
+                    Arc::new(move |time| {
+                        let mut gradient = RadialGradient::new(center.at(time), radius.at(time));
+                        if let Some(focal) = &focal {
+                            gradient = gradient.focal(focal.at(time));
+                        }
+                        for stop in &spec.stops {
+                            gradient = gradient.stop(stop.offset, stop.color);
+                        }
+                        Paint::Radial(with_options!(gradient, spec.options))
+                    }),
+                )
             }
             GradientSpec::Sweep(spec) => {
-                let mut gradient = SweepGradient::new(
-                    spec.center,
-                    spec.start_angle.to_radians(),
-                    spec.end_angle.to_radians(),
-                );
-                for stop in &spec.stops {
-                    gradient = gradient.stop(stop.offset, stop.color);
-                }
-                Paint::Sweep(with_options!(gradient, spec.options))
+                let center = self.animated(&spec.center, &format!("{path}.sweep.center"));
+                let start = self.animated(&spec.start_angle, &format!("{path}.sweep.start_angle"));
+                let end = self.animated(&spec.end_angle, &format!("{path}.sweep.end_angle"));
+                let (center, start, end) = (center?, start?, end?);
+                let spec = spec.clone();
+                (
+                    center.varying() || start.varying() || end.varying(),
+                    Arc::new(move |time| {
+                        let start = start.at(time).to_radians();
+                        let mut end = end.at(time).to_radians();
+                        let span = end - start;
+                        if span > std::f64::consts::TAU
+                            && span - std::f64::consts::TAU <= FULL_TURN_ROUNDING_TOLERANCE
+                        {
+                            end = start + std::f64::consts::TAU;
+                            if end - start > std::f64::consts::TAU {
+                                end = end.next_down();
+                            }
+                        }
+                        let mut gradient = SweepGradient::new(center.at(time), start, end);
+                        for stop in &spec.stops {
+                            gradient = gradient.stop(stop.offset, stop.color);
+                        }
+                        Paint::Sweep(with_options!(gradient, spec.options))
+                    }),
+                )
             }
         };
-        match paint.validate() {
-            Ok(()) => Some(paint),
-            Err(error) => {
-                self.error(path, "gradient", error.message);
-                None
-            }
+        let initial = sample(Time::ZERO);
+        if let Err(error) = initial.validate() {
+            self.error(path, "gradient", error.message);
+            return None;
         }
+        if !varying {
+            return Some(PaintProp::Fixed(initial));
+        }
+        let path = path.to_owned();
+        Some(PaintProp::Sampled(Arc::new(move |time| {
+            let paint = sample(time);
+            paint
+                .validate()
+                .map_err(|error| ValidationError::invalid(&path, "gradient", error.message))?;
+            Ok(paint)
+        })))
     }
 }

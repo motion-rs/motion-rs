@@ -61,6 +61,16 @@ pub(crate) fn annotate(mut error: ValidationError, text: &str) -> ValidationErro
     let target = match &unknown {
         Some(name) if path == "document" => name.clone(),
         Some(name) => format!("{path}.{name}"),
+        None if error.field != "json"
+            && path != error.field
+            && !path.ends_with(&format!(".{}", error.field)) =>
+        {
+            if path == "document" {
+                error.field.clone()
+            } else {
+                format!("{path}.{}", error.field)
+            }
+        }
         None => path,
     };
     let hint = serde_suggestion(&error.message);

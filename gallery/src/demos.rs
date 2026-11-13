@@ -1,6 +1,6 @@
 //! The gallery is a small film program. Each film owns its metadata and timeline.
 
-use crate::{DemoMetadata, DemoParameters};
+use crate::{AuthoringMode, DemoMetadata, DemoParameters};
 use motion::prelude::*;
 
 mod animation_atlas;
@@ -15,6 +15,8 @@ mod filter_atlas;
 mod harmonics;
 mod ink_features;
 mod ink_journey;
+mod json_animation_atlas;
+mod json_atlas;
 mod logo_sting;
 mod noise_atlas;
 mod particle_atlas;
@@ -57,7 +59,7 @@ struct Film {
 const PROGRAM: &[Film] = &[
     Film {
         metadata: animation_atlas::METADATA,
-        build: animation_atlas::timeline,
+        build: animation_atlas_timeline,
     },
     Film {
         metadata: brush_atlas::METADATA,
@@ -65,23 +67,23 @@ const PROGRAM: &[Film] = &[
     },
     Film {
         metadata: particle_atlas::METADATA,
-        build: particle_atlas::timeline,
+        build: particle_atlas_timeline,
     },
     Film {
         metadata: particle_features::METADATA,
-        build: particle_features::timeline,
+        build: particle_features_timeline,
     },
     Film {
         metadata: filter_atlas::METADATA,
-        build: filter_atlas::timeline,
+        build: filter_atlas_timeline,
     },
     Film {
         metadata: compositing_atlas::METADATA,
-        build: compositing_atlas::timeline,
+        build: compositing_atlas_timeline,
     },
     Film {
         metadata: vector_atlas::METADATA,
-        build: vector_atlas::timeline,
+        build: vector_atlas_timeline,
     },
     Film {
         metadata: ink_features::METADATA,
@@ -146,4 +148,82 @@ pub(super) fn timeline(info: DemoMetadata, parameters: DemoParameters) -> motion
             std::io::Error::new(std::io::ErrorKind::InvalidInput, "Unknown gallery film")
         })?;
     Ok((film.build)(parameters)?)
+}
+
+fn animation_atlas_timeline(parameters: DemoParameters) -> Result<Timeline, motion::ErrorReport> {
+    match parameters.mode {
+        AuthoringMode::Default => animation_atlas::timeline(parameters),
+        AuthoringMode::Json => json_animation_atlas::timeline(parameters),
+    }
+}
+
+fn compositing_atlas_timeline(parameters: DemoParameters) -> Result<Timeline, motion::ErrorReport> {
+    match parameters.mode {
+        AuthoringMode::Default => compositing_atlas::timeline(parameters),
+        AuthoringMode::Json => json_atlas::timeline(
+            json_atlas::COMPOSITING_DOCUMENT,
+            parameters,
+            Default::default(),
+        ),
+    }
+}
+
+fn particle_atlas_timeline(parameters: DemoParameters) -> Result<Timeline, motion::ErrorReport> {
+    match parameters.mode {
+        AuthoringMode::Default => particle_atlas::timeline(parameters),
+        AuthoringMode::Json => json_atlas::timeline(
+            json_atlas::PARTICLE_DOCUMENT,
+            parameters,
+            [
+                ("seed".into(), parameters.seed.into()),
+                ("count".into(), parameters.count.into()),
+            ]
+            .into_iter()
+            .collect(),
+        ),
+    }
+}
+
+fn filter_atlas_timeline(parameters: DemoParameters) -> Result<Timeline, motion::ErrorReport> {
+    match parameters.mode {
+        AuthoringMode::Default => filter_atlas::timeline(parameters),
+        AuthoringMode::Json => json_atlas::timeline(
+            json_atlas::FILTER_DOCUMENT,
+            parameters,
+            [("seed".into(), parameters.seed.into())]
+                .into_iter()
+                .collect(),
+        ),
+    }
+}
+
+fn particle_features_timeline(parameters: DemoParameters) -> Result<Timeline, motion::ErrorReport> {
+    match parameters.mode {
+        AuthoringMode::Default => particle_features::timeline(parameters),
+        AuthoringMode::Json => json_atlas::timeline(
+            json_atlas::PARTICLE_FEATURES_DOCUMENT,
+            parameters,
+            [
+                ("seed".into(), parameters.seed.into()),
+                // Native curl fields use the low 32 bits of the seed.
+                ("curl_seed".into(), (parameters.seed as u32).into()),
+                ("count".into(), parameters.count.into()),
+            ]
+            .into_iter()
+            .collect(),
+        ),
+    }
+}
+
+fn vector_atlas_timeline(parameters: DemoParameters) -> Result<Timeline, motion::ErrorReport> {
+    match parameters.mode {
+        AuthoringMode::Default => vector_atlas::timeline(parameters),
+        AuthoringMode::Json => json_atlas::timeline(
+            json_atlas::VECTOR_DOCUMENT,
+            parameters,
+            [("seed".into(), parameters.seed.into())]
+                .into_iter()
+                .collect(),
+        ),
+    }
 }

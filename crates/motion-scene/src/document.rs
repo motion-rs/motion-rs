@@ -2,7 +2,7 @@
 
 use crate::audio::{AudioSpec, BusSpec, MasterSpec};
 use crate::element::Element;
-use crate::{FORMAT_VERSION, MAX_DOCUMENT_BYTES, diagnostics, params};
+use crate::{FORMAT_VERSION, MAX_DOCUMENT_BYTES, definitions, diagnostics, params};
 use motion_core::Color;
 use motion_core::{Direction, IrisShape};
 use motion_core::{FrameRate, ValidationError};
@@ -36,6 +36,7 @@ pub struct Document {
     #[serde(rename = "$schema", default, skip_serializing_if = "Option::is_none")]
     pub schema: Option<String>,
     /// Format version; must equal [`FORMAT_VERSION`].
+    #[schemars(range(min = 1, max = 1))]
     pub version: u32,
     /// Optional human-readable title.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -49,12 +50,14 @@ pub struct Document {
     pub background: Option<Color>,
     /// Explicit film duration in seconds; the latest track or audio end by default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(range(max = 1e6), extend("exclusiveMinimum" = 0))]
     pub duration: Option<f64>,
     /// Film look applied to every scene and the display transform.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub look: Option<LookSpec>,
     /// Named parameters: `{"$param": "name"}` values are replaced on load, and
     /// expressions read numeric ones as `$name`. Overrides replace values by key.
+    /// `{"$calc": "expression"}` values resolve after overrides, before substitution.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub params: BTreeMap<String, serde_json::Value>,
     /// Font files bound to every text element, relative to the document.
@@ -99,6 +102,10 @@ impl Document {
     ///
     /// Inputs over [`MAX_DOCUMENT_BYTES`] and unsupported versions are rejected.
     /// `{"$param": "name"}` references are replaced by their declared values.
+    /// `{"$calc": "expression"}` evaluates finite numeric expressions once on load;
+    /// parameters may depend on one another, but time and element bindings are invalid.
+    /// `{"use": "name"}` references expand root `defs` after parameters resolve;
+    /// sibling fields replace whole definition fields. Definitions are removed.
     pub fn from_json(text: &str) -> motion_core::Result<Self> {
         Self::from_json_with(text, None)
     }
@@ -107,8 +114,9 @@ impl Document {
     ///
     /// `overrides` is a JSON object whose keys must be declared in `params`; each
     /// replaces the whole default value. The returned document holds the effective
-    /// parameter values and no `$param` references, so writing it back records the
-    /// resolved film.
+    /// parameter values after `$calc` evaluation, so writing it back records the
+    /// resolved film. References outside `params` are substituted; reusable `defs`
+    /// are expanded and removed before type checking.
     pub fn from_json_with(
         text: &str,
         overrides: Option<&serde_json::Value>,
@@ -121,6 +129,8 @@ impl Document {
         let mut value: serde_json::Value = serde_json::from_str(text)
             .map_err(|error| ValidationError::invalid("document", "json", error.to_string()))?;
         params::resolve(&mut value, overrides, MAX_DOCUMENT_BYTES)
+            .map_err(|error| diagnostics::annotate(error, text))?;
+        definitions::resolve(&mut value, MAX_DOCUMENT_BYTES)
             .map_err(|error| diagnostics::annotate(error, text))?;
         let document: Self = serde_path_to_error::deserialize(value).map_err(|error| {
             let path = error.path().to_string();
@@ -382,8 +392,10 @@ pub struct SceneSpec {
     pub name: Option<String>,
     /// Absolute start in seconds; the track cursor by default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(range(min = 0.0, max = 1e6))]
     pub start: Option<f64>,
     /// Positive duration in seconds.
+    #[schemars(range(max = 1e6), extend("exclusiveMinimum" = 0))]
     pub duration: f64,
     /// Root element.
     pub content: Element,

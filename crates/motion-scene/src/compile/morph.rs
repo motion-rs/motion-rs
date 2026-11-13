@@ -2,6 +2,7 @@
 
 use super::Compiler;
 use super::element::Built;
+#[cfg(feature = "svg")]
 use super::failure::failure;
 use super::style::Style;
 use crate::formula::{MorphSpec, SvgMorphSpec};
@@ -46,41 +47,60 @@ impl Compiler<'_> {
     /// Prepares the morph between two SVG files at compile time.
     #[cfg(feature = "svg")]
     pub(crate) fn svg_morph(&mut self, spec: &SvgMorphSpec, path: &str) -> Option<Built> {
-        use motion_content::{Morph, Svg, SvgAsset};
-        let from = self.resolve(&spec.from, &format!("{path}.from"));
-        let to = self.resolve(&spec.to, &format!("{path}.to"));
+        use motion_content::Morph;
+        let from = self.svg_asset(&spec.from, &format!("{path}.from"));
+        let to = self.svg_asset(&spec.to, &format!("{path}.to"));
         let progress = self.animated(&spec.progress, &format!("{path}.progress"));
         let (from, to, progress) = (from?, to?, progress?);
-        let mut trees = Vec::new();
-        for (field, file) in [("from", from), ("to", to)] {
-            let here = format!("{path}.{field}");
-            let length = std::fs::metadata(&file)
-                .map_err(|error| self.error(&here, "source", error.to_string()))
-                .ok()?
-                .len();
-            if length > MAX_SVG_BYTES {
-                self.limit(&here, "source", "SVG files are limited to 16 MiB");
-                return None;
-            }
-            let bytes = std::fs::read(&file)
-                .map_err(|error| self.error(&here, "source", error.to_string()))
-                .ok()?;
-            let asset = SvgAsset::from_bytes(&bytes)
-                .map_err(|error| self.error(&here, "source", error.to_string()))
-                .ok()?;
-            let tree = Svg::from_asset(Arc::new(asset))
-                .vector_tree()
-                .map_err(|error| self.error(&here, "source", error.to_string()))
-                .ok()?;
-            trees.push(tree);
-        }
-        let morph = Morph::new(&trees[0], &trees[1])
+        let morph = Morph::new(&from.tree, &to.tree)
             .map_err(|error| self.error(path, "morph", error.message))
             .ok()?;
         let varying = progress.varying();
         Some(Built::new(varying, move |time| {
             morph.sample(progress.at(time)).unwrap_or_else(failure)
         }))
+    }
+
+    #[cfg(feature = "svg")]
+    pub(crate) fn svg_asset(
+        &mut self,
+        source: &crate::content::SvgSourceSpec,
+        path: &str,
+    ) -> Option<Arc<motion_content::SvgAsset>> {
+        use crate::content::SvgSourceSpec;
+        use std::io::Read;
+        let bytes = match source {
+            SvgSourceSpec::File(file) => {
+                let file = self.resolve(file, path)?;
+                let file = std::fs::File::open(file)
+                    .map_err(|error| self.error(path, "source", error.to_string()))
+                    .ok()?;
+                let mut bytes = Vec::new();
+                file.take(MAX_SVG_BYTES + 1)
+                    .read_to_end(&mut bytes)
+                    .map_err(|error| self.error(path, "source", error.to_string()))
+                    .ok()?;
+                if bytes.len() as u64 > MAX_SVG_BYTES {
+                    self.limit(path, "source", "SVG sources are limited to 16 MiB");
+                    return None;
+                }
+                bytes
+            }
+            SvgSourceSpec::Inline { data } => {
+                if data.len() as u64 > MAX_SVG_BYTES {
+                    self.limit(path, "data", "SVG sources are limited to 16 MiB");
+                    return None;
+                }
+                return motion_content::SvgAsset::from_bytes(data.as_bytes())
+                    .map(Arc::new)
+                    .map_err(|error| self.error(path, "data", error.to_string()))
+                    .ok();
+            }
+        };
+        motion_content::SvgAsset::from_bytes(&bytes)
+            .map(Arc::new)
+            .map_err(|error| self.error(path, "source", error.to_string()))
+            .ok()
     }
 
     #[cfg(not(feature = "svg"))]

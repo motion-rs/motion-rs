@@ -245,6 +245,113 @@ mod tests {
     use super::*;
 
     #[test]
+    fn json_particle_features_compiles_independently_and_preserves_pages() -> motion::Result {
+        use motion::declarative::{Content, Document, TrackItem};
+        let source = super::super::json_atlas::PARTICLE_FEATURES_DOCUMENT;
+        let document = Document::from_json(source)?;
+        assert_eq!(document.name.as_deref(), Some(METADATA.title));
+        assert_eq!(document.params["pages"], PAGES.len());
+        assert_eq!(document.tracks[0].items.len(), PAGES.len());
+        for (item, page) in document.tracks[0].items.iter().zip(PAGES) {
+            let TrackItem::Scene(scene) = item else {
+                panic!("Expected a particle scene");
+            };
+            assert_eq!(scene.name.as_deref(), Some(page.title));
+            let Content::Group(children) = &scene.content.content else {
+                panic!("Expected page content");
+            };
+            assert!(
+                children
+                    .iter()
+                    .any(|child| child.name.as_deref() == Some("Page captions"))
+            );
+        }
+        assert_eq!(
+            document
+                .compile(&Default::default())?
+                .timeline()
+                .frame_count(),
+            240
+        );
+        assert_eq!(
+            Document::from_json(&serde_json::to_string(&document).unwrap())?,
+            document
+        );
+        let project = crate::project(RenderOptions::default())?;
+        for seconds in [1_u32, 8, 60] {
+            let timeline = project.build(
+                METADATA.id,
+                Some(serde_json::json!({
+                    "mode": "json", "seconds": seconds, "count": 16, "seed": u64::MAX,
+                })),
+            )?;
+            assert_eq!(timeline.duration(), seconds.seconds());
+            assert_eq!(timeline.frame_count(), u64::from(seconds) * 30);
+        }
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "requires explicit MOTION_TEST_FONT; compares all 47 native and JSON CPU pages"]
+    fn json_particle_features_frames_match_native_and_replay() -> motion::Result {
+        let font = std::env::var_os("MOTION_TEST_FONT")
+            .ok_or_else(|| std::io::Error::other("Set MOTION_TEST_FONT"))?;
+        let options = crate::render_options(Some(std::path::Path::new(&font)))?
+            .backend(BackendPreference::Cpu)
+            .size(PixelSize::new(288, 162));
+        let project = crate::project(options.clone())?;
+        for (seconds, count, seed) in [(60, 16, 17), (8, 4, u64::MAX), (1, 128, 20261027)] {
+            let actual = project.build(
+                METADATA.id,
+                Some(serde_json::json!({
+                    "mode": "json", "seconds": seconds, "count": count, "seed": seed,
+                })),
+            )?;
+            let expected = project.build(
+                METADATA.id,
+                Some(serde_json::json!({
+                    "mode": "default", "seconds": seconds, "count": count, "seed": seed,
+                })),
+            )?;
+            let mut frames = (0..PAGES.len())
+                .flat_map(|page| {
+                    [0.18, 0.62, 0.99].map(move |local| {
+                        ((page as f64 + local) / PAGES.len() as f64 * f64::from(seconds) * 30.0)
+                            .floor() as i64
+                    })
+                })
+                .collect::<Vec<_>>();
+            frames.push(actual.frame_count() as i64 - 1);
+            frames.sort_unstable();
+            frames.dedup();
+            for frame in frames.iter().rev() {
+                let time = Time::from_frame(*frame, motion::fps!(30));
+                let actual = render_still(&actual, time, &options)?;
+                let expected = render_still(&expected, time, &options)?;
+                let difference = actual
+                    .bytes()
+                    .iter()
+                    .zip(expected.bytes())
+                    .map(|(actual, expected)| actual.abs_diff(*expected))
+                    .max()
+                    .unwrap();
+                let page = page_at(*frame as f64 / f64::from(seconds) / 30.0).0;
+                assert!(
+                    difference <= 1,
+                    "{} frame {frame}, count {count}, seed {seed}: maximum channel difference {difference}",
+                    PAGES[page].title
+                );
+            }
+            let time = Time::from_frame(*frames.last().unwrap(), motion::fps!(30));
+            assert_eq!(
+                render_still(&actual, time, &options)?.bytes(),
+                render_still(&actual, time, &options)?.bytes()
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
     fn pages_have_unique_titles_and_exact_duration() -> motion::Result {
         let mut titles = std::collections::BTreeSet::new();
         assert_eq!(PAGES.len(), 47);

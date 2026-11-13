@@ -92,6 +92,38 @@ fn cli_prints_the_document_schema() -> motion::Result {
 }
 
 #[test]
+fn project_document_cache_preserves_edits_parameters_and_failure_recovery() -> motion::Result {
+    let directory = tempfile::tempdir()?;
+    let path = directory.path().join("film.json");
+    let source = serde_json::json!({"version":1,"size":[8,8],"fps":4,
+    "params":{"seconds":1},"tracks":[{"items":[{"scene":{
+        "duration":{"$param":"seconds"},"content":{"children":[]}
+    }}]}]})
+    .to_string();
+    std::fs::write(&path, &source)?;
+    let project = Project::new("cache").document("film", &path).build()?;
+    assert_eq!(project.build("film", None)?.frame_count(), 4);
+    assert_eq!(project.build("film", None)?.frame_count(), 4);
+    assert_eq!(
+        project
+            .build("film", Some(serde_json::json!({"seconds":2})))?
+            .frame_count(),
+        8
+    );
+    std::fs::write(&path, source.replace("\"seconds\":1", "\"seconds\":3"))?;
+    assert_eq!(project.build("film", None)?.frame_count(), 12);
+    assert_eq!(
+        project.build(path.to_str().unwrap(), None)?.frame_count(),
+        12
+    );
+    std::fs::write(&path, "{")?;
+    assert!(project.build("film", None).is_err());
+    std::fs::write(&path, source)?;
+    assert_eq!(project.build("film", None)?.frame_count(), 4);
+    Ok(())
+}
+
+#[test]
 fn invalid_documents_report_paths_through_the_project() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("broken.json");
@@ -116,14 +148,14 @@ fn invalid_documents_report_paths_through_the_project() {
 fn committed_schema_matches_the_format() {
     let path = concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../../examples/documents/motion.schema.json"
+        "/../../schemas/motion.schema.json"
     );
     let committed: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
     assert_eq!(
         committed,
         motion::declarative::schema(),
-        "regenerate with: cargo run -p motion-cli -- schema > examples/documents/motion.schema.json"
+        "regenerate with: cargo run -p motion-cli -- schema > schemas/motion.schema.json"
     );
 }
 

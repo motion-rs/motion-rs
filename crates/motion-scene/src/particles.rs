@@ -1,28 +1,65 @@
 //! Particle simulations and trajectories described as plain data.
 
+use crate::paint::PaintSpec;
+use crate::value::Animated;
 use motion_core::{Color, Point, Rect};
 use schemars::{JsonSchema, Schema, SchemaGenerator};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 
+mod configuration;
+mod materials;
+mod operators;
+mod sources;
+
+pub use configuration::{ParticleConfigurationSpec, ParticleCurveSpec, ParticleTrailSpec};
+pub use materials::{ParticleMaterialSpec, ParticleSheetSpec, ParticleSpriteSpec};
+pub use operators::{
+    ParticleCoordinateSpec, ParticleEventSpec, ParticleFalloffSpec, ParticleInheritSpec,
+    ParticleOperatorSpec, ParticleResponseSpec, ParticleSubEmitterSpec,
+};
+pub use sources::ParticlePointsSpec;
+pub use sources::{
+    ParticleImageSourceSpec, ParticleImageSpec, ParticleSurfaceSpec, ParticleTextSourceSpec,
+};
+
 /// A seeded, deterministic particle simulation drawn into the scene.
 ///
 /// Emitters spawn particles, modifiers act on them in declaration order and the
-/// style draws them. Simulation time is scene-local; the simulation runs for
-/// `duration` seconds, or for the scene's duration when omitted.
+/// style draws them, or a shared preset supplies the complete recipe. Simulation
+/// time is scene-local unless `sample_time` overrides it. Presets require an
+/// explicit `duration`; hand-authored simulations otherwise use the scene duration.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+#[schemars(extend("allOf" = [{
+    "if": {"required": ["preset"], "properties": {
+        "preset": {"type": "object", "required": ["kind"]}
+    }},
+    "then": {"required": ["duration"], "properties": {
+        "duration": {"not": {"type": "null"}, "exclusiveMinimum": 0, "maximum": 3600}
+    }}
+}]))]
 pub struct ParticlesSpec {
     /// Explicit deterministic seed.
     pub seed: u64,
-    /// Simulated seconds; the scene duration by default.
+    /// Shared recipe instead of explicit emitters and modifiers.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preset: Option<ParticlePresetSpec>,
+    /// Simulation sample time in `0..=1e6` seconds; scene-local time when omitted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("minimum" = 0.0, "maximum" = 1e6))]
+    pub sample_time: Option<Animated<f64>>,
+    /// Simulated seconds; required in `(0, 3600]` for presets, otherwise the scene duration by default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("exclusiveMinimum" = 0))]
     pub duration: Option<f64>,
     /// Fixed simulation step in seconds.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("exclusiveMinimum" = 0))]
     pub step: Option<f64>,
     /// Particle count limit; the engine default (16384) when omitted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(range(min = 1, max = 1_000_000))]
     pub max_particles: Option<u32>,
     /// Particle sources.
     #[serde(default)]
@@ -36,6 +73,12 @@ pub struct ParticlesSpec {
     /// Compositing of the particle layer.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub blend: Option<ParticleBlendSpec>,
+    /// Optional time mapping, work allowance and batch presentation policy.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub configuration: Option<Box<ParticleConfigurationSpec>>,
+    /// Ordered event-triggered local emitters.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sub_emitters: Vec<ParticleSubEmitterSpec>,
 }
 
 impl ParticlesSpec {
@@ -43,6 +86,8 @@ impl ParticlesSpec {
     pub fn new(seed: u64) -> Self {
         Self {
             seed,
+            preset: None,
+            sample_time: None,
             duration: None,
             step: None,
             max_particles: None,
@@ -50,6 +95,8 @@ impl ParticlesSpec {
             modifiers: Vec::new(),
             style: None,
             blend: None,
+            configuration: None,
+            sub_emitters: Vec::new(),
         }
     }
 
@@ -72,6 +119,74 @@ impl ParticlesSpec {
     }
 }
 
+/// A shared particle recipe with explicit local bounds and optional adjustments.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ParticlePresetSpec {
+    /// Recipe name.
+    pub kind: ParticlePresetKind,
+    /// Local design bounds `[left, top, right, bottom]`.
+    pub bounds: [f64; 4],
+    /// Density multiplier in `(0, 16]`; one by default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(range(max = 16.0), extend("exclusiveMinimum" = 0))]
+    pub density: Option<f64>,
+    /// Motion multiplier in `(0, 16]`; one by default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(range(max = 16.0), extend("exclusiveMinimum" = 0))]
+    pub speed: Option<f64>,
+    /// HDR intensity multiplier in `0..=64`; one by default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(range(min = 0.0, max = 64.0))]
+    pub intensity: Option<f32>,
+    /// At most 256 fixed colored paths required by logo recipes, using the recipe bounds.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[schemars(length(max = 256))]
+    pub logo: Vec<ParticleVectorPathSpec>,
+}
+
+/// A fixed painted path in a particle preset's colored vector source.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ParticleVectorPathSpec {
+    /// SVG path data.
+    pub data: String,
+    /// Fixed solid color or gradient; animated paints are rejected.
+    pub fill: PaintSpec,
+}
+
+/// Stable names of the shared particle recipes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ParticlePresetKind {
+    /// Tapered ballistic burst.
+    Sparks,
+    /// Cooling glowing embers.
+    Embers,
+    /// Small depth-aware dust.
+    Dust,
+    /// Floating bokeh motes.
+    Motes,
+    /// Layered wind-driven snow.
+    Snow,
+    /// Colliding rain and splash bursts.
+    Rain,
+    /// Curl-driven smoke sprites.
+    Smoke,
+    /// Buoyant fire sprites.
+    Fire,
+    /// Flipping colored quads.
+    Confetti,
+    /// Rockets and secondary bursts.
+    Fireworks,
+    /// Breathing drifting lights.
+    Fireflies,
+    /// Colored vector dispersal.
+    LogoDissolve,
+    /// Colored vector convergence.
+    LogoAssemble,
+}
+
 /// Where particles are born.
 #[derive(Clone, Debug, PartialEq)]
 pub enum EmitterShape {
@@ -88,6 +203,12 @@ pub enum EmitterShape {
     Rect(Rect),
     /// Points along SVG path data.
     Path(String),
+    /// Painted vector surface.
+    Surface(ParticleSurfaceSpec),
+    /// Image alpha or luminance distribution.
+    Image(ParticleImageSourceSpec),
+    /// Explicitly shaped glyph surface.
+    Text(ParticleTextSourceSpec),
     /// One instantaneous burst.
     Burst {
         /// Scene-local birth time in seconds.
@@ -99,8 +220,8 @@ pub enum EmitterShape {
     },
 }
 
-/// A particle source, written with one shape key (`point`, `disk`, `rect`, `path` or
-/// `burst`) next to optional birth settings. Colors are authored sRGB, premultiplied
+/// A particle source, written with one shape key (`point`, `disk`, `rect`, `path`,
+/// `surface`, `image`, `text` or `burst`) next to optional birth settings. Colors are authored sRGB, premultiplied
 /// internally. `rate` applies to continuous emitters, not bursts.
 ///
 /// ```
@@ -130,6 +251,10 @@ pub struct EmitterSpec {
     pub size: Option<f64>,
     /// Depth range `[near, far]`.
     pub depth_range: Option<[f64; 2]>,
+    /// Animated normalized arc-length progress for path sources.
+    pub path_progress: Option<Animated<f64>>,
+    /// Explicit premultiplied linear birth color, overriding authored sRGB color.
+    pub premultiplied_color: Option<[f32; 4]>,
 }
 
 impl EmitterSpec {
@@ -144,6 +269,8 @@ impl EmitterSpec {
             color: None,
             size: None,
             depth_range: None,
+            path_progress: None,
+            premultiplied_color: None,
         }
     }
 
@@ -219,6 +346,12 @@ struct RawEmitter {
     /// Path emitter, as SVG path data.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    surface: Option<ParticleSurfaceSpec>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    image: Option<ParticleImageSourceSpec>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    text: Option<ParticleTextSourceSpec>,
     /// Burst emitter.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     burst: Option<BurstShape>,
@@ -243,6 +376,10 @@ struct RawEmitter {
     /// Depth range `[near, far]`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     depth_range: Option<[f64; 2]>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    path_progress: Option<Animated<f64>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    premultiplied_color: Option<[f32; 4]>,
 }
 
 impl TryFrom<RawEmitter> for EmitterSpec {
@@ -262,6 +399,10 @@ impl TryFrom<RawEmitter> for EmitterSpec {
             }),
             raw.rect.map(|value| ("rect", EmitterShape::Rect(value))),
             raw.path.map(|value| ("path", EmitterShape::Path(value))),
+            raw.surface
+                .map(|value| ("surface", EmitterShape::Surface(value))),
+            raw.image.map(|value| ("image", EmitterShape::Image(value))),
+            raw.text.map(|value| ("text", EmitterShape::Text(value))),
             raw.burst.map(|value| {
                 (
                     "burst",
@@ -277,7 +418,7 @@ impl TryFrom<RawEmitter> for EmitterSpec {
         let shape = match (selected.next(), selected.next()) {
             (Some((_, shape)), None) => shape,
             (None, _) => {
-                return Err("Emitter needs one shape: point, disk, rect, path or burst".into());
+                return Err("Emitter needs one shape: point, disk, rect, path, surface, image, text or burst".into());
             }
             (Some((first, _)), Some((second, _))) => {
                 return Err(format!(
@@ -294,6 +435,8 @@ impl TryFrom<RawEmitter> for EmitterSpec {
             color: raw.color,
             size: raw.size,
             depth_range: raw.depth_range,
+            path_progress: raw.path_progress,
+            premultiplied_color: raw.premultiplied_color,
         })
     }
 }
@@ -308,6 +451,8 @@ impl From<EmitterSpec> for RawEmitter {
             color: spec.color,
             size: spec.size,
             depth_range: spec.depth_range,
+            path_progress: spec.path_progress,
+            premultiplied_color: spec.premultiplied_color,
             ..Self::default()
         };
         match spec.shape {
@@ -315,6 +460,9 @@ impl From<EmitterSpec> for RawEmitter {
             EmitterShape::Disk { center, radius } => raw.disk = Some(DiskShape { center, radius }),
             EmitterShape::Rect(value) => raw.rect = Some(value),
             EmitterShape::Path(value) => raw.path = Some(value),
+            EmitterShape::Surface(value) => raw.surface = Some(value),
+            EmitterShape::Image(value) => raw.image = Some(value),
+            EmitterShape::Text(value) => raw.text = Some(value),
             EmitterShape::Burst {
                 time,
                 count,
@@ -361,9 +509,9 @@ pub enum ModifierSpec {
         frequency: f64,
         /// Acceleration scale.
         strength: f64,
-        /// Noise seed; zero by default.
+        /// Noise seed in `0..=4294967295`; zero by default.
         #[serde(default)]
-        seed: u32,
+        seed: u64,
         /// Noise evolution speed; zero by default.
         #[serde(default)]
         phase_speed: f64,
@@ -386,6 +534,12 @@ pub enum ModifierSpec {
         /// Size at death.
         end: f64,
     },
+    /// Nonnegative HDR energy over normalized age.
+    IntensityOverLifetime(ParticleCurveSpec),
+    /// Blackbody color over normalized age, in Kelvin.
+    Temperature(ParticleCurveSpec),
+    /// Population, collision or field operator.
+    Operator(Box<ParticleOperatorSpec>),
 }
 
 /// How particles are drawn, written as `{"dots": {"radius": 2}}` and similar.
@@ -422,6 +576,47 @@ pub enum ParticleStyleSpec {
         radius: f64,
         /// Shape kind.
         shape: ParticleShapeSpec,
+    },
+    /// Depth-aware aperture geometry.
+    Bokeh {
+        /// In-focus radius.
+        radius: f64,
+        /// Defocus scale.
+        aperture: f32,
+        /// Focus depth.
+        focus: f32,
+        /// Polygon blade count; a disc when omitted.
+        blades: Option<u8>,
+        /// Rim intensity.
+        ring: f32,
+        /// Edge hardness.
+        hardness: f32,
+        /// HDR energy multiplier.
+        highlight: f32,
+    },
+    /// Budgeted immutable procedural atlas.
+    Sprites {
+        /// Explicit material seed.
+        seed: u64,
+        /// Generated frames, 1 to 64.
+        frames: Vec<ParticleSpriteSpec>,
+        /// Full local sprite side.
+        size: f64,
+        /// Pads differing frame sizes to uniform cells.
+        padded: bool,
+        /// Stateless frame selection.
+        mode: ParticleSheetSpec,
+    },
+    /// Ordinary vector circles with an age-dependent radius.
+    NodeCircles {
+        /// Base radius in design units.
+        radius: f64,
+        /// Signed sinusoidal radius amplitude.
+        amplitude: f64,
+        /// Angular frequency in radians per second of particle age.
+        frequency: f64,
+        /// Fixed circle fill.
+        fill: Color,
     },
 }
 
@@ -477,6 +672,10 @@ pub enum ParticleBlendSpec {
 pub struct TrajectorySpec {
     /// The motion model.
     pub model: TrajectoryModelSpec,
+    /// Explicit sample time in seconds; scene-local time when omitted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("minimum" = 0.0, "maximum" = 1e6))]
+    pub sample_time: Option<Animated<f64>>,
     /// How particles are drawn; dots by default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub style: Option<ParticleStyleSpec>,
@@ -489,6 +688,15 @@ pub struct TrajectorySpec {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub enum TrajectoryModelSpec {
+    /// Corresponding points easing from a source set to a target set.
+    Converge {
+        /// Source points, 1 to 65536.
+        from: ParticlePointsSpec,
+        /// Target points, with the same length as the source.
+        to: ParticlePointsSpec,
+        /// Travel duration in seconds.
+        duration: f64,
+    },
     /// Particles flung from a point under gravity and drag.
     Ballistic {
         /// Launch point `[x, y]`.

@@ -3,11 +3,14 @@
 use super::Compiler;
 use super::value::Lift;
 use super::value::Prop;
-use crate::effects::{ClipShapeSpec, FilterSpec, MaskSpec};
+use crate::effects::{
+    ApertureSpec, ClipShapeSpec, FilterSpec, HeightSourceSpec, MaskSpec, OpticsSpec,
+};
 use crate::element::Element;
 use motion_core::{
-    BlendMode, Cdl, Circle, ClipMode, Color, Filter, MaskMode, Node, NodeModifiers, Path2D, Pivot,
-    Point, Rect, SceneCache, SceneContext, Size, Time, Vector2,
+    ApertureShape, BlendMode, Cdl, Circle, ClipMode, Color, Filter, FilterOperation, HeightFrom,
+    MaskMode, Node, NodeModifiers, Optics, Path2D, Pivot, Point, Rect, RoundedRect, SceneCache,
+    SceneContext, Size, Time, ValidationError, Vector2,
 };
 use std::sync::Arc;
 
@@ -91,7 +94,15 @@ impl Compiler<'_> {
             .filters
             .iter()
             .enumerate()
-            .map(|(index, filter)| self.filter(filter, &format!("{path}.filters[{index}]")))
+            .map(|(index, filter)| {
+                let here = format!("{path}.filters[{index}]");
+                let filter = self.filter(filter, &here)?;
+                if let Err(error) = filter.at(Time::ZERO, &here) {
+                    self.error(&here, "parameters", error.message);
+                    return None;
+                }
+                Some((filter, Arc::<str>::from(here)))
+            })
             .collect::<Vec<_>>();
         let clip = element.clip.as_ref().map(|clip| {
             let shape = self.clip_shape(&clip.shape, &format!("{path}.clip.shape"))?;
@@ -128,6 +139,15 @@ impl Compiler<'_> {
             ClipShapeSpec::Rect(bounds) => self
                 .animated(bounds, &format!("{path}.rect"))
                 .map(ClipProp::Rect),
+            ClipShapeSpec::RoundedRect(spec) => {
+                let path = format!("{path}.rounded_rect");
+                let bounds = self.animated(&spec.bounds, &format!("{path}.bounds"));
+                let radius = self.optional(
+                    spec.corner_radius.as_ref(),
+                    &format!("{path}.corner_radius"),
+                );
+                Some(ClipProp::RoundedRect(bounds?, radius?))
+            }
             ClipShapeSpec::Circle(circle) => {
                 let center = self.animated(&circle.center, &format!("{path}.circle.center"));
                 let radius = self.animated(&circle.radius, &format!("{path}.circle.radius"));
@@ -172,15 +192,28 @@ impl Compiler<'_> {
                 let intensity = self.animated(intensity, &format!("{path}.intensity"));
                 Some(FilterProp::Glow(threshold?, sigma?, intensity?))
             }
-            FilterSpec::Bloom(bloom) => Some(FilterProp::Fixed(Filter::Bloom {
-                threshold: bloom.threshold.unwrap_or(0.9),
-                knee: bloom.knee.unwrap_or(0.25),
-                radius: bloom.radius.unwrap_or(4.0),
-                levels: bloom.levels.unwrap_or(5),
-                falloff: bloom.falloff.unwrap_or(0.5),
-                intensity: bloom.intensity.unwrap_or(0.15),
-                tint: bloom.tint.as_ref().map_or(Color::WHITE, |tint| *tint),
-            })),
+            FilterSpec::Bloom(bloom) => {
+                let intensity = self.animated_or(
+                    bloom.intensity.as_ref(),
+                    0.15,
+                    &format!("{path}.bloom.intensity"),
+                )?;
+                let bloom = bloom.clone();
+                Some(FilterProp::Sampled(
+                    intensity.varying(),
+                    Arc::new(move |time| {
+                        Ok(Filter::Bloom {
+                            threshold: bloom.threshold.unwrap_or(0.9),
+                            knee: bloom.knee.unwrap_or(0.25),
+                            radius: bloom.radius.unwrap_or(4.0),
+                            levels: bloom.levels.unwrap_or(5),
+                            falloff: bloom.falloff.unwrap_or(0.5),
+                            intensity: intensity.at(time),
+                            tint: bloom.tint.as_ref().map_or(Color::WHITE, |tint| *tint),
+                        })
+                    }),
+                ))
+            }
             FilterSpec::ColorAdjust(adjust) => {
                 let path = format!("{path}.color_adjust");
                 let exposure =
@@ -214,12 +247,243 @@ impl Compiler<'_> {
                     saturation: saturation?[0],
                 })))
             }
-            FilterSpec::Halation { strength, radius } => Filter::halation(*strength, *radius)
-                .map(FilterProp::Fixed)
-                .map_err(|error| {
-                    self.error(&format!("{path}.halation"), "parameters", error.message)
-                })
-                .ok(),
+            FilterSpec::Halation { strength, radius } => {
+                let strength = self.animated(strength, &format!("{path}.halation.strength"))?;
+                let radius = *radius;
+                let initial = Filter::halation(strength.at(Time::ZERO), radius)
+                    .map_err(|error| {
+                        self.error(&format!("{path}.halation"), "parameters", error.message)
+                    })
+                    .ok()?;
+                if !strength.varying() {
+                    return Some(FilterProp::Fixed(initial));
+                }
+                Some(FilterProp::Sampled(
+                    strength.varying(),
+                    Arc::new(move |time| Filter::halation(strength.at(time), radius)),
+                ))
+            }
+            FilterSpec::BlurXy { sigma_x, sigma_y } => {
+                let horizontal = self.animated(sigma_x, &format!("{path}.blur_xy.sigma_x"));
+                let vertical = self.animated(sigma_y, &format!("{path}.blur_xy.sigma_y"));
+                let (horizontal, vertical) = (horizontal?, vertical?);
+                Some(FilterProp::Sampled(
+                    horizontal.varying() || vertical.varying(),
+                    Arc::new(move |time| {
+                        Ok(Filter::Custom(vec![FilterOperation::BlurXY {
+                            sigma_x: horizontal.at(time),
+                            sigma_y: vertical.at(time),
+                        }]))
+                    }),
+                ))
+            }
+            FilterSpec::Grain { seed, strength } => {
+                let strength = self.animated(strength, &format!("{path}.grain.strength"))?;
+                let seed = *seed;
+                Some(FilterProp::Sampled(
+                    strength.varying(),
+                    Arc::new(move |time| Ok(Filter::grain(seed, strength.at(time)))),
+                ))
+            }
+            FilterSpec::Optics(spec) => self.optics(spec, &format!("{path}.optics")),
+        }
+    }
+
+    fn optics(&mut self, spec: &OpticsSpec, path: &str) -> Option<FilterProp> {
+        let compiled = match spec {
+            OpticsSpec::LensFlare {
+                center,
+                ghosts,
+                threshold,
+                intensity,
+                tint,
+            } => {
+                let center = self.animated(center, &format!("{path}.lens_flare.center"));
+                let threshold = self.animated(threshold, &format!("{path}.lens_flare.threshold"));
+                let intensity = self.animated(intensity, &format!("{path}.lens_flare.intensity"));
+                let (center, threshold, intensity) = (center?, threshold?, intensity?);
+                let (ghosts, tint) = (*ghosts, *tint);
+                FilterProp::Sampled(
+                    center.varying() || threshold.varying() || intensity.varying(),
+                    Arc::new(move |time| {
+                        Ok(Filter::Optics(Optics::LensFlare {
+                            center: {
+                                let [x, y] = center.at(time);
+                                Point::new(x, y)
+                            },
+                            ghosts,
+                            threshold: threshold.at(time),
+                            intensity: intensity.at(time),
+                            tint,
+                        }))
+                    }),
+                )
+            }
+            OpticsSpec::Lens {
+                distortion,
+                chromatic,
+                auto_fit,
+                center,
+            } => {
+                let distortion = self.animated(distortion, &format!("{path}.lens.distortion"));
+                let chromatic = self.animated(chromatic, &format!("{path}.lens.chromatic"));
+                let center = self.optional(center.as_ref(), &format!("{path}.lens.center"));
+                let (distortion, chromatic, center) = (distortion?, chromatic?, center?);
+                let auto_fit = *auto_fit;
+                FilterProp::Sampled(
+                    distortion.varying()
+                        || chromatic.varying()
+                        || center.as_ref().is_some_and(Prop::varying),
+                    Arc::new(move |time| {
+                        Ok(Filter::Optics(Optics::Lens {
+                            distortion: distortion.at(time),
+                            chromatic: chromatic.at(time),
+                            auto_fit,
+                            center: center.as_ref().map(|center| {
+                                let [x, y] = center.at(time);
+                                Point::new(x, y)
+                            }),
+                        }))
+                    }),
+                )
+            }
+            OpticsSpec::LensVignette {
+                angle_of_view,
+                strength,
+                roundness,
+            } => {
+                let strength =
+                    self.animated(strength, &format!("{path}.lens_vignette.strength"))?;
+                let (angle_of_view, roundness) = (*angle_of_view, *roundness);
+                FilterProp::Sampled(
+                    strength.varying(),
+                    Arc::new(move |time| {
+                        Ok(Filter::Optics(Optics::LensVignette {
+                            angle_of_view,
+                            strength: strength.at(time),
+                            roundness,
+                        }))
+                    }),
+                )
+            }
+            OpticsSpec::Bokeh {
+                radius,
+                shape,
+                highlight_boost,
+            } => {
+                let radius = self.animated(radius, &format!("{path}.bokeh.radius"));
+                let (sides, rotation) = match shape {
+                    ApertureSpec::Disc => (None, Prop::Fixed(0.0)),
+                    ApertureSpec::Polygon { sides, rotation } => (
+                        Some(*sides),
+                        self.animated(rotation, &format!("{path}.bokeh.shape.polygon.rotation"))?,
+                    ),
+                };
+                let radius = radius?;
+                let highlight_boost = *highlight_boost;
+                FilterProp::Sampled(
+                    radius.varying() || rotation.varying(),
+                    Arc::new(move |time| {
+                        Ok(Filter::Optics(Optics::Bokeh {
+                            radius: radius.at(time),
+                            shape: sides.map_or(ApertureShape::Disc, |sides| {
+                                ApertureShape::Polygon {
+                                    sides,
+                                    rotation: rotation.at(time).to_radians(),
+                                }
+                            }),
+                            highlight_boost,
+                        }))
+                    }),
+                )
+            }
+            OpticsSpec::RadialBlur {
+                center,
+                strength,
+                samples,
+                decay,
+            } => {
+                let center = self.animated(center, &format!("{path}.radial_blur.center"));
+                let strength = self.animated(strength, &format!("{path}.radial_blur.strength"));
+                let (center, strength) = (center?, strength?);
+                let (samples, decay) = (*samples, *decay);
+                FilterProp::Sampled(
+                    center.varying() || strength.varying(),
+                    Arc::new(move |time| {
+                        Ok(Filter::Optics(Optics::RadialBlur {
+                            center: {
+                                let [x, y] = center.at(time);
+                                Point::new(x, y)
+                            },
+                            strength: strength.at(time),
+                            samples,
+                            decay,
+                        }))
+                    }),
+                )
+            }
+            OpticsSpec::Anamorphic {
+                threshold,
+                length,
+                stretch,
+                tint,
+                intensity,
+            } => {
+                let length = self.animated(length, &format!("{path}.anamorphic.length"))?;
+                let (threshold, stretch, tint, intensity) =
+                    (*threshold, *stretch, *tint, *intensity);
+                FilterProp::Sampled(
+                    length.varying(),
+                    Arc::new(move |time| {
+                        Ok(Filter::Optics(Optics::Anamorphic {
+                            threshold,
+                            length: length.at(time),
+                            stretch,
+                            tint,
+                            intensity,
+                        }))
+                    }),
+                )
+            }
+            OpticsSpec::Relight {
+                height_from,
+                light_dir,
+                color,
+                ambient,
+                specular,
+            } => {
+                let values = light_dir
+                    .iter()
+                    .enumerate()
+                    .map(|(index, source)| {
+                        self.animated(source, &format!("{path}.relight.light_dir[{index}]"))
+                    })
+                    .collect::<Option<Vec<_>>>()?;
+                let height_from = match height_from {
+                    HeightSourceSpec::Luma => HeightFrom::Luma,
+                    HeightSourceSpec::Alpha => HeightFrom::Alpha,
+                };
+                let (color, ambient, specular) = (*color, *ambient, *specular);
+                FilterProp::Sampled(
+                    values.iter().any(Prop::varying),
+                    Arc::new(move |time| {
+                        Ok(Filter::Optics(Optics::Relight {
+                            height_from,
+                            light_dir: [values[0].at(time), values[1].at(time), values[2].at(time)],
+                            color,
+                            ambient,
+                            specular,
+                        }))
+                    }),
+                )
+            }
+        };
+        match compiled.at(Time::ZERO, path) {
+            Ok(_) => Some(compiled),
+            Err(error) => {
+                self.error(path, "parameters", error.message);
+                None
+            }
         }
     }
 
@@ -261,7 +525,7 @@ struct Modifiers {
     opacity: Option<Prop<f64>>,
     blend: Option<BlendMode>,
     z_index: Option<i32>,
-    filters: Vec<FilterProp>,
+    filters: Vec<(FilterProp, Arc<str>)>,
     clip: Option<(ClipProp, ClipMode)>,
     mask: Option<(Built, MaskMode)>,
 }
@@ -274,7 +538,7 @@ impl Modifiers {
             || self.scale.as_ref().is_some_and(Prop::varying)
             || self.scale_xy.as_ref().is_some_and(Prop::varying)
             || self.opacity.as_ref().is_some_and(Prop::varying)
-            || self.filters.iter().any(FilterProp::varying)
+            || self.filters.iter().any(|(filter, _)| filter.varying())
             || self.clip.as_ref().is_some_and(|(clip, _)| clip.varying())
             || self.mask.as_ref().is_some_and(|(mask, _)| mask.varying())
     }
@@ -302,8 +566,11 @@ impl Modifiers {
             let [horizontal, vertical] = translate.at(time);
             node = node.translate(horizontal, vertical);
         }
-        for filter in &self.filters {
-            node = node.filter(filter.at(time));
+        for (filter, path) in &self.filters {
+            node = match filter.at(time, path) {
+                Ok(filter) => node.filter(filter),
+                Err(error) => return super::failure::failure(error),
+            };
         }
         if let Some((clip, mode)) = &self.clip {
             node = clip.apply(node, *mode, time);
@@ -333,6 +600,10 @@ enum FilterProp {
     Glow(Prop<f64>, Prop<f64>, Prop<f64>),
     ColorAdjust([Prop<f64>; 4]),
     Fixed(Filter),
+    Sampled(
+        bool,
+        Arc<dyn Fn(Time) -> Result<Filter, ValidationError> + Send + Sync>,
+    ),
 }
 
 impl FilterProp {
@@ -347,11 +618,14 @@ impl FilterProp {
             }
             Self::ColorAdjust(values) => values.iter().any(Prop::varying),
             Self::Fixed(_) => false,
+            Self::Sampled(varying, _) => *varying,
         }
     }
 
-    fn at(&self, time: Time) -> Filter {
-        match self {
+    /// Samples the filter and validates animated parameters at `time`, so a value
+    /// that only becomes invalid later fails that frame instead of reaching the renderer.
+    fn at(&self, time: Time, path: &str) -> Result<Filter, ValidationError> {
+        let filter = match self {
             Self::Blur(sigma) => Filter::Blur {
                 sigma: sigma.at(time),
             },
@@ -374,13 +648,17 @@ impl FilterProp {
                 saturation: saturation.at(time),
                 hue_degrees: hue.at(time),
             },
-            Self::Fixed(filter) => filter.clone(),
-        }
+            Self::Fixed(filter) => return Ok(filter.clone()),
+            Self::Sampled(_, sample) => sample(time)?,
+        };
+        filter.validate(path)?;
+        Ok(filter)
     }
 }
 
 enum ClipProp {
     Rect(Prop<Rect>),
+    RoundedRect(Prop<Rect>, Option<Prop<f64>>),
     Circle(Prop<Point>, Prop<f64>),
     Path(Path2D),
 }
@@ -389,6 +667,9 @@ impl ClipProp {
     fn varying(&self) -> bool {
         match self {
             Self::Rect(bounds) => bounds.varying(),
+            Self::RoundedRect(bounds, radius) => {
+                bounds.varying() || radius.as_ref().is_some_and(Prop::varying)
+            }
             Self::Circle(center, radius) => center.varying() || radius.varying(),
             Self::Path(_) => false,
         }
@@ -397,6 +678,13 @@ impl ClipProp {
     fn apply(&self, node: Node, mode: ClipMode, time: Time) -> Node {
         match self {
             Self::Rect(bounds) => node.clip_with(bounds.at(time), mode),
+            Self::RoundedRect(bounds, radius) => {
+                let radius = radius.as_ref().map_or(0.0, |radius| radius.at(time));
+                match RoundedRect::new(bounds.at(time), radius) {
+                    Ok(rect) => node.clip_with(rect, mode),
+                    Err(error) => super::failure::failure(error),
+                }
+            }
             Self::Circle(center, radius) => match Circle::new(center.at(time), radius.at(time)) {
                 Ok(circle) => node.clip_with(circle, mode),
                 Err(error) => super::failure::failure(error),

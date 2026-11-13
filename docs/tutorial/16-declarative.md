@@ -10,9 +10,12 @@ need `text`, `image` and `svg`. The format contract is in
 
 ## A Minimal Document
 
+Save this document in `examples/documents/` so its relative `$schema` path resolves
+to the [committed schema](../../schemas/motion.schema.json).
+
 ```json
 {
-  "$schema": "./motion.schema.json",
+  "$schema": "../../schemas/motion.schema.json",
   "version": 1,
   "size": [640, 360],
   "fps": 30,
@@ -65,7 +68,7 @@ prints the JSON Schema for editor completion:
 
 ```sh
 cargo run -p motion-cli -- still examples/documents/intro.json --time 1.5
-cargo run -p motion-cli -- schema > motion.schema.json
+cargo run -p motion-cli -- schema > schemas/motion.schema.json
 ```
 
 ```rust,no_run
@@ -91,6 +94,35 @@ Any scalar, point or color property accepts a fixed value or one motion object:
 
 Unit easings are strings such as `"cubic_in_out"`; parameterized easings are objects
 such as `{"steps": 4}` or `{"cubic_bezier": {"x1": 0.2, "y1": 0, "x2": 0, "y2": 1}}`.
+
+Additional motion objects describe closed-form springs, path components and composition:
+
+```json
+{"spring": {"from": 0, "to": 1, "stiffness": 121, "damping": 9}}
+```
+
+```json
+{"clock": {"source": {"spring": {"from": 0, "to": 1}}, "scale": 2, "offset": -0.2}}
+```
+
+```json
+{"map": {"source": {"tween": {"from": 0, "to": 1, "duration": 1}}, "expr": "t * t"}}
+```
+
+`clock` changes the nested animation's time, while `map` treats `t` as its sampled
+numeric value. `components` combines scalar animations into a point or rectangle;
+`sum` adds scalar sources in order. `follow_path` supplies `x`, `y` or tangent
+`angle` in degrees from SVG path data with a duration and optional easing.
+
+For a live readout, use `text.number` instead of fixed text:
+
+```json
+{"text": {"number": {"value": {"expr": "t"}, "precision": 2, "prefix": "t ", "suffix": " s"}, "size": 14}, "fill": "white"}
+```
+
+See the [format contract](../design/documents.md#numeric-text-readouts) for numeric
+readout limits. Sequence different pages as scenes in a track; each scene has its
+own local time and all scenes are validated during compilation.
 
 ## Styles, Transforms and Effects
 
@@ -147,6 +179,55 @@ assert!(Document::from_json_with(text, Some(&json!({"size": 1}))).is_err());
 
 From the command line pass `--params '{"radius": 20}'` after a `.json` path. The loaded
 document keeps the effective values and no `$param` objects.
+
+Use `$calc` for numeric values that should be computed once after parameter
+overrides, rather than animated each frame:
+
+```json
+{
+  "seconds": 8,
+  "fps": 30,
+  "pages": 43,
+  "page_1_frame": {"$calc": "ceil($seconds * $fps / $pages)"},
+  "page_1_start": {"$calc": "$page_1_frame / $fps"}
+}
+```
+
+Put these declarations inside root `params`. Overriding `seconds` recalculates both
+derived values, regardless of declaration order. A `$calc` object can also appear
+directly in a numeric field or reusable definition. It uses the same arithmetic
+and functions as `expr`, but cannot read time `t` or element bindings; cycles and
+non-finite results are errors. Arithmetic uses f64, while an untouched integer
+parameter such as a seed keeps its original precision. Use `expr` for values that
+must change with frame time.
+
+## Reusable definitions
+
+Declare shared values, styles and component templates in `defs`. A `use` reference
+expands while loading; sibling fields replace whole fields from the definition:
+
+```json
+{
+  "version": 1, "size": [320, 180], "fps": 30,
+  "params": {"tint": "#14a082"},
+  "defs": {
+    "style": {"fill": {"$param": "tint"}},
+    "dot": {"use": "style", "circle": {"center": [0, 0], "radius": 20}}
+  },
+  "tracks": [{"items": [{"scene": {"duration": 2, "content": {
+    "children": [
+      {"use": "dot", "id": "left", "position": [100, 90]},
+      {"use": "dot", "id": "right", "position": [220, 90], "fill": "white"}
+    ]
+  }}}]}]
+}
+```
+
+Definitions can reference other definitions and contain parameter references.
+Array and scalar definitions use `{"use": "name"}` without sibling fields. An override
+of `circle`, for example, must supply the whole circle specification. Cycles and
+unknown names fail at the referring path. Loaded documents serialize their expanded
+values without `defs`; ids remain exactly as authored.
 
 ## Expressions and Bindings
 

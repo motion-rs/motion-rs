@@ -87,13 +87,15 @@ impl StudioScene {
 
     /// Rebuilds this scene while the workbench runs whenever a watched file changes.
     ///
-    /// The workbench polls the modification times of `watch` a few times per second and,
+    /// The workbench polls the modification times and lengths of `watch` a few times per second and,
     /// once a change has settled, calls `load` on a worker thread. A successful result
     /// replaces the scene: the playhead, cues, preview settings and export settings are
     /// kept (clamped to the new length) and every cached frame is dropped. A failure
     /// keeps the previous scene and shows the error in the header, so a file saved with
     /// a mistake never closes or blanks the preview. The scene returned by `load` need
-    /// not be reloadable itself. `load` must be deterministic and thread-safe.
+    /// not be reloadable itself. If it is, its new watch list and loader replace the
+    /// previous ones. Results superseded by another watched change are discarded.
+    /// `load` must be deterministic and thread-safe.
     pub fn reloadable(
         mut self,
         watch: impl IntoIterator<Item = PathBuf>,

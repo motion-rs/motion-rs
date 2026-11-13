@@ -39,6 +39,17 @@ impl DemoMetadata {
     }
 }
 
+/// Authoring mode used by demonstrations that offer multiple implementations.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AuthoringMode {
+    /// Uses the demonstration's original implementation.
+    #[default]
+    Default,
+    /// Loads a declarative JSON document.
+    Json,
+}
+
 /// Shared bounded demonstration parameters.
 #[derive(Clone, Copy, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -49,6 +60,21 @@ pub struct DemoParameters {
     pub seed: u64,
     /// Bounded mark count, in 4..=128.
     pub count: u32,
+    /// Authoring mode; defaults to the original implementation and is ignored when unsupported.
+    #[serde(default)]
+    pub mode: AuthoringMode,
+}
+
+impl DemoParameters {
+    fn validate(self) -> motion::Result<Self> {
+        if !(1..=60).contains(&self.seconds) || !(4..=128).contains(&self.count) {
+            return Err(motion::Error::Parameters(Box::new(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "seconds must be 1..=60 and count 4..=128",
+            ))));
+        }
+        Ok(self)
+    }
 }
 
 impl Default for DemoParameters {
@@ -57,6 +83,7 @@ impl Default for DemoParameters {
             seconds: 8,
             seed: 20261027,
             count: 72,
+            mode: AuthoringMode::default(),
         }
     }
 }
@@ -71,13 +98,7 @@ pub fn project(options: RenderOptions) -> motion::Result<Project> {
     let mut project = Project::new("motion").render_options(options);
     for demo in demos::catalog() {
         project = project.try_timeline_with::<DemoParameters>(demo.id, move |parameters| {
-            if !(1..=60).contains(&parameters.seconds) || !(4..=128).contains(&parameters.count) {
-                return Err(motion::Error::Parameters(Box::new(std::io::Error::new(
-                    std::io::ErrorKind::InvalidInput,
-                    "seconds must be 1..=60 and count 4..=128",
-                ))));
-            }
-            demos::timeline(demo, parameters)
+            demos::timeline(demo, parameters.validate()?)
         })?;
     }
     Ok(project.build()?)
@@ -285,6 +306,81 @@ mod tests {
     }
 
     #[test]
+    fn shared_mode_defaults_and_round_trips() -> serde_json::Result<()> {
+        let legacy = serde_json::json!({"seconds": 8, "seed": 17, "count": 72});
+        let parameters: DemoParameters = serde_json::from_value(legacy)?;
+        assert_eq!(parameters.mode, AuthoringMode::Default);
+        for (name, mode) in [
+            ("default", AuthoringMode::Default),
+            ("json", AuthoringMode::Json),
+        ] {
+            let parameters = DemoParameters {
+                mode,
+                ..DemoParameters::default()
+            };
+            let value = serde_json::to_value(parameters)?;
+            assert_eq!(value["mode"], name);
+            assert_eq!(serde_json::from_value::<DemoParameters>(value)?.mode, mode);
+        }
+        assert!(serde_json::from_value::<AuthoringMode>(serde_json::json!("declarative")).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn animation_atlas_modes_share_one_catalog_entry() -> motion::Result {
+        let project = project(RenderOptions::default())?;
+        let entries = project.list();
+        let atlas = entries
+            .iter()
+            .find(|entry| entry.name == "animation-atlas")
+            .unwrap();
+        assert_eq!(atlas.defaults.as_ref().unwrap()["mode"], "default");
+        assert_eq!(
+            entries
+                .iter()
+                .filter(|entry| entry.name.contains("animation-atlas"))
+                .count(),
+            1
+        );
+        for mode in ["default", "json"] {
+            for seconds in [1, 8, 60] {
+                let film = project.build(
+                    "animation-atlas",
+                    Some(serde_json::json!({
+                        "mode": mode, "seconds": seconds, "seed": u64::MAX,
+                    })),
+                )?;
+                assert_eq!(film.size(), Size::new(960.0, 540.0));
+                assert_eq!(film.frame_count(), seconds * 30);
+                assert_eq!(film.duration(), seconds.seconds());
+            }
+        }
+        assert_eq!(project.build("animation-atlas", None)?.frame_count(), 240);
+        for parameters in [
+            serde_json::json!({"mode": "unknown"}),
+            serde_json::json!({"mode": "declarative"}),
+            serde_json::json!({"mode": 1}),
+            serde_json::json!({"mode": "json", "seconds": 0}),
+            serde_json::json!({"mode": "default", "seconds": 61}),
+            serde_json::json!({"mode": "default", "count": 3}),
+            serde_json::json!({"mode": "json", "count": 129}),
+        ] {
+            assert!(project.build("animation-atlas", Some(parameters)).is_err());
+        }
+        for mode in ["default", "json"] {
+            let film = project.build("brush-atlas", Some(serde_json::json!({"mode": mode})))?;
+            assert_eq!(film.frame_count(), 240);
+        }
+        for removed in [
+            "declarative-animation-atlas",
+            "declarative-json-animation-atlas",
+        ] {
+            assert!(project.build(removed, None).is_err());
+        }
+        Ok(())
+    }
+
+    #[test]
     fn film_program_has_unique_ids_composed_features_and_exact_duration() -> motion::Result {
         let entries = catalog();
         let expected = [
@@ -374,6 +470,12 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(registered, expected);
         for entry in entries {
+            let defaults = project
+                .list()
+                .into_iter()
+                .find(|film| film.name == entry.id)
+                .unwrap();
+            assert_eq!(defaults.defaults.as_ref().unwrap()["mode"], "default");
             for seconds in [1, 8] {
                 let timeline =
                     project.build(entry.id, Some(serde_json::json!({"seconds":seconds})))?;

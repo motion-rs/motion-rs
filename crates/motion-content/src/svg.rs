@@ -28,7 +28,7 @@
 //! # Ok::<(), motion_core::Error>(())
 //! ```
 
-use crate::{VectorGroup, VectorItem, VectorPath, VectorSelection, VectorTree};
+use crate::{VectorGroup, VectorItem, VectorPath, VectorTree};
 
 use motion_core::{Color, FillRule, Path2D, Point, Rect, Size, Transform};
 use std::{

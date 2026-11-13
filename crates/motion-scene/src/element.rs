@@ -125,6 +125,11 @@ impl Element {
         })
     }
 
+    /// Creates an open polyline from fixed or compile-time sampled points.
+    pub fn polyline(points: PointsSpec) -> Self {
+        Self::new(Content::Polyline(points))
+    }
+
     /// Creates geometry from SVG path data.
     pub fn path(data: impl Into<String>) -> Self {
         Self::new(PathSpec { data: data.into() })

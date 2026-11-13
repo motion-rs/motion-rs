@@ -1,5 +1,6 @@
 //! Compilation of validated documents into engine timelines with their look.
 
+use crate::cache::read_source;
 use crate::document::{Document, LookSpec, SceneSpec, TrackItem, TransitionEffect};
 use crate::element::Element;
 use element::Built;
@@ -13,6 +14,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 
+mod animation;
 mod audio;
 mod binding;
 mod captions;
@@ -23,10 +25,25 @@ mod expr;
 mod failure;
 mod formula;
 mod morph;
+#[cfg(feature = "particles")]
+mod particle_configuration;
+#[cfg(feature = "particles")]
+mod particle_events;
+#[cfg(feature = "particles")]
+mod particle_materials;
+#[cfg(feature = "particles")]
+mod particle_operators;
+#[cfg(feature = "particles")]
+mod particle_preset;
+#[cfg(feature = "particles")]
+mod particle_sources;
 mod particles;
 mod style;
 mod text;
 mod value;
+
+pub(crate) use animation::numeric_animation;
+pub(crate) use expr::calculate;
 
 /// Largest accepted time, duration or offset in seconds (about 11.5 days).
 pub(crate) const MAX_SECONDS: f64 = 1e6;
@@ -36,6 +53,9 @@ const MAX_DESIGN_EXTENT: f64 = 65_536.0;
 
 /// Most diagnostics retained from one compilation.
 const MAX_ERRORS: usize = 256;
+
+/// Deepest recursive motion composition accepted during compilation.
+const MAX_MOTION_DEPTH: usize = 32;
 
 /// Inputs that are not part of the document itself.
 #[derive(Clone, Debug, Default)]
@@ -223,15 +243,23 @@ pub fn load_with(
     overrides: Option<&Value>,
 ) -> Result<CompiledDocument, motion_core::ErrorReport> {
     let path = std::path::absolute(path.as_ref())?;
-    let text = std::fs::read_to_string(&path)?;
-    let document = Document::from_json_with(&text, overrides)?;
+    let text = read_source(&path)?;
+    compile_source(path, &text, overrides)
+}
+
+pub(crate) fn compile_source(
+    path: PathBuf,
+    text: &str,
+    overrides: Option<&Value>,
+) -> Result<CompiledDocument, motion_core::ErrorReport> {
+    let document = Document::from_json_with(text, overrides)?;
     let mut options = CompileOptions::default();
     if let Some(directory) = path.parent() {
         options = options.base_dir(directory);
     }
     let mut compiled = document
         .compile(&options)
-        .map_err(|error| crate::diagnostics::annotate_report(error, &text))?;
+        .map_err(|error| crate::diagnostics::annotate_report(error, text))?;
     compiled.resources.insert(0, path);
     Ok(compiled)
 }
@@ -261,6 +289,7 @@ pub(crate) struct Compiler<'a> {
     bindings: HashMap<String, Arc<dyn Signal<f64>>>,
     /// Bindings being resolved, for cycle detection.
     resolving: Vec<String>,
+    motion_depth: usize,
     #[cfg(feature = "text")]
     fonts: Option<motion_content::FontLibrary>,
 }
@@ -277,6 +306,7 @@ impl<'a> Compiler<'a> {
             documents: HashMap::new(),
             bindings: HashMap::new(),
             resolving: Vec::new(),
+            motion_depth: 0,
             #[cfg(feature = "text")]
             fonts: None,
         }

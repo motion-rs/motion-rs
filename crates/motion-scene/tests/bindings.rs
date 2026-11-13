@@ -44,6 +44,108 @@ fn scene(content: &str, params: &str) -> String {
 }
 
 #[test]
+fn calculations_resolve_overrides_dependencies_and_value_positions() {
+    let text = scene(
+        r#"{"circle": {"center": [20, 10], "radius": {"$calc": "$radius / 2"}}, "fill": "white"}"#,
+        r#"{"radius": {"$calc": "$base * 2"}, "base": 4, "ticks": {"$calc": "$radius * 30"}, "seed": 18446744073709551615}"#,
+    );
+    let mut source: serde_json::Value = serde_json::from_str(&text).unwrap();
+    source["fps"] = json!({"$calc": "$base * 10"});
+    source["defs"] = json!({"dot": source["tracks"][0]["items"][0]["scene"]["content"]});
+    source["tracks"][0]["items"][0]["scene"]["content"] = json!({"use": "dot"});
+    let document =
+        Document::from_json_with(&source.to_string(), Some(&json!({"base": 3}))).unwrap();
+    assert_eq!(document.params["radius"], json!(6));
+    assert_eq!(document.params["ticks"], json!(180));
+    assert_eq!(document.params["seed"], json!(u64::MAX));
+    assert_eq!(
+        Document::from_json(&document.to_json().unwrap()).unwrap(),
+        document
+    );
+    let film = document.compile(&CompileOptions::default()).unwrap();
+    assert_eq!(film.timeline().frame_count(), 60);
+    assert_eq!(pixel(&film, 0.0, 20, 10), WHITE);
+    assert_eq!(pixel(&film, 0.0, 20, 5), BLACK);
+    let schema = motion_scene::schema();
+    assert_eq!(schema["$defs"]["CalcRef"]["required"], json!(["$calc"]));
+    source["fps"] = json!({"$calc": "$base / 2"});
+    assert!(Document::from_json_with(&source.to_string(), Some(&json!({"base": 3}))).is_err());
+}
+
+#[test]
+fn calculations_reject_cycles_runtime_values_and_nonfinite_results() {
+    for (params, expected) in [
+        (r#"{"a":{"$calc":"$b"},"b":{"$calc":"$a"}}"#, "cycle"),
+        (r#"{"a":{"$calc":"t"}}"#, "time"),
+        (r#"{"a":{"$calc":"@dot.radius"}}"#, "elements"),
+        (r#"{"a":{"$calc":"1 / 0"}}"#, "finite"),
+        (r#"{"a":{"$calc":"$missing"}}"#, "Unknown parameter"),
+        (r#"{"a":{"$calc":true}}"#, "expression string"),
+        (r#"{"a":{"$calc":"1","extra":2}}"#, "sibling"),
+    ] {
+        let error = Document::from_json(&scene(r#"{"children":[]}"#, params)).unwrap_err();
+        let diagnostic = error.downcast_ref::<ValidationError>().unwrap();
+        assert!(diagnostic.message.contains(expected), "{diagnostic:?}");
+        assert!(diagnostic.path.starts_with("params."), "{diagnostic:?}");
+        assert!(diagnostic.message.contains("line "), "{diagnostic:?}");
+    }
+}
+
+#[test]
+fn calculations_enforce_limits_and_preserve_nested_values() {
+    let text = scene(
+        r#"{"children":{"$param":"shapes"}}"#,
+        r#"{"base":3,"negative_zero":{"$calc":"-0"},"shapes":[{"circle":{"center":[20,10],"radius":{"$calc":"$base * 2"}},"fill":"white"}]}"#,
+    );
+    let document = Document::from_json(&text).unwrap();
+    assert!(
+        document.params["negative_zero"]
+            .as_f64()
+            .unwrap()
+            .is_sign_negative()
+    );
+    assert_eq!(document.params["shapes"][0]["circle"]["radius"], json!(6));
+    let mut parameters = serde_json::Map::new();
+    for index in 0..34 {
+        parameters.insert(
+            format!("p{index}"),
+            if index == 33 {
+                json!(1)
+            } else {
+                json!({"$calc": format!("$p{} + 1", index + 1)})
+            },
+        );
+    }
+    let error = Document::from_json(&scene(
+        r#"{"children":[]}"#,
+        &serde_json::to_string(&parameters).unwrap(),
+    ))
+    .unwrap_err();
+    assert!(error.to_string().contains("32 levels"), "{error}");
+    for expression in [format!("{}1", "+".repeat(60)), "1".repeat(4097)] {
+        let text = scene(
+            r#"{"children":[]}"#,
+            &json!({"value":{"$calc": expression}}).to_string(),
+        );
+        assert!(Document::from_json(&text).is_err());
+    }
+    let text = scene(r#"{"children":[]}"#, r#"{"a":1}"#);
+    assert!(Document::from_json_with(&text, Some(&json!({"a": "x".repeat(65_537)}))).is_err());
+    let inline = scene(
+        r#"{"circle":{"center":[20,10],"radius":{"$calc":"$missing"}}}"#,
+        "{}",
+    );
+    let error = Document::from_json(&inline).unwrap_err();
+    assert!(
+        error
+            .downcast_ref::<ValidationError>()
+            .unwrap()
+            .path
+            .ends_with("circle.radius")
+    );
+}
+
+#[test]
 fn parameters_substitute_anywhere_and_accept_overrides() {
     let text = scene(
         r##"{"circle": {"center": [20, 10], "radius": {"$param": "radius"}},
@@ -225,6 +327,13 @@ fn expressions_round_trip_and_describe_in_the_schema() {
     assert!(definitions.contains_key("ParamRef"));
     let element = &definitions["Element"];
     let radius = serde_json::to_string(&element["anyOf"]).unwrap();
-    assert!(radius.contains("ParamRef"), "{radius}");
+    assert!(radius.contains("ValueRef"), "{radius}");
+    assert!(
+        definitions["ValueRef"]["anyOf"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|reference| reference["$ref"] == "#/$defs/ParamRef")
+    );
     assert!(definitions.contains_key("ExprSpec"));
 }

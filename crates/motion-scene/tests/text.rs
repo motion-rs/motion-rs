@@ -121,14 +121,11 @@ fn text_documents_round_trip_and_report_errors() {
                 .clone()
         })
         .collect();
-    assert!(
-        messages.iter().any(|message| message.contains("not both")),
-        "{messages:?}"
-    );
-    assert!(
-        messages
-            .iter()
-            .any(|message| message.contains("requires `content`")),
-        "{messages:?}"
+    assert_eq!(
+        messages,
+        [
+            "Give exactly one of `content`, `spans` or `number`",
+            "Give exactly one of `content`, `spans` or `number`",
+        ]
     );
 }

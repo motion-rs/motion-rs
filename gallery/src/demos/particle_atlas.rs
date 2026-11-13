@@ -254,10 +254,88 @@ fn stage(preset: Preset) -> Node {
 
 #[cfg(test)]
 mod tests {
+    use super::super::{atlas, json_atlas};
     use super::*;
+    use serde_json::json;
 
     /// Maximum 8-bit channel difference between empty and HDR composition paths.
     const COMPOSITING_TOLERANCE: u8 = 1;
+
+    #[test]
+    fn json_particle_atlas_source() -> motion::Result {
+        let pages = particle_pages();
+        json_atlas::tests::source(json_atlas::PARTICLE_DOCUMENT, METADATA, &pages)?;
+        let project = crate::project(RenderOptions::default())?;
+        for count in [4, 128] {
+            let timeline = project.build(
+                "particle-atlas",
+                Some(json!({"mode":"json", "seed":u64::MAX,"count":count})),
+            )?;
+            assert_eq!(timeline.frame_count(), 240);
+        }
+        Ok(())
+    }
+
+    fn particle_pages() -> Vec<atlas::Page> {
+        Preset::ALL
+            .into_iter()
+            .map(|preset| atlas::Page {
+                title: preset.name(),
+                lines: description(preset).1,
+            })
+            .collect()
+    }
+
+    #[test]
+    #[ignore = "requires explicit MOTION_TEST_FONT; compares complete native and JSON CPU frames"]
+    fn json_particle_atlas_frames() -> motion::Result {
+        json_atlas::tests::frames(METADATA, &particle_pages())
+    }
+
+    #[test]
+    #[ignore = "requires explicit MOTION_TEST_FONT; compares particle density boundaries"]
+    fn json_particle_atlas_density_frames() -> motion::Result {
+        let font = std::env::var_os("MOTION_TEST_FONT")
+            .ok_or_else(|| std::io::Error::other("Set MOTION_TEST_FONT"))?;
+        let options = crate::render_options(Some(std::path::Path::new(&font)))?
+            .backend(BackendPreference::Cpu)
+            .size(PixelSize::new(288, 162));
+        let project = crate::project(options.clone())?;
+        for count in [4, 128] {
+            let actual = project.build(
+                "particle-atlas",
+                Some(json!({"mode":"json","seconds":52,"seed":18,"count":count})),
+            )?;
+            let expected = project.build(
+                "particle-atlas",
+                Some(json!({"mode":"default","seconds":52,"seed":18,"count":count})),
+            )?;
+            for page in [0, 6, 9, 12] {
+                let time = Time::from_seconds((page as f64 + 0.62) * 4.0);
+                let first = render_still(&actual, time, &options)?;
+                let reference = render_still(&expected, time, &options)?;
+                let maximum = first
+                    .bytes()
+                    .iter()
+                    .zip(reference.bytes())
+                    .map(|(actual, expected)| actual.abs_diff(*expected))
+                    .max()
+                    .unwrap();
+                assert!(
+                    maximum <= 1,
+                    "count={count} page={page} max_channel_difference={maximum}"
+                );
+                assert_eq!(
+                    first.bytes(),
+                    render_still(&actual, time, &options)?.bytes()
+                );
+                println!(
+                    "Particle density parity: count={count} page={page} max_channel_difference={maximum} replay=exact"
+                );
+            }
+        }
+        Ok(())
+    }
 
     #[test]
     fn every_preset_has_its_own_page_description_and_visible_clock() {

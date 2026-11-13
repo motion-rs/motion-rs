@@ -99,6 +99,22 @@ impl Content {
     }
 }
 
+/// A numeric text readout with bounded precision and affixes.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct NumberTextSpec {
+    /// Numeric animation to display; nonfinite results use Rust's numeric spelling.
+    pub value: Animated<f64>,
+    /// Decimal places, at most 16.
+    pub precision: u8,
+    /// Fixed prefix; combined affixes are limited to 4096 bytes.
+    #[serde(default)]
+    pub prefix: String,
+    /// Fixed suffix.
+    #[serde(default)]
+    pub suffix: String,
+}
+
 /// An axis-aligned rectangle.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -170,12 +186,67 @@ pub struct ArcSpec {
     pub sweep_angle: Animated<f64>,
 }
 
-/// Fixed points for polygons and polylines.
+/// Fixed or compile-time sampled points for polygons and polylines.
+///
+/// Give exactly one of a nonempty `points` list or `sample`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct PointsSpec {
     /// Points `[[x, y], ...]` in drawing order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub points: Vec<Point>,
+    /// Point animation sampled once during compilation, instead of fixed points.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sample: Option<SampledPointsSpec>,
+    /// Per-frame animated points, instead of fixed or compile-time sampled points.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub animated: Option<Vec<Animated<Point>>>,
+}
+
+impl PointsSpec {
+    /// Creates a fixed point list.
+    pub fn new(points: impl IntoIterator<Item = Point>) -> Self {
+        Self {
+            points: points.into_iter().collect(),
+            sample: None,
+            animated: None,
+        }
+    }
+
+    /// Creates a compile-time sampled point list.
+    pub fn sampled(sample: SampledPointsSpec) -> Self {
+        Self {
+            points: Vec::new(),
+            sample: Some(sample),
+            animated: None,
+        }
+    }
+}
+
+/// Uniform samples of an animated point, independent of the current frame time.
+///
+/// The document compiler resolves parameters and animations normally, then retains
+/// `segments + 1` points including both range endpoints. No per-frame sampling occurs.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SampledPointsSpec {
+    /// Animated point in drawing coordinates.
+    pub source: Animated<Point>,
+    /// Increasing, nonnegative sample times in seconds, at most 1e6 each.
+    pub range: [f64; 2],
+    /// Number of line segments in `1..=65535`.
+    pub segments: u32,
+}
+
+impl SampledPointsSpec {
+    /// Creates a sampling description validated when the document is compiled.
+    pub fn new(source: impl Into<Animated<Point>>, range: [f64; 2], segments: u32) -> Self {
+        Self {
+            source: source.into(),
+            range,
+            segments,
+        }
+    }
 }
 
 /// A regular polygon with one vertex pointing up.
@@ -262,7 +333,8 @@ pub struct PathSpec {
 
 /// A paragraph laid out with the document or render font environment.
 ///
-/// Give either `content` for uniform text or `spans` for rich text. Fill and
+/// Give `content` for uniform text, `spans` for rich text or `number` for a
+/// numeric readout. Fill and
 /// stroke come from the element, so they apply to the whole paragraph; spans may
 /// override the family, size, weight, slant and fill of their own run.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -274,6 +346,9 @@ pub struct TextSpec {
     /// Styled runs of a rich paragraph, at most 256.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub spans: Vec<TextSpanSpec>,
+    /// Dynamic numeric readout, instead of `content` or `spans`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub number: Option<NumberTextSpec>,
     /// Font family; the library default when omitted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub family: Option<String>,
@@ -315,6 +390,7 @@ impl TextSpec {
         Self {
             content: content.into(),
             spans: Vec::new(),
+            number: None,
             family: None,
             size: None,
             weight: None,
@@ -520,16 +596,95 @@ pub struct ImageSpec {
     pub sampling: Option<Sampling>,
 }
 
-/// A static SVG file.
+/// An SVG drawing from a file or embedded markup, optionally written over time.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SvgSpec {
-    /// File path, relative to the document directory.
-    pub source: String,
+    /// File path relative to the document directory, or embedded SVG markup.
+    pub source: SvgSourceSpec,
     /// Fit the drawing into `[width, height]`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub size: Option<[f64; 2]>,
     /// Handwriting progress in `0..=1`; fully drawn when omitted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub write: Option<Animated<f64>>,
+    /// Handwriting geometry; core defaults when omitted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub write_options: Option<SvgWriteSpec>,
+}
+
+/// An SVG file path or explicitly embedded SVG markup.
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
+#[serde(untagged, deny_unknown_fields)]
+pub enum SvgSourceSpec {
+    /// File path relative to the document directory.
+    File(String),
+    /// SVG markup parsed once during document compilation.
+    Inline {
+        /// SVG XML, limited to 16 MiB.
+        data: String,
+    },
+}
+
+impl From<String> for SvgSourceSpec {
+    fn from(source: String) -> Self {
+        Self::File(source)
+    }
+}
+
+impl From<&str> for SvgSourceSpec {
+    fn from(source: &str) -> Self {
+        Self::File(source.to_owned())
+    }
+}
+
+/// Options for cumulative contour handwriting.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SvgWriteSpec {
+    /// Outline width in design units.
+    pub width: f64,
+    /// Fraction of progress spent drawing the outline, in `0..=1`.
+    pub outline_fraction: f64,
+}
+
+impl<'de> Deserialize<'de> for SvgSourceSpec {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        deserializer.deserialize_any(SvgSourceVisitor)
+    }
+}
+
+/// Reads an SVG source with a precise message instead of serde's untagged fallback.
+struct SvgSourceVisitor;
+
+impl<'de> serde::de::Visitor<'de> for SvgSourceVisitor {
+    type Value = SvgSourceSpec;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("an SVG file path string or an object {\"data\": \"<svg ...>\"}")
+    }
+
+    fn visit_str<E: serde::de::Error>(self, value: &str) -> Result<Self::Value, E> {
+        Ok(SvgSourceSpec::File(value.to_owned()))
+    }
+
+    fn visit_string<E: serde::de::Error>(self, value: String) -> Result<Self::Value, E> {
+        Ok(SvgSourceSpec::File(value))
+    }
+
+    fn visit_map<A: serde::de::MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
+        use serde::de::Error;
+        let mut data = None;
+        while let Some(key) = map.next_key::<String>()? {
+            if key != "data" {
+                return Err(A::Error::unknown_field(&key, &["data"]));
+            }
+            if data.is_some() {
+                return Err(A::Error::duplicate_field("data"));
+            }
+            data = Some(map.next_value::<String>()?);
+        }
+        data.map(|data| SvgSourceSpec::Inline { data })
+            .ok_or_else(|| A::Error::missing_field("data"))
+    }
 }

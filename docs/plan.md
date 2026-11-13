@@ -154,33 +154,27 @@ Remaining acceptance:
 The format, parameters, bindings, content kinds, hot reload and diagnostics are described in
 [declarative documents](design/documents.md). Remaining work, in order:
 
-1. Add reusable definitions: named styles, templates and component references
-   (`defs` / `use`) that expand during load, so large films stop repeating subtrees.
-   Expansion must stay bounded and report the referring path like `$param` does.
-2. Close the content gaps. Particles lack image emitters, force fields, sprite sheets,
+1. Close the content gaps. Particles lack image emitters, force fields, sprite sheets,
    bokeh and trail options; formulas lack subexpression selection; Typst page documents,
    animated SVG and image-sequence sources are not describable; audio lacks
    analysis-driven signals, synthesis, speed/reverse transforms, metadata and chapters.
-3. Extend bindings: read an element's world transform and bounds, bind across scenes and
+2. Extend bindings: read an element's world transform and bounds, bind across scenes and
    to audio analysis, and reference whole points (`@id.position`) without components.
-4. Add format migration: a `migrate` command and compatibility rules for the next
+3. Add format migration: a `migrate` command and compatibility rules for the next
    version. Until a second version exists, other versions are rejected.
-5. Evaluate Lottie/Bodymovin import as a converter into this format. Decide between an
+4. Evaluate Lottie/Bodymovin import as a converter into this format. Decide between an
    existing Rust implementation and a first-party subset only after checking license
    and binary size, and keep the dependency optional.
-6. Export code-built timelines to documents for the builders that have a data form.
+5. Export code-built timelines to documents for the builders that have a data form.
    Closure scenes cannot be serialized, so the supported subset must be explicit.
-7. Test the parser and compiler with fuzzing or property tests (no panics, bounded
+6. Test the parser and compiler with fuzzing or property tests (no panics, bounded
    work, every diagnostic path resolvable) and pin golden frames for the example
    documents on both backends.
-8. Cache compiled documents in `Project` by file modification time, and make the
-   retained-diagnostic cap (256) configurable.
-9. Hot reload polish: watch resources that appear after launch, preserve the
-   per-scene GPU context across reloads, and accept native window acceptance on real
+7. Make the retained-diagnostic cap (256) configurable.
+8. Hot reload polish: preserve the per-scene GPU context across reloads, and accept native window acceptance on real
    hosts. The automated fixtures use headless egui and do not replace it.
-10. Shrink the schema (currently about 340 KB because every value position accepts a
-    `$param` reference) by moving the reference into shared definitions, and generate
-    value-range constraints where JSON Schema can express them.
+9. Extend static schema range coverage beyond document times and particle inputs.
+   Animated results and resource availability still require runtime validation.
 
 ## Completion Rules
 

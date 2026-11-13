@@ -1,0 +1,411 @@
+{
+  "version": 1,
+  "name": {"$param": "title"},
+  "size": [960, 540],
+  "fps": 30,
+  "background": "#f1f3f0",
+  "params": {
+    "seconds": 8,
+    "title": "Compositing Atlas",
+    "pages": 26,
+    "segment_width": {"$calc": "(864 - 2 * ($pages - 1)) / $pages"}
+  },
+  "defs": {
+    "heading": {"family": "", "size": 26, "weight": 600, "letter_spacing": 0},
+    "body": {"family": "", "size": 17, "weight": 500, "letter_spacing": 0},
+    "next": {"family": "", "size": 13, "weight": 500, "letter_spacing": 0, "max_width": 268},
+    "page_number": {"family": "", "size": 24, "weight": 600, "letter_spacing": 0, "max_width": 120, "alignment": "end"},
+    "page_caption": {"fill": "#1f2723"},
+    "heading_node": {"fill": "#1f2723", "translate": [47, 120]},
+    "line_one": {"fill": "#1f2723", "translate": [48, 176]},
+    "line_two": {"fill": "#1f2723", "translate": [48, 202]},
+    "line_three": {"fill": "#1f2723", "translate": [48, 228]},
+    "next_node": {"fill": "#56635c", "translate": [48, 443.25]},
+    "number_node": {"fill": "#1f2723", "translate": [744, 50]},
+    "backdrop": {"rect": {"bounds": [48, 48, 464, 256]}, "fill": "#c9d9cf"},
+    "back_circle": {
+      "circle": {"center": [210, 152], "radius": 86},
+      "fill": {"linear": {"start": [124, 0], "end": [296, 0], "options": {"units": "user_space"}, "stops": [
+        {"offset": 0, "color": "#3564c4"}, {"offset": 1, "color": "#66e0c2"}
+      ]}}
+    },
+    "front_circle": {
+      "circle": {"center": {"expr": ["290 + sin(@clock.rotate * 6) * 36", "152"]}, "radius": 86},
+      "fill": "#e37659"
+    },
+    "shapes": {"children": [{"use": "back_circle"}, {"use": "front_circle"}]},
+    "specimen": {"children": [
+      {"rect": {"bounds": [0, 0, 512, 304]}, "fill": "#17231f00"},
+      {"rect": {"bounds": [72, 64, 440, 240]}, "fill": {"linear": {
+        "start": [72, 64], "end": [440, 240], "options": {"units": "user_space"}, "stops": [
+          {"offset": 0, "color": "#8bd5f3"}, {"offset": 1, "color": "#d64b36"}
+        ]
+      }}},
+      {"circle": {"center": {"expr": ["256 + sin(@clock.rotate * tau) * 55", "152"]}, "radius": 64}, "fill": "#ffc777"},
+      {"circle": {"center": [250, 127], "radius": 12}, "fill": "#ffffff", "filters": [{"color_adjust": {"exposure": 2, "contrast": 1, "saturation": 1, "hue": 0}}]},
+      {"rect": {"bounds": [184, 177, 330, 184]}, "fill": "#ffffff"}
+    ]},
+    "mask_art": {
+      "circle": {"center": {"expr": ["150 + 212 * @clock.rotate", "152"]}, "radius": 100},
+      "fill": {"linear": {"start": [110, 0], "end": [400, 0], "options": {"units": "user_space"}, "stops": [
+        {"offset": 0, "color": "#000000"}, {"offset": 1, "color": "#ffffff"}
+      ]}}
+    },
+    "clip_circle": {"circle": {"center": {"expr": ["180 + 150 * @clock.rotate", "152"]}, "radius": 105}},
+    "pair_label": {"family": "", "size": 14, "weight": 500, "letter_spacing": 0.6, "max_width": 240, "alignment": "center"},
+    "divider": {"rect": {"bounds": [255.5, 56, 256.5, 248]}, "fill": "#3a4d44"},
+    "left_label": {"fill": "#b9cec5", "translate": [8, 222]},
+    "right_label": {"fill": "#b9cec5", "translate": [264, 222]},
+    "order_circle": {
+      "circle": {"center": {"expr": ["290 + sin(@clock.rotate * 6) * 40", "152"]}, "radius": 84}, "fill": "#ffc777"
+    }
+  },
+  "tracks": [{"items": [{"scene": {
+    "name": "Compositing pages",
+    "duration": {"$param": "seconds"},
+    "content": {"children": [
+      {"id": "clock", "translate": {"expr": ["t / $seconds", "min(floor(t / $seconds * $pages), $pages - 1)"]},
+       "rotate": {"expr": "clamp(t / $seconds * $pages - min(floor(t / $seconds * $pages), $pages - 1), 0, 1)"}},
+      {"text": {"content": "MOTION GALLERY  /  RENDERING", "family": "", "size": 11, "weight": 600, "letter_spacing": 1.2}, "fill": "#56635c", "translate": [48, 28]},
+      {"text": {"use": "heading", "content": {"$param": "title"}, "size": 32}, "fill": "#1f2723", "translate": [47, 44]},
+      {"text": {"content": "/ 26", "family": "", "size": 15, "weight": 500, "letter_spacing": 0, "max_width": 44, "alignment": "end"}, "fill": "#56635c", "translate": [868, 58]},
+      {"rect": {"bounds": [48, 99.5, 912, 100.5]}, "fill": "#c3cbc5"},
+      {"rect": {"bounds": [48, 272, 76, 275]}, "fill": "#d64b36"},
+      {"name": "Page captions", "children": [
+        {"name": "Source over", "opacity": {"expr": "if(@clock.translate.y == 0, 1, 0)"}, "children": [
+          {"use": "heading_node", "text": {"use": "heading", "content": "Source over"}},
+          {"use": "number_node", "text": {"use": "page_number", "content": "01"}},
+          {"use": "line_one", "text": {"use": "body", "content": "The foreground covers its"}},
+          {"use": "line_two", "text": {"use": "body", "content": "backdrop according to alpha"}},
+          {"use": "line_three", "text": {"use": "body", "content": "in linear working color."}},
+          {"use": "next_node", "text": {"use": "next", "content": "Next  /  Plus"}}
+        ]},
+        {"name": "Plus", "opacity": {"expr": "if(@clock.translate.y == 1, 1, 0)"}, "children": [
+          {"use": "heading_node", "text": {"use": "heading", "content": "Plus"}},
+          {"use": "number_node", "text": {"use": "page_number", "content": "02"}},
+          {"use": "line_one", "text": {"use": "body", "content": "Premultiplied colors add"}},
+          {"use": "line_two", "text": {"use": "body", "content": "light energy without clipping"}},
+          {"use": "line_three", "text": {"use": "body", "content": "the working RGB channels."}},
+          {"use": "next_node", "text": {"use": "next", "content": "Next  /  Multiply"}}
+        ]},
+        {"name": "Multiply", "opacity": {"expr": "if(@clock.translate.y == 2, 1, 0)"}, "children": [
+          {"use": "heading_node", "text": {"use": "heading", "content": "Multiply"}},
+          {"use": "number_node", "text": {"use": "page_number", "content": "03"}},
+          {"use": "line_one", "text": {"use": "body", "content": "Source and backdrop colors"}},
+          {"use": "line_two", "text": {"use": "body", "content": "multiply in their overlap;"}},
+          {"use": "line_three", "text": {"use": "body", "content": "white leaves color unchanged."}},
+          {"use": "next_node", "text": {"use": "next", "content": "Next  /  Screen"}}
+        ]},
+        {"name": "Screen", "opacity": {"expr": "if(@clock.translate.y == 3, 1, 0)"}, "children": [
+          {"use": "heading_node", "text": {"use": "heading", "content": "Screen"}},
+          {"use": "number_node", "text": {"use": "page_number", "content": "04"}},
+          {"use": "line_one", "text": {"use": "body", "content": "The inverse-product formula"}},
+          {"use": "line_two", "text": {"use": "body", "content": "brightens the overlapping"}},
+          {"use": "line_three", "text": {"use": "body", "content": "source and backdrop colors."}},
+          {"use": "next_node", "text": {"use": "next", "content": "Next  /  Darken"}}
+        ]},
+        {"name": "Darken", "opacity": {"expr": "if(@clock.translate.y == 4, 1, 0)"}, "children": [
+          {"use": "heading_node", "text": {"use": "heading", "content": "Darken"}},
+          {"use": "number_node", "text": {"use": "page_number", "content": "05"}},
+          {"use": "line_one", "text": {"use": "body", "content": "Each channel retains the"}},
+          {"use": "line_two", "text": {"use": "body", "content": "darker straight-color value"}},
+          {"use": "line_three", "text": {"use": "body", "content": "inside the overlap."}},
+          {"use": "next_node", "text": {"use": "next", "content": "Next  /  Lighten"}}
+        ]},
+        {"name": "Lighten", "opacity": {"expr": "if(@clock.translate.y == 5, 1, 0)"}, "children": [
+          {"use": "heading_node", "text": {"use": "heading", "content": "Lighten"}},
+          {"use": "number_node", "text": {"use": "page_number", "content": "06"}},
+          {"use": "line_one", "text": {"use": "body", "content": "Each channel retains the"}},
+          {"use": "line_two", "text": {"use": "body", "content": "lighter straight-color value"}},
+          {"use": "line_three", "text": {"use": "body", "content": "inside the overlap."}},
+          {"use": "next_node", "text": {"use": "next", "content": "Next  /  Difference"}}
+        ]},
+        {"name": "Difference", "opacity": {"expr": "if(@clock.translate.y == 6, 1, 0)"}, "children": [
+          {"use": "heading_node", "text": {"use": "heading", "content": "Difference"}},
+          {"use": "number_node", "text": {"use": "page_number", "content": "07"}},
+          {"use": "line_one", "text": {"use": "body", "content": "Absolute channel differences"}},
+          {"use": "line_two", "text": {"use": "body", "content": "highlight where the source"}},
+          {"use": "line_three", "text": {"use": "body", "content": "and backdrop disagree."}},
+          {"use": "next_node", "text": {"use": "next", "content": "Next  /  Exclusion"}}
+        ]},
+        {"name": "Exclusion", "opacity": {"expr": "if(@clock.translate.y == 7, 1, 0)"}, "children": [
+          {"use": "heading_node", "text": {"use": "heading", "content": "Exclusion"}},
+          {"use": "number_node", "text": {"use": "page_number", "content": "08"}},
+          {"use": "line_one", "text": {"use": "body", "content": "A softer difference formula"}},
+          {"use": "line_two", "text": {"use": "body", "content": "combines both source colors"}},
+          {"use": "line_three", "text": {"use": "body", "content": "without absolute-value edges."}},
+          {"use": "next_node", "text": {"use": "next", "content": "Next  /  Overlay"}}
+        ]},
+        {"name": "Overlay", "opacity": {"expr": "if(@clock.translate.y == 8, 1, 0)"}, "children": [
+          {"use": "heading_node", "text": {"use": "heading", "content": "Overlay"}},
+          {"use": "number_node", "text": {"use": "page_number", "content": "09"}},
+          {"use": "line_one", "text": {"use": "body", "content": "Backdrop channels choose"}},
+          {"use": "line_two", "text": {"use": "body", "content": "between multiply and screen"}},
+          {"use": "line_three", "text": {"use": "body", "content": "around their midpoint."}},
+          {"use": "next_node", "text": {"use": "next", "content": "Next  /  Hard light"}}
+        ]},
+        {"name": "Hard light", "opacity": {"expr": "if(@clock.translate.y == 9, 1, 0)"}, "children": [
+          {"use": "heading_node", "text": {"use": "heading", "content": "Hard light"}},
+          {"use": "number_node", "text": {"use": "page_number", "content": "10"}},
+          {"use": "line_one", "text": {"use": "body", "content": "Source channels choose"}},
+          {"use": "line_two", "text": {"use": "body", "content": "between multiply and screen"}},
+          {"use": "line_three", "text": {"use": "body", "content": "around their midpoint."}},
+          {"use": "next_node", "text": {"use": "next", "content": "Next  /  Soft light"}}
+        ]},
+        {"name": "Soft light", "opacity": {"expr": "if(@clock.translate.y == 10, 1, 0)"}, "children": [
+          {"use": "heading_node", "text": {"use": "heading", "content": "Soft light"}},
+          {"use": "number_node", "text": {"use": "page_number", "content": "11"}},
+          {"use": "line_one", "text": {"use": "body", "content": "A piecewise lighting curve"}},
+          {"use": "line_two", "text": {"use": "body", "content": "gently adjusts contrast"}},
+          {"use": "line_three", "text": {"use": "body", "content": "using the foreground color."}},
+          {"use": "next_node", "text": {"use": "next", "content": "Next  /  Color dodge"}}
+        ]},
+        {"name": "Color dodge", "opacity": {"expr": "if(@clock.translate.y == 11, 1, 0)"}, "children": [
+          {"use": "heading_node", "text": {"use": "heading", "content": "Color dodge"}},
+          {"use": "number_node", "text": {"use": "page_number", "content": "12"}},
+          {"use": "line_one", "text": {"use": "body", "content": "Bright source channels"}},
+          {"use": "line_two", "text": {"use": "body", "content": "lift the backdrop through"}},
+          {"use": "line_three", "text": {"use": "body", "content": "bounded division endpoints."}},
+          {"use": "next_node", "text": {"use": "next", "content": "Next  /  Color burn"}}
+        ]},
+        {"name": "Color burn", "opacity": {"expr": "if(@clock.translate.y == 12, 1, 0)"}, "children": [
+          {"use": "heading_node", "text": {"use": "heading", "content": "Color burn"}},
+          {"use": "number_node", "text": {"use": "page_number", "content": "13"}},
+          {"use": "line_one", "text": {"use": "body", "content": "Dark source channels"}},
+          {"use": "line_two", "text": {"use": "body", "content": "deepen the backdrop through"}},
+          {"use": "line_three", "text": {"use": "body", "content": "the inverse-ratio formula."}},
+          {"use": "next_node", "text": {"use": "next", "content": "Next  /  Hue"}}
+        ]},
+        {"name": "Hue", "opacity": {"expr": "if(@clock.translate.y == 13, 1, 0)"}, "children": [
+          {"use": "heading_node", "text": {"use": "heading", "content": "Hue"}},
+          {"use": "number_node", "text": {"use": "page_number", "content": "14"}},
+          {"use": "line_one", "text": {"use": "body", "content": "Source hue combines with"}},
+          {"use": "line_two", "text": {"use": "body", "content": "the backdrop saturation"}},
+          {"use": "line_three", "text": {"use": "body", "content": "and backdrop luminosity."}},
+          {"use": "next_node", "text": {"use": "next", "content": "Next  /  Saturation"}}
+        ]},
+        {"name": "Saturation", "opacity": {"expr": "if(@clock.translate.y == 14, 1, 0)"}, "children": [
+          {"use": "heading_node", "text": {"use": "heading", "content": "Saturation"}},
+          {"use": "number_node", "text": {"use": "page_number", "content": "15"}},
+          {"use": "line_one", "text": {"use": "body", "content": "Source saturation changes"}},
+          {"use": "line_two", "text": {"use": "body", "content": "the backdrop while keeping"}},
+          {"use": "line_three", "text": {"use": "body", "content": "its hue and luminosity."}},
+          {"use": "next_node", "text": {"use": "next", "content": "Next  /  Color"}}
+        ]},
+        {"name": "Color", "opacity": {"expr": "if(@clock.translate.y == 15, 1, 0)"}, "children": [
+          {"use": "heading_node", "text": {"use": "heading", "content": "Color"}},
+          {"use": "number_node", "text": {"use": "page_number", "content": "16"}},
+          {"use": "line_one", "text": {"use": "body", "content": "Source hue and saturation"}},
+          {"use": "line_two", "text": {"use": "body", "content": "replace backdrop chroma"}},
+          {"use": "line_three", "text": {"use": "body", "content": "while retaining luminosity."}},
+          {"use": "next_node", "text": {"use": "next", "content": "Next  /  Luminosity"}}
+        ]},
+        {"name": "Luminosity", "opacity": {"expr": "if(@clock.translate.y == 16, 1, 0)"}, "children": [
+          {"use": "heading_node", "text": {"use": "heading", "content": "Luminosity"}},
+          {"use": "number_node", "text": {"use": "page_number", "content": "17"}},
+          {"use": "line_one", "text": {"use": "body", "content": "Source luminosity changes"}},
+          {"use": "line_two", "text": {"use": "body", "content": "the backdrop while keeping"}},
+          {"use": "line_three", "text": {"use": "body", "content": "its hue and saturation."}},
+          {"use": "next_node", "text": {"use": "next", "content": "Next  /  Alpha mask"}}
+        ]},
+        {"name": "Alpha mask", "opacity": {"expr": "if(@clock.translate.y == 17, 1, 0)"}, "children": [
+          {"use": "heading_node", "text": {"use": "heading", "content": "Alpha mask"}},
+          {"use": "number_node", "text": {"use": "page_number", "content": "18"}},
+          {"use": "line_one", "text": {"use": "body", "content": "Only mask opacity controls"}},
+          {"use": "line_two", "text": {"use": "body", "content": "the retained source; black"}},
+          {"use": "line_three", "text": {"use": "body", "content": "can still be fully opaque."}},
+          {"use": "next_node", "text": {"use": "next", "content": "Next  /  Luminance mask"}}
+        ]},
+        {"name": "Luminance mask", "opacity": {"expr": "if(@clock.translate.y == 18, 1, 0)"}, "children": [
+          {"use": "heading_node", "text": {"use": "heading", "content": "Luminance mask"}},
+          {"use": "number_node", "text": {"use": "page_number", "content": "19"}},
+          {"use": "line_one", "text": {"use": "body", "content": "Linear mask luminance"}},
+          {"use": "line_two", "text": {"use": "body", "content": "controls source coverage;"}},
+          {"use": "line_three", "text": {"use": "body", "content": "white and black differ."}},
+          {"use": "next_node", "text": {"use": "next", "content": "Next  /  Inverted alpha"}}
+        ]},
+        {"name": "Inverted alpha", "opacity": {"expr": "if(@clock.translate.y == 19, 1, 0)"}, "children": [
+          {"use": "heading_node", "text": {"use": "heading", "content": "Inverted alpha"}},
+          {"use": "number_node", "text": {"use": "page_number", "content": "20"}},
+          {"use": "line_one", "text": {"use": "body", "content": "Opaque mask regions erase"}},
+          {"use": "line_two", "text": {"use": "body", "content": "the source while transparent"}},
+          {"use": "line_three", "text": {"use": "body", "content": "regions preserve it."}},
+          {"use": "next_node", "text": {"use": "next", "content": "Next  /  Inverted luminance"}}
+        ]},
+        {"name": "Inverted luminance", "opacity": {"expr": "if(@clock.translate.y == 20, 1, 0)"}, "children": [
+          {"use": "heading_node", "text": {"use": "heading", "content": "Inverted luminance", "size": 22}},
+          {"use": "number_node", "text": {"use": "page_number", "content": "21"}},
+          {"use": "line_one", "text": {"use": "body", "content": "Dark mask regions retain"}},
+          {"use": "line_two", "text": {"use": "body", "content": "the source while bright"}},
+          {"use": "line_three", "text": {"use": "body", "content": "regions attenuate it."}},
+          {"use": "next_node", "text": {"use": "next", "content": "Next  /  Coverage clip"}}
+        ]},
+        {"name": "Coverage clip", "opacity": {"expr": "if(@clock.translate.y == 21, 1, 0)"}, "children": [
+          {"use": "heading_node", "text": {"use": "heading", "content": "Coverage clip"}},
+          {"use": "number_node", "text": {"use": "page_number", "content": "22"}},
+          {"use": "line_one", "text": {"use": "body", "content": "Source and clip coverages"}},
+          {"use": "line_two", "text": {"use": "body", "content": "are rasterized separately"}},
+          {"use": "line_three", "text": {"use": "body", "content": "before multiplication."}},
+          {"use": "next_node", "text": {"use": "next", "content": "Next  /  Geometric clip"}}
+        ]},
+        {"name": "Geometric clip", "opacity": {"expr": "if(@clock.translate.y == 22, 1, 0)"}, "children": [
+          {"use": "heading_node", "text": {"use": "heading", "content": "Geometric clip"}},
+          {"use": "number_node", "text": {"use": "page_number", "content": "23"}},
+          {"use": "line_one", "text": {"use": "body", "content": "Geometry is intersected"}},
+          {"use": "line_two", "text": {"use": "body", "content": "before quantization rather"}},
+          {"use": "line_three", "text": {"use": "body", "content": "than multiplying coverages."}},
+          {"use": "next_node", "text": {"use": "next", "content": "Next  /  Group opacity"}}
+        ]},
+        {"name": "Group opacity", "opacity": {"expr": "if(@clock.translate.y == 23, 1, 0)"}, "children": [
+          {"use": "heading_node", "text": {"use": "heading", "content": "Group opacity"}},
+          {"use": "number_node", "text": {"use": "page_number", "content": "24"}},
+          {"use": "line_one", "text": {"use": "body", "content": "Per-child alpha overlaps"}},
+          {"use": "line_two", "text": {"use": "body", "content": "differ from fading the"}},
+          {"use": "line_three", "text": {"use": "body", "content": "completed group just once."}},
+          {"use": "next_node", "text": {"use": "next", "content": "Next  /  Sibling order"}}
+        ]},
+        {"name": "Sibling order", "opacity": {"expr": "if(@clock.translate.y == 24, 1, 0)"}, "children": [
+          {"use": "heading_node", "text": {"use": "heading", "content": "Sibling order"}},
+          {"use": "number_node", "text": {"use": "page_number", "content": "25"}},
+          {"use": "line_one", "text": {"use": "body", "content": "Sibling-local z-index"}},
+          {"use": "line_two", "text": {"use": "body", "content": "changes which overlapping"}},
+          {"use": "line_three", "text": {"use": "body", "content": "shape is painted last."}},
+          {"use": "next_node", "text": {"use": "next", "content": "Next  /  Isolation and filters"}}
+        ]},
+        {"name": "Isolation and filters", "opacity": {"expr": "if(@clock.translate.y == 25, 1, 0)"}, "children": [
+          {"use": "heading_node", "text": {"use": "heading", "content": "Isolation and filters", "size": 22}},
+          {"use": "number_node", "text": {"use": "page_number", "content": "26"}},
+          {"use": "line_one", "text": {"use": "body", "content": "Blur each child separately"}},
+          {"use": "line_two", "text": {"use": "body", "content": "or blur their assembled"}},
+          {"use": "line_three", "text": {"use": "body", "content": "group: overlap differs."}},
+          {"use": "next_node", "text": {"use": "next", "content": "End of atlas"}}
+        ]}
+      ]},
+      {"rect": {"bounds": [344, 124, 912, 461.25], "corner_radius": 10}, "fill": "#17231f",
+       "filters": [{"drop_shadow": {"offset": [0, 8], "sigma": 12, "color": "rgba(23, 35, 31, 0.22)"}}]},
+      {"pivot": {"point": [0, 0]}, "scale": {"$calc": "568 / 512"}, "translate": [344, 124],
+       "clip": {"shape": {"rounded_rect": {"bounds": [0, 0, 512, 304], "corner_radius": {"$calc": "10 / (568 / 512)"}}}, "mode": "geometric"},
+       "children": [
+        {"rect": {"bounds": [0, 0, 512, 304]}, "fill": "#17231f"},
+        {"rect": {"bounds": [64, 0, 64.5, 304]}, "fill": "#26372f"},
+        {"rect": {"bounds": [128, 0, 128.5, 304]}, "fill": "#26372f"},
+        {"rect": {"bounds": [192, 0, 192.5, 304]}, "fill": "#26372f"},
+        {"rect": {"bounds": [256, 0, 256.5, 304]}, "fill": "#26372f"},
+        {"rect": {"bounds": [320, 0, 320.5, 304]}, "fill": "#26372f"},
+        {"rect": {"bounds": [384, 0, 384.5, 304]}, "fill": "#26372f"},
+        {"rect": {"bounds": [448, 0, 448.5, 304]}, "fill": "#26372f"},
+        {"rect": {"bounds": [0, 64, 512, 64.5]}, "fill": "#26372f"},
+        {"rect": {"bounds": [0, 128, 512, 128.5]}, "fill": "#26372f"},
+        {"rect": {"bounds": [0, 192, 512, 192.5]}, "fill": "#26372f"},
+        {"rect": {"bounds": [0, 256, 512, 256.5]}, "fill": "#26372f"},
+        {"opacity": {"expr": "if(@clock.translate.y < 17, 1, 0)"}, "children": [
+          {"use": "backdrop"}, {"use": "back_circle"},
+          {"use": "front_circle", "blend": "source_over", "opacity": {"expr": "if(@clock.translate.y == 0, 1, 0)"}},
+          {"use": "front_circle", "blend": "plus", "opacity": {"expr": "if(@clock.translate.y == 1, 1, 0)"}},
+          {"use": "front_circle", "blend": "multiply", "opacity": {"expr": "if(@clock.translate.y == 2, 1, 0)"}},
+          {"use": "front_circle", "blend": "screen", "opacity": {"expr": "if(@clock.translate.y == 3, 1, 0)"}},
+          {"use": "front_circle", "blend": "darken", "opacity": {"expr": "if(@clock.translate.y == 4, 1, 0)"}},
+          {"use": "front_circle", "blend": "lighten", "opacity": {"expr": "if(@clock.translate.y == 5, 1, 0)"}},
+          {"use": "front_circle", "blend": "difference", "opacity": {"expr": "if(@clock.translate.y == 6, 1, 0)"}},
+          {"use": "front_circle", "blend": "exclusion", "opacity": {"expr": "if(@clock.translate.y == 7, 1, 0)"}},
+          {"use": "front_circle", "blend": "overlay", "opacity": {"expr": "if(@clock.translate.y == 8, 1, 0)"}},
+          {"use": "front_circle", "blend": "hard_light", "opacity": {"expr": "if(@clock.translate.y == 9, 1, 0)"}},
+          {"use": "front_circle", "blend": "soft_light", "opacity": {"expr": "if(@clock.translate.y == 10, 1, 0)"}},
+          {"use": "front_circle", "blend": "color_dodge", "opacity": {"expr": "if(@clock.translate.y == 11, 1, 0)"}},
+          {"use": "front_circle", "blend": "color_burn", "opacity": {"expr": "if(@clock.translate.y == 12, 1, 0)"}},
+          {"use": "front_circle", "blend": "hue", "opacity": {"expr": "if(@clock.translate.y == 13, 1, 0)"}},
+          {"use": "front_circle", "blend": "saturation", "opacity": {"expr": "if(@clock.translate.y == 14, 1, 0)"}},
+          {"use": "front_circle", "blend": "color", "opacity": {"expr": "if(@clock.translate.y == 15, 1, 0)"}},
+          {"use": "front_circle", "blend": "luminosity", "opacity": {"expr": "if(@clock.translate.y == 16, 1, 0)"}}
+        ]},
+        {"opacity": {"expr": "if(@clock.translate.y >= 17, if(@clock.translate.y <= 22, 1, 0), 0)"}, "children": [
+          {"use": "divider"},
+          {"use": "specimen", "scale": 0.48, "translate": [-128, 0]},
+          {"use": "specimen", "scale": 0.48, "translate": [128, 0], "mask": {"element": {"use": "mask_art"}, "mode": "alpha"}, "opacity": {"expr": "if(@clock.translate.y == 17, 1, 0)"}},
+          {"use": "specimen", "scale": 0.48, "translate": [128, 0], "mask": {"element": {"use": "mask_art"}, "mode": "luminance"}, "opacity": {"expr": "if(@clock.translate.y == 18, 1, 0)"}},
+          {"use": "specimen", "scale": 0.48, "translate": [128, 0], "mask": {"element": {"use": "mask_art"}, "mode": "inverted_alpha"}, "opacity": {"expr": "if(@clock.translate.y == 19, 1, 0)"}},
+          {"use": "specimen", "scale": 0.48, "translate": [128, 0], "mask": {"element": {"use": "mask_art"}, "mode": "inverted_luminance"}, "opacity": {"expr": "if(@clock.translate.y == 20, 1, 0)"}},
+          {"use": "specimen", "scale": 0.48, "translate": [128, 0], "clip": {"shape": {"use": "clip_circle"}, "mode": "coverage"}, "opacity": {"expr": "if(@clock.translate.y == 21, 1, 0)"}},
+          {"use": "specimen", "scale": 0.48, "translate": [128, 0], "clip": {"shape": {"use": "clip_circle"}, "mode": "geometric"}, "opacity": {"expr": "if(@clock.translate.y == 22, 1, 0)"}},
+          {"use": "left_label", "text": {"use": "pair_label", "content": "Original"}},
+          {"use": "right_label", "text": {"use": "pair_label", "content": "Processed"}}
+        ]},
+        {"opacity": {"expr": "if(@clock.translate.y == 23, 1, 0)"}, "children": [
+          {"use": "divider"},
+          {"scale": 0.48, "translate": [-128, 0], "children": [
+            {"use": "backdrop"}, {"children": [{"use": "back_circle", "opacity": 0.5}, {"use": "front_circle", "opacity": 0.5}]}
+          ]},
+          {"scale": 0.48, "translate": [128, 0], "children": [{"use": "backdrop"}, {"use": "shapes", "opacity": 0.5}]},
+          {"use": "left_label", "text": {"use": "pair_label", "content": "Child alpha"}},
+          {"use": "right_label", "text": {"use": "pair_label", "content": "Group opacity"}}
+        ]},
+        {"opacity": {"expr": "if(@clock.translate.y == 24, 1, 0)"}, "children": [
+          {"rect": {"bounds": [90, 70, 300, 235]}, "fill": "#66e0c2", "z_index": 1},
+          {"use": "order_circle", "z_index": 0, "opacity": {"expr": "if(@clock.rotate < 0.5, 1, 0)"}},
+          {"use": "order_circle", "z_index": 2, "opacity": {"expr": "if(@clock.rotate < 0.5, 0, 1)"}}
+        ]},
+        {"opacity": {"expr": "if(@clock.translate.y == 25, 1, 0)"}, "children": [
+          {"use": "divider"},
+          {"use": "shapes", "filters": [{"blur": {"sigma": 12}}], "scale": 0.48, "translate": [-128, 0]},
+          {"children": [{"use": "back_circle", "filters": [{"blur": {"sigma": 12}}]}, {"use": "front_circle", "filters": [{"blur": {"sigma": 12}}]}], "scale": 0.48, "translate": [128, 0]},
+          {"use": "left_label", "text": {"use": "pair_label", "content": "Group blur"}},
+          {"use": "right_label", "text": {"use": "pair_label", "content": "Child blur"}}
+        ]}
+      ]},
+      {"name": "Footer", "children": [
+        {"rect": {"bounds": {"expr": ["48", "494 - if(@clock.translate.y == 0, 2, 1)", "48 + $segment_width", "494 + if(@clock.translate.y == 0, 2, 1)"]}}, "fill": "#c3cbc5"},
+        {"rect": {"bounds": {"expr": ["48", "494 - if(@clock.translate.y == 0, 2, 1)", "48 + $segment_width * clamp(@clock.translate.x * $pages, 0, 1)", "494 + if(@clock.translate.y == 0, 2, 1)"]}}, "fill": "#d64b36"},
+        {"rect": {"bounds": {"expr": ["48 + 1 * ($segment_width + 2)", "494 - if(@clock.translate.y == 1, 2, 1)", "48 + 1 * ($segment_width + 2) + $segment_width", "494 + if(@clock.translate.y == 1, 2, 1)"]}}, "fill": "#c3cbc5"},
+        {"rect": {"bounds": {"expr": ["48 + 1 * ($segment_width + 2)", "494 - if(@clock.translate.y == 1, 2, 1)", "48 + 1 * ($segment_width + 2) + $segment_width * clamp(@clock.translate.x * $pages - 1, 0, 1)", "494 + if(@clock.translate.y == 1, 2, 1)"]}}, "fill": "#d64b36"},
+        {"rect": {"bounds": {"expr": ["48 + 2 * ($segment_width + 2)", "494 - if(@clock.translate.y == 2, 2, 1)", "48 + 2 * ($segment_width + 2) + $segment_width", "494 + if(@clock.translate.y == 2, 2, 1)"]}}, "fill": "#c3cbc5"},
+        {"rect": {"bounds": {"expr": ["48 + 2 * ($segment_width + 2)", "494 - if(@clock.translate.y == 2, 2, 1)", "48 + 2 * ($segment_width + 2) + $segment_width * clamp(@clock.translate.x * $pages - 2, 0, 1)", "494 + if(@clock.translate.y == 2, 2, 1)"]}}, "fill": "#d64b36"},
+        {"rect": {"bounds": {"expr": ["48 + 3 * ($segment_width + 2)", "494 - if(@clock.translate.y == 3, 2, 1)", "48 + 3 * ($segment_width + 2) + $segment_width", "494 + if(@clock.translate.y == 3, 2, 1)"]}}, "fill": "#c3cbc5"},
+        {"rect": {"bounds": {"expr": ["48 + 3 * ($segment_width + 2)", "494 - if(@clock.translate.y == 3, 2, 1)", "48 + 3 * ($segment_width + 2) + $segment_width * clamp(@clock.translate.x * $pages - 3, 0, 1)", "494 + if(@clock.translate.y == 3, 2, 1)"]}}, "fill": "#d64b36"},
+        {"rect": {"bounds": {"expr": ["48 + 4 * ($segment_width + 2)", "494 - if(@clock.translate.y == 4, 2, 1)", "48 + 4 * ($segment_width + 2) + $segment_width", "494 + if(@clock.translate.y == 4, 2, 1)"]}}, "fill": "#c3cbc5"},
+        {"rect": {"bounds": {"expr": ["48 + 4 * ($segment_width + 2)", "494 - if(@clock.translate.y == 4, 2, 1)", "48 + 4 * ($segment_width + 2) + $segment_width * clamp(@clock.translate.x * $pages - 4, 0, 1)", "494 + if(@clock.translate.y == 4, 2, 1)"]}}, "fill": "#d64b36"},
+        {"rect": {"bounds": {"expr": ["48 + 5 * ($segment_width + 2)", "494 - if(@clock.translate.y == 5, 2, 1)", "48 + 5 * ($segment_width + 2) + $segment_width", "494 + if(@clock.translate.y == 5, 2, 1)"]}}, "fill": "#c3cbc5"},
+        {"rect": {"bounds": {"expr": ["48 + 5 * ($segment_width + 2)", "494 - if(@clock.translate.y == 5, 2, 1)", "48 + 5 * ($segment_width + 2) + $segment_width * clamp(@clock.translate.x * $pages - 5, 0, 1)", "494 + if(@clock.translate.y == 5, 2, 1)"]}}, "fill": "#d64b36"},
+        {"rect": {"bounds": {"expr": ["48 + 6 * ($segment_width + 2)", "494 - if(@clock.translate.y == 6, 2, 1)", "48 + 6 * ($segment_width + 2) + $segment_width", "494 + if(@clock.translate.y == 6, 2, 1)"]}}, "fill": "#c3cbc5"},
+        {"rect": {"bounds": {"expr": ["48 + 6 * ($segment_width + 2)", "494 - if(@clock.translate.y == 6, 2, 1)", "48 + 6 * ($segment_width + 2) + $segment_width * clamp(@clock.translate.x * $pages - 6, 0, 1)", "494 + if(@clock.translate.y == 6, 2, 1)"]}}, "fill": "#d64b36"},
+        {"rect": {"bounds": {"expr": ["48 + 7 * ($segment_width + 2)", "494 - if(@clock.translate.y == 7, 2, 1)", "48 + 7 * ($segment_width + 2) + $segment_width", "494 + if(@clock.translate.y == 7, 2, 1)"]}}, "fill": "#c3cbc5"},
+        {"rect": {"bounds": {"expr": ["48 + 7 * ($segment_width + 2)", "494 - if(@clock.translate.y == 7, 2, 1)", "48 + 7 * ($segment_width + 2) + $segment_width * clamp(@clock.translate.x * $pages - 7, 0, 1)", "494 + if(@clock.translate.y == 7, 2, 1)"]}}, "fill": "#d64b36"},
+        {"rect": {"bounds": {"expr": ["48 + 8 * ($segment_width + 2)", "494 - if(@clock.translate.y == 8, 2, 1)", "48 + 8 * ($segment_width + 2) + $segment_width", "494 + if(@clock.translate.y == 8, 2, 1)"]}}, "fill": "#c3cbc5"},
+        {"rect": {"bounds": {"expr": ["48 + 8 * ($segment_width + 2)", "494 - if(@clock.translate.y == 8, 2, 1)", "48 + 8 * ($segment_width + 2) + $segment_width * clamp(@clock.translate.x * $pages - 8, 0, 1)", "494 + if(@clock.translate.y == 8, 2, 1)"]}}, "fill": "#d64b36"},
+        {"rect": {"bounds": {"expr": ["48 + 9 * ($segment_width + 2)", "494 - if(@clock.translate.y == 9, 2, 1)", "48 + 9 * ($segment_width + 2) + $segment_width", "494 + if(@clock.translate.y == 9, 2, 1)"]}}, "fill": "#c3cbc5"},
+        {"rect": {"bounds": {"expr": ["48 + 9 * ($segment_width + 2)", "494 - if(@clock.translate.y == 9, 2, 1)", "48 + 9 * ($segment_width + 2) + $segment_width * clamp(@clock.translate.x * $pages - 9, 0, 1)", "494 + if(@clock.translate.y == 9, 2, 1)"]}}, "fill": "#d64b36"},
+        {"rect": {"bounds": {"expr": ["48 + 10 * ($segment_width + 2)", "494 - if(@clock.translate.y == 10, 2, 1)", "48 + 10 * ($segment_width + 2) + $segment_width", "494 + if(@clock.translate.y == 10, 2, 1)"]}}, "fill": "#c3cbc5"},
+        {"rect": {"bounds": {"expr": ["48 + 10 * ($segment_width + 2)", "494 - if(@clock.translate.y == 10, 2, 1)", "48 + 10 * ($segment_width + 2) + $segment_width * clamp(@clock.translate.x * $pages - 10, 0, 1)", "494 + if(@clock.translate.y == 10, 2, 1)"]}}, "fill": "#d64b36"},
+        {"rect": {"bounds": {"expr": ["48 + 11 * ($segment_width + 2)", "494 - if(@clock.translate.y == 11, 2, 1)", "48 + 11 * ($segment_width + 2) + $segment_width", "494 + if(@clock.translate.y == 11, 2, 1)"]}}, "fill": "#c3cbc5"},
+        {"rect": {"bounds": {"expr": ["48 + 11 * ($segment_width + 2)", "494 - if(@clock.translate.y == 11, 2, 1)", "48 + 11 * ($segment_width + 2) + $segment_width * clamp(@clock.translate.x * $pages - 11, 0, 1)", "494 + if(@clock.translate.y == 11, 2, 1)"]}}, "fill": "#d64b36"},
+        {"rect": {"bounds": {"expr": ["48 + 12 * ($segment_width + 2)", "494 - if(@clock.translate.y == 12, 2, 1)", "48 + 12 * ($segment_width + 2) + $segment_width", "494 + if(@clock.translate.y == 12, 2, 1)"]}}, "fill": "#c3cbc5"},
+        {"rect": {"bounds": {"expr": ["48 + 12 * ($segment_width + 2)", "494 - if(@clock.translate.y == 12, 2, 1)", "48 + 12 * ($segment_width + 2) + $segment_width * clamp(@clock.translate.x * $pages - 12, 0, 1)", "494 + if(@clock.translate.y == 12, 2, 1)"]}}, "fill": "#d64b36"},
+        {"rect": {"bounds": {"expr": ["48 + 13 * ($segment_width + 2)", "494 - if(@clock.translate.y == 13, 2, 1)", "48 + 13 * ($segment_width + 2) + $segment_width", "494 + if(@clock.translate.y == 13, 2, 1)"]}}, "fill": "#c3cbc5"},
+        {"rect": {"bounds": {"expr": ["48 + 13 * ($segment_width + 2)", "494 - if(@clock.translate.y == 13, 2, 1)", "48 + 13 * ($segment_width + 2) + $segment_width * clamp(@clock.translate.x * $pages - 13, 0, 1)", "494 + if(@clock.translate.y == 13, 2, 1)"]}}, "fill": "#d64b36"},
+        {"rect": {"bounds": {"expr": ["48 + 14 * ($segment_width + 2)", "494 - if(@clock.translate.y == 14, 2, 1)", "48 + 14 * ($segment_width + 2) + $segment_width", "494 + if(@clock.translate.y == 14, 2, 1)"]}}, "fill": "#c3cbc5"},
+        {"rect": {"bounds": {"expr": ["48 + 14 * ($segment_width + 2)", "494 - if(@clock.translate.y == 14, 2, 1)", "48 + 14 * ($segment_width + 2) + $segment_width * clamp(@clock.translate.x * $pages - 14, 0, 1)", "494 + if(@clock.translate.y == 14, 2, 1)"]}}, "fill": "#d64b36"},
+        {"rect": {"bounds": {"expr": ["48 + 15 * ($segment_width + 2)", "494 - if(@clock.translate.y == 15, 2, 1)", "48 + 15 * ($segment_width + 2) + $segment_width", "494 + if(@clock.translate.y == 15, 2, 1)"]}}, "fill": "#c3cbc5"},
+        {"rect": {"bounds": {"expr": ["48 + 15 * ($segment_width + 2)", "494 - if(@clock.translate.y == 15, 2, 1)", "48 + 15 * ($segment_width + 2) + $segment_width * clamp(@clock.translate.x * $pages - 15, 0, 1)", "494 + if(@clock.translate.y == 15, 2, 1)"]}}, "fill": "#d64b36"},
+        {"rect": {"bounds": {"expr": ["48 + 16 * ($segment_width + 2)", "494 - if(@clock.translate.y == 16, 2, 1)", "48 + 16 * ($segment_width + 2) + $segment_width", "494 + if(@clock.translate.y == 16, 2, 1)"]}}, "fill": "#c3cbc5"},
+        {"rect": {"bounds": {"expr": ["48 + 16 * ($segment_width + 2)", "494 - if(@clock.translate.y == 16, 2, 1)", "48 + 16 * ($segment_width + 2) + $segment_width * clamp(@clock.translate.x * $pages - 16, 0, 1)", "494 + if(@clock.translate.y == 16, 2, 1)"]}}, "fill": "#d64b36"},
+        {"rect": {"bounds": {"expr": ["48 + 17 * ($segment_width + 2)", "494 - if(@clock.translate.y == 17, 2, 1)", "48 + 17 * ($segment_width + 2) + $segment_width", "494 + if(@clock.translate.y == 17, 2, 1)"]}}, "fill": "#c3cbc5"},
+        {"rect": {"bounds": {"expr": ["48 + 17 * ($segment_width + 2)", "494 - if(@clock.translate.y == 17, 2, 1)", "48 + 17 * ($segment_width + 2) + $segment_width * clamp(@clock.translate.x * $pages - 17, 0, 1)", "494 + if(@clock.translate.y == 17, 2, 1)"]}}, "fill": "#d64b36"},
+        {"rect": {"bounds": {"expr": ["48 + 18 * ($segment_width + 2)", "494 - if(@clock.translate.y == 18, 2, 1)", "48 + 18 * ($segment_width + 2) + $segment_width", "494 + if(@clock.translate.y == 18, 2, 1)"]}}, "fill": "#c3cbc5"},
+        {"rect": {"bounds": {"expr": ["48 + 18 * ($segment_width + 2)", "494 - if(@clock.translate.y == 18, 2, 1)", "48 + 18 * ($segment_width + 2) + $segment_width * clamp(@clock.translate.x * $pages - 18, 0, 1)", "494 + if(@clock.translate.y == 18, 2, 1)"]}}, "fill": "#d64b36"},
+        {"rect": {"bounds": {"expr": ["48 + 19 * ($segment_width + 2)", "494 - if(@clock.translate.y == 19, 2, 1)", "48 + 19 * ($segment_width + 2) + $segment_width", "494 + if(@clock.translate.y == 19, 2, 1)"]}}, "fill": "#c3cbc5"},
+        {"rect": {"bounds": {"expr": ["48 + 19 * ($segment_width + 2)", "494 - if(@clock.translate.y == 19, 2, 1)", "48 + 19 * ($segment_width + 2) + $segment_width * clamp(@clock.translate.x * $pages - 19, 0, 1)", "494 + if(@clock.translate.y == 19, 2, 1)"]}}, "fill": "#d64b36"},
+        {"rect": {"bounds": {"expr": ["48 + 20 * ($segment_width + 2)", "494 - if(@clock.translate.y == 20, 2, 1)", "48 + 20 * ($segment_width + 2) + $segment_width", "494 + if(@clock.translate.y == 20, 2, 1)"]}}, "fill": "#c3cbc5"},
+        {"rect": {"bounds": {"expr": ["48 + 20 * ($segment_width + 2)", "494 - if(@clock.translate.y == 20, 2, 1)", "48 + 20 * ($segment_width + 2) + $segment_width * clamp(@clock.translate.x * $pages - 20, 0, 1)", "494 + if(@clock.translate.y == 20, 2, 1)"]}}, "fill": "#d64b36"},
+        {"rect": {"bounds": {"expr": ["48 + 21 * ($segment_width + 2)", "494 - if(@clock.translate.y == 21, 2, 1)", "48 + 21 * ($segment_width + 2) + $segment_width", "494 + if(@clock.translate.y == 21, 2, 1)"]}}, "fill": "#c3cbc5"},
+        {"rect": {"bounds": {"expr": ["48 + 21 * ($segment_width + 2)", "494 - if(@clock.translate.y == 21, 2, 1)", "48 + 21 * ($segment_width + 2) + $segment_width * clamp(@clock.translate.x * $pages - 21, 0, 1)", "494 + if(@clock.translate.y == 21, 2, 1)"]}}, "fill": "#d64b36"},
+        {"rect": {"bounds": {"expr": ["48 + 22 * ($segment_width + 2)", "494 - if(@clock.translate.y == 22, 2, 1)", "48 + 22 * ($segment_width + 2) + $segment_width", "494 + if(@clock.translate.y == 22, 2, 1)"]}}, "fill": "#c3cbc5"},
+        {"rect": {"bounds": {"expr": ["48 + 22 * ($segment_width + 2)", "494 - if(@clock.translate.y == 22, 2, 1)", "48 + 22 * ($segment_width + 2) + $segment_width * clamp(@clock.translate.x * $pages - 22, 0, 1)", "494 + if(@clock.translate.y == 22, 2, 1)"]}}, "fill": "#d64b36"},
+        {"rect": {"bounds": {"expr": ["48 + 23 * ($segment_width + 2)", "494 - if(@clock.translate.y == 23, 2, 1)", "48 + 23 * ($segment_width + 2) + $segment_width", "494 + if(@clock.translate.y == 23, 2, 1)"]}}, "fill": "#c3cbc5"},
+        {"rect": {"bounds": {"expr": ["48 + 23 * ($segment_width + 2)", "494 - if(@clock.translate.y == 23, 2, 1)", "48 + 23 * ($segment_width + 2) + $segment_width * clamp(@clock.translate.x * $pages - 23, 0, 1)", "494 + if(@clock.translate.y == 23, 2, 1)"]}}, "fill": "#d64b36"},
+        {"rect": {"bounds": {"expr": ["48 + 24 * ($segment_width + 2)", "494 - if(@clock.translate.y == 24, 2, 1)", "48 + 24 * ($segment_width + 2) + $segment_width", "494 + if(@clock.translate.y == 24, 2, 1)"]}}, "fill": "#c3cbc5"},
+        {"rect": {"bounds": {"expr": ["48 + 24 * ($segment_width + 2)", "494 - if(@clock.translate.y == 24, 2, 1)", "48 + 24 * ($segment_width + 2) + $segment_width * clamp(@clock.translate.x * $pages - 24, 0, 1)", "494 + if(@clock.translate.y == 24, 2, 1)"]}}, "fill": "#d64b36"},
+        {"rect": {"bounds": {"expr": ["48 + 25 * ($segment_width + 2)", "494 - if(@clock.translate.y == 25, 2, 1)", "48 + 25 * ($segment_width + 2) + $segment_width", "494 + if(@clock.translate.y == 25, 2, 1)"]}}, "fill": "#c3cbc5"},
+        {"rect": {"bounds": {"expr": ["48 + 25 * ($segment_width + 2)", "494 - if(@clock.translate.y == 25, 2, 1)", "48 + 25 * ($segment_width + 2) + $segment_width * clamp(@clock.translate.x * $pages - 25, 0, 1)", "494 + if(@clock.translate.y == 25, 2, 1)"]}}, "fill": "#d64b36"}
+      ]}
+    ]}
+  }}]}]
+}

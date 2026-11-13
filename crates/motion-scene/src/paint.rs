@@ -19,7 +19,7 @@ const GRADIENT_TAGS: [&str; 3] = ["linear", "radial", "sweep"];
 pub enum PaintSpec {
     /// A fixed or animated color.
     Solid(Animated<Color>),
-    /// A static gradient.
+    /// A gradient with optionally animated geometry and fixed color stops.
     Gradient(GradientSpec),
 }
 
@@ -100,9 +100,9 @@ pub enum GradientSpec {
 #[serde(deny_unknown_fields)]
 pub struct LinearGradientSpec {
     /// Point at offset zero, `[x, y]`.
-    pub start: Point,
+    pub start: Animated<Point>,
     /// Point at offset one, `[x, y]`.
-    pub end: Point,
+    pub end: Animated<Point>,
     /// Stops ordered by offset.
     pub stops: Vec<GradientStop>,
     /// Shared interpolation, coordinate and extension options.
@@ -114,8 +114,8 @@ impl LinearGradientSpec {
     /// Creates a gradient from `start` to `end`.
     pub fn new(start: Point, end: Point) -> Self {
         Self {
-            start,
-            end,
+            start: start.into(),
+            end: end.into(),
             stops: Vec::new(),
             options: GradientOptions::default(),
         }
@@ -136,12 +136,12 @@ impl LinearGradientSpec {
 #[serde(deny_unknown_fields)]
 pub struct RadialGradientSpec {
     /// End-circle center `[x, y]`.
-    pub center: Point,
+    pub center: Animated<Point>,
     /// End-circle radius.
-    pub radius: f64,
+    pub radius: Animated<f64>,
     /// Optional start point `[x, y]` inside the end circle.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub focal: Option<Point>,
+    pub focal: Option<Animated<Point>>,
     /// Stops ordered by offset.
     pub stops: Vec<GradientStop>,
     /// Shared interpolation, coordinate and extension options.
@@ -153,8 +153,8 @@ impl RadialGradientSpec {
     /// Creates a centered radial gradient.
     pub fn new(center: Point, radius: f64) -> Self {
         Self {
-            center,
-            radius,
+            center: center.into(),
+            radius: radius.into(),
             focal: None,
             stops: Vec::new(),
             options: GradientOptions::default(),
@@ -176,11 +176,11 @@ impl RadialGradientSpec {
 #[serde(deny_unknown_fields)]
 pub struct SweepGradientSpec {
     /// Rotation center `[x, y]`.
-    pub center: Point,
+    pub center: Animated<Point>,
     /// Angle of offset zero, in degrees.
-    pub start_angle: f64,
+    pub start_angle: Animated<f64>,
     /// Angle of offset one, in degrees.
-    pub end_angle: f64,
+    pub end_angle: Animated<f64>,
     /// Stops ordered by offset.
     pub stops: Vec<GradientStop>,
     /// Shared interpolation, coordinate and extension options.
@@ -192,9 +192,9 @@ impl SweepGradientSpec {
     /// Creates a sweep between two angles in degrees.
     pub fn new(center: Point, start_angle: f64, end_angle: f64) -> Self {
         Self {
-            center,
-            start_angle,
-            end_angle,
+            center: center.into(),
+            start_angle: start_angle.into(),
+            end_angle: end_angle.into(),
             stops: Vec::new(),
             options: GradientOptions::default(),
         }

@@ -11,7 +11,6 @@ use std::sync::Arc;
 #[cfg(feature = "particles")]
 use super::failure::failure;
 #[cfg(feature = "particles")]
-#[cfg(feature = "particles")]
 use super::value::Lift;
 #[cfg(feature = "particles")]
 use crate::particles::{
@@ -20,13 +19,13 @@ use crate::particles::{
 };
 #[cfg(feature = "particles")]
 use motion_content::particles::{
-    Attractor, Ballistic, BounceBox, BurstEmitter, ColorOverLifetime, CurlNoise, DiskEmitter, Drag,
-    Gravity, NoiseDrift, Orbit, ParticleShape, ParticleSimulation, ParticleStyle,
-    ParticleTrajectory, PathEmitter, PointEmitter, RectEmitter, Seek, SimulationLimits,
-    SizeOverLifetime, Vortex, Wind,
+    Attractor, Ballistic, BounceBox, BurstEmitter, ColorOverLifetime, Converge, CurlNoise,
+    DiskEmitter, Drag, Gravity, ImageDensity, ImageEmitter, NoiseDrift, Orbit, ParticleShape,
+    ParticleSimulation, ParticleStyle, ParticleTrajectory, PathEmitter, PointEmitter, RectEmitter,
+    Seek, SimulationLimits, SizeOverLifetime, SurfaceEmitter, Vortex, Wind,
 };
 #[cfg(feature = "particles")]
-use motion_core::{Duration, Vector2};
+use motion_core::{Duration, Rect, Time, Vector2};
 
 /// Most simultaneously living particles a document may request.
 #[cfg(feature = "particles")]
@@ -91,11 +90,24 @@ impl Compiler<'_> {
                 "max_particles",
             )
         });
-        if spec.emitters.is_empty() {
+        let sample_time = spec
+            .sample_time
+            .as_ref()
+            .map(|source| self.animated(source, &format!("{path}.sample_time")))
+            .lift()?;
+        if let Some(source) = &sample_time {
+            self.seconds(source.at(Time::ZERO), path, "sample_time")?;
+        }
+        if spec.emitters.is_empty() && spec.preset.is_none() {
             self.error(path, "emitters", "A simulation needs at least one emitter");
         }
-        let mut simulation = ParticleSimulation::new(spec.seed);
-        let mut valid = !spec.emitters.is_empty();
+        let mut simulation = match &spec.preset {
+            Some(preset) => self.particle_preset(spec, preset, path)?,
+            None => ParticleSimulation::new(spec.seed),
+        };
+        let mut valid = !spec.emitters.is_empty() || spec.preset.is_some();
+        #[cfg(feature = "text")]
+        let mut text_sources = Vec::new();
         for (index, emitter) in spec.emitters.iter().enumerate() {
             let here = format!("{path}.emitters[{index}]");
             match self.emitter(emitter, &here) {
@@ -104,6 +116,10 @@ impl Compiler<'_> {
                 Some(Emitter::Rect(emitter)) => simulation = simulation.emitter(emitter),
                 Some(Emitter::Path(emitter)) => simulation = simulation.emitter(emitter),
                 Some(Emitter::Burst(emitter)) => simulation = simulation.emitter(emitter),
+                Some(Emitter::Surface(emitter)) => simulation = simulation.emitter(emitter),
+                Some(Emitter::Image(emitter)) => simulation = simulation.emitter(emitter),
+                #[cfg(feature = "text")]
+                Some(Emitter::Text(text, birth)) => text_sources.push((text, birth)),
                 None => valid = false,
             }
         }
@@ -111,7 +127,23 @@ impl Compiler<'_> {
             let here = format!("{path}.modifiers[{index}]");
             simulation = self.modifier(simulation, modifier, &here)?;
         }
-        let particle_style = self.particle_style(spec.style.as_ref(), spec.blend, path);
+        if spec.sub_emitters.len() > 256 {
+            self.limit(
+                path,
+                "sub_emitters",
+                "At most 256 sub-emitter rules are supported",
+            );
+            return None;
+        }
+        for (index, rule) in spec.sub_emitters.iter().enumerate() {
+            let here = format!("{path}.sub_emitters[{index}]");
+            simulation = simulation.sub_emitter(self.particle_sub_emitter(rule, &here)?);
+        }
+        let particle_style = if spec.preset.is_some() {
+            None
+        } else {
+            Some(self.particle_style(spec.style.as_ref(), spec.blend, path)?)
+        };
         let (duration, step, count) = (duration.lift()?, step.lift()?, count.lift()?);
         style?;
         if !valid {
@@ -129,15 +161,73 @@ impl Compiler<'_> {
                 ..SimulationLimits::default()
             });
         }
-        let simulation = match simulation.style(particle_style?).build() {
+        if let Some(configuration) = &spec.configuration {
+            simulation =
+                self.particle_configuration(simulation, configuration, spec.max_particles, path)?;
+        }
+        if let Some(particle_style) = particle_style {
+            let particle_style =
+                self.particle_presentation(particle_style, spec.configuration.as_deref(), path)?;
+            simulation = simulation.style(particle_style);
+        }
+        #[cfg(feature = "text")]
+        if !text_sources.is_empty() {
+            let path = path.to_owned();
+            let source = Arc::new((simulation, text_sources));
+            return Some(Built::with_context(true, move |context| {
+                let fonts = context.assets().fonts().map(|fonts| fonts.snapshot_id());
+                let prepared = context.cache(
+                    (
+                        Arc::as_ptr(&source) as usize,
+                        fonts,
+                        "particle-text-sources",
+                    ),
+                    || {
+                        let draw =
+                            motion_core::DrawContext::default().with_assets(context.assets());
+                        let result = (|| {
+                            let mut simulation = source.0.clone();
+                            for (text, birth) in &source.1 {
+                                simulation = simulation.emitter(continuous!(
+                                    SurfaceEmitter::from_text(text, &draw)?,
+                                    birth
+                                ));
+                            }
+                            simulation.build()
+                        })();
+                        (source.clone(), result)
+                    },
+                );
+                let prepared = match &prepared.1 {
+                    Ok(prepared) => prepared,
+                    Err(error) => return failure_node(error.clone()),
+                };
+                let rendered = match &sample_time {
+                    None => prepared.try_render(context),
+                    Some(source) => match sampled_context(context, source, duration, &path) {
+                        Ok(sampled) => prepared.try_render(&sampled),
+                        Err(error) => return failure_node(error),
+                    },
+                };
+                rendered.unwrap_or_else(failure_node)
+            }));
+        }
+        let simulation = match simulation.build() {
             Ok(simulation) => simulation,
             Err(error) => {
                 self.error(path, "simulation", error.to_string());
                 return None;
             }
         };
+        let path = path.to_owned();
         Some(Built::with_context(true, move |context| {
-            simulation.try_render(context).unwrap_or_else(failure_node)
+            let Some(source) = &sample_time else {
+                return simulation.try_render(context).unwrap_or_else(failure_node);
+            };
+            match sampled_context(context, source, duration, &path) {
+                Ok(sampled) => simulation.try_render(&sampled).unwrap_or_else(failure_node),
+                Err(error) => failure(error),
+            }
         }))
     }
 
@@ -150,8 +240,36 @@ impl Compiler<'_> {
         path: &str,
     ) -> Option<Built> {
         let path_model = format!("{path}.model");
+        let sample_time = spec
+            .sample_time
+            .as_ref()
+            .map(|source| self.animated(source, &format!("{path}.sample_time")))
+            .lift()?;
+        if let Some(source) = &sample_time {
+            self.seconds(source.at(Time::ZERO), path, "sample_time")?;
+        }
         let particle_style = self.particle_style(spec.style.as_ref(), spec.blend, path);
         let trajectory = match &spec.model {
+            TrajectoryModelSpec::Converge { from, to, duration } => {
+                let from = self.particle_points(from, &format!("{path_model}.converge.from"))?;
+                let to = self.particle_points(to, &format!("{path_model}.converge.to"))?;
+                if from.len() != to.len() {
+                    self.limit(
+                        path,
+                        "model.converge",
+                        "Converge takes equal sets of 1 to 65536 points",
+                    );
+                    return None;
+                }
+                let duration = self.positive(*duration, path, "model.converge.duration")?;
+                match Converge::new(&from, &to, duration) {
+                    Ok(model) => ParticleTrajectory::new(model),
+                    Err(error) => {
+                        self.error(path, "model.converge", error.to_string());
+                        return None;
+                    }
+                }
+            }
             TrajectoryModelSpec::Ballistic {
                 center,
                 count,
@@ -225,8 +343,15 @@ impl Compiler<'_> {
         };
         style?;
         let trajectory = trajectory.style(particle_style?);
+        let path = path.to_owned();
         Some(Built::with_context(true, move |context| {
-            trajectory.try_render(context).unwrap_or_else(failure_node)
+            let Some(source) = &sample_time else {
+                return trajectory.try_render(context).unwrap_or_else(failure_node);
+            };
+            match sampled_context(context, source, None, &path) {
+                Ok(sampled) => trajectory.try_render(&sampled).unwrap_or_else(failure_node),
+                Err(error) => failure(error),
+            }
         }))
     }
 
@@ -251,9 +376,25 @@ impl Compiler<'_> {
         }
     }
 
+    /// Admits a seed for a 32-bit noise field, rejecting values that would alias by truncation.
     #[cfg(feature = "particles")]
-    fn emitter(&mut self, spec: &EmitterSpec, path: &str) -> Option<Emitter> {
+    pub(super) fn noise_seed(&mut self, seed: u64, path: &str, field: &str) -> Option<u32> {
+        u32::try_from(seed)
+            .map_err(|_| self.error(path, field, "Noise field seeds must be in 0..=4294967295"))
+            .ok()
+    }
+
+    #[cfg(feature = "particles")]
+    pub(super) fn emitter(&mut self, spec: &EmitterSpec, path: &str) -> Option<Emitter> {
         let birth = self.birth(spec, path)?;
+        if spec.path_progress.is_some() && !matches!(spec.shape, EmitterShape::Path(_)) {
+            self.error(
+                path,
+                "path_progress",
+                "Path progress requires a path emitter",
+            );
+            return None;
+        }
         Some(match &spec.shape {
             EmitterShape::Point(position) => {
                 Emitter::Point(continuous!(PointEmitter::new(*position), &birth))
@@ -264,7 +405,55 @@ impl Compiler<'_> {
             EmitterShape::Rect(rect) => Emitter::Rect(continuous!(RectEmitter::new(*rect), &birth)),
             EmitterShape::Path(data) => {
                 let geometry = self.svg_path(data, &format!("{path}.path"))?;
-                Emitter::Path(continuous!(PathEmitter::new(Arc::new(geometry)), &birth))
+                let mut emitter = continuous!(PathEmitter::new(Arc::new(geometry)), &birth);
+                if let Some(source) = &spec.path_progress {
+                    let progress = self.animated(source, &format!("{path}.path_progress"))?;
+                    emitter = emitter.along_path(move |duration| progress.at(duration));
+                }
+                Emitter::Path(emitter)
+            }
+            EmitterShape::Surface(source) => Emitter::Surface(continuous!(
+                SurfaceEmitter::new(self.particle_surface(source, path)?)
+                    .inherit_color(source.inherit_color),
+                &birth
+            )),
+            EmitterShape::Image(source) => {
+                let image = self.particle_image(&source.image, path)?;
+                let [left, top, right, bottom] = source.bounds;
+                let emitter = ImageEmitter::new(
+                    image,
+                    Rect::new(left, top, right, bottom),
+                    if source.luminance {
+                        ImageDensity::Luminance
+                    } else {
+                        ImageDensity::Alpha
+                    },
+                    SimulationLimits::default(),
+                )
+                .map_err(|error| self.error(path, "image", error.to_string()))
+                .ok()?;
+                Emitter::Image(continuous!(emitter, &birth))
+            }
+            EmitterShape::Text(source) => {
+                #[cfg(feature = "text")]
+                {
+                    let size =
+                        self.bounded(source.size, f64::MIN_POSITIVE, 4096.0, path, "text.size")?;
+                    let mut text = motion_content::Text::new(source.content.as_str())
+                        .family(source.family.as_str())
+                        .size(size)
+                        .fill(source.fill);
+                    if let Some(fonts) = &self.fonts {
+                        text = text.fonts(fonts);
+                    }
+                    Emitter::Text(Box::new(text), birth)
+                }
+                #[cfg(not(feature = "text"))]
+                {
+                    let _ = source;
+                    self.unsupported(path, "Text emitters require feature `text`");
+                    return None;
+                }
             }
             EmitterShape::Burst {
                 time,
@@ -304,6 +493,16 @@ impl Compiler<'_> {
 
     #[cfg(feature = "particles")]
     fn birth(&mut self, spec: &EmitterSpec, path: &str) -> Option<Birth> {
+        if let Some(color) = spec.premultiplied_color
+            && (color.iter().any(|value| !value.is_finite() || *value < 0.0) || color[3] > 1.0)
+        {
+            self.error(
+                path,
+                "premultiplied_color",
+                "Birth color must be finite and nonnegative with alpha in 0..=1",
+            );
+            return None;
+        }
         let rate = spec
             .rate
             .map(|rate| self.bounded(rate, 0.0, 1e7, path, "rate"));
@@ -331,7 +530,9 @@ impl Compiler<'_> {
             lifetime: lifetime.lift()?,
             speed: speed.lift()?,
             velocity: velocity.lift()?,
-            color: spec.color.as_ref().map(|color| premultiplied(*color)),
+            color: spec
+                .premultiplied_color
+                .or_else(|| spec.color.as_ref().map(|color| premultiplied(*color))),
             size: size.lift()?.map(|size| size as f32),
             depth: depth.lift()?,
         })
@@ -365,7 +566,7 @@ impl Compiler<'_> {
             } => simulation.modifier(CurlNoise {
                 frequency: *frequency,
                 strength: *strength,
-                seed: *seed,
+                seed: self.noise_seed(*seed, path, "curl_noise.seed")?,
                 phase_speed: *phase_speed,
             }),
             ModifierSpec::Seek { targets, strength } => {
@@ -396,6 +597,17 @@ impl Compiler<'_> {
                     start: *start,
                     end: *end,
                 })
+            }
+            ModifierSpec::IntensityOverLifetime(curve) => {
+                simulation.modifier(motion_content::particles::IntensityOverLifetime::new(
+                    self.particle_curve(curve, path)?,
+                ))
+            }
+            ModifierSpec::Temperature(curve) => simulation.modifier(
+                motion_content::particles::Temperature::new(self.particle_curve(curve, path)?),
+            ),
+            ModifierSpec::Operator(operator) => {
+                self.particle_operator(simulation, operator, path)?
             }
         })
     }
@@ -443,6 +655,11 @@ impl Compiler<'_> {
                     },
                 },
             },
+            Some(
+                style @ (ParticleStyleSpec::Bokeh { .. }
+                | ParticleStyleSpec::Sprites { .. }
+                | ParticleStyleSpec::NodeCircles { .. }),
+            ) => self.particle_material_style(style, &path)?,
         };
         if let Some(blend) = blend {
             particle = particle.blend(match blend {
@@ -480,7 +697,8 @@ impl Compiler<'_> {
 
 /// Birth settings shared by every emitter, already validated.
 #[cfg(feature = "particles")]
-struct Birth {
+#[derive(Clone)]
+pub(super) struct Birth {
     rate: Option<f64>,
     lifetime: Option<Duration>,
     speed: Option<f64>,
@@ -491,12 +709,16 @@ struct Birth {
 }
 
 #[cfg(feature = "particles")]
-enum Emitter {
+pub(super) enum Emitter {
     Point(PointEmitter),
     Disk(DiskEmitter),
     Rect(RectEmitter),
     Path(PathEmitter),
     Burst(BurstEmitter),
+    Surface(SurfaceEmitter),
+    Image(ImageEmitter),
+    #[cfg(feature = "text")]
+    Text(Box<motion_content::Text>, Birth),
 }
 
 /// Authored encoded sRGB with straight alpha to the engine's premultiplied form.
@@ -514,4 +736,27 @@ fn premultiplied(color: motion_core::Color) -> [f32; 4] {
 #[cfg(feature = "particles")]
 fn failure_node(error: motion_core::ValidationError) -> motion_core::Node {
     failure(error)
+}
+
+#[cfg(feature = "particles")]
+fn sampled_context<'a>(
+    context: &motion_core::SceneContext<'a>,
+    source: &super::value::Prop<f64>,
+    duration: Option<Duration>,
+    path: &str,
+) -> Result<motion_core::SceneContext<'a>, motion_core::ValidationError> {
+    let seconds = source.at(context.time());
+    if !seconds.is_finite() || !(0.0..=super::MAX_SECONDS).contains(&seconds) {
+        return Err(motion_core::ValidationError::invalid(
+            path,
+            "sample_time",
+            "Sample time must be finite and in 0..=1e6 seconds",
+        ));
+    }
+    let sampled =
+        context.try_shifted(context.time() - Duration::from_seconds(seconds).after_origin())?;
+    Ok(match duration {
+        Some(duration) => sampled.with_clip_duration(duration),
+        None => sampled,
+    })
 }

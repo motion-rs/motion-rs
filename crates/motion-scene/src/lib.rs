@@ -57,10 +57,13 @@
 
 #![forbid(unsafe_code)]
 
+mod animation;
 mod audio;
+mod cache;
 mod captions;
 mod compile;
 mod content;
+mod definitions;
 mod diagnostics;
 mod diagram;
 mod document;
@@ -73,16 +76,19 @@ mod params;
 mod particles;
 mod value;
 
+pub use animation::{ClockSpec, FollowPathSpec, MapSpec, PathComponent, SpringSpec};
 pub use audio::{
     AudioSpec, BusSpec, DuckSpec, DuckTriggerSpec, EffectSpec, EqKindSpec, LimiterSpec,
     LoudnessSpec, MasterSpec, PanLawSpec, SpatialSpec,
 };
+pub use cache::CompileCache;
 pub use captions::{CaptionsSpec, CueSpec, KeywordSpec};
 pub use compile::{CompileOptions, CompiledDocument, load, load_with};
 pub use content::{
-    ArcSpec, ArrowSpec, CircleSpec, Content, EllipseSpec, ImageSpec, LineSpec, PartsSpec, PathSpec,
-    PointsSpec, RectSpec, RegularPolygonSpec, RingSpec, SplineSpec, StarSpec, SvgSpec,
-    TextSpanSpec, TextSpec, TextSplitSpec,
+    ArcSpec, ArrowSpec, CircleSpec, Content, EllipseSpec, ImageSpec, LineSpec, NumberTextSpec,
+    PartsSpec, PathSpec, PointsSpec, RectSpec, RegularPolygonSpec, RingSpec, SampledPointsSpec,
+    SplineSpec, StarSpec, SvgSourceSpec, SvgSpec, SvgWriteSpec, TextSpanSpec, TextSpec,
+    TextSplitSpec,
 };
 pub use diagram::{
     CalloutSpec, LineChartSpec, OrientationSpec, RulerSpec, ScaleKind, ScaleSpec, SeriesSpec,
@@ -92,7 +98,8 @@ pub use document::{
     TransitionSpec,
 };
 pub use effects::{
-    BloomSpec, CdlSpec, ClipShapeSpec, ClipSpec, ColorAdjustSpec, FilterSpec, MaskSpec,
+    ApertureSpec, BloomSpec, CdlSpec, ClipShapeSpec, ClipSpec, ColorAdjustSpec, FilterSpec,
+    HeightSourceSpec, MaskSpec, OpticsSpec,
 };
 pub use element::Element;
 pub use formula::{FormulaSpec, MorphSpec, SvgMorphSpec};
@@ -103,7 +110,13 @@ pub use paint::{
 };
 pub use particles::{
     BurstShape, DiskShape, EmitterShape, EmitterSpec, ModifierSpec, ParticleBlendSpec,
-    ParticleShapeSpec, ParticleStyleSpec, ParticlesSpec, TrajectoryModelSpec, TrajectorySpec,
+    ParticleConfigurationSpec, ParticleCoordinateSpec, ParticleCurveSpec, ParticleEventSpec,
+    ParticleFalloffSpec, ParticleImageSourceSpec, ParticleImageSpec, ParticleInheritSpec,
+    ParticleMaterialSpec, ParticleOperatorSpec, ParticlePointsSpec, ParticlePresetKind,
+    ParticlePresetSpec, ParticleResponseSpec, ParticleShapeSpec, ParticleSheetSpec,
+    ParticleSpriteSpec, ParticleStyleSpec, ParticleSubEmitterSpec, ParticleSurfaceSpec,
+    ParticleTextSourceSpec, ParticleTrailSpec, ParticleVectorPathSpec, ParticlesSpec,
+    TrajectoryModelSpec, TrajectorySpec,
 };
 pub use value::{
     Animated, EasingSpec, ExprSpec, KeyframeSpec, KeyframesSpec, MotionSpec, NoiseSpec,
@@ -119,8 +132,9 @@ pub const MAX_DOCUMENT_BYTES: usize = 16 * 1024 * 1024;
 /// Returns the JSON Schema (draft 2020-12) describing [`Document`].
 ///
 /// Reference it from a document's `$schema` key for editor completion. The schema
-/// checks structure and types; value ranges and timing rules are enforced by
-/// [`Document::compile`].
+/// checks structure, types and selected static ranges; complete range and timing
+/// validation remains in [`Document::compile`]. Value positions also accept `$calc`, `$param` and `use` references,
+/// resolved by [`Document::from_json`] before type checking.
 ///
 /// ```
 /// let schema = motion_scene::schema();

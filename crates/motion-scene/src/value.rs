@@ -1,5 +1,6 @@
 //! Animated property values, motion sources, easing curves and serialized colors.
 
+use crate::animation::{ClockSpec, FollowPathSpec, MapSpec, SpringSpec};
 use motion_core::Waveform;
 use motion_core::{Easing, Point, Rect};
 use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
@@ -10,7 +11,7 @@ use std::borrow::Cow;
 /// A property that is either a fixed value or sampled from scene-local time.
 ///
 /// JSON writes a fixed value directly (`12`, `[1, 2]`, `"#fff"`). A motion is an
-/// object with exactly one key: `tween`, `keyframes`, `oscillate` or `noise`.
+/// object with one motion key, such as `tween`, `spring`, `clock` or `expr`.
 /// Because no fixed value is a JSON object, the two forms never overlap.
 ///
 /// ```
@@ -47,6 +48,56 @@ impl<T> Animated<T> {
     /// Reports whether this property is constant for every time.
     pub fn is_fixed(&self) -> bool {
         matches!(self, Self::Fixed(_))
+    }
+
+    /// Samples this animation on an affine clock, clamped to +/-1e6 seconds.
+    pub fn clock(self, scale: f64, offset: f64) -> Self {
+        Self::Motion(Box::new(MotionSpec::Clock(ClockSpec {
+            source: Box::new(self),
+            scale,
+            offset,
+        })))
+    }
+
+    /// Builds a numeric value from one animation per component.
+    pub fn components(values: impl IntoIterator<Item = Animated<f64>>) -> Self {
+        Self::Motion(Box::new(MotionSpec::Components(
+            values.into_iter().collect(),
+        )))
+    }
+}
+
+impl Animated<f64> {
+    /// Sums up to 32 numeric animations in their supplied order.
+    pub fn sum(values: impl IntoIterator<Item = Animated<f64>>) -> Self {
+        Self::Motion(Box::new(MotionSpec::Sum(values.into_iter().collect())))
+    }
+
+    /// Maps the sampled value through an expression whose `t` is that value.
+    pub fn map_expr(self, expr: impl Into<String>) -> Self {
+        Self::Motion(Box::new(MotionSpec::Map(MapSpec {
+            source: Box::new(self),
+            expr: expr.into(),
+        })))
+    }
+
+    /// Validates a sampler driven only by explicit time, without document parameters or bindings.
+    ///
+    /// Numeric expressions may produce nonfinite values, as in document properties.
+    pub fn compile(&self) -> motion_core::Result<std::sync::Arc<dyn motion_core::Signal<f64>>> {
+        crate::compile::numeric_animation(self)
+    }
+}
+
+impl<T> From<SpringSpec<T>> for Animated<T> {
+    fn from(spring: SpringSpec<T>) -> Self {
+        Self::Motion(Box::new(MotionSpec::Spring(spring)))
+    }
+}
+
+impl From<FollowPathSpec> for Animated<f64> {
+    fn from(path: FollowPathSpec) -> Self {
+        Self::Motion(Box::new(MotionSpec::FollowPath(path)))
     }
 }
 
@@ -150,7 +201,11 @@ impl<T: JsonSchema> JsonSchema for Animated<T> {
 
 /// A time-varying source for an [`Animated`] property.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "snake_case", deny_unknown_fields)]
+#[serde(
+    rename_all = "snake_case",
+    deny_unknown_fields,
+    bound(deserialize = "T: DeserializeOwned")
+)]
 pub enum MotionSpec<T> {
     /// Two-value interpolation.
     Tween(TweenSpec<T>),
@@ -162,6 +217,18 @@ pub enum MotionSpec<T> {
     Noise(NoiseSpec),
     /// An arithmetic expression of scene-local time, parameters and other elements.
     Expr(ExprSpec),
+    /// Closed-form spring response.
+    Spring(SpringSpec<T>),
+    /// Affine source clock with signed offset and scale.
+    Clock(ClockSpec<T>),
+    /// Numeric expression mapping; numeric properties only.
+    Map(MapSpec),
+    /// Arc-length path component; numeric properties only.
+    FollowPath(FollowPathSpec),
+    /// One numeric source per value component.
+    Components(Vec<Animated<f64>>),
+    /// Ordered sum of numeric sources; numeric properties only.
+    Sum(Vec<Animated<f64>>),
 }
 
 /// Expression source text: one string for a number, one string per component for a point.

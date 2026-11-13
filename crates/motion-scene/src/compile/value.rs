@@ -175,10 +175,17 @@ impl Compiler<'_> {
         value: &Animated<T>,
         path: &str,
     ) -> Option<Prop<T::Engine>> {
-        match value {
+        if self.motion_depth >= super::MAX_MOTION_DEPTH {
+            self.limit(path, "motion", "Motion composition exceeds 32 levels");
+            return None;
+        }
+        self.motion_depth += 1;
+        let result = match value {
             Animated::Fixed(value) => self.value(value, path).map(Prop::Fixed),
             Animated::Motion(motion) => self.motion(motion, path).map(Prop::Varying),
-        }
+        };
+        self.motion_depth -= 1;
+        result
     }
 
     /// Compiles an optional property, substituting `default` when omitted.
@@ -253,6 +260,41 @@ impl Compiler<'_> {
                 self.scalar::<T>(signal, &path)
             }
             MotionSpec::Expr(spec) => self.expression_motion::<T>(spec, &format!("{path}.expr")),
+            MotionSpec::Spring(spring) => self.spring(spring, &format!("{path}.spring")),
+            MotionSpec::Clock(clock) => self.clock(clock, &format!("{path}.clock")),
+            MotionSpec::Map(mapping) => {
+                let path = format!("{path}.map");
+                let signal = self.map_animation(mapping, &path)?;
+                self.scalar::<T>(signal, &path)
+            }
+            MotionSpec::FollowPath(spec) => {
+                let path = format!("{path}.follow_path");
+                let signal = self.follow_path(spec, &path)?;
+                self.scalar::<T>(signal, &path)
+            }
+            MotionSpec::Components(values) => {
+                if T::ARITY == 0 || values.len() != T::ARITY {
+                    self.error(
+                        path,
+                        "components",
+                        "Expected one numeric animation per value component",
+                    );
+                    return None;
+                }
+                let signals = self.numeric_sources(values, &format!("{path}.components"))?;
+                T::from_signals(&signals)
+            }
+            MotionSpec::Sum(values) => {
+                let path = format!("{path}.sum");
+                let signals = self.numeric_sources(values, &path)?;
+                let source = Arc::new(move |time: Time| {
+                    signals
+                        .iter()
+                        .map(|signal| signal.sample(time))
+                        .sum::<f64>()
+                });
+                self.scalar::<T>(source, &path)
+            }
         }
     }
 
@@ -294,7 +336,7 @@ impl Compiler<'_> {
         T::from_signals(&signals)
     }
 
-    fn scalar<T: Value>(
+    pub(super) fn scalar<T: Value>(
         &mut self,
         signal: Arc<dyn Signal<f64>>,
         path: &str,

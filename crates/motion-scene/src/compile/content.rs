@@ -4,7 +4,7 @@ use super::Compiler;
 use super::element::Built;
 use super::style::Style;
 use super::value::Lift;
-use crate::content::{Content, ImageSpec, SvgSpec};
+use crate::content::{Content, ImageSpec, PointsSpec, SvgSpec};
 use motion_core::{
     ArcShape, Arrow, Circle, Ellipse, Line, Node, Point, Polygon, Polyline, RegularPolygon, Ring,
     RoundedRect, Spline, Star, Time, Vector2,
@@ -117,7 +117,22 @@ impl Compiler<'_> {
                 })
             }
             Content::Polygon(spec) => {
-                let points = self.points(&spec.points, &format!("{path}.polygon"))?;
+                if spec.animated.is_some() {
+                    let points = self.animated_points(spec, &format!("{path}.polygon"), 3)?;
+                    let varying = points.iter().any(super::value::Prop::varying);
+                    return shape(style?, varying, move |style, time| {
+                        style.shape(
+                            Polygon::new(
+                                points
+                                    .iter()
+                                    .map(|source| source.at(time))
+                                    .collect::<Vec<_>>(),
+                            ),
+                            time,
+                        )
+                    });
+                }
+                let points = self.point_source(spec, &format!("{path}.polygon"))?;
                 let polygon = Polygon::new(points)
                     .map_err(|error| {
                         self.error(&format!("{path}.polygon"), "points", error.message)
@@ -128,7 +143,22 @@ impl Compiler<'_> {
                 })
             }
             Content::Polyline(spec) => {
-                let points = self.points(&spec.points, &format!("{path}.polyline"))?;
+                if spec.animated.is_some() {
+                    let points = self.animated_points(spec, &format!("{path}.polyline"), 2)?;
+                    let varying = points.iter().any(super::value::Prop::varying);
+                    return shape(style?, varying, move |style, time| {
+                        style.shape(
+                            Polyline::new(
+                                points
+                                    .iter()
+                                    .map(|source| source.at(time))
+                                    .collect::<Vec<_>>(),
+                            ),
+                            time,
+                        )
+                    });
+                }
+                let points = self.point_source(spec, &format!("{path}.polyline"))?;
                 let polyline = Polyline::new(points)
                     .map_err(|error| {
                         self.error(&format!("{path}.polyline"), "points", error.message)
@@ -272,6 +302,83 @@ impl Compiler<'_> {
         }
     }
 
+    fn animated_points(
+        &mut self,
+        spec: &PointsSpec,
+        path: &str,
+        minimum: usize,
+    ) -> Option<Vec<super::value::Prop<Point>>> {
+        let points = spec.animated.as_ref()?;
+        if !spec.points.is_empty() || spec.sample.is_some() {
+            self.error(
+                path,
+                "animated",
+                "Give exactly one of points, sample or animated",
+            );
+            return None;
+        }
+        if !(minimum..=MAX_POINTS).contains(&points.len()) {
+            self.limit(
+                path,
+                "animated",
+                "Animated points must meet the shape minimum and contain at most 65536 entries",
+            );
+            return None;
+        }
+        points
+            .iter()
+            .enumerate()
+            .map(|(index, source)| self.animated(source, &format!("{path}.animated[{index}]")))
+            .collect()
+    }
+
+    pub(super) fn point_source(
+        &mut self,
+        spec: &PointsSpec,
+        path: &str,
+    ) -> Option<Vec<motion_core::Point>> {
+        let Some(sample) = &spec.sample else {
+            return self.points(&spec.points, path);
+        };
+        let path = format!("{path}.sample");
+        if !spec.points.is_empty() {
+            self.error(
+                &path,
+                "points",
+                "Give either fixed points or sample, not both",
+            );
+            return None;
+        }
+        let segments = sample.segments as usize;
+        if segments == 0 || segments >= MAX_POINTS {
+            self.limit(
+                &path,
+                "segments",
+                "Sampled points require 1..=65535 segments",
+            );
+            return None;
+        }
+        let start = self.seconds(sample.range[0], &path, "range[0]")?;
+        let end = self.seconds(sample.range[1], &path, "range[1]")?;
+        if end <= start {
+            self.error(&path, "range", "Sample range must be increasing");
+            return None;
+        }
+        let source = self.animated(&sample.source, &format!("{path}.source"))?;
+        let mut points = Vec::with_capacity(segments + 1);
+        for index in 0..=segments {
+            let seconds =
+                start.as_seconds() + (end - start).as_seconds() * index as f64 / segments as f64;
+            let coordinate = source.at(Time::from_seconds(seconds));
+            if !coordinate.x.is_finite() || !coordinate.y.is_finite() {
+                self.error(&path, "source", "Every sampled coordinate must be finite");
+                return None;
+            }
+            points.push(coordinate);
+        }
+        Some(points)
+    }
+
     fn points(&mut self, points: &[Point], path: &str) -> Option<Vec<Point>> {
         if points.len() > MAX_POINTS {
             self.limit(path, "points", "Point lists are limited to 65536 entries");
@@ -337,17 +444,37 @@ impl Compiler<'_> {
             .write
             .as_ref()
             .map(|write| self.animated(write, &format!("{path}.write")));
-        let source = self.resolve(&spec.source, &format!("{path}.source"));
+        let source = self.svg_asset(&spec.source, &format!("{path}.source"));
         let (write, source) = (write.lift()?, source?);
-        let mut svg = motion_content::Svg::open(motion_core::Source::File(source));
+        let mut svg = motion_content::Svg::from_asset(source);
         if let Some([width, height]) = spec.size {
             svg = svg.fit(motion_core::Size::new(width, height));
         }
         let varying = write.as_ref().is_some_and(super::value::Prop::varying);
+        let write_options =
+            spec.write_options
+                .as_ref()
+                .map(|options| motion_content::WriteOptions {
+                    width: options.width,
+                    outline_fraction: options.outline_fraction,
+                });
+        if let Some(options) = write_options
+            && (!options.width.is_finite()
+                || options.width <= 0.0
+                || !options.outline_fraction.is_finite()
+                || !(0.0..=1.0).contains(&options.outline_fraction))
+        {
+            self.error(
+                path,
+                "write_options",
+                "Require positive finite width and outline_fraction in 0..=1",
+            );
+            return None;
+        }
         Some(Built::new(varying, move |time| {
             let mut svg = svg.clone();
             if let Some(write) = &write {
-                svg = svg.write(write.at(time));
+                svg = svg.write_with(write.at(time), write_options.unwrap_or_default());
             }
             Node::from(svg)
         }))

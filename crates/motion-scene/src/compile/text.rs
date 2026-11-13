@@ -13,11 +13,19 @@ use crate::content::{PartsSpec, TextSplitSpec};
 #[cfg(feature = "text")]
 use crate::options::TextAlignmentSpec;
 #[cfg(feature = "text")]
-use motion_core::{Duration, Node};
+use motion_core::{Duration, Node, Time};
 
 /// Most styled runs one rich paragraph may contain.
 #[cfg(feature = "text")]
 const MAX_SPANS: usize = 256;
+
+/// Largest numeric readout precision in decimal places.
+#[cfg(feature = "text")]
+const MAX_PRECISION: u8 = 16;
+
+/// Largest combined numeric readout affix length, in bytes.
+#[cfg(feature = "text")]
+const MAX_AFFIX_BYTES: usize = 4096;
 
 impl Compiler<'_> {
     /// Compiles a paragraph; `style` is None when element styling already failed.
@@ -31,15 +39,36 @@ impl Compiler<'_> {
         use motion_content::{FontWeight, Text, TextAlignment, TextSpan, TextSplit};
         let rich = !spec.spans.is_empty();
         let mut valid = true;
-        if rich == !spec.content.is_empty() {
-            let message = if rich {
-                "Give either `content` or `spans`, not both"
-            } else {
-                "Text requires `content` or `spans`"
-            };
-            self.error(path, "content", message);
+        let choices = usize::from(rich)
+            + usize::from(!spec.content.is_empty())
+            + usize::from(spec.number.is_some());
+        if choices != 1 {
+            self.error(
+                path,
+                "content",
+                "Give exactly one of `content`, `spans` or `number`",
+            );
             valid = false;
         }
+        let number = spec.number.as_ref().map(|number| {
+            if number.precision > MAX_PRECISION
+                || number.prefix.len().saturating_add(number.suffix.len()) > MAX_AFFIX_BYTES
+            {
+                self.limit(
+                    &format!("{path}.number"),
+                    "format",
+                    "Numeric text requires precision <=16 and affixes <=4096 bytes",
+                );
+                return None;
+            }
+            let value = self.animated(&number.value, &format!("{path}.number.value"))?;
+            Some((
+                value,
+                number.precision as usize,
+                number.prefix.clone(),
+                number.suffix.clone(),
+            ))
+        });
         if spec.spans.len() > MAX_SPANS {
             self.limit(path, "spans", "Rich text is limited to 256 spans");
             valid = false;
@@ -71,9 +100,22 @@ impl Compiler<'_> {
             .map(|value| self.bounded(value, f64::MIN_POSITIVE, 1e9, path, "max_width"));
         let (size, write, visible) = (size.lift()?, write.lift()?, visible.lift()?);
         let (parts, style) = (parts.lift()?, style?);
+        let number = number.lift()?;
+        let (line_height, spacing, width) = (line_height.lift()?, spacing.lift()?, width.lift()?);
         if !valid {
             return None;
         }
+        // A constant readout is formatted once, like `content`, so it is built a single time.
+        let (constant, number) = match number {
+            Some((value, precision, prefix, suffix)) if !value.varying() => (
+                Some(format!(
+                    "{prefix}{:.precision$}{suffix}",
+                    value.at(Time::ZERO)
+                )),
+                None,
+            ),
+            number => (None, number),
+        };
         let mut text = if rich {
             Text::rich(spec.spans.iter().map(|span| {
                 let mut run = TextSpan::new(span.text.as_str());
@@ -94,46 +136,60 @@ impl Compiler<'_> {
                 }
                 run
             }))
+        } else if let Some(constant) = constant {
+            Text::new(constant)
         } else {
             Text::new(spec.content.as_str())
         };
-        if let Some(family) = &spec.family {
-            text = text.family(family.as_str());
-        }
-        if let Some(weight) = spec.weight {
-            text = text.weight(FontWeight(weight));
-        }
-        if let Some(height) = line_height {
-            text = text.line_height(height?);
-        }
-        if let Some(spacing) = spacing {
-            text = text.letter_spacing(spacing?);
-        }
-        if let Some(width) = width {
-            text = text.max_width(width?);
-        }
-        if let Some(alignment) = spec.alignment {
-            text = text.alignment(match alignment {
-                TextAlignmentSpec::Start => TextAlignment::Start,
-                TextAlignmentSpec::End => TextAlignment::End,
-                TextAlignmentSpec::Center => TextAlignment::Center,
-                TextAlignmentSpec::Justified => TextAlignment::Justified,
-            });
-        }
-        if let Some(split) = spec.split {
-            text = text.split(match split {
-                TextSplitSpec::Characters => TextSplit::Characters,
-                TextSplitSpec::Words => TextSplit::Words,
-                TextSplitSpec::Lines => TextSplit::Lines,
-            });
-        }
-        if let Some(fonts) = &self.fonts {
-            text = text.fonts(fonts);
-        }
-        if let Some(parts) = parts {
-            text = parts.apply(text);
-        }
+        let configuration = spec.clone();
+        let fonts = self.fonts.clone();
+        let parts = parts.map(Arc::new);
+        let configure = move |mut text: Text| {
+            let spec = &configuration;
+            if let Some(family) = &spec.family {
+                text = text.family(family.as_str());
+            }
+            if let Some(weight) = spec.weight {
+                text = text.weight(FontWeight(weight));
+            }
+            if let Some(height) = line_height {
+                text = text.line_height(height);
+            }
+            if let Some(spacing) = spacing {
+                text = text.letter_spacing(spacing);
+            }
+            if let Some(width) = width {
+                text = text.max_width(width);
+            }
+            if let Some(alignment) = spec.alignment {
+                text = text.alignment(match alignment {
+                    TextAlignmentSpec::Start => TextAlignment::Start,
+                    TextAlignmentSpec::End => TextAlignment::End,
+                    TextAlignmentSpec::Center => TextAlignment::Center,
+                    TextAlignmentSpec::Justified => TextAlignment::Justified,
+                });
+            }
+            if let Some(split) = spec.split {
+                text = text.split(match split {
+                    TextSplitSpec::Characters => TextSplit::Characters,
+                    TextSplitSpec::Words => TextSplit::Words,
+                    TextSplitSpec::Lines => TextSplit::Lines,
+                });
+            }
+            if let Some(fonts) = &fonts {
+                text = text.fonts(fonts);
+            }
+            if let Some(parts) = &parts {
+                text = parts.apply(text);
+            }
+            text
+        };
+        text = configure(text);
         // A fixed size is applied once so every frame shares the shaped layout cache.
+        let fixed_size = match &size {
+            Some(Prop::Fixed(size)) => Some(*size),
+            _ => None,
+        };
         let size = match size {
             Some(Prop::Fixed(size)) => {
                 text = text.size(size);
@@ -142,18 +198,31 @@ impl Compiler<'_> {
             size => size,
         };
         let varying = style.varying()
+            || number.is_some()
             || size.is_some()
             || write.as_ref().is_some_and(Prop::varying)
             || visible.as_ref().is_some_and(Prop::varying);
         Some(Built::new(varying, move |time| {
             let mut text = text.clone();
+            if let Some((value, precision, prefix, suffix)) = &number {
+                text = configure(Text::new(format!(
+                    "{prefix}{:.precision$}{suffix}",
+                    value.at(time)
+                )));
+                if let Some(size) = fixed_size {
+                    text = text.size(size);
+                }
+            }
             if let Some(size) = &size {
                 text = text.size(size.at(time));
             }
             if let Some(count) = &visible {
                 text = text.visible_parts(count.at(time).max(0.0).floor() as usize);
             }
-            text = style.text(text, time);
+            text = match style.text(text, time) {
+                Ok(text) => text,
+                Err(error) => return super::failure::failure(error),
+            };
             if let Some(write) = &write {
                 text = text.write(write.at(time));
             }
@@ -213,9 +282,9 @@ struct PartProps {
 
 #[cfg(feature = "text")]
 impl PartProps {
-    fn apply(self, text: motion_content::Text) -> motion_content::Text {
+    fn apply(self: &Arc<Self>, text: motion_content::Text) -> motion_content::Text {
         let delay = self.delay;
-        let props = Arc::new(self);
+        let props = self.clone();
         text.animate_parts(delay, move |part| {
             let time = part.time();
             let mut style = motion_content::PartStyle::new();

@@ -24,7 +24,7 @@ const MAX_MESSAGE_CHARS: usize = 600;
 /// Watch state of one reloadable scene.
 pub(crate) struct ReloadState {
     source: Arc<ReloadSource>,
-    stamps: Vec<Option<SystemTime>>,
+    stamps: Vec<Option<FileStamp>>,
     last_poll: Instant,
     changed_at: Option<Instant>,
     running: Option<Receiver<Result<StudioScene>>>,
@@ -58,12 +58,30 @@ impl ReloadState {
         self.stamps = current;
         true
     }
+
+    fn finish_pending(&mut self, now: Instant) -> bool {
+        self.running = None;
+        if std::mem::take(&mut self.dirty) {
+            self.changed_at = Some(now);
+            false
+        } else {
+            true
+        }
+    }
 }
 
-fn stamp(path: &PathBuf) -> Option<SystemTime> {
-    std::fs::metadata(path)
-        .and_then(|metadata| metadata.modified())
-        .ok()
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct FileStamp {
+    modified: Option<SystemTime>,
+    length: u64,
+}
+
+fn stamp(path: &PathBuf) -> Option<FileStamp> {
+    let metadata = std::fs::metadata(path).ok()?;
+    Some(FileStamp {
+        modified: metadata.modified().ok(),
+        length: metadata.len(),
+    })
 }
 
 impl StudioApp {
@@ -88,16 +106,13 @@ impl StudioApp {
         if let Some(receiver) = &state.running {
             match receiver.try_recv() {
                 Ok(result) => {
-                    state.running = None;
-                    if state.dirty {
-                        state.dirty = false;
-                        state.changed_at = Some(now);
+                    if state.finish_pending(now) {
+                        self.finish_reload(context, result);
                     }
-                    self.finish_reload(context, result);
                 }
                 Err(TryRecvError::Empty) => {}
                 Err(TryRecvError::Disconnected) => {
-                    state.running = None;
+                    state.finish_pending(now);
                     self.reload_status = Some((true, "Reload worker stopped".into()));
                 }
             }
@@ -168,7 +183,7 @@ impl StudioApp {
     ) -> Result<()> {
         let clock = super::validate_scene(&scene)?;
         let preview = PreviewCoordinator::new(scene.clone(), context.clone())?;
-        scene.reload = self.scene.reload.clone();
+        scene.reload = scene.reload.or_else(|| self.scene.reload.clone());
         self.pause();
         let mut view = crate::timeline_ui::TimelineView::new(&scene, context, clock);
         view.cues = std::mem::take(&mut self.inspection.timeline_view.cues)
@@ -190,6 +205,10 @@ impl StudioApp {
             (start, end)
         };
         self.scene = scene;
+        if let (Some(state), Some(source)) = (&mut self.reload, self.scene.reload.clone()) {
+            state.source = source;
+            state.stamps = state.source.watch.iter().map(stamp).collect();
+        }
         self.clock = clock;
         self.playback.transport.frame = self
             .playback
@@ -203,5 +222,42 @@ impl StudioApp {
         self.inspection.nodes = Arc::from([]);
         self.preview_state = Default::default();
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reloads_changed_during_compilation_discard_stale_results() {
+        let source = Arc::new(ReloadSource {
+            watch: Vec::new(),
+            load: Box::new(|| Err(std::io::Error::other("Unused loader").into())),
+        });
+        let mut state = ReloadState::new(source);
+        let (_sender, receiver) = std::sync::mpsc::channel();
+        state.running = Some(receiver);
+        state.dirty = true;
+        let now = Instant::now();
+        assert!(!state.finish_pending(now));
+        assert!(state.running.is_none());
+        assert!(!state.dirty);
+        assert_eq!(state.changed_at, Some(now));
+        assert!(state.finish_pending(now));
+    }
+
+    #[test]
+    fn reload_file_stamps_include_length_even_with_unchanged_modification_time() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("scene.json");
+        std::fs::write(&path, "{}").unwrap();
+        let before = stamp(&path).unwrap();
+        std::fs::write(&path, "{\"x\":1}").unwrap();
+        let file = std::fs::File::options().write(true).open(&path).unwrap();
+        file.set_modified(before.modified.unwrap()).unwrap();
+        let after = stamp(&path).unwrap();
+        assert_eq!(before.modified, after.modified);
+        assert_ne!(before, after);
     }
 }

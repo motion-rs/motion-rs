@@ -1,0 +1,158 @@
+{
+  "$schema": "../../schemas/motion.schema.json",
+  "version": 1,
+  "name": "Ink shrimp and bamboo - original composition",
+  "size": [1920, 1080],
+  "fps": 30,
+  "duration": 8,
+  "background": "#f8f8f2",
+  "look": "clean",
+  "defs": {
+    "ink-wash": {
+      "linear": {
+        "start": [0.1, 0], "end": [0.8, 1],
+        "stops": [
+          { "offset": 0, "color": "rgb(30 34 31 / 68%)" },
+          { "offset": 0.42, "color": "rgb(65 72 67 / 28%)" },
+          { "offset": 1, "color": "rgb(88 95 90 / 9%)" }
+        ]
+      }
+    },
+    "fine-ink": { "width": 1.7, "paint": "rgb(26 32 29 / 77%)", "cap": "round", "join": "round" },
+    "wet-ink": { "width": 3.2, "paint": "rgb(35 42 37 / 54%)", "cap": "round", "join": "round" },
+    "antenna-trim": { "end": { "tween": { "from": 0, "to": 1, "duration": 2.5, "delay": 1.4, "easing": "cubic_out" } } },
+    "bamboo-trim": { "end": { "tween": { "from": 0, "to": 1, "duration": 1.8, "easing": "cubic_out" } } },
+    "shrimp": {
+      "pivot": { "point": [0, 0] },
+      "children": [
+        {
+          "name": "tail fan",
+          "path": { "data": "M-146 22 C-174 2 -192 -10 -213 -9 C-207 12 -190 29 -163 37 C-188 27 -214 24 -234 34 C-216 50 -191 54 -160 43 C-184 48 -207 65 -213 81 C-184 80 -161 66 -145 42 Z" },
+          "fill": { "use": "ink-wash" },
+          "stroke": { "width": 1.4, "paint": "rgb(48 55 50 / 42%)", "cap": "round" }
+        },
+        { "path": { "data": "M-156 38 Q-186 29 -214 5 M-155 40 Q-185 40 -219 39 M-154 44 Q-183 62 -201 75" }, "stroke": { "use": "fine-ink" } },
+        { "path": { "data": "M-154 14 C-143 -2 -124 -6 -110 5 L-105 31 C-120 44 -140 48 -158 39 Z" }, "fill": { "use": "ink-wash" } },
+        { "path": { "data": "M-119 -5 C-106 -21 -88 -22 -75 -11 L-68 20 C-80 36 -99 41 -118 32 Z" }, "fill": { "use": "ink-wash" } },
+        { "path": { "data": "M-86 -23 C-70 -36 -50 -35 -36 -21 L-30 12 C-45 29 -64 30 -83 22 Z" }, "fill": { "use": "ink-wash" } },
+        { "path": { "data": "M-47 -35 C-28 -48 -10 -46 6 -31 L9 3 C-7 20 -27 22 -46 12 Z" }, "fill": { "use": "ink-wash" } },
+        { "path": { "data": "M-3 -42 C23 -49 48 -43 65 -26 L66 4 C45 20 24 18 4 7 Z" }, "fill": { "use": "ink-wash" } },
+        {
+          "name": "translucent carapace",
+          "path": { "data": "M37 -47 C72 -68 112 -55 139 -25 L147 -4 C121 10 87 14 54 5 C52 -15 46 -31 37 -47 Z" },
+          "fill": { "use": "ink-wash" },
+          "stroke": { "width": 1.8, "paint": "rgb(23 30 26 / 32%)", "cap": "round" }
+        },
+        { "path": { "data": "M-155 15 Q-129 -11 -113 7 M-119 -4 Q-92 -26 -76 -8 M-85 -23 Q-58 -39 -38 -20 M-44 -36 Q-14 -49 8 -29 M1 -43 Q38 -49 61 -25 M49 -44 Q92 -61 128 -30" }, "stroke": { "use": "wet-ink" } },
+        { "path": { "data": "M-143 37 Q-136 23 -133 8 M-109 29 Q-97 15 -97 -5 M-70 19 Q-55 8 -57 -21 M-30 11 Q-12 -1 -15 -33 M12 5 Q30 -7 26 -39" }, "stroke": { "width": 1.1, "paint": "rgb(39 47 41 / 37%)", "cap": "round" } },
+        { "path": { "data": "M-125 13 C-93 -15 -59 -23 -19 -25 C32 -24 70 -21 112 -15" }, "stroke": { "width": 2.8, "paint": "rgb(32 38 34 / 40%)", "cap": "round" } },
+        { "path": { "data": "M92 -23 Q122 -43 152 -43 L182 -36 L153 -34" }, "stroke": { "width": 3.8, "paint": "#242b26", "cap": "round" } },
+        { "path": { "data": "M126 -35 L132 -49 L139 -37 L147 -50 L153 -37 L160 -48 L164 -37" }, "stroke": { "width": 1.2, "paint": "rgb(22 29 24 / 72%)", "cap": "round" } },
+        { "line": { "from": [117, -32], "to": [139, -66] }, "stroke": { "width": 3.4, "paint": "#202722", "cap": "round" } },
+        { "line": { "from": [121, -22], "to": [154, -56] }, "stroke": { "width": 3, "paint": "#30382f", "cap": "round" } },
+        { "ellipse": { "center": [140, -67], "radii": [8.5, 5.5] }, "fill": "#151c17", "rotate": -20 },
+        { "ellipse": { "center": [155, -57], "radii": [7.5, 4.8] }, "fill": "#1c241e", "rotate": -27 },
+        {
+          "name": "long antennae",
+          "children": [
+            { "path": { "data": "M146 -35 C232 -93 330 -113 416 -177 C469 -217 491 -263 479 -304" }, "stroke": { "use": "fine-ink" }, "trim": { "use": "antenna-trim" } },
+            { "path": { "data": "M149 -31 C252 -32 333 3 442 -5 C530 -12 589 -42 622 -79" }, "stroke": { "width": 1.35, "paint": "rgb(24 31 26 / 66%)", "cap": "round" }, "trim": { "use": "antenna-trim" } },
+            { "path": { "data": "M144 -25 C206 7 248 47 287 61 C326 75 351 65 363 50" }, "stroke": { "width": 1.7, "paint": "rgb(32 40 33 / 65%)", "cap": "round" }, "trim": { "use": "antenna-trim" } },
+            { "path": { "data": "M137 -30 C195 -75 242 -99 292 -121 C343 -144 370 -151 399 -148" }, "stroke": { "width": 1.15, "paint": "rgb(27 35 28 / 52%)", "cap": "round" }, "trim": { "use": "antenna-trim" } }
+          ]
+        },
+        {
+          "name": "fine walking legs",
+          "path": { "data": "M109 0 L93 49 L135 90 L171 94 M89 5 L66 54 L105 112 L130 119 M62 10 L37 60 L68 117 L92 133 M34 12 L7 67 L26 124 L45 142 M4 16 L-21 72 L-9 122 L5 139 M-34 24 L-57 68 L-53 105 M-73 31 L-91 66 L-91 92 M-105 36 L-120 66 L-121 85" },
+          "stroke": { "width": 1.6, "paint": "rgb(32 39 32 / 63%)", "cap": "round", "join": "round" },
+          "trim": { "end": { "tween": { "from": 0, "to": 1, "duration": 1.9, "delay": 1.2, "easing": "cubic_out" } } }
+        },
+        { "path": { "data": "M-7 -37 L-2 -17 M34 -40 L47 -19 M70 -45 L84 -25 M-45 -27 L-40 -9 M-88 -9 L-81 4" }, "stroke": { "width": 5, "paint": "rgb(248 248 242 / 51%)", "cap": "round" } }
+      ]
+    }
+  },
+  "tracks": [{
+    "name": "ink on paper",
+    "items": [{
+      "scene": {
+        "name": "shrimp and bamboo",
+        "duration": 8,
+        "content": {
+          "children": [
+            {
+              "name": "quiet paper fibres",
+              "path": { "data": "M80 128 Q660 106 1300 139 M280 194 Q870 161 1800 208 M74 421 Q550 404 1010 416 M103 523 Q740 493 1780 549 M118 717 Q590 680 998 705 M376 865 Q1050 824 1850 883 M86 957 Q680 927 1370 952 M149 94 Q124 420 173 890 M1811 140 Q1770 500 1805 975" },
+              "stroke": { "width": 1.2, "paint": "rgb(111 118 104 / 5%)", "cap": "round" }
+            },
+            {
+              "name": "first bamboo brushstrokes",
+              "children": [
+                { "path": { "data": "M1505 1079 Q1527 913 1548 795 M1552 773 Q1579 613 1600 494 M1605 474 Q1630 311 1660 158" }, "stroke": { "width": 18, "paint": "rgb(42 53 39 / 58%)", "cap": "round" }, "trim": { "use": "bamboo-trim" } },
+                { "path": { "data": "M1513 1078 Q1536 912 1556 792 M1560 770 Q1587 610 1608 492 M1613 470 Q1639 307 1667 157" }, "stroke": { "width": 4, "paint": "rgb(19 32 20 / 53%)", "cap": "round" }, "trim": { "use": "bamboo-trim" } },
+                { "path": { "data": "M1529 789 Q1550 779 1571 787 M1583 486 Q1605 479 1625 487 M1643 156 Q1664 149 1683 158" }, "stroke": { "width": 5.5, "paint": "#303e2d", "cap": "round" }, "trim": { "use": "bamboo-trim" } },
+                { "path": { "data": "M1605 492 Q1510 374 1344 318 Q1257 291 1196 242 M1647 229 Q1552 160 1444 148 M1547 793 Q1628 685 1741 647" }, "stroke": { "width": 4, "paint": "rgb(30 45 26 / 75%)", "cap": "round" }, "trim": { "use": "bamboo-trim" } }
+              ],
+              "opacity": { "tween": { "from": 0, "to": 1, "duration": 0.8 } }
+            },
+            {
+              "name": "bamboo leaves",
+              "children": [
+                { "path": { "data": "M1492 369 Q1457 295 1400 250 Q1435 317 1492 369 Z M1488 369 Q1414 364 1348 407 Q1430 404 1488 369 Z M1413 340 Q1372 271 1305 252 Q1352 310 1413 340 Z M1413 340 Q1336 340 1257 374 Q1340 380 1413 340 Z M1327 311 Q1286 249 1221 226 Q1260 284 1327 311 Z M1308 304 Q1233 305 1174 336 Q1250 345 1308 304 Z" }, "fill": "rgb(24 38 21 / 83%)" },
+                { "path": { "data": "M1510 381 Q1503 295 1542 231 Q1543 317 1510 381 Z M1549 420 Q1620 413 1686 446 Q1615 449 1549 420 Z M1556 403 Q1555 329 1593 278 Q1590 354 1556 403 Z M1439 354 Q1393 406 1380 477 Q1373 406 1439 354 Z M1365 328 Q1317 383 1319 438 Q1304 382 1365 328 Z" }, "fill": "rgb(43 56 37 / 59%)" },
+                { "path": { "data": "M1571 183 Q1516 116 1460 105 Q1499 157 1571 183 Z M1527 165 Q1466 186 1408 227 Q1492 209 1527 165 Z M1495 156 Q1468 89 1430 58 Q1437 129 1495 156 Z M1686 670 Q1685 604 1721 548 Q1722 618 1686 670 Z M1699 665 Q1761 657 1811 686 Q1746 693 1699 665 Z M1660 694 Q1630 733 1621 786 Q1661 747 1660 694 Z" }, "fill": "rgb(27 43 24 / 75%)" },
+                { "path": { "data": "M1319 299 Q1266 267 1226 258 M1456 154 Q1508 157 1553 178 M1544 399 Q1517 356 1513 325" }, "stroke": { "width": 2, "paint": "rgb(248 248 242 / 35%)", "cap": "round" } }
+              ],
+              "opacity": { "tween": { "from": 0, "to": 1, "duration": 1.4, "delay": 0.7, "easing": "cubic_out" } }
+            },
+            {
+              "use": "shrimp",
+              "name": "upper shrimp",
+              "scale": 0.82,
+              "rotate": -11,
+              "translate": { "keyframes": { "keys": [
+                { "time": 0, "value": [740, 391] },
+                { "time": 3.5, "value": [746, 386], "easing": "sine_in_out" },
+                { "time": 7.966666666666667, "value": [770, 376], "easing": "sine_in_out" }
+              ] } },
+              "opacity": { "tween": { "from": 0, "to": 1, "duration": 1.5, "delay": 1.1, "easing": "cubic_out" } }
+            },
+            {
+              "use": "shrimp",
+              "name": "central shrimp",
+              "scale": 0.9,
+              "rotate": 160,
+              "translate": { "keyframes": { "keys": [
+                { "time": 0, "value": [1128, 632] },
+                { "time": 4, "value": [1124, 636], "easing": "sine_in_out" },
+                { "time": 7.966666666666667, "value": [1100, 650], "easing": "sine_in_out" }
+              ] } },
+              "opacity": { "tween": { "from": 0, "to": 1, "duration": 1.5, "delay": 2.25, "easing": "cubic_out" } }
+            },
+            {
+              "use": "shrimp",
+              "name": "lower shrimp",
+              "scale": 0.64,
+              "rotate": 22,
+              "translate": { "keyframes": { "keys": [
+                { "time": 0, "value": [589, 777] },
+                { "time": 4.6, "value": [592, 778], "easing": "sine_in_out" },
+                { "time": 7.966666666666667, "value": [616, 789], "easing": "sine_in_out" }
+              ] } },
+              "opacity": { "tween": { "from": 0, "to": 1, "duration": 1.3, "delay": 3.3, "easing": "cubic_out" } }
+            },
+            {
+              "name": "original vermilion seal - not an artist signature",
+              "translate": [1700, 850],
+              "opacity": { "tween": { "from": 0, "to": 0.86, "duration": 0.7, "delay": 5.8, "easing": "cubic_out" } },
+              "children": [
+                { "path": { "data": "M0 3 L60 0 L63 62 L2 64 Z" }, "fill": "#bd3c2d" },
+                { "path": { "data": "M7 11 L23 10 L24 24 L10 25 L10 51 L22 51 M32 9 L33 28 L48 28 L48 10 M31 37 L49 37 L49 51 L32 52 L33 38 M8 33 L23 33 M40 10 L40 21 M40 42 L40 51" }, "stroke": { "width": 3.5, "paint": "#f8f8f2", "cap": "square", "join": "round" } },
+                { "path": { "data": "M1 15 L4 18 M58 35 L63 37 M18 60 L20 64 M43 0 L44 5" }, "stroke": { "width": 2.5, "paint": "#f8f8f2", "cap": "round" } }
+              ]
+            }
+          ]
+        }
+      }
+    }]
+  }]
+}

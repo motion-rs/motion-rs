@@ -81,6 +81,172 @@ fn burst_simulation() -> ParticlesSpec {
         .style(ParticleStyleSpec::Dots { radius: 2.0 })
 }
 
+#[test]
+fn particle_presets_parse_and_round_trip_without_optional_features() {
+    let source = serde_json::json!({"seed":u64::MAX,"duration":4,
+        "preset":{"kind":"sparks","bounds":[0,0,64,48],"density":0.1},
+        "sample_time":{"expr":"0.12 + t"}});
+    let spec: ParticlesSpec = serde_json::from_value(source).unwrap();
+    assert_eq!(spec.seed, u64::MAX);
+    assert_eq!(
+        serde_json::from_str::<ParticlesSpec>(&serde_json::to_string(&spec).unwrap()).unwrap(),
+        spec
+    );
+    if !cfg!(feature = "particles") {
+        assert!(
+            messages(&document(Element::new(Content::Particles(spec))))
+                .iter()
+                .any(|message| message.contains("feature `particles`"))
+        );
+    }
+}
+
+#[cfg(feature = "particles")]
+#[test]
+fn particle_presets_match_shared_recipes_and_seek_exactly() {
+    use motion_content::particles::presets::{Preset, PresetOptions};
+    use motion_core::{Duration, Rect, Size, Timeline};
+    use serde_json::json;
+    let kinds = [
+        "sparks",
+        "embers",
+        "dust",
+        "motes",
+        "snow",
+        "rain",
+        "smoke",
+        "fire",
+        "confetti",
+        "fireworks",
+        "fireflies",
+        "logo_dissolve",
+        "logo_assemble",
+    ];
+    let data = "M22.4 14.4 L41.6 14.4 L41.6 33.6 L22.4 33.6 Z";
+    let fill = json!({"linear":{"start":[0,0],"end":[1,0],"stops":[
+        {"offset":0,"color":"#25bb90"},{"offset":1,"color":"#ff4060"}]}});
+    let logo = vec![ParticleVectorPathSpec {
+        data: data.into(),
+        fill: serde_json::from_value(fill.clone()).unwrap(),
+    }];
+    for (kind, preset) in kinds.into_iter().zip(Preset::ALL) {
+        let spec: ParticlesSpec = serde_json::from_value(json!({"seed":u64::MAX,"duration":4,
+            "preset":{"kind":kind,"bounds":[0,0,64,48],"density":0.1,"logo":logo},
+            "sample_time":{"expr":"0.12 + t * 0.5"}}))
+        .unwrap();
+        let actual = film(Element::new(Content::Particles(spec)));
+        let mut recipe = PresetOptions::new(
+            u64::MAX,
+            Duration::from_seconds(4.0),
+            Rect::new(0.0, 0.0, 64.0, 48.0),
+        );
+        recipe.density = 0.1;
+        recipe.logo = Some(std::sync::Arc::new(
+            motion_content::VectorTree::new(
+                recipe.bounds,
+                motion_content::VectorGroup {
+                    children: vec![motion_content::VectorItem::Path(
+                        motion_content::VectorPath::filled(
+                            motion_core::Path2D::parse_svg(data).unwrap(),
+                            motion_core::LinearGradient::new(
+                                motion_core::Point::ORIGIN,
+                                motion_core::Point::new(1.0, 0.0),
+                            )
+                            .stop(0.0, Color::from_hex(0x25bb90))
+                            .stop(1.0, Color::from_hex(0xff4060)),
+                        ),
+                    )],
+                    ..Default::default()
+                },
+            )
+            .unwrap(),
+        ));
+        let simulation = preset.simulation(recipe).unwrap().build().unwrap();
+        let expected = Timeline::new(Size::new(240.0, 120.0), motion_core::fps!(10))
+            .track(|track| {
+                track.scene(Duration::from_seconds(2.0), move |context| {
+                    let sample =
+                        Duration::from_seconds(0.12 + context.elapsed().as_seconds() * 0.5)
+                            .after_origin();
+                    let sampled = context
+                        .try_shifted(context.time() - sample)?
+                        .with_clip_duration(Duration::from_seconds(4.0));
+                    simulation.try_render(&sampled)
+                })
+            })
+            .build()
+            .unwrap();
+        let options = actual.render_options(
+            RenderOptions::default().backend(motion_render::BackendPreference::Cpu),
+        );
+        for seconds in [0.8, 0.0, 0.4, 0.8] {
+            let time = Time::from_seconds(seconds);
+            assert_eq!(
+                render_still(actual.timeline(), time, &options)
+                    .unwrap()
+                    .bytes(),
+                render_still(&expected, time, &options).unwrap().bytes(),
+                "{kind} at {seconds}"
+            );
+        }
+    }
+}
+
+#[cfg(feature = "particles")]
+#[test]
+fn particle_presets_reject_conflicts_limits_and_invalid_sample_times() {
+    use serde_json::json;
+    let base = json!({"seed":17,"duration":4,"preset":{"kind":"sparks","bounds":[0,0,64,48]}});
+    let make = |source| {
+        document(Element::new(Content::Particles(
+            serde_json::from_value(source).unwrap(),
+        )))
+    };
+    for changes in [
+        json!({"emitters":[{"point":[0,0]}]}),
+        json!({"modifiers":[{"drag":1}]}),
+        json!({"style":{"dots":{"radius":1}}}),
+        json!({"blend":"plus"}),
+        json!({"duration":0}),
+        json!({"step":0}),
+        json!({"max_particles":0}),
+        json!({"sample_time":-1}),
+        json!({"sample_time":1000001}),
+        json!({"preset":{"kind":"sparks","bounds":[0,0,64,48],"density":0}}),
+        json!({"preset":{"kind":"sparks","bounds":[0,0,64,48],"speed":17}}),
+        json!({"preset":{"kind":"sparks","bounds":[0,0,64,48],"intensity":65}}),
+        json!({"preset":{"kind":"sparks","bounds":[0,0,0,48]}}),
+        json!({"preset":{"kind":"logo_dissolve","bounds":[0,0,64,48]}}),
+        json!({"preset":{"kind":"sparks","bounds":[0,0,64,48],"logo":vec![json!({"data":"M0 0 L1 0 L1 1 Z","fill":"#fff"});257]}}),
+        json!({"preset":{"kind":"sparks","bounds":[0,0,64,48],"logo":[{"data":"M0 0 L1 0 L1 1 Z","fill":{"tween":{"from":"#fff","to":"#000","duration":1}}}]}}),
+    ] {
+        let mut source = base.clone();
+        source
+            .as_object_mut()
+            .unwrap()
+            .extend(changes.as_object().unwrap().clone());
+        assert!(!messages(&make(source)).is_empty());
+    }
+    let mut missing = base.clone();
+    missing.as_object_mut().unwrap().remove("duration");
+    assert!(!messages(&make(missing)).is_empty());
+    for expression in ["0.1 - t", "1 / (0.5 - t)"] {
+        let mut source = base.clone();
+        source["sample_time"] = json!({"expr":expression});
+        let compiled = make(source)
+            .compile(&CompileOptions::default().base_dir(FONTS))
+            .unwrap();
+        assert!(
+            render_still(
+                compiled.timeline(),
+                Time::from_seconds(0.5),
+                &RenderOptions::default()
+            )
+            .is_err()
+        );
+    }
+}
+
 #[cfg(feature = "particles")]
 #[test]
 fn particle_simulations_are_deterministic_and_animate() {
@@ -155,10 +321,139 @@ fn trajectories_render_closed_form_bursts() {
             seed: 3,
             lifetime: Some(1.5),
         },
+        sample_time: None,
         style: Some(ParticleStyleSpec::GlowDots { radius: 2.0 }),
         blend: Some(ParticleBlendSpec::Plus),
     }));
     assert!(ink(&render(&film(element), 0.5)) > 20);
+}
+
+#[cfg(feature = "particles")]
+#[test]
+fn convergence_uses_explicit_sample_time_and_validates_points() {
+    let source = serde_json::json!({
+        "model": {"converge": {"from": [[20, 60], [40, 60]],
+            "to": [[180, 60], [200, 60]], "duration": 2}},
+        "sample_time": 1,
+        "style": {"dots": {"radius": 3}}
+    });
+    let spec: TrajectorySpec = serde_json::from_value(source.clone()).unwrap();
+    assert_eq!(serde_json::to_value(&spec).unwrap()["sample_time"], 1.0);
+    let actual = film(Element::new(Content::Trajectory(spec)));
+    assert_eq!(render(&actual, 0.0).bytes(), render(&actual, 1.5).bytes());
+    let expected = film(Element::new(Content::Trajectory(
+        serde_json::from_value(serde_json::json!({
+            "model": source["model"], "style": source["style"]
+        }))
+        .unwrap(),
+    )));
+    assert_eq!(render(&actual, 0.0).bytes(), render(&expected, 1.0).bytes());
+    for invalid in [
+        serde_json::json!({"model": {"converge": {
+            "from": [[20, 60]], "to": [], "duration": 2}}}),
+        serde_json::json!({"model": source["model"], "sample_time": -1}),
+    ] {
+        let spec = serde_json::from_value(invalid).unwrap();
+        assert!(!messages(&document(Element::new(Content::Trajectory(spec)))).is_empty());
+    }
+}
+
+#[cfg(feature = "particles")]
+#[test]
+fn extended_particle_inputs_reject_invalid_configuration_and_materials() {
+    use serde_json::json;
+    let source = json!({"seed": 17, "duration": 4, "emitters": [{
+        "burst": {"time": 0, "count": 8, "position": [120, 60]}, "lifetime": 4
+    }]});
+    for patch in [
+        json!({"configuration": {"workers": 0}}),
+        json!({"configuration": {"loop_period": 0}}),
+        json!({"configuration": {"time_remap": [-1, 3]}}),
+        json!({"configuration": {"max_work": 0}}),
+        json!({"configuration": {"trails": {"segments": 0}}}),
+        json!({"modifiers": [{"intensity_over_lifetime": {"stops": [[0, 1], [0, 2]]}}]}),
+        json!({"emitters": [{"image": {"image": {"size": [2, 2], "rgba": []},
+            "bounds": [0, 0, 20, 20]}}]}),
+        json!({"emitters": [{"point": [120, 60], "path_progress": 0.5}]}),
+        json!({"emitters": [{"point": [120, 60], "premultiplied_color": [1, 1, 1, 2]}]}),
+        json!({"modifiers": [{"operator": {"custom_slot": {"slot": 4, "modulus": null, "scale": 1}}}]}),
+        json!({"sub_emitters": [{"on": "birth", "emitter": {"burst": {"time": 0,
+            "count": 2, "position": [0, 0]}}, "inherit": "position", "probability": 2}]}),
+        json!({"style": {"sprites": {"seed": 17, "size": 32, "padded": true,
+            "mode": "custom", "frames": [{"material": "star", "size": 257}]}}}),
+        json!({"preset": {"kind": "sparks", "bounds": [0, 0, 240, 120]}, "emitters": [],
+            "configuration": {"flip": true}}),
+    ] {
+        let mut candidate = source.clone();
+        candidate
+            .as_object_mut()
+            .unwrap()
+            .extend(patch.as_object().unwrap().clone());
+        let spec: ParticlesSpec = serde_json::from_value(candidate.clone()).unwrap();
+        assert!(
+            !messages(&document(Element::new(Content::Particles(spec)))).is_empty(),
+            "Accepted {candidate}"
+        );
+    }
+    for (patch, expected) in [
+        (
+            json!({"modifiers": [{"operator": {"custom_slot": {"slot": 3, "modulus": null, "scale": 1}}}]}),
+            "slot 3 is reserved",
+        ),
+        (
+            json!({"modifiers": [{"curl_noise": {"frequency": 0.02, "strength": 6,
+                "phase_speed": 0, "seed": 4_294_967_296_u64}}]}),
+            "Noise field seeds",
+        ),
+        (
+            json!({"modifiers": [{"operator": {"curl_flow": {"seed": u64::MAX,
+                "frequency": 0.02, "strength": 6}}}]}),
+            "Noise field seeds",
+        ),
+    ] {
+        let mut candidate = source.clone();
+        candidate
+            .as_object_mut()
+            .unwrap()
+            .extend(patch.as_object().unwrap().clone());
+        let spec: ParticlesSpec = serde_json::from_value(candidate).unwrap();
+        let messages = messages(&document(Element::new(Content::Particles(spec))));
+        assert!(
+            messages.iter().any(|message| message.contains(expected)),
+            "{messages:?}"
+        );
+    }
+}
+
+#[cfg(all(feature = "particles", feature = "text"))]
+#[test]
+#[ignore = "requires explicit fixture font; checks font-snapshot changes after cached failure"]
+fn glyph_particle_cache_distinguishes_font_snapshots_after_failure() {
+    let spec: ParticlesSpec = serde_json::from_value(serde_json::json!({
+        "seed": 17, "duration": 2, "sample_time": 1,
+        "emitters": [{"text": {"content": "motion", "family": "", "size": 24,
+            "fill": "white"}, "rate": 50, "speed": 0, "lifetime": 2}]
+    }))
+    .unwrap();
+    let document = Document::new([240.0, 120.0], 10)
+        .track(TrackSpec::new().scene(SceneSpec::new(2.0, Element::new(Content::Particles(spec)))));
+    let compiled = document.compile(&Default::default()).unwrap();
+    let assets = motion_core::Assets::new(FONTS).unwrap();
+    let options = RenderOptions::default().resources(assets.clone());
+    assert!(render_still(compiled.timeline(), Time::ZERO, &options).is_err());
+    let mut fonts = motion_content::FontLibrary::new();
+    fonts
+        .load_file(std::path::Path::new(FONTS).join("NotoSans-Regular.ttf"))
+        .unwrap();
+    let options = options.resources(assets.with_fonts(fonts));
+    let first = render_still(compiled.timeline(), Time::ZERO, &options).unwrap();
+    assert!(ink(&first) > 20);
+    assert_eq!(
+        first.bytes(),
+        render_still(compiled.timeline(), Time::ZERO, &options)
+            .unwrap()
+            .bytes()
+    );
 }
 
 #[cfg(feature = "diagram")]

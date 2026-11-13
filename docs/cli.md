@@ -181,7 +181,7 @@ subcommand):
 
 ```sh
 cargo run -p motion-cli -- still examples/documents/intro.json --time 1.5
-cargo run -p motion-cli -- schema > examples/documents/motion.schema.json
+cargo run -p motion-cli -- schema > schemas/motion.schema.json
 ```
 
 Document errors print the failing JSON path, the field and, for loaded files, the
@@ -225,6 +225,10 @@ The gallery wraps the same CLI ([`gallery/src/lib.rs`](../gallery/src/lib.rs)):
   system fonts are loaded for every command except `list`.
 - `studio --demo NAME` selects one demo (once, valid names only), conflicting with a
   positional name or `--timeline`; bare `studio` selects the first catalog entry.
+
+The [`motion-generate` skill](../.github/skills/motion-generate/SKILL.md) generates independent
+JSON films from content descriptions, validates and inspects them, then supplies
+direct document-path commands for Studio preview, stills and video export.
 
 Automation can drive `still` and `export` of a film binary with `--size`, `--time`,
 `--range`, `--output` and `--overwrite`, and rely on exit code `0`. `VisualCheckPolicy` in

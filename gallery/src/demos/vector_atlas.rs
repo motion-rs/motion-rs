@@ -162,10 +162,17 @@ pub(super) const PAGES: &[Page] = &[
 ];
 
 pub(super) fn timeline(parameters: DemoParameters) -> Result<Timeline, motion::ErrorReport> {
+    timeline_pages(parameters, PAGES)
+}
+
+pub(super) fn timeline_pages(
+    parameters: DemoParameters,
+    pages: &'static [Page],
+) -> Result<Timeline, motion::ErrorReport> {
     let source = SvgAsset::from_bytes(SOURCE)?.tree;
     let target = SvgAsset::from_bytes(TARGET)?.tree;
     let morph = Morph::new(&source, &target)?;
-    atlas::timeline(parameters, METADATA, PAGES, move |page, progress, _| {
+    atlas::timeline(parameters, METADATA, pages, move |page, progress, _| {
         let color = Color::from_hex(atlas::MINT);
         let bounds = Rect::new(40.0, 52.0, 472.0, 252.0);
         Ok(match page {

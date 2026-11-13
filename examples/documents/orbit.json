@@ -1,5 +1,5 @@
 {
-  "$schema": "./motion.schema.json",
+  "$schema": "../../schemas/motion.schema.json",
   "version": 1,
   "name": "Parametric orbit",
   "size": [640, 360],

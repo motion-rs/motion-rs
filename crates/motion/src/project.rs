@@ -60,6 +60,8 @@ pub struct Project {
     name: String,
     entries: Vec<Entry>,
     options: RenderOptions,
+    #[cfg(feature = "declarative")]
+    cache: Arc<std::sync::Mutex<motion_scene::CompileCache>>,
 }
 
 impl Default for Project {
@@ -68,6 +70,8 @@ impl Default for Project {
             name: "motion".into(),
             entries: Vec::new(),
             options: RenderOptions::default(),
+            #[cfg(feature = "declarative")]
+            cache: Default::default(),
         }
     }
 }
@@ -177,9 +181,7 @@ impl Project {
         let project = self.clone();
         let name = name.to_owned();
         Ok(scene.reloadable(watch, move || {
-            project
-                .studio_build(&name, parameters.clone(), options.clone())
-                .map(|(scene, _)| scene)
+            project.studio_scene_with(&name, parameters.clone(), options.clone())
         }))
     }
 
@@ -210,7 +212,7 @@ impl Project {
             Some(entry) => (entry.build_film)(parameters)?,
             #[cfg(feature = "declarative")]
             None if name.ends_with(".json") => {
-                Film::document(std::path::Path::new(name), parameters.as_ref())?
+                Film::document(std::path::Path::new(name), parameters.as_ref(), &self.cache)?
             }
             None => return Err(invalid(format!("Unknown timeline: {name}"))),
         };
@@ -226,6 +228,8 @@ pub struct ProjectBuilder {
     entries: Vec<Entry>,
     options: RenderOptions,
     errors: motion_core::ErrorReport,
+    #[cfg(feature = "declarative")]
+    cache: Arc<std::sync::Mutex<motion_scene::CompileCache>>,
 }
 
 impl Default for ProjectBuilder {
@@ -242,6 +246,8 @@ impl ProjectBuilder {
             entries: Vec::new(),
             options: RenderOptions::default(),
             errors: Default::default(),
+            #[cfg(feature = "declarative")]
+            cache: Default::default(),
         }
     }
 
@@ -259,6 +265,8 @@ impl ProjectBuilder {
             name: self.name,
             entries: self.entries,
             options: self.options,
+            #[cfg(feature = "declarative")]
+            cache: self.cache,
         })
     }
 
@@ -362,7 +370,8 @@ impl ProjectBuilder {
         )
     }
 
-    /// Registers a declarative JSON document, read and compiled lazily on each build.
+    /// Registers a declarative JSON document, read lazily on each build.
+    /// Unchanged documents reuse this project's bounded compilation cache.
     /// Relative resources resolve against the document's directory; its look's
     /// display stage applies to this project's stills and exports. `--params`
     /// overrides the parameters the document declares; `list` cannot show them
@@ -380,12 +389,13 @@ impl ProjectBuilder {
         path: impl Into<std::path::PathBuf>,
     ) -> Result<Self> {
         let path = path.into();
+        let cache = self.cache.clone();
         self.register(
             ProjectTimelineInfo {
                 name: name.into(),
                 defaults: None,
             },
-            move |parameters| Film::document(&path, parameters.as_ref()),
+            move |parameters| Film::document(&path, parameters.as_ref(), &cache),
         )
     }
 
@@ -451,7 +461,7 @@ impl ProjectBuilder {
 struct Film {
     timeline: Timeline,
     #[cfg(feature = "declarative")]
-    document: Option<motion_scene::CompiledDocument>,
+    document: Option<Arc<motion_scene::CompiledDocument>>,
     watch: Vec<std::path::PathBuf>,
 }
 
@@ -466,8 +476,15 @@ impl Film {
     }
 
     #[cfg(feature = "declarative")]
-    fn document(path: &std::path::Path, parameters: Option<&Value>) -> Result<Self> {
-        let document = motion_scene::load_with(path, parameters)?;
+    fn document(
+        path: &std::path::Path,
+        parameters: Option<&Value>,
+        cache: &std::sync::Mutex<motion_scene::CompileCache>,
+    ) -> Result<Self> {
+        let document = cache
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .load_with(path, parameters)?;
         Ok(Self {
             timeline: document.timeline().clone(),
             watch: document.resources().to_vec(),

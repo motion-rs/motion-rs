@@ -1,6 +1,6 @@
 use super::*;
 use crate::asset::AssetsExt;
-use motion_core::{Asset, NodeModifiers};
+use motion_core::{Asset, Node, NodeModifiers};
 use motion_render::RenderPrepare;
 
 fn pixels(asset: &SvgAsset) -> motion_core::Result<motion_render::FrameBuffer> {
@@ -322,5 +322,49 @@ fn svg_effects_operations_and_focal_paints_match_cpu_gpu() -> motion_core::Resul
     }
     assert_eq!(cases, 40);
     println!("SVG cases={cases} max_byte={maximum} GPU replay=exact");
+    Ok(())
+}
+
+#[test]
+fn svg_selections_and_writing_match_vector_reveal() -> motion_core::Result<()> {
+    let asset=Arc::new(SvgAsset::from_bytes(br#"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="8"><rect id="a" x="1" y="1" width="6" height="6" fill="red"/><path id="b" d="M9 1h6v6h-6z" fill="none" stroke="blue" stroke-width="2"/></svg>"#)?);
+    let render = |node: Node| -> motion_core::Result<Vec<u8>> {
+        Ok(node
+            .compile(
+                Size::new(16.0, 8.0),
+                motion_core::PixelSize::new(16, 8),
+                motion_core::ValidationLimits::default(),
+            )?
+            .prepare(
+                motion_core::ValidationLimits::default(),
+                motion_core::RasterLimits::default(),
+            )?
+            .render_linear(motion_core::RasterLimits::default())?
+            .bytes()
+            .to_vec())
+    };
+    let ids = asset.tree.ids();
+    type Modify = Arc<dyn Fn(Node) -> Node + Send + Sync>;
+    let half: Modify = Arc::new(|node: Node| node.opacity(0.5));
+    let turn: Modify = Arc::new(|node: Node| node.rotate(0.2));
+    let selections = [
+        crate::VectorSelection::shared([ids["a"].clone()], &half),
+        crate::VectorSelection::shared([ids["b"].clone()], &turn),
+        crate::VectorSelection::shared([ids["a"].clone()], &turn),
+    ];
+    for write in [None, Some(0.0), Some(0.4), Some(1.0)] {
+        let mut svg = Svg::from_asset(asset.clone())
+            .select("#a", |node| node.opacity(0.5))
+            .select("b", |node| node.rotate(0.2))
+            .select("a", |node| node.rotate(0.2));
+        if let Some(progress) = write {
+            svg = svg.write(progress);
+        }
+        assert_eq!(
+            render(svg.try_node()?)?,
+            render(asset.tree.reveal(&selections, write)?)?,
+            "write {write:?}"
+        );
+    }
     Ok(())
 }

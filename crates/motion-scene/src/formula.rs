@@ -1,5 +1,6 @@
 //! Math formulas and shape morphs described as plain data.
 
+use crate::content::SvgSourceSpec;
 use crate::value::Animated;
 use motion_core::Color;
 use schemars::JsonSchema;
@@ -90,17 +91,17 @@ pub struct MorphSpec {
     pub samples: Option<u32>,
 }
 
-/// An SVG file that morphs into another SVG file; requires feature `svg`.
+/// An SVG drawing that morphs into another drawing; requires feature `svg`.
 ///
 /// Painted parts are matched by id, then by position and shape; unmatched parts grow
 /// or shrink around their centers. Progress is clamped to `0..=1`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SvgMorphSpec {
-    /// Start SVG file, relative to the document directory.
-    pub from: String,
-    /// End SVG file, relative to the document directory.
-    pub to: String,
+    /// Start SVG file path or embedded markup.
+    pub from: SvgSourceSpec,
+    /// End SVG file path or embedded markup.
+    pub to: SvgSourceSpec,
     /// Morph progress.
     pub progress: Animated<f64>,
 }

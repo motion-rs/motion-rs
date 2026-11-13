@@ -20,7 +20,7 @@ enum Input {
 pub struct Svg {
     input: Input,
     size: Option<Size>,
-    progress: Option<f64>,
+    progress: Option<(f64, crate::WriteOptions)>,
     selections: Vec<(Arc<str>, Selection)>,
 }
 
@@ -63,7 +63,13 @@ impl Svg {
 
     /// Uses the common cumulative vector handwriting effect.
     pub fn write(mut self, progress: f64) -> Self {
-        self.progress = Some(progress);
+        self.progress = Some((progress, crate::WriteOptions::default()));
+        self
+    }
+
+    /// Uses explicit outline geometry for the common cumulative handwriting effect.
+    pub fn write_with(mut self, progress: f64, options: crate::WriteOptions) -> Self {
+        self.progress = Some((progress, options));
         self
     }
 
@@ -122,14 +128,27 @@ impl Svg {
                 return Err(unsupported(format!("SVG selection ID not found: {id}")));
             }
         }
-        let selections = self
-            .selections
-            .iter()
-            .map(|(id, modify)| {
-                VectorSelection::shared([asset.tree.ids()[id.as_ref()].clone()], modify)
-            })
-            .collect::<Vec<_>>();
-        let mut node = asset.tree.reveal(&selections, self.progress)?;
+        let mut callbacks_by_address =
+            std::collections::BTreeMap::<Vec<usize>, Vec<&Selection>>::new();
+        for (id, callback) in &self.selections {
+            callbacks_by_address
+                .entry(asset.tree.ids()[id.as_ref()].clone())
+                .or_default()
+                .push(callback);
+        }
+        let map = |address: &[usize], mut node: Node| {
+            if let Some(callbacks) = callbacks_by_address.get(address) {
+                for callback in callbacks {
+                    node = callback(node);
+                }
+            }
+            node
+        };
+        let mut node = if let Some((progress, options)) = self.progress {
+            asset.tree.write_mapped(progress, options, &map)?
+        } else {
+            asset.tree.node_mapped(&map)
+        };
         let scale = (size.width / asset.size().width).min(size.height / asset.size().height);
         let transform = Transform::scale(scale).then(Transform::translate(
             (size.width - asset.size().width * scale) * 0.5,

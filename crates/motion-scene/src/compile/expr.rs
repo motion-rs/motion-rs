@@ -100,7 +100,7 @@ impl Signal<f64> for ExprAnimation {
 }
 
 impl Expr {
-    fn eval(&self, time: f64, references: &[f64]) -> f64 {
+    pub(super) fn eval(&self, time: f64, references: &[f64]) -> f64 {
         match self {
             Self::Number(value) => *value,
             Self::Duration => time,
@@ -277,6 +277,46 @@ fn with_hint<'a>(
 /// right-associative `^`, then numbers, `t` (scene-local seconds), `pi`, `tau`,
 /// `$parameter`, `@element.property` references, function calls and parentheses.
 pub(crate) fn parse(source: &str, parameters: &BTreeMap<String, Value>) -> Result<Parsed, String> {
+    parse_with(
+        source,
+        &mut |name| {
+            let value = match parameters.get(name) {
+                Some(Value::Number(number)) => number.as_f64(),
+                Some(Value::Bool(flag)) => Some(f64::from(u8::from(*flag))),
+                Some(_) => return Err(format!("Parameter `{name}` is not a number")),
+                None => {
+                    return Err(with_hint(
+                        format!("Unknown parameter `{name}`"),
+                        name,
+                        parameters.keys().map(String::as_str),
+                    ));
+                }
+            };
+            value.ok_or_else(|| format!("Parameter `{name}` is not finite"))
+        },
+        true,
+    )
+}
+
+/// Evaluates a finite load-time number without scene time or element bindings.
+pub(crate) fn calculate(
+    source: &str,
+    parameters: &mut dyn FnMut(&str) -> Result<f64, String>,
+) -> Result<f64, String> {
+    let parsed = parse_with(source, parameters, false)?;
+    let value = parsed.expr.eval(0.0, &[]);
+    if value.is_finite() {
+        Ok(value)
+    } else {
+        Err("Load-time calculations must produce a finite number".into())
+    }
+}
+
+fn parse_with(
+    source: &str,
+    parameters: &mut dyn FnMut(&str) -> Result<f64, String>,
+    animated: bool,
+) -> Result<Parsed, String> {
     if source.len() > MAX_EXPRESSION_BYTES {
         return Err("Expression exceeds 4096 bytes".into());
     }
@@ -286,6 +326,7 @@ pub(crate) fn parse(source: &str, parameters: &BTreeMap<String, Value>) -> Resul
         nodes: 0,
         depth: 0,
         parameters,
+        animated,
         references: Vec::new(),
     };
     let expr = parser.comparison()?;
@@ -304,7 +345,8 @@ struct Parser<'a> {
     position: usize,
     nodes: usize,
     depth: usize,
-    parameters: &'a BTreeMap<String, Value>,
+    parameters: &'a mut dyn FnMut(&str) -> Result<f64, String>,
+    animated: bool,
     references: Vec<String>,
 }
 
@@ -372,7 +414,10 @@ impl Parser<'_> {
             }
             Some(b'+') => {
                 self.position += 1;
-                self.unary()
+                self.enter()?;
+                let value = self.unary()?;
+                self.depth -= 1;
+                Ok(value)
             }
             _ => self.power(),
         }
@@ -450,23 +495,14 @@ impl Parser<'_> {
     fn parameter(&mut self) -> Result<Expr, String> {
         self.position += 1;
         let name = self.word(|byte| byte.is_ascii_alphanumeric() || byte == b'_')?;
-        let value = match self.parameters.get(&name) {
-            Some(Value::Number(number)) => number.as_f64(),
-            Some(Value::Bool(flag)) => Some(f64::from(u8::from(*flag))),
-            Some(_) => return Err(format!("Parameter `{name}` is not a number")),
-            None => {
-                return Err(with_hint(
-                    format!("Unknown parameter `{name}`"),
-                    &name,
-                    self.parameters.keys().map(String::as_str),
-                ));
-            }
-        };
-        let value = value.ok_or_else(|| format!("Parameter `{name}` is not finite"))?;
+        let value = (self.parameters)(&name)?;
         self.node(Expr::Number(value))
     }
 
     fn reference(&mut self) -> Result<Expr, String> {
+        if !self.animated {
+            return Err("Load-time calculations cannot reference elements".into());
+        }
         self.position += 1;
         let name =
             self.word(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'.')?;
@@ -485,7 +521,8 @@ impl Parser<'_> {
         self.skip_space();
         if self.peek() != Some(b'(') {
             return match name.as_str() {
-                "t" => self.node(Expr::Duration),
+                "t" if self.animated => self.node(Expr::Duration),
+                "t" => Err("Load-time calculations cannot read time `t`".into()),
                 "pi" => self.node(Expr::Number(std::f64::consts::PI)),
                 "tau" => self.node(Expr::Number(std::f64::consts::TAU)),
                 _ => Err(with_hint(
@@ -591,6 +628,24 @@ impl Parser<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn calculations_resolve_parameters_and_reject_runtime_inputs() {
+        let mut parameter = |name: &str| match name {
+            "seconds" => Ok(8.0),
+            _ => Err(format!("Unknown parameter `{name}`")),
+        };
+        assert_eq!(
+            calculate("ceil($seconds * 30 / 43) / 30", &mut parameter).unwrap(),
+            6.0 / 30.0
+        );
+        for expression in ["t", "@dot.radius", "1 / 0", "sqrt(-1)", "$missing"] {
+            assert!(
+                calculate(expression, &mut parameter).is_err(),
+                "{expression}"
+            );
+        }
+    }
 
     fn eval(source: &str, time: f64) -> Result<f64, String> {
         let mut parameters = BTreeMap::new();

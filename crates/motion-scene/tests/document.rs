@@ -2,7 +2,7 @@
 
 use motion_core::{
     BlendMode, ClipMode, Color, ErrorKind, FillRule, LineCap, LineJoin, MaskMode, Pivot, Point,
-    Time, ValidationError,
+    Rect, Time, ValidationError,
 };
 use motion_render::{RenderOptions, render_still};
 use motion_scene::*;
@@ -26,6 +26,374 @@ fn errors(document: &Document) -> Vec<ValidationError> {
         .iter()
         .map(|error| error.downcast_ref::<ValidationError>().unwrap().clone())
         .collect()
+}
+
+#[test]
+fn atlas_gradients_animate_replay_and_reject_invalid_geometry() {
+    let make = |gradient| {
+        Document::new([16.0, 16.0], 30).track(TrackSpec::new().scene(SceneSpec::new(
+            2.0,
+            Element::rect([0.0, 0.0, 16.0, 16.0]).fill(PaintSpec::Gradient(gradient)),
+        )))
+    };
+    let mut linear = LinearGradientSpec::new(Point::new(0.0, 0.0), Point::new(8.0, 0.0))
+        .stop(0.0, Color::BLACK)
+        .stop(1.0, Color::WHITE);
+    linear.end = Animated::exprs(["8 + t * 8", "0"]);
+    linear.options.units = Some(motion_core::GradientUnits::UserSpace);
+    let mut radial = RadialGradientSpec::new(Point::new(8.0, 8.0), 8.0)
+        .stop(0.0, Color::BLACK)
+        .stop(1.0, Color::WHITE);
+    radial.radius = Animated::expr("8 + t * 8");
+    radial.options.units = Some(motion_core::GradientUnits::UserSpace);
+    for gradient in [GradientSpec::Linear(linear), GradientSpec::Radial(radial)] {
+        let document = make(gradient);
+        assert_eq!(
+            Document::from_json(&document.to_json().unwrap()).unwrap(),
+            document
+        );
+        assert_ne!(pixel(&document, 0.0, 4, 4), pixel(&document, 1.0, 4, 4));
+        assert_eq!(pixel(&document, 0.5, 4, 4), pixel(&document, 0.5, 4, 4));
+    }
+    let mut sweep = SweepGradientSpec::new(Point::new(0.5, 0.5), 0.0, 360.0)
+        .stop(0.0, Color::BLACK)
+        .stop(1.0, Color::WHITE);
+    sweep.start_angle = Animated::expr("degrees(2.8 + t)");
+    sweep.end_angle = Animated::expr("degrees(2.8 + t + tau)");
+    let document = make(GradientSpec::Sweep(sweep.clone()));
+    for time in [0.0, 0.25, 0.5, 1.0] {
+        pixel(&document, time, 4, 4);
+    }
+    sweep.end_angle = Animated::expr("degrees(2.8 + t + tau) + 0.000001");
+    assert!(!errors(&make(GradientSpec::Sweep(sweep))).is_empty());
+    let mut invalid = RadialGradientSpec::new(Point::new(0.5, 0.5), 1.0)
+        .stop(0.0, Color::BLACK)
+        .stop(1.0, Color::WHITE);
+    invalid.radius = Animated::expr("1 - t");
+    let compiled = make(GradientSpec::Radial(invalid))
+        .compile(&CompileOptions::default())
+        .unwrap();
+    assert!(
+        render_still(
+            compiled.timeline(),
+            Time::from_seconds(1.5),
+            &RenderOptions::default()
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn atlas_animated_points_match_fixed_geometry_and_enforce_limits() {
+    let make = |points| {
+        Document::new([16.0, 16.0], 30).track(TrackSpec::new().scene(SceneSpec::new(
+            2.0,
+            Element::polyline(points).stroke(StrokeSpec::new(2.0, Color::WHITE)),
+        )))
+    };
+    let mut points = PointsSpec::new([]);
+    points.animated = Some(vec![
+        Animated::exprs(["2 + t * 4", "2"]),
+        [10.0, 10.0].into(),
+    ]);
+    let document = make(points.clone());
+    let compiled = document.compile(&CompileOptions::default()).unwrap();
+    assert_eq!(
+        Document::from_json(&document.to_json().unwrap()).unwrap(),
+        document
+    );
+    for seconds in [1.0, 0.0, 0.5, 1.0] {
+        let fixed = make(PointsSpec::new([
+            Point::new(2.0 + seconds * 4.0, 2.0),
+            Point::new(10.0, 10.0),
+        ]))
+        .compile(&CompileOptions::default())
+        .unwrap();
+        let time = Time::from_seconds(seconds);
+        assert_eq!(
+            render_still(compiled.timeline(), time, &RenderOptions::default())
+                .unwrap()
+                .bytes(),
+            render_still(fixed.timeline(), time, &RenderOptions::default())
+                .unwrap()
+                .bytes()
+        );
+    }
+    let mut mixed = points.clone();
+    mixed.points = vec![Point::new(0.0, 0.0)];
+    assert!(!errors(&make(mixed)).is_empty());
+    let mut sampled = points.clone();
+    sampled.sample = Some(SampledPointsSpec::new(
+        Animated::exprs(["t", "t"]),
+        [0.0, 1.0],
+        2,
+    ));
+    assert!(!errors(&make(sampled)).is_empty());
+    for count in [0, 1, 65_537] {
+        let mut invalid = points.clone();
+        invalid.animated = Some(vec![[0.0, 0.0].into(); count]);
+        assert!(!errors(&make(invalid)).is_empty());
+    }
+    let polygon = Document::new([16.0, 16.0], 30).track(TrackSpec::new().scene(SceneSpec::new(
+        1.0,
+        Element::new(Content::Polygon(points)).fill(Color::WHITE),
+    )));
+    assert!(!errors(&polygon).is_empty());
+}
+
+#[test]
+fn atlas_optical_filters_preserve_core_validation() {
+    use serde_json::json;
+    for spec in [
+        json!({"radial_blur":{"center":[8,8],"strength":0.5,"samples":0,"decay":0.9}}),
+        json!({"radial_blur":{"center":[8,8],"strength":0.5,"samples":65,"decay":0.9}}),
+        json!({"lens_flare":{"center":[8,8],"ghosts":9,"threshold":0.5,"intensity":1,"tint":"#fff"}}),
+        json!({"bokeh":{"radius":2,"shape":{"polygon":{"sides":2,"rotation":0}},"highlight_boost":1}}),
+        json!({"relight":{"height_from":"luma","light_dir":[0,0,0],"color":"#fff","ambient":0.2,"specular":1}}),
+    ] {
+        let filter = serde_json::from_value(json!({"optics":spec})).unwrap();
+        let document = Document::new([16.0, 16.0], 30).track(
+            TrackSpec::new().scene(SceneSpec::new(
+                1.0,
+                Element::rect([0.0, 0.0, 16.0, 16.0])
+                    .fill(Color::WHITE)
+                    .filter(filter),
+            )),
+        );
+        assert!(
+            errors(&document)
+                .iter()
+                .any(|error| error.path.contains("filters[0].optics"))
+        );
+    }
+    let document = Document::new([16.0, 16.0], 30).track(
+        TrackSpec::new().scene(SceneSpec::new(
+            1.0,
+            Element::rect([0.0, 0.0, 16.0, 16.0])
+                .fill(Color::WHITE)
+                .filter(FilterSpec::Halation {
+                    strength: (-1.0).into(),
+                    radius: 2.0,
+                }),
+        )),
+    );
+    let errors = errors(&document);
+    assert!(
+        errors
+            .iter()
+            .any(|error| error.path.ends_with("filters[0].halation") && error.field == "parameters"),
+        "{errors:?}"
+    );
+}
+
+#[test]
+fn animated_filters_fail_the_frame_where_they_become_invalid() {
+    let make = |filter| {
+        Document::new([16.0, 16.0], 30).track(
+            TrackSpec::new().scene(SceneSpec::new(
+                2.0,
+                Element::rect([0.0, 0.0, 16.0, 16.0])
+                    .fill(Color::WHITE)
+                    .filter(filter),
+            )),
+        )
+    };
+    for filter in [
+        FilterSpec::BlurXy {
+            sigma_x: Animated::expr("1 - t"),
+            sigma_y: 1.0.into(),
+        },
+        FilterSpec::Grain {
+            seed: 7,
+            strength: Animated::expr("0.5 - t"),
+        },
+    ] {
+        let compiled = make(filter).compile(&CompileOptions::default()).unwrap();
+        let render = |seconds| {
+            render_still(
+                compiled.timeline(),
+                Time::from_seconds(seconds),
+                &RenderOptions::default(),
+            )
+        };
+        render(0.25).unwrap();
+        let error = render(1.5).unwrap_err().to_string();
+        assert!(error.contains("filters[0]"), "{error}");
+    }
+    let invalid = make(FilterSpec::BlurXy {
+        sigma_x: (-1.0).into(),
+        sigma_y: 1.0.into(),
+    });
+    assert!(
+        errors(&invalid)
+            .iter()
+            .any(|error| error.path.contains("filters[0]"))
+    );
+}
+
+#[cfg(feature = "svg")]
+#[test]
+fn atlas_inline_svg_writes_morphs_and_validates_without_files() {
+    use serde_json::json;
+    let source = json!({"data":r##"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect id="mark" x="2" y="2" width="12" height="12" fill="#fff"/></svg>"##});
+    let target = json!({"data":r##"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect id="mark" x="6" y="6" width="4" height="4" fill="#fff"/></svg>"##});
+    let make = |element: serde_json::Value| {
+        Document::new([16.0, 16.0], 30).track(TrackSpec::new().scene(SceneSpec::new(
+            2.0,
+            serde_json::from_value::<Element>(element).unwrap(),
+        )))
+    };
+    let document = make(
+        json!({"svg":{"source":source,"write":{"expr":"t"},"write_options":{"width":3,"outline_fraction":0.8}}}),
+    );
+    assert_eq!(
+        Document::from_json(&document.to_json().unwrap()).unwrap(),
+        document
+    );
+    let compiled = document.compile(&CompileOptions::default()).unwrap();
+    assert!(compiled.resources().is_empty());
+    assert_eq!(pixel(&document, 0.0, 8, 8), [0, 0, 0, 0]);
+    assert_eq!(pixel(&document, 1.0, 8, 8), [255, 255, 255, 255]);
+    assert_eq!(pixel(&document, 0.5, 2, 2), pixel(&document, 0.5, 2, 2));
+    let morph = make(json!({"svg_morph":{"from":source,"to":target,"progress":{"expr":"t"}}}));
+    assert!(
+        morph
+            .compile(&CompileOptions::default())
+            .unwrap()
+            .resources()
+            .is_empty()
+    );
+    assert_ne!(pixel(&morph, 0.0, 3, 3), pixel(&morph, 1.0, 3, 3));
+    for options in [
+        json!({"width":0,"outline_fraction":0.8}),
+        json!({"width":3,"outline_fraction":1.1}),
+    ] {
+        assert!(
+            !errors(&make(
+                json!({"svg":{"source":source,"write":0.5,"write_options":options}})
+            ))
+            .is_empty()
+        );
+    }
+    assert!(!errors(&make(json!({"svg":{"source":{"data":"not SVG"}}}))).is_empty());
+    for (source, expected) in [
+        (json!(3), "an SVG file path string or an object"),
+        (json!({"path": "a.svg"}), "unknown field `path`"),
+        (json!({}), "missing field `data`"),
+    ] {
+        let error = serde_json::from_value::<Element>(json!({"svg": {"source": source}}))
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains(expected), "{error}");
+    }
+}
+
+#[test]
+fn sampled_polylines_compile_once_and_match_fixed_points() {
+    let element = |points| Element::polyline(points).stroke(StrokeSpec::new(1.0, Color::WHITE));
+    let make = |points| {
+        Document::new([16.0, 16.0], 30)
+            .background(Color::BLACK)
+            .track(TrackSpec::new().scene(SceneSpec::new(1.0, element(points))))
+    };
+    let sampled = PointsSpec::sampled(SampledPointsSpec::new(
+        Animated::components([Animated::expr("2 + t * 8"), Animated::expr("2 + t * 8")]),
+        [0.0, 1.0],
+        2,
+    ));
+    let document = make(sampled.clone());
+    let fixed = make(PointsSpec::new([
+        Point::new(2.0, 2.0),
+        Point::new(6.0, 6.0),
+        Point::new(10.0, 10.0),
+    ]));
+    assert_eq!(
+        Document::from_json(&document.to_json().unwrap()).unwrap(),
+        document
+    );
+    for time in [0.0, 0.5] {
+        assert_eq!(pixel(&document, time, 6, 6), pixel(&fixed, time, 6, 6));
+        assert_ne!(pixel(&document, time, 6, 6), [0, 0, 0, 255]);
+    }
+    for segments in [0, 65536] {
+        let mut broken = sampled.clone();
+        broken.sample.as_mut().unwrap().segments = segments;
+        assert!(!errors(&make(broken)).is_empty());
+    }
+    let mut mixed = sampled.clone();
+    mixed.points = vec![Point::new(0.0, 0.0)];
+    assert!(!errors(&make(mixed)).is_empty());
+    let mut invalid = sampled;
+    invalid.sample.as_mut().unwrap().source = Animated::exprs(["t", "1 / 0"]);
+    assert!(!errors(&make(invalid)).is_empty());
+}
+
+#[test]
+fn rounded_rect_clips_round_trip_animate_and_replay() {
+    let make = |spec, mode| {
+        Document::new([16.0, 16.0], 30)
+            .background(Color::BLACK)
+            .track(
+                TrackSpec::new().scene(SceneSpec::new(
+                    2.0,
+                    Element::rect([0.0, 0.0, 16.0, 16.0])
+                        .fill(Color::WHITE)
+                        .clip(ClipSpec::new(ClipShapeSpec::RoundedRect(spec)).mode(mode)),
+                )),
+            )
+    };
+    for mode in [ClipMode::Coverage, ClipMode::Geometric] {
+        let document = make(
+            RectSpec::new(Animated::tween(
+                Rect::new(0.0, 0.0, 16.0, 16.0),
+                Rect::new(4.0, 4.0, 12.0, 12.0),
+                1.0,
+            ))
+            .corner_radius(Animated::tween(0.0, 4.0, 1.0)),
+            mode,
+        );
+        assert_eq!(
+            Document::from_json(&document.to_json().unwrap()).unwrap(),
+            document
+        );
+        let compiled = document.compile(&CompileOptions::default()).unwrap();
+        let options = compiled.render_options(RenderOptions::default());
+        for seconds in [1.0, 0.0, 0.5, 1.0] {
+            let inset = seconds * 4.0;
+            let fixed = make(
+                RectSpec::new([inset, inset, 16.0 - inset, 16.0 - inset]).corner_radius(inset),
+                mode,
+            )
+            .compile(&CompileOptions::default())
+            .unwrap();
+            let time = Time::from_seconds(seconds);
+            let actual = render_still(compiled.timeline(), time, &options).unwrap();
+            let expected = render_still(fixed.timeline(), time, &options).unwrap();
+            assert_eq!(actual.bytes(), expected.bytes());
+            let replay = render_still(compiled.timeline(), time, &options).unwrap();
+            assert_eq!(actual.bytes(), replay.bytes());
+        }
+        assert_eq!(pixel(&document, 0.0, 0, 0), [255, 255, 255, 255]);
+        assert_eq!(pixel(&document, 1.0, 4, 4), [0, 0, 0, 255]);
+        assert_eq!(pixel(&document, 1.0, 8, 8), [255, 255, 255, 255]);
+        let square = make(RectSpec::new([0.0, 0.0, 16.0, 16.0]), mode);
+        assert_eq!(pixel(&square, 0.0, 0, 0), [255, 255, 255, 255]);
+    }
+    let invalid = make(
+        RectSpec::new([0.0, 0.0, 16.0, 16.0]).corner_radius(-1.0),
+        ClipMode::Geometric,
+    );
+    let compiled = invalid.compile(&CompileOptions::default()).unwrap();
+    assert!(render_still(compiled.timeline(), Time::ZERO, &RenderOptions::default()).is_err());
+    let nonfinite = make(
+        RectSpec::new([0.0, 0.0, 16.0, 16.0]).corner_radius(f64::NAN),
+        ClipMode::Geometric,
+    );
+    assert!(
+        errors(&nonfinite)
+            .iter()
+            .any(|error| error.path.ends_with("rounded_rect.corner_radius"))
+    );
 }
 
 fn showcase() -> Document {
@@ -363,6 +731,50 @@ fn unwrap(schema: &serde_json::Value) -> &serde_json::Value {
 }
 
 #[test]
+fn particle_schema_constrains_static_inputs() {
+    let schema = schema();
+    let preset = &unwrap(&schema["$defs"]["ParticlePresetSpec"])["properties"];
+    for field in ["density", "speed"] {
+        assert_eq!(unwrap(&preset[field])["exclusiveMinimum"], 0);
+        assert_eq!(unwrap(&preset[field])["maximum"], 16.0);
+    }
+    assert_eq!(unwrap(&preset["intensity"])["minimum"], 0.0);
+    assert_eq!(unwrap(&preset["intensity"])["maximum"], 64.0);
+    assert_eq!(unwrap(&preset["logo"])["maxItems"], 256);
+    let particles = &unwrap(&schema["$defs"]["ParticlesSpec"])["properties"];
+    assert_eq!(unwrap(&particles["duration"])["exclusiveMinimum"], 0);
+    assert_eq!(unwrap(&particles["step"])["exclusiveMinimum"], 0);
+    assert_eq!(unwrap(&particles["max_particles"])["minimum"], 1);
+    assert_eq!(unwrap(&particles["max_particles"])["maximum"], 1_000_000);
+    assert_eq!(unwrap(&particles["sample_time"])["minimum"], 0.0);
+    assert_eq!(unwrap(&particles["sample_time"])["maximum"], 1e6);
+    let conditional = &unwrap(&schema["$defs"]["ParticlesSpec"])["allOf"][0];
+    assert_eq!(
+        conditional["if"]["properties"]["preset"]["required"],
+        serde_json::json!(["kind"])
+    );
+    assert_eq!(
+        conditional["then"]["required"],
+        serde_json::json!(["duration"])
+    );
+    assert_eq!(
+        conditional["then"]["properties"]["duration"]["maximum"],
+        3600
+    );
+    assert_eq!(unwrap(&schema["properties"]["version"])["minimum"], 1);
+    assert_eq!(unwrap(&schema["properties"]["version"])["maximum"], 1);
+    assert_eq!(
+        unwrap(&schema["properties"]["duration"])["exclusiveMinimum"],
+        0
+    );
+    assert_eq!(unwrap(&schema["properties"]["duration"])["maximum"], 1e6);
+    let scene = &unwrap(&schema["$defs"]["SceneSpec"])["properties"];
+    assert_eq!(unwrap(&scene["duration"])["exclusiveMinimum"], 0);
+    assert_eq!(unwrap(&scene["duration"])["maximum"], 1e6);
+    assert_eq!(unwrap(&scene["start"])["minimum"], 0.0);
+}
+
+#[test]
 fn schema_describes_every_public_shape() {
     let schema = schema();
     let definitions = schema["$defs"].as_object().unwrap();
@@ -375,6 +787,7 @@ fn schema_describes_every_public_shape() {
         "FilterSpec",
         "EasingSpec",
         "ParamRef",
+        "UseRef",
     ] {
         assert!(definitions.contains_key(name), "{name} missing");
     }
@@ -403,8 +816,169 @@ fn schema_describes_every_public_shape() {
     ] {
         assert!(properties.contains_key(key), "{key} missing");
     }
+    assert!(!properties.contains_key("switch"));
+    assert!(!definitions.contains_key("SwitchSpec"));
+    assert!(serde_json::from_str::<Element>(r#"{"switch":{"index":0,"cases":[]}}"#).is_err());
     assert_eq!(unwrap(&schema["properties"]["version"])["type"], "integer");
     assert!(schema["properties"]["params"].is_object());
+    assert_eq!(schema["properties"]["defs"]["type"], "object");
+    assert_eq!(schema["properties"]["defs"]["maxProperties"], 256);
+    assert_eq!(
+        schema["properties"]["background"]["anyOf"][1]["$ref"],
+        "#/$defs/ValueRef"
+    );
+    assert_eq!(
+        definitions["ValueRef"]["anyOf"],
+        serde_json::json!([
+            {"$ref":"#/$defs/ParamRef"},
+            {"$ref":"#/$defs/UseRef"},
+            {"$ref":"#/$defs/CalcRef"}
+        ])
+    );
+    assert_eq!(
+        definitions["UseRef"]["required"],
+        serde_json::json!(["use"])
+    );
+}
+
+#[test]
+fn reference_keys_are_reserved_in_every_document_shape() {
+    fn visit(schema: &serde_json::Value, path: &str, found: &mut Vec<String>) {
+        match schema {
+            serde_json::Value::Object(object) => {
+                if let Some(properties) =
+                    object.get("properties").and_then(|value| value.as_object())
+                {
+                    for key in properties.keys() {
+                        if ["use", "$param", "$calc"].contains(&key.as_str()) {
+                            found.push(format!("{path}.{key}"));
+                        }
+                    }
+                }
+                for (key, child) in object {
+                    visit(child, &format!("{path}.{key}"), found);
+                }
+            }
+            serde_json::Value::Array(items) => {
+                for (index, child) in items.iter().enumerate() {
+                    visit(child, &format!("{path}[{index}]"), found);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    let mut schema = schema();
+    let definitions = schema["$defs"].as_object_mut().unwrap();
+    for reference in ["ParamRef", "UseRef", "CalcRef"] {
+        assert!(
+            definitions.remove(reference).is_some(),
+            "{reference} missing"
+        );
+    }
+    let mut found = Vec::new();
+    visit(&schema, "schema", &mut found);
+    assert!(
+        found.is_empty(),
+        "reserved reference keys used as fields: {found:?}"
+    );
+}
+
+#[test]
+fn scenes_select_content_and_validate_every_scene() {
+    let mut document = Document::new([4.0, 4.0], 2).track(
+        TrackSpec::new()
+            .scene(SceneSpec::new(
+                1.0,
+                Element::rect([0.0, 0.0, 4.0, 4.0]).fill(Color::WHITE),
+            ))
+            .scene(SceneSpec::new(
+                1.0,
+                Element::rect([0.0, 0.0, 4.0, 4.0]).fill(Color::BLACK),
+            )),
+    );
+    assert_eq!(pixel(&document, 0.5, 1, 1), [255, 255, 255, 255]);
+    assert_eq!(pixel(&document, 1.5, 1, 1), [0, 0, 0, 255]);
+    assert_eq!(
+        Document::from_json(&document.to_json().unwrap()).unwrap(),
+        document
+    );
+    let TrackItem::Scene(scene) = &mut document.tracks[0].items[1] else {
+        panic!("scene expected")
+    };
+    scene.content = Element::circle([0.0, 0.0], f64::NAN).fill(Color::WHITE);
+    assert!(
+        errors(&document)
+            .iter()
+            .any(|error| error.path.contains("items[1].scene.content.circle.radius"))
+    );
+}
+
+#[cfg(feature = "text")]
+#[test]
+fn numeric_text_enforces_format_limits_and_rejects_mixed_content() {
+    let readout = |precision, prefix: String, content: &str| {
+        let mut spec = TextSpec::new(content);
+        spec.number = Some(NumberTextSpec {
+            value: Animated::expr("t"),
+            precision,
+            prefix,
+            suffix: String::new(),
+        });
+        Document::new([40.0, 20.0], 2).track(
+            TrackSpec::new().scene(SceneSpec::new(2.0, Element::text(spec).fill(Color::WHITE))),
+        )
+    };
+    assert!(
+        readout(3, "t ".into(), "")
+            .compile(&Default::default())
+            .is_ok()
+    );
+    for document in [
+        readout(17, String::new(), ""),
+        readout(3, "x".repeat(4097), ""),
+        readout(3, String::new(), "mixed"),
+    ] {
+        assert!(!errors(&document).is_empty());
+    }
+}
+
+#[cfg(feature = "text")]
+#[test]
+fn constant_numeric_text_renders_like_its_formatted_content() {
+    let fonts = concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/fixtures/fonts");
+    let render = |mut spec: TextSpec, number: Option<NumberTextSpec>| {
+        spec.number = number;
+        let document = Document::new([120.0, 40.0], 10)
+            .font("NotoSans-Regular.ttf")
+            .track(
+                TrackSpec::new().scene(SceneSpec::new(
+                    1.0,
+                    Element::text(spec.family("Noto Sans").size(20.0))
+                        .fill(Color::WHITE)
+                        .translate([4.0, 30.0]),
+                )),
+            );
+        let compiled = document
+            .compile(&CompileOptions::default().base_dir(fonts))
+            .unwrap();
+        render_still(
+            compiled.timeline(),
+            Time::from_seconds(0.5),
+            &RenderOptions::default(),
+        )
+        .unwrap()
+    };
+    let readout = NumberTextSpec {
+        value: 12.3456.into(),
+        precision: 2,
+        prefix: "n ".into(),
+        suffix: "!".into(),
+    };
+    let number = render(TextSpec::new(""), Some(readout));
+    let content = render(TextSpec::new("n 12.35!"), None);
+    assert!(number.bytes().chunks(4).any(|pixel| pixel[3] > 200));
+    assert_eq!(number.bytes(), content.bytes());
 }
 
 #[cfg(feature = "text")]
