@@ -490,13 +490,10 @@ fn documents_round_trip_through_json() {
 fn showcase_compiles_and_renders() {
     let compiled = showcase().compile(&CompileOptions::default()).unwrap();
     assert_eq!(compiled.timeline().frame_count(), 120);
+    let options = compiled
+        .render_options(RenderOptions::default().backend(motion_render::BackendPreference::Cpu));
     for seconds in [0.0, 0.5, 0.9, 1.5, 3.2] {
-        render_still(
-            compiled.timeline(),
-            Time::from_seconds(seconds),
-            &compiled.render_options(RenderOptions::default()),
-        )
-        .unwrap();
+        render_still(compiled.timeline(), Time::from_seconds(seconds), &options).unwrap();
     }
 }
 
