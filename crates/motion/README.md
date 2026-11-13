@@ -6,7 +6,7 @@ to or replayed exactly.
 
 ```toml
 [dependencies]
-motion-rs = "0.1"
+motion-rs = "0.2"
 ```
 
 The package is `motion-rs`; the library is imported as `motion`:
@@ -30,7 +30,7 @@ To build without them, disable the default features and pick what you need:
 
 ```toml
 [dependencies]
-motion-rs = { version = "0.1", default-features = false, features = ["image", "text"] }
+motion-rs = { version = "0.2", default-features = false, features = ["image", "text"] }
 ```
 
 ## Features

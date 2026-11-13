@@ -17,11 +17,11 @@ ffmpeg = []
 gpu = ["motion-render/gpu", "motion-encode/gpu"]
 
 [dependencies]
-motion-core = { version = "0.1.0", path = "../motion-core" }
-motion-content = { version = "0.1.0", path = "../motion-content", default-features = false, optional = true }
-motion-render = { version = "0.1.0", path = "../motion-render", default-features = false }
-motion-encode = { version = "0.1.0", path = "../motion-encode", default-features = false, features = ["ffmpeg"] }
-motion-ffmpeg = { version = "0.1.0", path = "../motion-ffmpeg" }
+motion-core = { version = "0.2.0", path = "../motion-core" }
+motion-content = { version = "0.2.0", path = "../motion-content", default-features = false, optional = true }
+motion-render = { version = "0.2.0", path = "../motion-render", default-features = false }
+motion-encode = { version = "0.2.0", path = "../motion-encode", default-features = false, features = ["ffmpeg"] }
+motion-ffmpeg = { version = "0.2.0", path = "../motion-ffmpeg" }
 cpal = { version = "0.16", default-features = false }
 rtrb = "0.3"
 eframe = { version = "0.37.0", default-features = false, features = ["default_fonts", "wgpu", "wayland", "x11"] }

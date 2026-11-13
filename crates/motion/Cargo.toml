@@ -33,14 +33,14 @@ studio = ["ffmpeg", "dep:motion-studio"]
 declarative = ["dep:motion-scene"]
 
 [dependencies]
-motion-core = { version = "0.1.0", path = "../motion-core" }
-motion-render = { version = "0.1.0", path = "../motion-render", default-features = false }
-motion-content = { version = "0.1.0", path = "../motion-content", default-features = false, optional = true }
-motion-formula = { version = "0.1.0", path = "../motion-formula", default-features = false, optional = true }
-motion-encode = { version = "0.1.0", path = "../motion-encode", default-features = false }
-motion-scene = { version = "0.1.0", path = "../motion-scene", optional = true }
-motion-studio = { version = "0.1.0", path = "../motion-studio", default-features = false, optional = true }
-motion-ffmpeg = { version = "0.1.0", path = "../motion-ffmpeg", optional = true }
+motion-core = { version = "0.2.0", path = "../motion-core" }
+motion-render = { version = "0.2.0", path = "../motion-render", default-features = false }
+motion-content = { version = "0.2.0", path = "../motion-content", default-features = false, optional = true }
+motion-formula = { version = "0.2.0", path = "../motion-formula", default-features = false, optional = true }
+motion-encode = { version = "0.2.0", path = "../motion-encode", default-features = false }
+motion-scene = { version = "0.2.0", path = "../motion-scene", optional = true }
+motion-studio = { version = "0.2.0", path = "../motion-studio", default-features = false, optional = true }
+motion-ffmpeg = { version = "0.2.0", path = "../motion-ffmpeg", optional = true }
 clap = { version = "4", features = ["derive", "string"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["float_roundtrip"] }

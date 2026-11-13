@@ -17,8 +17,8 @@ formula = ["typst"]
 gpu = []
 
 [dependencies]
-motion-core = { version = "0.1.0", path = "../motion-core" }
-motion-content = { version = "0.1.0", path = "../motion-content", default-features = false, features = ["text", "svg"] }
+motion-core = { version = "0.2.0", path = "../motion-core" }
+motion-content = { version = "0.2.0", path = "../motion-content", default-features = false, features = ["text", "svg"] }
 libm = "0.2"
 typst = "0.15.1"
 typst-assets = { version = "0.15.1", features = ["fonts"] }

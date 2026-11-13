@@ -15,7 +15,7 @@ name = "motion"
 path = "src/main.rs"
 
 [dependencies]
-motion = { package = "motion-rs", version = "0.1.0", path = "../motion", features = ["declarative"] }
+motion = { package = "motion-rs", version = "0.2.0", path = "../motion", features = ["declarative"] }
 
 [lints]
 workspace = true

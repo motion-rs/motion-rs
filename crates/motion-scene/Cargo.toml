@@ -23,11 +23,11 @@ formula = ["text", "dep:motion-formula", "motion-formula/formula"]
 audio = ["dep:motion-encode", "motion-encode/audio"]
 
 [dependencies]
-motion-core = { version = "0.1.0", path = "../motion-core", features = ["schema"] }
-motion-render = { version = "0.1.0", path = "../motion-render", default-features = false }
-motion-content = { version = "0.1.0", path = "../motion-content", default-features = false, features = ["schema"] }
-motion-formula = { version = "0.1.0", path = "../motion-formula", default-features = false, optional = true }
-motion-encode = { version = "0.1.0", path = "../motion-encode", default-features = false, optional = true }
+motion-core = { version = "0.2.0", path = "../motion-core", features = ["schema"] }
+motion-render = { version = "0.2.0", path = "../motion-render", default-features = false }
+motion-content = { version = "0.2.0", path = "../motion-content", default-features = false, features = ["schema"] }
+motion-formula = { version = "0.2.0", path = "../motion-formula", default-features = false, optional = true }
+motion-encode = { version = "0.2.0", path = "../motion-encode", default-features = false, optional = true }
 schemars = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["float_roundtrip"] }

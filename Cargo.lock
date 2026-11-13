@@ -2899,7 +2899,7 @@ dependencies = [
 
 [[package]]
 name = "motion-bench"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "criterion",
  "libm",
@@ -2914,14 +2914,14 @@ dependencies = [
 
 [[package]]
 name = "motion-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "motion-rs",
 ]
 
 [[package]]
 name = "motion-content"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bytemuck",
  "cosmic-text",
@@ -2948,7 +2948,7 @@ dependencies = [
 
 [[package]]
 name = "motion-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kurbo",
  "libm",
@@ -2961,7 +2961,7 @@ dependencies = [
 
 [[package]]
 name = "motion-encode"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "color_quant",
  "gif",
@@ -2982,14 +2982,14 @@ dependencies = [
 
 [[package]]
 name = "motion-ffmpeg"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bindgen",
 ]
 
 [[package]]
 name = "motion-formula"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "fontdb 0.24.0",
  "kurbo",
@@ -3008,7 +3008,7 @@ dependencies = [
 
 [[package]]
 name = "motion-gallery"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "clap",
  "image",
@@ -3021,7 +3021,7 @@ dependencies = [
 
 [[package]]
 name = "motion-render"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bytemuck",
  "half",
@@ -3039,7 +3039,7 @@ dependencies = [
 
 [[package]]
 name = "motion-rs"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "clap",
  "image",
@@ -3060,7 +3060,7 @@ dependencies = [
 
 [[package]]
 name = "motion-scene"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "motion-content",
  "motion-core",
@@ -3076,7 +3076,7 @@ dependencies = [
 
 [[package]]
 name = "motion-studio"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cpal",
  "eframe",

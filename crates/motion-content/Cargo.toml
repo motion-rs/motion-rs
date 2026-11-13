@@ -24,7 +24,7 @@ serde = ["dep:serde"]
 schema = ["serde", "dep:schemars"]
 
 [dependencies]
-motion-core = { version = "0.1.0", path = "../motion-core" }
+motion-core = { version = "0.2.0", path = "../motion-core" }
 libm = "0.2"
 half = "2"
 kurbo = "0.13"

@@ -17,9 +17,9 @@ ffmpeg = ["audio", "dep:motion-ffmpeg"]
 gpu = ["motion-render/gpu"]
 
 [dependencies]
-motion-core = { version = "0.1.0", path = "../motion-core" }
-motion-render = { version = "0.1.0", path = "../motion-render", default-features = false }
-motion-ffmpeg = { version = "0.1.0", path = "../motion-ffmpeg", optional = true }
+motion-core = { version = "0.2.0", path = "../motion-core" }
+motion-render = { version = "0.2.0", path = "../motion-render", default-features = false }
+motion-ffmpeg = { version = "0.2.0", path = "../motion-ffmpeg", optional = true }
 libm = "0.2"
 serde_json = "1"
 tempfile = "3"

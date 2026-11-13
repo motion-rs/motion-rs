@@ -15,7 +15,7 @@ default = []
 gpu = ["dep:bytemuck", "dep:pollster", "dep:wgpu"]
 
 [dependencies]
-motion-core = { version = "0.1.0", path = "../motion-core" }
+motion-core = { version = "0.2.0", path = "../motion-core" }
 libm = "0.2"
 half = "2"
 tempfile = "3"
