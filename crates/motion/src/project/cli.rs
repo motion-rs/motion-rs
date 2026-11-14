@@ -10,6 +10,8 @@ use crate::{ExportOptions, Result, Time};
 use clap::{CommandFactory, FromArgMatches, Parser, error::ErrorKind};
 use std::path::PathBuf;
 
+mod progress;
+
 /// A CLI command's completed result, never a partial file notification.
 #[derive(Debug)]
 pub enum ProjectOutcome {
@@ -189,11 +191,10 @@ impl Project {
         request.range = range;
         request.overwrite = output.overwrite;
         request = request.codec(codec);
-        Ok(ProjectOutcome::Exported(crate::export(
-            &timeline,
-            &request,
-            &crate::encode::NoProgress,
-        )?))
+        let progress = progress::CliProgress::stderr();
+        let result = crate::export(&timeline, &request, &progress);
+        progress.finish()?;
+        Ok(ProjectOutcome::Exported(result?))
     }
 
     /// CLI usage without constructing timelines, loading fonts or probing devices.

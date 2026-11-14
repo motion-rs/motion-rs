@@ -142,7 +142,12 @@ above are accepted but undocumented there.
 - Both commit a staged file; see the transaction rules in
   [reliability](design/reliability.md) and [rendering](design/rendering.md).
 - Success prints the destination path on stdout (the still path, or
-  `ExportReport::path`). Encoder libraries may also log to stderr.
+  `ExportReport::path`). Exports report preparing, rendering, finalizing and
+  completed phases on stderr, with rendered frame counts and percentages.
+  Interactive terminals update one progress line; redirected stderr receives
+  newline-separated updates at approximately ten-percentage-point intervals.
+  Rendering at 100% is not a committed output: finalization must still succeed.
+  Encoder libraries may also log to stderr.
 - Stills render with the project render options (transparent unless the project
   sets a background). Exports default the background to black when none is set.
 
