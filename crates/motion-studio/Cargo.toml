@@ -26,7 +26,7 @@ cpal = { version = "0.16", default-features = false }
 rtrb = "0.3"
 eframe = { version = "0.37.0", default-features = false, features = ["clipboard", "default_fonts", "wgpu", "wayland", "x11"] }
 egui-phosphor = "0.14"
-rfd = "0.15"
+rfd = "0.17"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["float_roundtrip"] }
 tempfile = "3"
