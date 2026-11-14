@@ -7,6 +7,8 @@ use eframe::egui::{self, Color32, RichText};
 use egui_phosphor::regular as icons;
 use std::sync::Arc;
 
+mod stats;
+
 pub(crate) struct Viewer {
     pub zoom: Option<f32>,
     pub pan: egui::Vec2,
@@ -236,11 +238,7 @@ impl crate::app::StudioApp {
             }
             2 => {
                 let mut seek = None;
-                if ui
-                    .button(egui_phosphor::regular::TRASH)
-                    .on_hover_text("Clear diagnostics")
-                    .clicked()
-                {
+                if inspector_action(ui, icons::TRASH, "Clear diagnostics") {
                     self.observations.diagnostics.clear();
                 }
                 if self.observations.diagnostics.is_empty() {
@@ -259,144 +257,19 @@ impl crate::app::StudioApp {
                     self.inspection.viewer.diagnostic_focus = Some(message);
                 }
             }
-            _ => {
-                let rate = f64::from(self.clock.rate.numerator())
-                    / f64::from(self.clock.rate.denominator());
-                let elapsed = self
-                    .observations
-                    .presentation_times
-                    .front()
-                    .and_then(|first| {
-                        self.observations
-                            .presentation_times
-                            .back()?
-                            .checked_duration_since(*first)
-                    })
-                    .filter(|elapsed| !elapsed.is_zero());
-                theme::section(ui, "Playback");
-                stat(
-                    ui,
-                    "Rate",
-                    &elapsed.map_or_else(
-                        || format!("-- / {rate:.2} fps"),
-                        |elapsed| {
-                            format!(
-                                "{:.1} / {rate:.2} fps",
-                                (self.observations.presentation_times.len() - 1) as f64
-                                    / elapsed.as_secs_f64()
-                            )
-                        },
-                    ),
-                );
-                stat(
-                    ui,
-                    "Skipped frames",
-                    &self.observations.dropped_frames.to_string(),
-                );
-                theme::section(ui, "Preview worker");
-                stat(
-                    ui,
-                    "Total",
-                    &format!("{:.2} ms", self.observations.elapsed.as_secs_f64() * 1000.0),
-                );
-                if let Some(timings) = self.observations.timings {
-                    for (stage, time) in [
-                        ("Evaluate", timings.evaluation),
-                        ("Compile", timings.compile),
-                        ("Coverage", timings.coverage),
-                        ("Plan (host)", timings.plan),
-                        ("Command encode (host)", timings.encode),
-                        ("CPU composition", timings.composition),
-                        (
-                            if timings.fused_output {
-                                "CPU compose + output"
-                            } else {
-                                "Output conversion"
-                            },
-                            timings.output,
-                        ),
-                        ("Completion/readback (host)", timings.readback),
-                        ("Upload enqueue", timings.upload),
-                        ("Native submit (CPU wall)", timings.submission),
-                    ] {
-                        stat(ui, stage, &format!("{:.2} ms", time.as_secs_f64() * 1000.0));
-                    }
-                    #[cfg(feature = "gpu")]
-                    if let Some(gpu) = timings.gpu {
-                        theme::section(ui, "GPU timestamps");
-                        for (stage, time) in [
-                            ("Composition", gpu.composition),
-                            ("Output", gpu.output),
-                            ("Readback copy", gpu.readback_copy),
-                            ("Flatten", gpu.coverage[0]),
-                            ("Count", gpu.coverage[1]),
-                            ("Prefix", gpu.coverage[2]),
-                            ("Scatter", gpu.coverage[3]),
-                            ("Carry", gpu.coverage[4]),
-                            ("Coverage", gpu.coverage[5]),
-                        ] {
-                            let value = match time.duration {
-                                Some(duration) => {
-                                    format!("{:.2} ms", duration.as_secs_f64() * 1000.0)
-                                }
-                                None => format!("{:?}", time.status),
-                            };
-                            stat(ui, stage, &value);
-                        }
-                        stat(
-                            ui,
-                            "Query buffers",
-                            &format!("{} bytes", gpu.instrumentation_bytes),
-                        );
-                    } else {
-                        stat(ui, "GPU timestamps", "Unavailable");
-                    }
-                }
-                theme::section(ui, "Cache");
-                stat(
-                    ui,
-                    "Hits",
-                    &format!(
-                        "{} / {}",
-                        self.observations.cache_hits, self.observations.preview_count
-                    ),
-                );
-                stat(
-                    ui,
-                    "Size",
-                    &format!("{:.1} MiB", self.cached_bytes as f64 / 1048576.0),
-                );
-                if let Some(stats) = self.observations.frame_stats {
-                    theme::section(ui, "Frame cost (work / peak)");
-                    for (stage, work, peak) in [
-                        (
-                            "Prepare",
-                            stats.preparation.work,
-                            stats.preparation.peak_bytes,
-                        ),
-                        ("Composite", stats.linear.work, stats.linear.peak_bytes),
-                        ("Output", stats.output.work, stats.output.peak_bytes),
-                    ] {
-                        stat(
-                            ui,
-                            stage,
-                            &format!("{work} / {:.1} MiB", peak as f64 / 1048576.0),
-                        );
-                    }
-                }
-            }
+            _ => self.stats_panel(ui),
         }
     }
 }
 
-/// One label/value row with the value right-aligned in monospace.
-fn stat(ui: &mut egui::Ui, name: &str, value: &str) {
+fn inspector_action(ui: &mut egui::Ui, icon: &str, label: &str) -> bool {
     ui.horizontal(|ui| {
-        ui.add(egui::Label::new(RichText::new(name).weak()).truncate());
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            ui.add(egui::Label::new(RichText::new(value).monospace()).truncate());
-        });
-    });
+            theme::icon_toggle(ui, icon, label, false)
+        })
+        .inner
+    })
+    .inner
 }
 
 impl crate::app::StudioApp {
@@ -757,6 +630,46 @@ impl crate::app::StudioApp {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn inspector_actions_stay_at_the_top_right() {
+        for width in [240.0, 340.0] {
+            for (icon, label) in [
+                (icons::COPY, "Copy stats to clipboard"),
+                (icons::TRASH, "Clear diagnostics"),
+            ] {
+                let context = egui::Context::default();
+                let mut output = context.run_ui(
+                    egui::RawInput {
+                        screen_rect: Some(egui::Rect::from_min_size(
+                            egui::Pos2::ZERO,
+                            egui::vec2(width, 800.0),
+                        )),
+                        ..Default::default()
+                    },
+                    |ui| {
+                        egui::CentralPanel::default().show(ui, |ui| {
+                            assert!(!inspector_action(ui, icon, label));
+                        });
+                    },
+                );
+                output.textures_delta.clear();
+                let bounds = output
+                    .shapes
+                    .iter()
+                    .find_map(|shape| match &shape.shape {
+                        egui::Shape::Text(text) if text.galley.text() == icon => {
+                            Some(text.visual_bounding_rect())
+                        }
+                        _ => None,
+                    })
+                    .unwrap();
+                assert!(bounds.left() > width - 40.0);
+                assert!(bounds.right() <= width);
+                assert!(bounds.bottom() < 50.0);
+            }
+        }
+    }
 
     #[test]
     fn fit_zoom_and_pan_keep_pixel_coordinates_stable() {

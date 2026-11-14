@@ -5,6 +5,144 @@ use motion_core::{Node, Size};
 use motion_render::Composition;
 
 #[test]
+fn stats_copy_button_exports_current_sections_and_values() -> motion_core::Result<()> {
+    let context = egui::Context::default();
+    let creation = eframe::CreationContext::_new_kittest(context.clone());
+    let scene = StudioScene::from_render(
+        "Stats copy",
+        Composition::new(
+            16,
+            8,
+            motion_render::FrameClock::new(motion_core::fps!(30), 90),
+        ),
+        Size::new(16.0, 8.0),
+        |_| Node::empty(),
+    )
+    .unwrap();
+    let clock = StudioClock::new(&scene.composition)?;
+    let mut app = StudioApp::with_persistence(&creation, scene, clock, false)?;
+    app.inspection.inspector_tab = 3;
+    for populated in [false, true] {
+        if populated {
+            let first = Instant::now();
+            app.observations.presentation_times =
+                [first, first + Duration::from_millis(100)].into();
+            app.observations.dropped_frames = 7;
+            app.observations.elapsed = Duration::from_millis(12);
+            app.observations.cache_hits = 2;
+            app.observations.preview_count = 3;
+            app.cached_bytes = 1048576;
+            let timings = motion_render::composition::FrameTimings {
+                evaluation: Duration::from_millis(1),
+                output: Duration::from_millis(5),
+                fused_output: true,
+                ..Default::default()
+            };
+            #[cfg(feature = "gpu")]
+            let timings = motion_render::composition::FrameTimings {
+                gpu: Some(motion_render::gpu::GpuTimings {
+                    composition: motion_render::gpu::GpuTimestamp {
+                        duration: Some(Duration::from_millis(2)),
+                        ..Default::default()
+                    },
+                    instrumentation_bytes: 96,
+                    ..Default::default()
+                }),
+                ..timings
+            };
+            app.observations.timings = Some(timings);
+            app.observations.frame_stats = Some(motion_render::FrameStats {
+                preparation: motion_render::PreparationStats {
+                    peak_bytes: 2097152,
+                    work: 42,
+                    ..Default::default()
+                },
+                ..Default::default()
+            });
+        }
+        let mut render = |events| {
+            let mut output = context.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(340.0, 1200.0),
+                    )),
+                    events,
+                    ..Default::default()
+                },
+                |ui| {
+                    egui::CentralPanel::default().show(ui, |ui| app.inspector(ui));
+                },
+            );
+            output.textures_delta.clear();
+            output
+        };
+        render(Vec::new());
+        let output = render(Vec::new());
+        assert!(output.platform_output.commands.is_empty());
+        let copy_button = output
+            .shapes
+            .iter()
+            .find_map(|shape| match &shape.shape {
+                egui::Shape::Text(text) if text.galley.text() == egui_phosphor::regular::COPY => {
+                    Some(text.visual_bounding_rect())
+                }
+                _ => None,
+            })
+            .unwrap();
+        let pointer = copy_button.center();
+        assert!(copy_button.bottom() < 50.0);
+        assert!(copy_button.left() > 300.0);
+        render(vec![
+            egui::Event::PointerMoved(pointer),
+            egui::Event::PointerButton {
+                pos: pointer,
+                button: egui::PointerButton::Primary,
+                pressed: true,
+                modifiers: egui::Modifiers::NONE,
+            },
+        ]);
+        let output = render(vec![egui::Event::PointerButton {
+            pos: pointer,
+            button: egui::PointerButton::Primary,
+            pressed: false,
+            modifiers: egui::Modifiers::NONE,
+        }]);
+        let [egui::OutputCommand::CopyText(text)] = output.platform_output.commands.as_slice()
+        else {
+            panic!("Expected exactly one clipboard text command");
+        };
+        if populated {
+            for expected in [
+                "Playback\nRate: 10.0 / 30.00 fps\nSkipped frames: 7\n",
+                "Preview worker\nTotal: 12.00 ms\nEvaluate: 1.00 ms\n",
+                "CPU compose + output: 5.00 ms\n",
+                "Native submit (CPU wall): 0.00 ms\n",
+                "Cache\nHits: 2 / 3\nSize: 1.0 MiB\n",
+                "Frame cost (work / peak)\nPrepare: 42 / 2.0 MiB\n",
+                "Composite: 0 / 0.0 MiB\nOutput: 0 / 0.0 MiB\n",
+            ] {
+                assert!(text.contains(expected), "{text}");
+            }
+            #[cfg(feature = "gpu")]
+            {
+                assert!(text.contains("GPU timestamps\nComposition: 2.00 ms\n"));
+                assert!(text.contains("Query buffers: 96 bytes\n"));
+            }
+            assert!(!text.contains("Output conversion:"));
+        } else {
+            assert_eq!(
+                text,
+                "Playback\nRate: -- / 30.00 fps\nSkipped frames: 0\n\
+                 \nPreview worker\nTotal: 0.00 ms\n\
+                 \nCache\nHits: 0 / 0\nSize: 0.0 MiB\n"
+            );
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn loop_shortcut_preserves_transport_and_respects_keyboard_focus() -> motion_core::Result<()> {
     let context = egui::Context::default();
     let creation = eframe::CreationContext::_new_kittest(context.clone());

@@ -203,7 +203,10 @@ restarts preparation and is not guaranteed gapless.
 
 The Inspector tabs (Export, Node, Diagnostics, Stats) are four equal-width icon
 buttons with tooltips. Stats groups values into Playback, Preview worker, Cache and
-Frame cost sections. The right Inspector queues H.264, H.265, VP9 with alpha, ProRes 4444, PNG sequences,
+Frame cost sections. The icon-only Copy button at the top right of Stats copies all currently shown
+sections and values, including their units and available GPU timestamps, as plain text
+to the clipboard. Diagnostics also places its Clear diagnostics icon at the top right.
+The right Inspector queues H.264, H.265, VP9 with alpha, ProRes 4444, PNG sequences,
 GIF, and individual PNG stills. Presets include 1080p H.264, transparent ProRes and
 640x360 GIF. GIF/PNG sequences are explicitly silent; GIF uses the timeline's rate
 up to 100 fps, otherwise 30 fps. At most 16 pending tasks run serially, each with a
