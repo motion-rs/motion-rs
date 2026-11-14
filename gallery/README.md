@@ -80,7 +80,7 @@ in catalog and CLI listing order, followed by narrative films and optional Harmo
 | Filter Atlas (rendering reference) | Seventeen pages compare unfiltered and processed specimens: blur, shadow, glow, color adjustment, Bloom, halation, anamorphic streaks, distortion, dispersion, vignette, bokeh, radial blur, flare, relighting, grain, directional blur and filter order. The same entry accepts `mode: "json"`. | [native](src/demos/filter_atlas.rs), [JSON](assets/filter-atlas.json), [loader](src/demos/json_atlas.rs) |
 | Compositing Atlas (rendering reference) | Twenty-six pages cover all seventeen public blend modes, alpha/luminance and inverted masks, coverage/geometric clips, group opacity, sibling order and filter isolation. The same catalog entry accepts `mode: "json"` for a bundled document using `defs` / `use`, parameters and scene-clock bindings. | [native](src/demos/compositing_atlas.rs), [JSON](assets/compositing-atlas.json), [loader](src/demos/json_atlas.rs) |
 | Vector Atlas (content reference) | Sixteen native pages show arc-length trim, dashes, caps, joins, winding rules, linear/radial/sweep gradients, extension and interpolation, native SVG, morphing, vector writing, path booleans, mesh gradients and planar perspective. The same entry accepts `mode: "json"` for thirteen declarative pages covering trim through vector writing. | [native](src/demos/vector_atlas.rs), [JSON](assets/vector-atlas.json), [loader](src/demos/json_atlas.rs) |
-| Ink Features (content reference) | Twenty-one pages isolate pressure, nibs, five bristles, caps, gradient paint, depletion, dry fibers, grain, paper, intersection build-up, rim darkening, wobble, boil, wetness, recorded input, pen lifts, erasing, pigment mixing and height-based relighting. | [ink_features.rs](src/demos/ink_features.rs) |
+| Ink Features (content reference) | Twenty-one pages isolate pressure, nibs, five bristles, caps, gradient paint, depletion, dry fibers, grain, paper, intersection build-up, rim darkening, wobble, boil, wetness, recorded input, pen lifts, erasing, pigment mixing and height-based relighting. The same entry accepts `mode: "json"` for all 21 pages. | [native](src/demos/ink_features.rs), [JSON](assets/ink-features.json), [loader](src/demos/json_atlas.rs) |
 | Noise Atlas (procedural reference) | Twelve pages sample value, Perlin, Simplex, 3D Perlin slices, Worley distances and edges, five-octave fBm, turbulence, ridged noise, domain warp, analytic gradients and curl fields. | [noise_atlas.rs](src/demos/noise_atlas.rs) |
 | Audio Atlas (audio reference) | Twenty-one audible pages cover oscillators, seeded noise, ADSR, chirp, drums, EQ, dynamics, delay, reverb, ducking, pan, stereo width, a master limiter and eleven sound presets. Dry and processed PCM drive the waveforms. | [audio_atlas.rs](src/demos/audio_atlas.rs) |
 | Typography Atlas (text reference) | Eighteen Chinese and English studies show rich spans, weights, hierarchy, wrapping, line height, four alignments, glyph outlines, gradients, grapheme/word/line reveal, per-part motion, vector handwriting and stable partial visibility. | [typography_atlas.rs](src/demos/typography_atlas.rs) |
@@ -89,7 +89,7 @@ in catalog and CLI listing order, followed by narrative films and optional Harmo
 | The Harbor Line (infographic) | A flat data-journalism explainer about a fictional harbour ferry: a scale-mapped bar chart grows year by year, an axis-labelled line chart traces falling commute times, keyframed counters tick up in a `Row` of stat cards and a timed caption track narrates underneath. Diagram charts and scales, `Keyframes`, `Row`/`Column` layout and captions. | [data_story.rs](src/demos/data_story.rs) |
 | Motion (branding) | A Motion ident: a circle, square and triangle spring onto a construction grid and morph into a three-stroke SVG M monogram while a trimmed orbit draws around them, then a burst reveals the lowercase `motion` wordmark and MADE TO MOVE tagline. Grid, chrome, burst and lockup are a `motion::declarative` JSON document composited with Rust-built morphs. | [logo_sting.rs](src/demos/logo_sting.rs) |
 | Room to Move (magazine) | An editorial issue: a serif cover with spring-settled letters, a start-aligned two-column spread with 16-unit body text, drop cap and pull quote, and a full-bleed closing page. Grapheme animation, paragraph layout, masks and directional wipes. | [type_in_motion.rs](src/demos/type_in_motion.rs) |
-| The Long Way Home (nostalgia) | A brush-and-ink landscape on aged paper with a typewriter caption, rust stamp, orange date mark, dust, scratches, light leak and flickering grain. Pressure strokes, ink material, camera drift and per-frame seeded film damage. | [ink_journey.rs](src/demos/ink_journey.rs) |
+| The Long Way Home (nostalgia) | A brush-and-ink landscape on aged paper with a typewriter caption, rust stamp, orange date mark, dust, scratches, light leak and flickering grain. Pressure strokes, ink material, camera drift and per-frame seeded film damage. The same entry accepts `mode: "json"`; birds use bounded sampled wings, while dust, scratches, hairs and exposure use a separate deterministic expression-based sequence rather than the native keyed random stream. | [native](src/demos/ink_journey.rs), [JSON](assets/ink-journey.json), [loader](src/demos/json_atlas.rs) |
 | Signal Garden (sci-fi audio) | An instrument display wired to a live mix: synthesized kick, hats, bass and lead are routed through buses with sidechain ducking, delay/reverb, pan/width and a limiting master. FFT bands drive the radial spectrum and Plexus constellations, the measured duck gain makes the garden pump with the kick, and a motion-blurred radar sweep and bus meters read back the mix. | [signal_garden.rs](src/demos/signal_garden.rs) |
 | Harmonics (`formula`) | An equation writes itself and morphs as a waveform doubles frequency. Native Typst vectors, semantic matching and function geometry. | [harmonics.rs](src/demos/harmonics.rs) |
 
@@ -98,8 +98,28 @@ All use a 960x540 design canvas and exact 30 fps timelines. Parameters
 accept 1..=60 seconds, a deterministic seed and a mark density of 4..=128.
 The shared `mode` parameter accepts `default` or `json` and defaults
 to `default`. Demos without alternate implementations accept and ignore it.
-Animation, Compositing, Filter, Vector and Particle Atlases, plus Particle Features, use their native Rust implementations
+Animation, Compositing, Filter, Vector and Particle Atlases, plus Particle Features,
+Ink Features and Ink Journey, use their native Rust implementations
 in `default` mode, while `json` loads the bundled documents.
+
+```sh
+cargo run --release -p motion-gallery --features studio,gpu --bin motion-gallery -- studio --demo ink-features --params '{"seconds":60,"mode":"json"}'
+cargo run --release -p motion-gallery --features studio,gpu --bin motion-gallery -- studio --demo ink-journey --params '{"mode":"json"}'
+```
+
+The two Ink documents also load directly through `motion-cli`. Their `fonts`
+parameter defaults to an empty list; provide explicit local font paths for text.
+For example, from a POSIX shell at the workspace root, this uses the test fixture
+font for verification, not a production typewriter face:
+
+```sh
+cargo run -p motion-cli -- validate gallery/assets/ink-features.json --params "{\"fonts\":[\"$PWD/tests/fixtures/fonts/NotoSans-Regular.ttf\"]}"
+```
+
+Gallery mode uses its configured fonts and derives `ink_seed` from the shared
+64-bit `seed`: Ink Features XORs the low and high halves, while Ink Journey uses
+the low half, matching the native recipes. Direct JSON loading exposes `ink_seed`
+separately; use it for brush materials and retain `seed` for full-width film grain.
 `DemoMetadata.features` describes combinations; features may recur across films.
 Optional entries are absent when their feature is disabled. Listing initializes
 neither formulas, audio, fonts nor GPU devices.

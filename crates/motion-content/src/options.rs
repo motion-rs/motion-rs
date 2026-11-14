@@ -1,4 +1,54 @@
-//! Plain content policies available without optional text or particle preparation.
+//! Plain content policies available without optional content preparation.
+
+/// Per-sample orientation of a brush nib.
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    feature = "serde",
+    serde(rename_all = "snake_case", deny_unknown_fields)
+)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub enum NibMode {
+    /// Fixed clockwise radians.
+    Fixed(f64),
+    /// Tangent angle plus a clockwise offset in radians.
+    FollowPath(f64),
+    /// Recorded nib azimuth, interpolated over the input samples.
+    Tilt,
+}
+
+/// Endpoint pressure treatment of a variable-width brush, independent of uniform line caps.
+///
+/// `BrushCap` shapes the nib imprint and pressure at brush endpoints, while core's
+/// `LineCap` selects the geometry of a uniform-width outline. `Round` resembles
+/// `LineCap::Round`, `Flat` resembles `Butt`, and `Tapered` has no uniform-cap counterpart.
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    feature = "serde",
+    serde(rename_all = "snake_case", deny_unknown_fields)
+)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub enum BrushCap {
+    /// Full rounded nib imprint.
+    Round,
+    /// Clips the nib at the endpoint tangent plane.
+    Flat,
+    /// Smoothly tapers over the specified positive arc length.
+    Tapered(f64),
+}
+
+/// Color mixing policy, independent of renderer blend modes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub enum PigmentMix {
+    /// Linear-light interpolation.
+    Linear,
+    /// Six-band infinite-thickness Kubelka-Munk approximation, not calibrated pigments.
+    KubelkaMunk,
+}
 
 /// Paragraph alignment, with start/end resolved by the paragraph direction.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]

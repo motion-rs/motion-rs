@@ -847,6 +847,622 @@
         }
       ]
     },
+    "BristlesSpec": {
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "description": "Bounded seeded bristles sharing one stroke.",
+          "properties": {
+            "count": {
+              "anyOf": [
+                {
+                  "description": "Number of bristles, in 1..=64.",
+                  "format": "uint",
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "jitter": {
+              "anyOf": [
+                {
+                  "description": "Jitter strength in 0..=1.",
+                  "format": "double",
+                  "type": "number"
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "seed": {
+              "anyOf": [
+                {
+                  "description": "Explicit random seed.",
+                  "format": "uint32",
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "spread": {
+              "anyOf": [
+                {
+                  "description": "Offset spread in design units, in 0..=512.",
+                  "format": "double",
+                  "type": "number"
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            }
+          },
+          "required": [
+            "count",
+            "spread",
+            "jitter",
+            "seed"
+          ],
+          "type": "object"
+        },
+        {
+          "$ref": "#/$defs/ValueRef"
+        }
+      ]
+    },
+    "BrushCap": {
+      "anyOf": [
+        {
+          "description": "Endpoint pressure treatment of a variable-width brush, independent of uniform line caps.",
+          "oneOf": [
+            {
+              "const": "round",
+              "description": "Full rounded nib imprint.",
+              "type": "string"
+            },
+            {
+              "const": "flat",
+              "description": "Clips the nib at the endpoint tangent plane.",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "description": "Smoothly tapers over the specified positive arc length.",
+              "properties": {
+                "tapered": {
+                  "anyOf": [
+                    {
+                      "format": "double",
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/ValueRef"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "tapered"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        {
+          "$ref": "#/$defs/ValueRef"
+        }
+      ]
+    },
+    "BrushStrokeSpec": {
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "description": "A pressure-sensitive stroke with exactly one of `path`, `points` or `samples`.",
+          "properties": {
+            "bristles": {
+              "anyOf": [
+                {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/BristlesSpec"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Seeded offset bristles."
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "caps": {
+              "anyOf": [
+                {
+                  "description": "Start and end endpoint treatment; defaults to round.",
+                  "items": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/BrushCap"
+                      },
+                      {
+                        "$ref": "#/$defs/ValueRef"
+                      }
+                    ]
+                  },
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "type": [
+                    "array",
+                    "null"
+                  ]
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "ink": {
+              "anyOf": [
+                {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/InkSpec"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Deterministic material; absent means an ordinary geometric brush."
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "ink_load": {
+              "anyOf": [
+                {
+                  "description": "Start and end ink supply in 0..=1.",
+                  "items": {
+                    "anyOf": [
+                      {
+                        "format": "double",
+                        "type": "number"
+                      },
+                      {
+                        "$ref": "#/$defs/ValueRef"
+                      }
+                    ]
+                  },
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "type": [
+                    "array",
+                    "null"
+                  ]
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "material_work_limit": {
+              "anyOf": [
+                {
+                  "description": "Material distance-evaluation allowance; defaults to 32 million.",
+                  "format": "uint64",
+                  "minimum": 0,
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "nib_aspect": {
+              "anyOf": [
+                {
+                  "description": "Elliptical minor/major nib ratio, in (0,1]; defaults to one.",
+                  "format": "double",
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "nib_mode": {
+              "anyOf": [
+                {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/NibMode"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Fixed or tangent-following clockwise degrees, or recorded tilt."
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "paint": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Paint",
+                  "description": "Stroke color or gradient, applied before material attenuation."
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "path": {
+              "anyOf": [
+                {
+                  "description": "Fixed SVG path data.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "points": {
+              "anyOf": [
+                {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/PointsSpec"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Fixed or compile-time sampled polyline points."
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "pressure": {
+              "anyOf": [
+                {
+                  "description": "Start, middle and end pressure in 0..=4; defaults to one.",
+                  "items": {
+                    "anyOf": [
+                      {
+                        "format": "double",
+                        "type": "number"
+                      },
+                      {
+                        "$ref": "#/$defs/ValueRef"
+                      }
+                    ]
+                  },
+                  "maxItems": 3,
+                  "minItems": 3,
+                  "type": [
+                    "array",
+                    "null"
+                  ]
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "pressure_curve": {
+              "anyOf": [
+                {
+                  "description": "Ordered progress/pressure pairs spanning 0..=1; at most 512.",
+                  "items": {
+                    "anyOf": [
+                      {
+                        "maxItems": 2,
+                        "minItems": 2,
+                        "prefixItems": [
+                          {
+                            "format": "double",
+                            "type": "number"
+                          },
+                          {
+                            "format": "double",
+                            "type": "number"
+                          }
+                        ],
+                        "type": "array"
+                      },
+                      {
+                        "$ref": "#/$defs/ValueRef"
+                      }
+                    ]
+                  },
+                  "type": "array"
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "pressure_from": {
+              "anyOf": [
+                {
+                  "description": "Analytic pressure with `t` interpreted as normalized arc length, not scene time.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "sample_limit": {
+              "anyOf": [
+                {
+                  "description": "Geometry sampling intervals in 2..=512; defaults to 256.",
+                  "format": "uint",
+                  "minimum": 0,
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "samples": {
+              "anyOf": [
+                {
+                  "description": "Recorded input, with 2..=512 strictly increasing timestamps starting at zero.",
+                  "items": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/InputSampleSpec"
+                      },
+                      {
+                        "$ref": "#/$defs/ValueRef"
+                      }
+                    ]
+                  },
+                  "type": "array"
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "speed_response": {
+              "anyOf": [
+                {
+                  "description": "Pressure response to speed, in 0..=1.",
+                  "format": "double",
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "timing": {
+              "anyOf": [
+                {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/BrushTimingSpec"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Moving duration and pen-up pauses for `write_time`."
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "wetness": {
+              "anyOf": [
+                {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/WetnessSpec"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Analytic wash expansion from explicit age, not playback history."
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "width": {
+              "anyOf": [
+                {
+                  "description": "Nib width in design units, in 0..=512.",
+                  "format": "double",
+                  "type": "number"
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "wobble": {
+              "anyOf": [
+                {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/WobbleSpec"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Seeded path displacement, optionally changing every two explicit frames."
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "write": {
+              "anyOf": [
+                {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/Animated_double"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Arc-length reveal in 0..=1; mutually exclusive with `write_time`."
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "write_time": {
+              "anyOf": [
+                {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/Animated_double"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Explicit nonnegative reveal seconds, using recording or `timing`."
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            }
+          },
+          "required": [
+            "width",
+            "paint"
+          ],
+          "type": "object"
+        },
+        {
+          "$ref": "#/$defs/ValueRef"
+        }
+      ]
+    },
+    "BrushTimingSpec": {
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "description": "Stateless arc timing with pauses between subpaths.",
+          "properties": {
+            "curve": {
+              "anyOf": [
+                {
+                  "default": [],
+                  "description": "Monotone time/progress pairs spanning (0,0)..=(1,1); linear when omitted.",
+                  "items": {
+                    "anyOf": [
+                      {
+                        "maxItems": 2,
+                        "minItems": 2,
+                        "prefixItems": [
+                          {
+                            "format": "double",
+                            "type": "number"
+                          },
+                          {
+                            "format": "double",
+                            "type": "number"
+                          }
+                        ],
+                        "type": "array"
+                      },
+                      {
+                        "$ref": "#/$defs/ValueRef"
+                      }
+                    ]
+                  },
+                  "type": "array"
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "duration": {
+              "anyOf": [
+                {
+                  "description": "Positive moving seconds, excluding pen-up pauses.",
+                  "format": "double",
+                  "type": "number"
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "lift_pause": {
+              "anyOf": [
+                {
+                  "default": 0.0,
+                  "description": "Nonnegative pause seconds between subpaths.",
+                  "format": "double",
+                  "type": "number"
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            }
+          },
+          "required": [
+            "duration"
+          ],
+          "type": "object"
+        },
+        {
+          "$ref": "#/$defs/ValueRef"
+        }
+      ]
+    },
     "BurstShape": {
       "anyOf": [
         {
@@ -3225,6 +3841,24 @@
                 }
               ]
             },
+            "brush_stroke": {
+              "anyOf": [
+                {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/BrushStrokeSpec"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Pressure-sensitive brush content."
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
             "callout": {
               "anyOf": [
                 {
@@ -3451,6 +4085,24 @@
                     }
                   ],
                   "description": "Image content."
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "ink_fill": {
+              "anyOf": [
+                {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/InkFillSpec"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Even-odd ink fill content."
                 },
                 {
                   "$ref": "#/$defs/ValueRef"
@@ -4798,6 +5450,24 @@
                     {
                       "additionalProperties": false,
                       "properties": {
+                        "frame": {
+                          "anyOf": [
+                            {
+                              "anyOf": [
+                                {
+                                  "$ref": "#/$defs/Animated_double"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "description": "Optional explicit frame number, XORed with the seed; in 0..=u32::MAX."
+                            },
+                            {
+                              "$ref": "#/$defs/ValueRef"
+                            }
+                          ]
+                        },
                         "seed": {
                           "anyOf": [
                             {
@@ -5526,6 +6196,348 @@
               "type": "string"
             }
           ]
+        },
+        {
+          "$ref": "#/$defs/ValueRef"
+        }
+      ]
+    },
+    "InkFillSpec": {
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "description": "An even-odd contour fill with a bounded deterministic ink material.",
+          "properties": {
+            "ink": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/InkSpec",
+                  "description": "Deterministic ink properties."
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "paint": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Paint",
+                  "description": "Color or gradient before material attenuation."
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "path": {
+              "anyOf": [
+                {
+                  "description": "SVG path data.",
+                  "type": "string"
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            }
+          },
+          "required": [
+            "path",
+            "paint",
+            "ink"
+          ],
+          "type": "object"
+        },
+        {
+          "$ref": "#/$defs/ValueRef"
+        }
+      ]
+    },
+    "InkSpec": {
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "description": "Seeded local ink properties; omitted fields retain the content engine defaults.",
+          "properties": {
+            "bleed": {
+              "anyOf": [
+                {
+                  "default": 0.0,
+                  "description": "Nonnegative soft wash radius.",
+                  "format": "float",
+                  "type": "number"
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "build_up": {
+              "anyOf": [
+                {
+                  "default": 0.0,
+                  "description": "Added intersection density in 0..=1; stroke-only.",
+                  "format": "double",
+                  "type": "number"
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "dryness": {
+              "anyOf": [
+                {
+                  "default": 0.0,
+                  "description": "Dry coverage strength in 0..=1.",
+                  "format": "float",
+                  "type": "number"
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "edge_anisotropy": {
+              "anyOf": [
+                {
+                  "default": null,
+                  "description": "Directional coordinate ratio in 0.1..=10; defaults to one.",
+                  "format": "double",
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "edge_darkening": {
+              "anyOf": [
+                {
+                  "default": 0.0,
+                  "description": "RGB rim darkening in 0..=1.",
+                  "format": "double",
+                  "type": "number"
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "edge_pooling": {
+              "anyOf": [
+                {
+                  "default": null,
+                  "description": "Inner edge deposit `[strength, width]`.",
+                  "items": {
+                    "anyOf": [
+                      {
+                        "format": "float",
+                        "type": "number"
+                      },
+                      {
+                        "$ref": "#/$defs/ValueRef"
+                      }
+                    ]
+                  },
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "type": [
+                    "array",
+                    "null"
+                  ]
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "edge_roughness": {
+              "anyOf": [
+                {
+                  "default": 0.0,
+                  "description": "Nonnegative geometric edge displacement.",
+                  "format": "float",
+                  "type": "number"
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "fibers": {
+              "anyOf": [
+                {
+                  "default": 0.0,
+                  "description": "Path-following dry fibers in 0..=1; stroke-only.",
+                  "format": "float",
+                  "type": "number"
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "granulation": {
+              "anyOf": [
+                {
+                  "default": 0.0,
+                  "description": "Coverage mottling in 0..=1.",
+                  "format": "float",
+                  "type": "number"
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "height_map": {
+              "anyOf": [
+                {
+                  "default": 0.0,
+                  "description": "Grayscale ridge strength in 0..=16; stroke-only.",
+                  "format": "double",
+                  "type": "number"
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "paper": {
+              "anyOf": [
+                {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/PaperSpec"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "description": "Explicit procedural or inline texture paper."
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "paper_transform": {
+              "anyOf": [
+                {
+                  "default": null,
+                  "description": "Finite local-to-paper affine mapping; identity when omitted.",
+                  "items": {
+                    "anyOf": [
+                      {
+                        "format": "double",
+                        "type": "number"
+                      },
+                      {
+                        "$ref": "#/$defs/ValueRef"
+                      }
+                    ]
+                  },
+                  "maxItems": 6,
+                  "minItems": 6,
+                  "type": [
+                    "array",
+                    "null"
+                  ]
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "seed": {
+              "anyOf": [
+                {
+                  "default": 0,
+                  "description": "Explicit material seed.",
+                  "format": "uint32",
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            }
+          },
+          "type": "object"
+        },
+        {
+          "$ref": "#/$defs/ValueRef"
+        }
+      ]
+    },
+    "InputSampleSpec": {
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "description": "One pen sample; positions, pressure, azimuth and recording time are explicit.",
+          "properties": {
+            "position": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Point",
+                  "description": "Local design-space position."
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "pressure": {
+              "anyOf": [
+                {
+                  "description": "Pressure in 0..=4.",
+                  "format": "double",
+                  "type": "number"
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "tilt": {
+              "anyOf": [
+                {
+                  "description": "Clockwise nib azimuth in degrees.",
+                  "format": "double",
+                  "type": "number"
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "time": {
+              "anyOf": [
+                {
+                  "description": "Recording seconds in 0..=86400.",
+                  "format": "double",
+                  "type": "number"
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            }
+          },
+          "required": [
+            "position",
+            "pressure",
+            "tilt",
+            "time"
+          ],
+          "type": "object"
         },
         {
           "$ref": "#/$defs/ValueRef"
@@ -8760,6 +9772,65 @@
         }
       ]
     },
+    "NibMode": {
+      "anyOf": [
+        {
+          "description": "Per-sample orientation of a brush nib.",
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "description": "Fixed clockwise radians.",
+              "properties": {
+                "fixed": {
+                  "anyOf": [
+                    {
+                      "format": "double",
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/ValueRef"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "fixed"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "description": "Tangent angle plus a clockwise offset in radians.",
+              "properties": {
+                "follow_path": {
+                  "anyOf": [
+                    {
+                      "format": "double",
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/ValueRef"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "follow_path"
+              ],
+              "type": "object"
+            },
+            {
+              "const": "tilt",
+              "description": "Recorded nib azimuth, interpolated over the input samples.",
+              "type": "string"
+            }
+          ]
+        },
+        {
+          "$ref": "#/$defs/ValueRef"
+        }
+      ]
+    },
     "NoiseSpec": {
       "anyOf": [
         {
@@ -9632,9 +10703,28 @@
             },
             {
               "$ref": "#/$defs/GradientSpec"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "pigment": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/PigmentSpec"
+                    },
+                    {
+                      "$ref": "#/$defs/ValueRef"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "pigment"
+              ],
+              "type": "object"
             }
           ],
-          "description": "A fixed or animated color, or a gradient."
+          "description": "A fixed or animated color, a gradient, or ink pigment mixing."
         },
         {
           "$ref": "#/$defs/ValueRef"
@@ -9660,6 +10750,237 @@
               "const": "minus_4_5_db",
               "description": "Equal-power with a 4.5 dB center attenuation.",
               "type": "string"
+            }
+          ]
+        },
+        {
+          "$ref": "#/$defs/ValueRef"
+        }
+      ]
+    },
+    "PaperSpec": {
+      "anyOf": [
+        {
+          "description": "Explicit paper descriptions; neither variant performs implicit IO.",
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "description": "Seeded noise attenuation.",
+              "properties": {
+                "procedural": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "scale": {
+                          "anyOf": [
+                            {
+                              "description": "Positive paper-space cell size.",
+                              "format": "float",
+                              "type": "number"
+                            },
+                            {
+                              "$ref": "#/$defs/ValueRef"
+                            }
+                          ]
+                        },
+                        "seed": {
+                          "anyOf": [
+                            {
+                              "description": "Explicit paper seed.",
+                              "format": "uint32",
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            {
+                              "$ref": "#/$defs/ValueRef"
+                            }
+                          ]
+                        },
+                        "strength": {
+                          "anyOf": [
+                            {
+                              "description": "Coverage attenuation in 0..=1.",
+                              "format": "float",
+                              "type": "number"
+                            },
+                            {
+                              "$ref": "#/$defs/ValueRef"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "seed",
+                        "strength",
+                        "scale"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "$ref": "#/$defs/ValueRef"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "procedural"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "description": "Repeating inline height image using the shared bounded RGBA8 image protocol.",
+              "properties": {
+                "texture": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "absorbency": {
+                          "anyOf": [
+                            {
+                              "description": "Luminance attenuation in 0..=1.",
+                              "format": "double",
+                              "type": "number"
+                            },
+                            {
+                              "$ref": "#/$defs/ValueRef"
+                            }
+                          ]
+                        },
+                        "grain_scale": {
+                          "anyOf": [
+                            {
+                              "description": "Positive paper-space units per texel.",
+                              "format": "double",
+                              "type": "number"
+                            },
+                            {
+                              "$ref": "#/$defs/ValueRef"
+                            }
+                          ]
+                        },
+                        "image": {
+                          "anyOf": [
+                            {
+                              "$ref": "#/$defs/ParticleImageSpec",
+                              "description": "Explicit image pixels, with sides at most 512."
+                            },
+                            {
+                              "$ref": "#/$defs/ValueRef"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "image",
+                        "grain_scale",
+                        "absorbency"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "$ref": "#/$defs/ValueRef"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "texture"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "description": "Seeded RGBA8 height texture generated once during compilation.",
+              "properties": {
+                "noise_texture": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "absorbency": {
+                          "anyOf": [
+                            {
+                              "description": "Luminance attenuation in 0..=1.",
+                              "format": "double",
+                              "type": "number"
+                            },
+                            {
+                              "$ref": "#/$defs/ValueRef"
+                            }
+                          ]
+                        },
+                        "grain_scale": {
+                          "anyOf": [
+                            {
+                              "description": "Positive paper-space units per texel.",
+                              "format": "double",
+                              "type": "number"
+                            },
+                            {
+                              "$ref": "#/$defs/ValueRef"
+                            }
+                          ]
+                        },
+                        "seed": {
+                          "anyOf": [
+                            {
+                              "description": "Explicit integer hash seed.",
+                              "format": "uint32",
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            {
+                              "$ref": "#/$defs/ValueRef"
+                            }
+                          ]
+                        },
+                        "size": {
+                          "anyOf": [
+                            {
+                              "description": "Pixel width and height, each in 1..=512.",
+                              "items": {
+                                "anyOf": [
+                                  {
+                                    "format": "uint32",
+                                    "minimum": 0,
+                                    "type": "integer"
+                                  },
+                                  {
+                                    "$ref": "#/$defs/ValueRef"
+                                  }
+                                ]
+                              },
+                              "maxItems": 2,
+                              "minItems": 2,
+                              "type": "array"
+                            },
+                            {
+                              "$ref": "#/$defs/ValueRef"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "size",
+                        "seed",
+                        "grain_scale",
+                        "absorbency"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "$ref": "#/$defs/ValueRef"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "noise_texture"
+              ],
+              "type": "object"
             }
           ]
         },
@@ -13073,6 +14394,92 @@
           },
           "required": [
             "data"
+          ],
+          "type": "object"
+        },
+        {
+          "$ref": "#/$defs/ValueRef"
+        }
+      ]
+    },
+    "PigmentMix": {
+      "anyOf": [
+        {
+          "description": "Color mixing policy, independent of renderer blend modes.",
+          "oneOf": [
+            {
+              "const": "linear",
+              "description": "Linear-light interpolation.",
+              "type": "string"
+            },
+            {
+              "const": "kubelka_munk",
+              "description": "Six-band infinite-thickness Kubelka-Munk approximation, not calibrated pigments.",
+              "type": "string"
+            }
+          ]
+        },
+        {
+          "$ref": "#/$defs/ValueRef"
+        }
+      ]
+    },
+    "PigmentSpec": {
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "description": "Animated color mixing through the native ink pigment policy.",
+          "properties": {
+            "amount": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Animated_double",
+                  "description": "Mixing amount in 0..=1."
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "first": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Color",
+                  "description": "First pigment."
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "mode": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/PigmentMix",
+                  "description": "Native mixing approximation."
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "second": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Color",
+                  "description": "Second pigment."
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            }
+          },
+          "required": [
+            "first",
+            "second",
+            "amount",
+            "mode"
           ],
           "type": "object"
         },
@@ -17363,6 +18770,134 @@
               "type": "string"
             }
           ]
+        },
+        {
+          "$ref": "#/$defs/ValueRef"
+        }
+      ]
+    },
+    "WetnessSpec": {
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "description": "Analytic absorption halo.",
+          "properties": {
+            "age": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Animated_double",
+                  "description": "Nonnegative age in seconds."
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "drying": {
+              "anyOf": [
+                {
+                  "description": "Positive drying duration in seconds.",
+                  "format": "double",
+                  "type": "number"
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "radius": {
+              "anyOf": [
+                {
+                  "description": "Maximum wash radius in design units.",
+                  "format": "float",
+                  "type": "number"
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            }
+          },
+          "required": [
+            "age",
+            "radius",
+            "drying"
+          ],
+          "type": "object"
+        },
+        {
+          "$ref": "#/$defs/ValueRef"
+        }
+      ]
+    },
+    "WobbleSpec": {
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "description": "Seeded analytic displacement of the complete path.",
+          "properties": {
+            "amplitude": {
+              "anyOf": [
+                {
+                  "description": "Displacement amplitude in 0..=512 design units.",
+                  "format": "double",
+                  "type": "number"
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "frame": {
+              "anyOf": [
+                {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/Animated_double"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Explicit nonnegative frame number for two-frame boil."
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "frequency": {
+              "anyOf": [
+                {
+                  "description": "Positive spatial frequency, at most 100.",
+                  "format": "double",
+                  "type": "number"
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            },
+            "seed": {
+              "anyOf": [
+                {
+                  "description": "Explicit random seed.",
+                  "format": "uint32",
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "$ref": "#/$defs/ValueRef"
+                }
+              ]
+            }
+          },
+          "required": [
+            "amplitude",
+            "frequency",
+            "seed"
+          ],
+          "type": "object"
         },
         {
           "$ref": "#/$defs/ValueRef"

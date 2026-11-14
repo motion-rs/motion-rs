@@ -177,7 +177,7 @@ Gallery disables facade defaults and forwards its own selected capabilities.
 | audio / ffmpeg | Headless audio / native codecs and audio preparation |
 | studio | Desktop workbench; enables FFmpeg, not automatic scene GPU selection |
 | serde / schema | Core and content: serde and JSON Schema for plain value types and policies, enabled by motion-scene without enabling optional content engines |
-| declarative | JSON documents; text, image and SVG elements follow the matching content features |
+| declarative | JSON documents; text, image, SVG and ink content follow the matching content features |
 
 The facade's authoring, extension, rendering and eager namespaces have different
 roles. Use the [tutorial](../tutorial/README.md) for current authoring and imports,

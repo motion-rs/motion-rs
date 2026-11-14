@@ -15,6 +15,10 @@ pub(super) const PARTICLE_DOCUMENT: &str = include_str!("../../assets/particle-a
 pub(super) const PARTICLE_FEATURES_DOCUMENT: &str =
     include_str!("../../assets/particle-features.json");
 
+pub(super) const INK_FEATURES_DOCUMENT: &str = include_str!("../../assets/ink-features.json");
+
+pub(super) const INK_JOURNEY_DOCUMENT: &str = include_str!("../../assets/ink-journey.json");
+
 pub(super) fn timeline(
     source: &str,
     parameters: DemoParameters,
@@ -35,7 +39,9 @@ pub(super) fn timeline(
 
 #[cfg(test)]
 pub(super) mod tests {
-    use super::super::{atlas, compositing_atlas, filter_atlas, vector_atlas};
+    use super::super::{
+        atlas, compositing_atlas, filter_atlas, ink_features, ink_journey, vector_atlas,
+    };
     use super::*;
     use crate::DemoMetadata;
     use atlas::Page;
@@ -44,6 +50,110 @@ pub(super) mod tests {
 
     /// Declarative pages shared with the native atlas, before the three native-only studies.
     const VECTOR_PAGE_COUNT: usize = 13;
+
+    #[test]
+    fn json_ink_sources_and_modes_preserve_pages_and_duration() -> motion::Result {
+        source(
+            INK_FEATURES_DOCUMENT,
+            ink_features::METADATA,
+            ink_features::PAGES,
+        )?;
+        let document = Document::from_json(INK_JOURNEY_DOCUMENT)?;
+        assert_eq!(document.name.as_deref(), Some(ink_journey::METADATA.title));
+        let options = motion::declarative::CompileOptions::default()
+            .base_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/assets"));
+        assert_eq!(document.compile(&options)?.timeline().frame_count(), 240);
+        let project = crate::project(RenderOptions::default())?;
+        for id in [ink_features::METADATA.id, ink_journey::METADATA.id] {
+            for seconds in [1, 8, 60] {
+                for mode in ["default", "json"] {
+                    let timeline = project.build(
+                        id,
+                        Some(json!({
+                            "seconds":seconds, "seed":u64::MAX, "mode":mode,
+                        })),
+                    )?;
+                    assert_eq!(timeline.frame_count(), seconds * 30);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn json_ink_features_match_native_pages_and_seek() -> motion::Result {
+        let font = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../tests/fixtures/fonts/NotoSans-Regular.ttf");
+        let options = crate::render_options(Some(&font))?
+            .backend(BackendPreference::Cpu)
+            .size(PixelSize::new(288, 162));
+        let project = crate::project(options.clone())?;
+        let parameters = json!({"seconds":60,"seed":17,"mode":"json"});
+        let actual = project.build("ink-features", Some(parameters))?;
+        let expected = project.build(
+            "ink-features",
+            Some(json!({"seconds":60,"seed":17,"mode":"default"})),
+        )?;
+        let times = (0..ink_features::PAGES.len())
+            .map(|page| {
+                Time::from_frame(
+                    ((page as f64 + 0.62) / ink_features::PAGES.len() as f64 * 1800.0).floor()
+                        as i64,
+                    motion::fps!(30),
+                )
+            })
+            .collect::<Vec<_>>();
+        let first = render_still(&actual, times[0], &options)?;
+        for (page, time) in times.iter().enumerate() {
+            let bitmap = render_still(&actual, *time, &options)?;
+            let reference = render_still(&expected, *time, &options)?;
+            let difference = bitmap
+                .bytes()
+                .iter()
+                .zip(reference.bytes())
+                .map(|(left, right)| left.abs_diff(*right))
+                .max()
+                .unwrap();
+            assert!(
+                difference <= 1,
+                "page={page}, maximum channel difference={difference}"
+            );
+        }
+        assert_eq!(
+            render_still(&actual, times[0], &options)?.bytes(),
+            first.bytes()
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn json_ink_journey_renders_and_replays() -> motion::Result {
+        let font = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../tests/fixtures/fonts/NotoSans-Regular.ttf");
+        let options = crate::render_options(Some(&font))?
+            .backend(BackendPreference::Cpu)
+            .size(PixelSize::new(288, 162));
+        let project = crate::project(options.clone())?;
+        let timeline =
+            project.build("ink-journey", Some(json!({"mode":"json","seed":u64::MAX})))?;
+        let first = render_still(&timeline, Time::from_seconds(5.0), &options)?;
+        for time in [0.0, 2.0, 7.9] {
+            let frame = render_still(&timeline, Time::from_seconds(time), &options)?;
+            assert!(
+                frame
+                    .bytes()
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .any(|pixel| pixel[0] != pixel[1])
+            );
+        }
+        assert_eq!(
+            render_still(&timeline, Time::from_seconds(5.0), &options)?.bytes(),
+            first.bytes()
+        );
+        Ok(())
+    }
 
     #[test]
     fn json_filter_atlas_source() -> motion::Result {
@@ -137,7 +247,10 @@ pub(super) mod tests {
         assert_eq!(document.params["pages"], pages.len());
         assert_eq!(
             document
-                .compile(&Default::default())?
+                .compile(
+                    &motion::declarative::CompileOptions::default()
+                        .base_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/assets"))
+                )?
                 .timeline()
                 .frame_count(),
             240

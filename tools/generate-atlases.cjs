@@ -5,6 +5,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const particleFeatures = require("./particle-features.cjs");
+const { inkFeatures, inkJourney } = require("./ink-documents.cjs");
 
 const assets = path.resolve(__dirname, "../gallery/assets");
 const template = JSON.parse(
@@ -870,6 +871,8 @@ for (const [filename, value] of [
   ],
   ["particle-atlas.json", particleDocument()],
   ["particle-features.json", particleFeatures(document)],
+  ["ink-features.json", inkFeatures(document)],
+  ["ink-journey.json", inkJourney()],
 ]) {
   const destination = path.join(assets, filename);
   const serialized = `${JSON.stringify(value, null, 2)}\n`;
@@ -881,6 +884,6 @@ for (const [filename, value] of [
     );
   else fs.writeFileSync(destination, serialized);
   console.log(
-    `${filename}: ${value.params.pages} pages ${process.argv.includes("--check") ? "verified" : "generated"}`,
+    `${filename}: ${value.params.pages ?? 1} pages ${process.argv.includes("--check") ? "verified" : "generated"}`,
   );
 }

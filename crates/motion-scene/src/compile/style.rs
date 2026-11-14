@@ -265,6 +265,7 @@ impl Compiler<'_> {
         match paint {
             PaintSpec::Solid(color) => self.animated(color, path).map(PaintProp::Solid),
             PaintSpec::Gradient(gradient) => self.gradient(gradient, path),
+            PaintSpec::Pigment(pigment) => self.pigment(pigment, &format!("{path}.pigment")),
         }
     }
 

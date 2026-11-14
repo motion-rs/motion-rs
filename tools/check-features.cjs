@@ -23,6 +23,7 @@ const matrix = [
   "declarative",
   "declarative,svg",
   "declarative,particles",
+  "declarative,ink",
   "declarative,diagram,captions",
   "declarative,formula",
   "declarative,audio",

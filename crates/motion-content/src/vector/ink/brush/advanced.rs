@@ -15,39 +15,13 @@ mod presets;
 mod tests;
 mod timing;
 
+pub use crate::{BrushCap, NibMode};
 pub use pigment::{PigmentMix, PigmentPainting};
 pub use presets::BrushPreset;
 pub use timing::BrushTiming;
 
 use geometry::{outline, samples};
 use material::material;
-
-/// Per-sample nib orientation for explicitly extended strokes.
-#[derive(Clone, Copy, Debug)]
-pub enum NibMode {
-    /// Fixed clockwise radians.
-    Fixed(f64),
-    /// Tangent angle plus a fixed offset.
-    FollowPath(f64),
-    /// Recorded nib azimuth, interpolated over the input samples.
-    Tilt,
-}
-
-/// Analytic pressure treatment at the endpoints of a variable-width [`BrushStroke`].
-///
-/// This is not [`LineCap`](motion_core::LineCap): `LineCap` picks the end geometry (butt, round
-/// or square) of a uniform-width [`StrokeStyle`](motion_core::StrokeStyle) outline, whereas
-/// `BrushCap` shapes how the nib imprint and pressure end a brush stroke. `Round` resembles
-/// `LineCap::Round`, `Flat` resembles `Butt`, and `Tapered` has no `LineCap` counterpart.
-#[derive(Clone, Copy, Debug)]
-pub enum BrushCap {
-    /// Full rounded nib imprint.
-    Round,
-    /// Clips the nib and connector geometry at an endpoint tangent plane.
-    Flat,
-    /// Smoothly tapers over the specified arc length.
-    Tapered(f64),
-}
 
 /// One recorded pen sample. Time is relative to the first input sample.
 #[derive(Clone, Copy, Debug)]

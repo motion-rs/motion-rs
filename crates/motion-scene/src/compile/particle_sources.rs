@@ -6,9 +6,6 @@ use motion_content::{ImageAsset, VectorGroup, VectorItem, VectorPath, VectorTree
 use motion_core::{Point, Rect, Time};
 use std::sync::Arc;
 
-/// Largest inline particle image side, in texels.
-const MAX_IMAGE_SIDE: u32 = 512;
-
 /// Most painted paths retained in one particle surface.
 const MAX_SURFACE_PATHS: usize = 256;
 
@@ -53,22 +50,7 @@ impl Compiler<'_> {
         spec: &ParticleImageSpec,
         path: &str,
     ) -> Option<Arc<ImageAsset>> {
-        let [width, height] = spec.size;
-        if !(1..=MAX_IMAGE_SIDE).contains(&width)
-            || !(1..=MAX_IMAGE_SIDE).contains(&height)
-            || spec.rgba.len() as u64 != u64::from(width) * u64::from(height) * 4
-        {
-            self.limit(
-                path,
-                "image",
-                "Inline image sides must be in 1..=512 with exactly width*height*4 bytes",
-            );
-            return None;
-        }
-        ImageAsset::from_rgba8(width, height, spec.rgba.clone())
-            .map(Arc::new)
-            .map_err(|error| self.error(path, "image", error.to_string()))
-            .ok()
+        self.inline_image(spec, path)
     }
 
     pub(super) fn particle_surface(

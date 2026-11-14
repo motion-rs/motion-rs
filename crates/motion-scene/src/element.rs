@@ -8,6 +8,7 @@ use crate::content::{
 use crate::diagram::{CalloutSpec, LineChartSpec, RulerSpec};
 use crate::effects::{ClipSpec, FilterSpec, MaskSpec};
 use crate::formula::{FormulaSpec, MorphSpec, SvgMorphSpec};
+use crate::ink::{BrushStrokeSpec, InkFillSpec};
 use crate::paint::{PaintSpec, StrokeSpec, TrimSpec};
 use crate::particles::{ParticlesSpec, TrajectorySpec};
 use crate::value::{Animated, is_false};
@@ -309,7 +310,14 @@ content_conversions!(
     FormulaSpec => Formula,
     MorphSpec => Morph,
     SvgMorphSpec => SvgMorph,
+    InkFillSpec => InkFill,
 );
+
+impl From<BrushStrokeSpec> for Content {
+    fn from(spec: BrushStrokeSpec) -> Self {
+        Self::BrushStroke(Box::new(spec))
+    }
+}
 
 /// The JSON object form: one optional key per content kind.
 #[derive(Default, Serialize, Deserialize, JsonSchema)]
@@ -399,6 +407,12 @@ struct RawElement {
     /// SVG morph content.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     svg_morph: Option<SvgMorphSpec>,
+    /// Pressure-sensitive brush content.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    brush_stroke: Option<Box<BrushStrokeSpec>>,
+    /// Even-odd ink fill content.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    ink_fill: Option<InkFillSpec>,
     /// Fill paint for geometry and text.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     fill: Option<PaintSpec>,
@@ -495,6 +509,10 @@ impl TryFrom<RawElement> for Element {
             raw.morph.map(|value| ("morph", Content::Morph(value))),
             raw.svg_morph
                 .map(|value| ("svg_morph", Content::SvgMorph(value))),
+            raw.brush_stroke
+                .map(|value| ("brush_stroke", Content::BrushStroke(value))),
+            raw.ink_fill
+                .map(|value| ("ink_fill", Content::InkFill(value))),
         ];
         let mut selected = candidates.into_iter().flatten();
         let content = match (selected.next(), selected.next()) {
@@ -583,6 +601,8 @@ impl From<Element> for RawElement {
             Content::Formula(spec) => raw.formula = Some(spec),
             Content::Morph(spec) => raw.morph = Some(spec),
             Content::SvgMorph(spec) => raw.svg_morph = Some(spec),
+            Content::BrushStroke(spec) => raw.brush_stroke = Some(spec),
+            Content::InkFill(spec) => raw.ink_fill = Some(spec),
         }
         raw
     }

@@ -24,6 +24,7 @@ mod element;
 mod expr;
 mod failure;
 mod formula;
+mod ink;
 mod morph;
 #[cfg(feature = "particles")]
 mod particle_configuration;

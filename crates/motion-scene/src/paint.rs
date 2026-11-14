@@ -1,5 +1,6 @@
 //! Fill/stroke paint, gradients, stroke geometry and trim ranges.
 
+use crate::ink::PigmentSpec;
 use crate::value::Animated;
 use motion_core::{Color, GradientExtend, GradientSpace, GradientUnits, LineCap, LineJoin, Point};
 use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
@@ -21,6 +22,8 @@ pub enum PaintSpec {
     Solid(Animated<Color>),
     /// A gradient with optionally animated geometry and fixed color stops.
     Gradient(GradientSpec),
+    /// Native ink pigment mixing; requires feature `ink`.
+    Pigment(PigmentSpec),
 }
 
 impl From<Color> for PaintSpec {
@@ -46,6 +49,13 @@ impl Serialize for PaintSpec {
         match self {
             Self::Solid(color) => color.serialize(serializer),
             Self::Gradient(gradient) => gradient.serialize(serializer),
+            Self::Pigment(pigment) => {
+                #[derive(Serialize)]
+                struct Wrapper<'a> {
+                    pigment: &'a PigmentSpec,
+                }
+                Wrapper { pigment }.serialize(serializer)
+            }
         }
     }
 }
@@ -53,6 +63,19 @@ impl Serialize for PaintSpec {
 impl<'de> Deserialize<'de> for PaintSpec {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let value = serde_json::Value::deserialize(deserializer)?;
+        if value
+            .as_object()
+            .is_some_and(|object| object.contains_key("pigment"))
+        {
+            #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct Wrapper {
+                pigment: PigmentSpec,
+            }
+            return Wrapper::deserialize(value)
+                .map(|wrapper| Self::Pigment(wrapper.pigment))
+                .map_err(D::Error::custom);
+        }
         let gradient = value
             .as_object()
             .is_some_and(|object| GRADIENT_TAGS.iter().any(|tag| object.contains_key(*tag)));
@@ -76,9 +99,15 @@ impl JsonSchema for PaintSpec {
     fn json_schema(generator: &mut SchemaGenerator) -> Schema {
         let solid = generator.subschema_for::<Animated<Color>>();
         let gradient = generator.subschema_for::<GradientSpec>();
+        let pigment = generator.subschema_for::<PigmentSpec>();
         json_schema!({
-            "description": "A fixed or animated color, or a gradient.",
-            "anyOf": [solid, gradient]
+            "description": "A fixed or animated color, a gradient, or ink pigment mixing.",
+            "anyOf": [solid, gradient, {
+                "type": "object",
+                "properties": {"pigment": pigment},
+                "required": ["pigment"],
+                "additionalProperties": false
+            }]
         })
     }
 }

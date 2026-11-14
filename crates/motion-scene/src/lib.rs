@@ -37,8 +37,8 @@
 //! Units are seconds, clockwise degrees, design units, `[x, y]` points and
 //! `[left, top, right, bottom]` rectangles. Relative resource paths resolve
 //! against [`CompileOptions::base_dir`]; [`load`] uses the document's directory.
-//! Text, images and SVG require the `text`, `image` and `svg` features; without
-//! them such documents still parse and serialize but fail to compile.
+//! Text, images, SVG and ink require the `text`, `image`, `svg` and `ink` features;
+//! without them such documents still parse and serialize but fail to compile.
 //!
 //! ```
 //! use motion_scene::Document;
@@ -70,6 +70,7 @@ mod document;
 mod effects;
 mod element;
 mod formula;
+mod ink;
 mod paint;
 mod params;
 mod particles;
@@ -101,6 +102,10 @@ pub use effects::{
 };
 pub use element::Element;
 pub use formula::{FormulaSpec, MorphSpec, SvgMorphSpec};
+pub use ink::{
+    BristlesSpec, BrushStrokeSpec, BrushTimingSpec, InkFillSpec, InkSpec, InputSampleSpec,
+    PaperSpec, PigmentSpec, WetnessSpec, WobbleSpec,
+};
 pub use paint::{
     GradientOptions, GradientSpec, GradientStop, LinearGradientSpec, PaintSpec, RadialGradientSpec,
     StrokeSpec, SweepGradientSpec, TrimSpec,

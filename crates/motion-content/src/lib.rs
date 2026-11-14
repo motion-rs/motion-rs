@@ -34,8 +34,8 @@ pub use font::{FontFace, FontIdentifier, FontLibrary, MAX_FONT_FACE_BYTES};
 pub use image::{AnimatedImage, AnimatedImageAsset, ImageLoopMode};
 pub use image::{Fit, Image, ImageAsset, ImageLevel, Sampling};
 pub use options::{
-    CollisionResponse, FieldCoordinate, Inherit, ParticleEventKind, Preset, TextAlignment,
-    TextSplit,
+    BrushCap, CollisionResponse, FieldCoordinate, Inherit, NibMode, ParticleEventKind, PigmentMix,
+    Preset, TextAlignment, TextSplit,
 };
 #[cfg(feature = "particles")]
 pub use particles::{

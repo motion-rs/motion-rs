@@ -60,6 +60,9 @@ pub enum FilterSpec {
         seed: u64,
         /// Nonnegative noise amplitude.
         strength: Animated<f64>,
+        /// Optional explicit frame number, XORed with the seed; in 0..=u32::MAX.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        frame: Option<Animated<f64>>,
     },
     /// Bounded optical effects on the completed subtree.
     Optics(OpticsSpec),

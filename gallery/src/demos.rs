@@ -87,7 +87,7 @@ const PROGRAM: &[Film] = &[
     },
     Film {
         metadata: ink_features::METADATA,
-        build: ink_features::timeline,
+        build: ink_features_timeline,
     },
     Film {
         metadata: noise_atlas::METADATA,
@@ -123,7 +123,7 @@ const PROGRAM: &[Film] = &[
     },
     Film {
         metadata: ink_journey::METADATA,
-        build: ink_journey::timeline,
+        build: ink_journey_timeline,
     },
     Film {
         metadata: signal_garden::METADATA,
@@ -224,6 +224,43 @@ fn vector_atlas_timeline(parameters: DemoParameters) -> Result<Timeline, motion:
             [("seed".into(), parameters.seed.into())]
                 .into_iter()
                 .collect(),
+        ),
+    }
+}
+
+fn ink_features_timeline(parameters: DemoParameters) -> Result<Timeline, motion::ErrorReport> {
+    match parameters.mode {
+        AuthoringMode::Default => ink_features::timeline(parameters),
+        AuthoringMode::Json => json_atlas::timeline(
+            json_atlas::INK_FEATURES_DOCUMENT,
+            parameters,
+            [
+                ("seed".into(), parameters.seed.into()),
+                (
+                    "ink_seed".into(),
+                    (parameters.seed as u32 ^ (parameters.seed >> 32) as u32).into(),
+                ),
+                ("fonts".into(), serde_json::json!([])),
+            ]
+            .into_iter()
+            .collect(),
+        ),
+    }
+}
+
+fn ink_journey_timeline(parameters: DemoParameters) -> Result<Timeline, motion::ErrorReport> {
+    match parameters.mode {
+        AuthoringMode::Default => ink_journey::timeline(parameters),
+        AuthoringMode::Json => json_atlas::timeline(
+            json_atlas::INK_JOURNEY_DOCUMENT,
+            parameters,
+            [
+                ("seed".into(), parameters.seed.into()),
+                ("ink_seed".into(), (parameters.seed as u32).into()),
+                ("fonts".into(), serde_json::json!([])),
+            ]
+            .into_iter()
+            .collect(),
         ),
     }
 }

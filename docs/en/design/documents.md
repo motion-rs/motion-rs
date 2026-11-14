@@ -31,6 +31,10 @@ content feature therefore still permits parsing and serialization, but compilati
 the unsupported capability. Resource descriptions, animated properties and particle shape
 parameters that retain f64 authoring precision remain document-specific structures.
 
+Ink nib modes, brush caps and pigment mixing likewise reuse feature-independent
+content policies. The document `ink` feature enables their preparation and is
+forwarded by the facade's `ink` feature when `declarative` is enabled.
+
 ## Data Model
 
 - Documents are plain data. Parsing and serialization never read resources, discover
@@ -52,6 +56,51 @@ parameters that retain f64 authoring precision remain document-specific structur
   objects, so the two forms cannot be confused. Oscillators and noise apply to
   numeric properties only. Easing is a closed serializable set; custom callbacks are
   not representable.
+
+## Ink content
+
+`brush_stroke` selects exactly one fixed SVG `path`, compile-time sampled `points`,
+or recorded `samples`, alongside `width` and `paint`. Element fill, uniform stroke,
+trim and fill rule do not apply to this content. Pressure uses one of a three-value
+`pressure`, ordered `pressure_curve`, or `pressure_from` arithmetic expression.
+Inside `pressure_from`, `t` is normalized arc length, not scene time; numeric document
+parameters are available, but element bindings are rejected. The compiler samples
+the expression for initial validation and native geometry validates actual sampled
+pressures during recording.
+
+Nib modes use clockwise degrees in documents, including recorded sample `tilt`,
+and are converted to native radians. Caps, bristles, ink load, wobble, material
+allowance and speed response use the existing brush builder and its limits.
+`write` reveals normalized full-path arc length. Alternatively, `write_time` supplies
+explicit nonnegative seconds and uses the original recording clock or a `timing`
+description with moving duration, monotone controls and pauses between subpaths.
+Timing and recorded sample lists are limited to 512 entries.
+
+`ink` descriptions set deterministic dryness, bleed, fibers, granulation, edge
+effects, paper and grayscale height. Paper is either procedural noise, an explicit
+bounded inline RGBA8 texture, or a seeded `noise_texture` generated at compilation;
+texture sides are at most 512 texels. `paper_transform` contains six native affine
+coefficients. No ink recipe discovers resources or advances mutable fluid state.
+Optional `wetness` samples explicit age and drying seconds; optional `wobble.frame`
+selects native two-frame boil. Recordings, reveal clocks and material ages are capped
+at 86400 seconds; boil frame numbers are capped at twice `u32::MAX`.
+
+Fixed brush recipes retain one immutable full stroke across reveal frames, sharing
+its bounded baked material. Animated paint, wetness or boil rebuilds the affected
+recipe from explicit inputs instead of retaining playback history. Invalid sampled
+reveal, material or paint values surface through the normal rendering diagnostics.
+`ink_fill` uses the native bounded even-odd contour fill with its own `path`, `paint`
+and `ink`. Stroke-only ink effects keep their native fill semantics.
+
+Paint also accepts `{"pigment": {"first": ..., "second": ..., "amount": ..., "mode": ...}}`.
+The animated amount is in 0..=1; `linear` and `kubelka_munk` use native linear-light
+mixing and the six-band approximation, respectively, not renderer blend modes.
+All ink descriptions parse and serialize without the `ink` feature, but compiling
+them reports the unsupported capability.
+
+Film `grain` can additionally take an explicit animated `frame` in 0..=`u32::MAX`.
+Its floored frame is XORed with the full-width integer seed. Omitting it preserves
+the original fixed-seed behavior.
 
 ## Animation composition
 

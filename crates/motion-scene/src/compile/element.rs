@@ -277,12 +277,30 @@ impl Compiler<'_> {
                     }),
                 ))
             }
-            FilterSpec::Grain { seed, strength } => {
+            FilterSpec::Grain {
+                seed,
+                strength,
+                frame,
+            } => {
                 let strength = self.animated(strength, &format!("{path}.grain.strength"))?;
+                let frame = self.optional(frame.as_ref(), &format!("{path}.grain.frame"))?;
                 let seed = *seed;
                 Some(FilterProp::Sampled(
-                    strength.varying(),
-                    Arc::new(move |time| Ok(Filter::grain(seed, strength.at(time)))),
+                    strength.varying() || frame.as_ref().is_some_and(Prop::varying),
+                    Arc::new(move |time| {
+                        let frame = frame.as_ref().map_or(0.0, |frame| frame.at(time));
+                        if !frame.is_finite() || !(0.0..=f64::from(u32::MAX)).contains(&frame) {
+                            return Err(ValidationError::invalid(
+                                "grain",
+                                "frame",
+                                "Grain frame must be finite and in 0..=u32::MAX",
+                            ));
+                        }
+                        Ok(Filter::grain(
+                            seed ^ frame.floor() as u64,
+                            strength.at(time),
+                        ))
+                    }),
                 ))
             }
             FilterSpec::Optics(spec) => self.optics(spec, &format!("{path}.optics")),
@@ -501,7 +519,7 @@ impl Compiler<'_> {
         }
     }
 
-    fn optional<T: super::value::Value>(
+    pub(super) fn optional<T: super::value::Value>(
         &mut self,
         value: Option<&crate::value::Animated<T>>,
         path: &str,

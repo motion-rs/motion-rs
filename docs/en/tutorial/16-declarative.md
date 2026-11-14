@@ -47,6 +47,46 @@ degrees. Each element has at most one content key (`children`, `rect`, `circle`,
 effect keys. [`examples/documents/intro.json`](../../../examples/documents/intro.json) is a
 complete geometry-only film.
 
+## Brush and ink content
+
+Enable `declarative,ink` to compile `brush_stroke` and `ink_fill`. A brush owns its
+paint and variable-width geometry rather than using an element's uniform stroke:
+
+```json
+{
+  "brush_stroke": {
+    "path": "M20 100 Q120 10 220 100",
+    "width": 16,
+    "paint": "#167d71",
+    "pressure": [0.2, 1.2, 0.1],
+    "nib_aspect": 0.42,
+    "nib_mode": {"fixed": -20},
+    "ink": {
+      "seed": 17,
+      "dryness": 0.2,
+      "granulation": 0.3,
+      "paper": {"procedural": {"seed": 71, "strength": 0.2, "scale": 1.2}}
+    },
+    "write": {"expr": "clamp(t / 2, 0, 1)"}
+  }
+}
+```
+
+Replace `path` with `points` for a compile-time sampled polyline, or `samples` for
+recorded positions, pressure, clockwise tilt degrees and timestamps. `write_time`
+uses recording seconds or explicit `timing` controls and pen-up pauses. For analytic
+pressure, `pressure_from: "0.3 + 0.9 * pow(sin(t * tau * 3), 2)"` uses normalized
+arc length as `t`, independently of the scene clock.
+
+The [Ink Features document](../../../gallery/assets/ink-features.json) demonstrates
+all 21 native atlas pages. [Ink Journey](../../../gallery/assets/ink-journey.json)
+describes the landscape, captions, camera drift and deterministic film damage.
+Their `fonts` parameter is an explicit list of local font paths; use absolute paths
+for fonts outside the document directory, since resource paths reject `..`.
+Gallery JSON mode inherits Gallery's configured fonts instead. See the
+[ink contract](../design/documents.md#ink-content) for limits and retained-material
+semantics.
+
 ## Rendering a Document
 
 `load` reads a file and resolves relative font, image, SVG and audio paths against the

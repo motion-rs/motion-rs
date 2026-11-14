@@ -271,6 +271,7 @@ fn animated_filters_fail_the_frame_where_they_become_invalid() {
         FilterSpec::Grain {
             seed: 7,
             strength: Animated::expr("0.5 - t"),
+            frame: None,
         },
     ] {
         let compiled = make(filter).compile(&CompileOptions::default()).unwrap();

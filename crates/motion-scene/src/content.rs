@@ -4,6 +4,7 @@ use crate::captions::CaptionsSpec;
 use crate::diagram::{CalloutSpec, LineChartSpec, RulerSpec};
 use crate::element::Element;
 use crate::formula::{FormulaSpec, MorphSpec, SvgMorphSpec};
+use crate::ink::{BrushStrokeSpec, InkFillSpec};
 use crate::particles::{ParticlesSpec, TrajectorySpec};
 use crate::value::Animated;
 use motion_content::{Fit, TextAlignment, TextSplit, WriteOptions};
@@ -69,6 +70,10 @@ pub enum Content {
     Morph(MorphSpec),
     /// SVG morph; see [`SvgMorphSpec`].
     SvgMorph(SvgMorphSpec),
+    /// Pressure-sensitive brush; requires feature `ink`.
+    BrushStroke(Box<BrushStrokeSpec>),
+    /// Deterministic even-odd ink fill; requires feature `ink`.
+    InkFill(InkFillSpec),
 }
 
 impl Content {

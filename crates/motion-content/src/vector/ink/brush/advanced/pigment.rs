@@ -5,21 +5,13 @@ use super::bounds;
 use super::geometry::{outline, samples};
 use super::material::material;
 use crate::ImageAsset;
+pub use crate::PigmentMix;
 use crate::vector::ink::paint::paint_sample;
 use motion_core::{
     Canvas, Color, DrawContext, Drawable, FillRule, ImagePattern, Paint, Path2D, PathVerb, Point,
     Rect, Transform, ValidationError,
 };
 use std::sync::{Arc, OnceLock};
-
-/// Optional color mixing approximation, separate from renderer blend modes.
-#[derive(Clone, Copy, Debug)]
-pub enum PigmentMix {
-    /// Linear-light interpolation.
-    Linear,
-    /// Six-band infinite-thickness Kubelka-Munk approximation, not calibrated pigments.
-    KubelkaMunk,
-}
 
 impl PigmentMix {
     /// Mixes approximate reflectances; endpoints remain exact, and this is not a calibrated model.

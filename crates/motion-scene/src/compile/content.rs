@@ -17,6 +17,10 @@ const MAX_POINTS: usize = 65_536;
 /// Largest accepted regular-polygon side or star point count.
 const MAX_VERTICES: u32 = 4096;
 
+/// Largest accepted inline image side, in texels.
+#[cfg(any(feature = "ink", feature = "particles"))]
+const MAX_INLINE_IMAGE_SIDE: u32 = 512;
+
 impl Compiler<'_> {
     /// Compiles content; `style` is None when styling already failed.
     pub(crate) fn content(
@@ -299,6 +303,12 @@ impl Compiler<'_> {
             Content::SvgMorph(spec) => {
                 style.and_then(|_| self.svg_morph(spec, &format!("{path}.svg_morph")))
             }
+            Content::BrushStroke(spec) => {
+                style.and_then(|_| self.brush_stroke(spec, &format!("{path}.brush_stroke")))
+            }
+            Content::InkFill(spec) => {
+                style.and_then(|_| self.ink_fill(spec, &format!("{path}.ink_fill")))
+            }
         }
     }
 
@@ -392,6 +402,30 @@ impl Compiler<'_> {
             return None;
         }
         Some(points.to_vec())
+    }
+
+    #[cfg(any(feature = "ink", feature = "particles"))]
+    pub(super) fn inline_image(
+        &mut self,
+        spec: &crate::ParticleImageSpec,
+        path: &str,
+    ) -> Option<Arc<motion_content::ImageAsset>> {
+        let [width, height] = spec.size;
+        if !(1..=MAX_INLINE_IMAGE_SIDE).contains(&width)
+            || !(1..=MAX_INLINE_IMAGE_SIDE).contains(&height)
+            || spec.rgba.len() as u64 != u64::from(width) * u64::from(height) * 4
+        {
+            self.limit(
+                path,
+                "image",
+                "Inline image sides must be in 1..=512 with exactly width*height*4 bytes",
+            );
+            return None;
+        }
+        motion_content::ImageAsset::from_rgba8(width, height, spec.rgba.clone())
+            .map(Arc::new)
+            .map_err(|error| self.error(path, "image", error.to_string()))
+            .ok()
     }
 
     fn count(&mut self, count: u32, minimum: u32, path: &str, field: &str) -> Option<usize> {
