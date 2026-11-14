@@ -344,6 +344,7 @@ fn svg_selections_and_writing_match_vector_reveal() -> motion_core::Result<()> {
             .to_vec())
     };
     let ids = asset.tree.ids();
+
     type Modify = Arc<dyn Fn(Node) -> Node + Send + Sync>;
     let half: Modify = Arc::new(|node: Node| node.opacity(0.5));
     let turn: Modify = Arc::new(|node: Node| node.rotate(0.2));

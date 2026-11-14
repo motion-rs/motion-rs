@@ -119,6 +119,7 @@ impl FrameRenderer {
             duration: self.duration,
             time: None,
             limits: self.session.limits,
+            #[cfg(feature = "gpu")]
             device_packing: false,
             preparation_backend: None,
             session: &mut self.session,

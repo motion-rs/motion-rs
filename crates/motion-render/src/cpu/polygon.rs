@@ -1,6 +1,6 @@
 //! Polygon path rasterization into sparse strips and spans using exact area coverage.
 
-use crate::prepared::{PixelRect, FrameRecords, Span, Strip};
+use crate::prepared::{FrameRecords, PixelRect, Span, Strip};
 #[cfg(test)]
 use crate::prepared::{PreparationStats, PreparedCpuFrame, PreparedItem, RenderPrepare};
 use crate::raster::{Band, RasterScope, coverage_to_byte, pixel_bounds};

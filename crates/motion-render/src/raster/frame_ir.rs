@@ -4,10 +4,12 @@
 //! complete coverage-cache keys. It is not a display list and contains no coverage.
 
 use crate::prepared::{PaintRecord, PixelRect, PreparationStats, PreparedLayer};
+#[cfg(any(feature = "gpu", test))]
+use motion_core::PathVerb;
 use motion_core::budget::Budget;
 use motion_core::{
-    FillRule, Paint, Path2D, PathClip, PathVerb, PixelSize, RasterLimits, Rect, RectClip,
-    ShapeClip, Transform, ValidatedDisplayList, ValidationError, ValidationLimits,
+    FillRule, Paint, Path2D, PathClip, PixelSize, RasterLimits, Rect, RectClip, ShapeClip,
+    Transform, ValidatedDisplayList, ValidationError, ValidationLimits,
 };
 use std::collections::HashSet;
 use std::mem::size_of;
@@ -150,6 +152,7 @@ impl<'a> FrameIr<'a> {
         self.stats
     }
 
+    #[cfg(any(feature = "gpu", test))]
     pub(crate) fn resource_bytes(&self) -> u64 {
         self.resource_bytes
     }
@@ -160,6 +163,7 @@ pub(crate) struct IrPath<'a> {
     pub(crate) transform: Transform,
     pub(crate) rule: FillRule,
     pub(crate) bounds: Rect,
+    #[cfg(any(feature = "gpu", test))]
     pub(crate) device_verbs: Vec<PathVerb>,
     pub(crate) segment_upper_bound: u64,
 }

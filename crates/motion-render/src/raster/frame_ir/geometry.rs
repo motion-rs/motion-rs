@@ -21,6 +21,7 @@ impl<'a> FrameIr<'a> {
             GeometrySource::Path(geometry) => geometry.bounding_box(),
         };
         let bounds = motion_core::display_list::mapped_bounds(local_bounds, transform, path)?;
+        #[cfg(any(feature = "gpu", test))]
         let mut device = Vec::new();
         let rectangle = rectangle_verbs(local_bounds);
         let verbs = match source {
@@ -29,6 +30,7 @@ impl<'a> FrameIr<'a> {
         };
         budget.work(verbs.len() as u64, path)?;
         budget.bytes(std::mem::size_of_val(verbs) as u64, path)?;
+        #[cfg(any(feature = "gpu", test))]
         device.try_reserve_exact(verbs.len()).map_err(|_| {
             ValidationError::limit(path, "max_bytes", "Could not reserve device curves")
         })?;
@@ -87,6 +89,7 @@ impl<'a> FrameIr<'a> {
             segments = segments.checked_add(additional).ok_or_else(|| {
                 ValidationError::limit(path, "max_work", "Path segment bound overflow")
             })?;
+            #[cfg(any(feature = "gpu", test))]
             device.push(mapped);
         }
         segments = segments.checked_add(1).ok_or_else(|| {
@@ -103,6 +106,7 @@ impl<'a> FrameIr<'a> {
                 transform,
                 rule,
                 bounds,
+                #[cfg(any(feature = "gpu", test))]
                 device_verbs: device,
                 segment_upper_bound: segments,
             },

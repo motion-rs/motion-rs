@@ -1,7 +1,7 @@
 //! Host side of the GPU uniform ABI: operation codes, paint kinds, the `GpuUniforms`
 //! record shared with WGSL, and the generated shader constants that mirror them.
 
-use crate::prepared::{PixelRect, FrameRecords};
+use crate::prepared::{FrameRecords, PixelRect};
 use motion_core::ValidationError;
 use motion_core::drawing::BlendMode;
 

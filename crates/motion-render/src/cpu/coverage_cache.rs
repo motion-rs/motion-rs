@@ -2,9 +2,9 @@
 
 use motion_core::{PixelSize, Rect, ValidationError};
 
+use crate::prepared::{FrameRecords, Span, Strip};
 #[cfg(test)]
 use crate::prepared::{PreparedCpuFrame, RenderPrepare};
-use crate::prepared::{FrameRecords, Span, Strip};
 use crate::raster::RasterScope;
 #[cfg(test)]
 use crate::raster::prepare::prepare_with_cache;

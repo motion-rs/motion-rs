@@ -68,6 +68,7 @@ pub(super) struct FrameExecution<'a> {
     pub(super) duration: Time,
     pub(super) time: Option<Time>,
     pub(super) limits: RasterLimits,
+    #[cfg(feature = "gpu")]
     pub(super) device_packing: bool,
     pub(super) preparation_backend: Option<BackendKind>,
     pub(super) session: &'a mut RenderSession,

@@ -324,6 +324,7 @@ impl FrameBuffer {
     }
 
     /// Converts linear output into straight sRGB RGBA8; transparent pixels keep their alpha.
+    #[cfg(any(feature = "gpu", test))]
     pub(crate) fn from_linear_rgba8(
         frame: &LinearFrame,
         limits: RasterLimits,
@@ -338,6 +339,7 @@ impl FrameBuffer {
     }
 
     /// Wraps pixels whose storage a GPU plan already admitted as linear f32 output.
+    #[cfg(any(feature = "gpu", test))]
     pub(crate) fn linear_unbounded(frame: &LinearFrame) -> Result<Self, ValidationError> {
         let unbounded = RasterLimits {
             max_pixels: u64::MAX,
@@ -639,6 +641,7 @@ impl FrameBuffer {
     }
 
     /// Atomically replaces a memory target on successful conversion.
+    #[cfg(any(feature = "gpu", test))]
     pub(crate) fn write_linear(
         frame: &LinearFrame,
         target: RenderTarget<'_>,

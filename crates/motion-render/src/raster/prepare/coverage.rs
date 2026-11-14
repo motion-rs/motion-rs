@@ -1,7 +1,7 @@
 //! Clip, rectangle and strip coverage emission plus the shared pixel-bounds and paint helpers
 //! used by preparation.
 
-use crate::prepared::{ClipRecord, PaintRecord, PixelRect, FrameRecords, Span, Strip};
+use crate::prepared::{ClipRecord, FrameRecords, PaintRecord, PixelRect, Span, Strip};
 use crate::raster::{Band, RasterScope};
 use motion_core::budget::Budget;
 use motion_core::{Color, PixelSize, Rect, ValidationError};

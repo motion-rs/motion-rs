@@ -1067,7 +1067,8 @@ fn curve_tolerance_scratch_budgets_and_hidden_failures_are_explicit() {
         .unwrap();
     assert_eq!(
         repeated.stats.peak_bytes - frame.stats.peak_bytes,
-        frame.stats.retained_bytes - size_of::<PreparedCpuFrame>() as u64 + ir_bytes(&repeated_list)
+        frame.stats.retained_bytes - size_of::<PreparedCpuFrame>() as u64
+            + ir_bytes(&repeated_list)
             - ir_bytes(&list)
     );
     for tolerance in [0.0, -1.0, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {

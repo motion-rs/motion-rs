@@ -1,7 +1,7 @@
 //! Scalar linear-premultiplied composition of immutable coverage.
 
 use crate::linear::{LinearFrame, WorkStats};
-use crate::prepared::{ClipRecord, PixelRect, PreparedItem, PreparedLayer, FrameRecords};
+use crate::prepared::{ClipRecord, FrameRecords, PixelRect, PreparedItem, PreparedLayer};
 use crate::raster::prepare::pixel_bounds;
 use motion_core::budget::Budget;
 use motion_core::instances::{InstanceBlend, InstanceComposite};

@@ -1,6 +1,6 @@
 //! Reference plus-layer capture trimming after backend coverage preparation.
 
-use crate::prepared::{PixelRect, PreparedItem, FrameRecords};
+use crate::prepared::{FrameRecords, PixelRect, PreparedItem};
 use motion_core::ValidationError;
 use motion_core::budget::Budget;
 use std::mem::size_of;

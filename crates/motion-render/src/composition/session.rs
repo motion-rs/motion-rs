@@ -197,6 +197,7 @@ impl RenderSession {
             duration: request.duration.after_origin(),
             time: Some(time),
             limits,
+            #[cfg(feature = "gpu")]
             device_packing: request.device_packing,
             preparation_backend: None,
             session: self,
