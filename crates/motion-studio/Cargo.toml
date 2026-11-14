@@ -23,7 +23,7 @@ motion-render = { version = "0.2.0", path = "../motion-render", default-features
 motion-encode = { version = "0.2.0", path = "../motion-encode", default-features = false, features = ["ffmpeg"] }
 motion-ffmpeg = { version = "0.2.0", path = "../motion-ffmpeg" }
 cpal = { version = "0.16", default-features = false }
-rtrb = "0.3"
+rtrb = "0.4"
 eframe = { version = "0.37.0", default-features = false, features = ["clipboard", "default_fonts", "wgpu", "wayland", "x11"] }
 egui-phosphor = "0.14"
 rfd = "0.15"
