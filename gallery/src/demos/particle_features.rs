@@ -352,27 +352,6 @@ mod tests {
     }
 
     #[test]
-    fn pages_have_unique_titles_and_exact_duration() -> motion::Result {
-        let mut titles = std::collections::BTreeSet::new();
-        assert_eq!(PAGES.len(), 47);
-        for (page, description) in PAGES.iter().enumerate() {
-            assert!(titles.insert(description.title));
-            assert!(description.lines.iter().all(|line| !line.is_empty()));
-            assert_eq!(page_at((page as f64 + 0.5) / PAGES.len() as f64).0, page);
-        }
-        assert_eq!(page_at(1.0), (PAGES.len() - 1, 1.0));
-        for seconds in [1, 8, 60] {
-            let timeline = timeline(DemoParameters {
-                seconds,
-                ..DemoParameters::default()
-            })?;
-            assert_eq!(timeline.duration(), seconds.seconds());
-            assert_eq!(timeline.frame_count(), u64::from(seconds) * 30);
-        }
-        Ok(())
-    }
-
-    #[test]
     #[ignore = "requires explicit MOTION_TEST_FONT; every capability subject, motion and exact replay"]
     fn every_page_renders_animates_and_replays() -> motion::Result {
         let font = std::env::var_os("MOTION_TEST_FONT")

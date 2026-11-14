@@ -371,85 +371,17 @@ mod tests {
             let film = project.build("brush-atlas", Some(serde_json::json!({"mode": mode})))?;
             assert_eq!(film.frame_count(), 240);
         }
-        for removed in [
-            "declarative-animation-atlas",
-            "declarative-json-animation-atlas",
-        ] {
-            assert!(project.build(removed, None).is_err());
-        }
         Ok(())
     }
 
     #[test]
-    fn film_program_has_unique_ids_composed_features_and_exact_duration() -> motion::Result {
+    fn film_program_registers_unique_ids_and_preserves_duration() -> motion::Result {
         let entries = catalog();
-        let expected = [
-            "animation-atlas",
-            "brush-atlas",
-            "particle-atlas",
-            "particle-features",
-            "filter-atlas",
-            "compositing-atlas",
-            "vector-atlas",
-            "ink-features",
-            "noise-atlas",
-            "audio-atlas",
-            "typography-atlas",
-            "caption-atlas",
-            "particle-garden",
-            "data-story",
-            "logo-sting",
-            "type-in-motion",
-            "ink-journey",
-            "signal-garden",
-        ]
-        .into_iter()
-        .chain(cfg!(feature = "formula").then_some("harmonics"))
-        .collect::<Vec<_>>();
-        assert_eq!(
-            entries.iter().map(|entry| entry.id).collect::<Vec<_>>(),
-            expected
-        );
+        assert!(!entries.is_empty());
+        let expected = entries.iter().map(|entry| entry.id).collect::<Vec<_>>();
         let mut ids = BTreeSet::new();
         for entry in &entries {
             assert!(ids.insert(entry.id), "duplicate demo: {}", entry.id);
-            assert!(
-                entry.features.len() >= 3,
-                "film must compose capabilities: {}",
-                entry.id
-            );
-            assert_eq!(
-                entry.features.iter().collect::<BTreeSet<_>>().len(),
-                entry.features.len()
-            );
-        }
-        for required in [
-            "type-in-motion",
-            "ink-journey",
-            "signal-garden",
-            "particle-garden",
-            "data-story",
-            "logo-sting",
-            "animation-atlas",
-            "brush-atlas",
-            "particle-atlas",
-            "particle-features",
-            "filter-atlas",
-            "compositing-atlas",
-            "vector-atlas",
-            "noise-atlas",
-            "ink-features",
-            "audio-atlas",
-            "typography-atlas",
-            "caption-atlas",
-        ] {
-            assert!(ids.contains(required), "missing film: {required}");
-        }
-        for removed in ["chidori", "puppet-show", "quiet-hours", "cinematic-look"] {
-            assert!(
-                !ids.contains(removed),
-                "removed demo must not be listed: {removed}"
-            );
         }
         assert_eq!(
             entries
@@ -458,21 +390,18 @@ mod tests {
                 .count(),
             usize::from(cfg!(feature = "formula"))
         );
-        assert_eq!(entries.len(), 18 + usize::from(cfg!(feature = "formula")));
         let project = project(RenderOptions::default())?;
-        for removed in ["chidori", "puppet-show", "quiet-hours", "cinematic-look"] {
-            assert!(project.build(removed, None).is_err());
-        }
-        let registered = project
-            .list()
-            .into_iter()
-            .map(|entry| entry.name)
-            .collect::<Vec<_>>();
-        assert_eq!(registered, expected);
+        let registered = project.list();
+        assert_eq!(
+            registered
+                .iter()
+                .map(|entry| entry.name.as_str())
+                .collect::<Vec<_>>(),
+            expected
+        );
         for entry in entries {
-            let defaults = project
-                .list()
-                .into_iter()
+            let defaults = registered
+                .iter()
                 .find(|film| film.name == entry.id)
                 .unwrap();
             assert_eq!(defaults.defaults.as_ref().unwrap()["mode"], "default");

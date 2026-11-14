@@ -48,21 +48,6 @@ mod tests {
                 .frame_count(),
             240
         );
-        let catalog = crate::catalog();
-        assert_eq!(catalog[0].id, "animation-atlas");
-        assert_eq!(
-            catalog
-                .iter()
-                .filter(|entry| entry.id == METADATA.id)
-                .count(),
-            1
-        );
-        for id in [
-            "declarative-animation-atlas",
-            "declarative-json-animation-atlas",
-        ] {
-            assert!(!catalog.iter().any(|entry| entry.id == id));
-        }
         Ok(())
     }
 

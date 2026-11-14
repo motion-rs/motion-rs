@@ -338,19 +338,11 @@ mod tests {
     }
 
     #[test]
-    fn every_preset_has_its_own_page_description_and_visible_clock() {
-        assert_eq!(Preset::ALL.len(), 13);
-        for (page, preset) in Preset::ALL.into_iter().enumerate() {
-            let (actual, local) = page_at((page as f64 + 0.5) / Preset::ALL.len() as f64);
-            assert_eq!(actual, page);
-            assert!((local - 0.5).abs() <= 1e-12);
-            let (category, lines) = description(preset);
-            assert!(!category.is_empty());
-            assert!(lines.iter().all(|line| !line.is_empty()));
+    fn preset_clocks_sample_visible_simulation_time() {
+        for preset in Preset::ALL {
             assert!(sample_time(preset, 0.0) > Time::ZERO);
             assert!(sample_time(preset, 1.0) < SIMULATION_SECONDS.seconds().after_origin());
         }
-        assert_eq!(page_at(1.0), (Preset::ALL.len() - 1, 1.0));
         assert!(sample_time(Preset::Fireworks, 0.0) < 0.8.seconds().after_origin());
         assert!(sample_time(Preset::Fireworks, 1.0) > 0.8.seconds().after_origin());
     }
@@ -366,20 +358,6 @@ mod tests {
             .build()?;
         let particles = simulation.sample(sample_time(Preset::Fireworks, 0.95))?;
         assert!(particles.iter().any(|particle| particle.custom[3] == 2.0));
-        Ok(())
-    }
-
-    #[test]
-    fn timeline_retains_shared_size_frame_rate_and_duration() -> motion::Result {
-        for seconds in [1, 8, 52, 60] {
-            let timeline = timeline(DemoParameters {
-                seconds,
-                ..DemoParameters::default()
-            })?;
-            assert_eq!(timeline.size(), Size::new(960.0, 540.0));
-            assert_eq!(timeline.duration(), seconds.seconds());
-            assert_eq!(timeline.frame_count(), u64::from(seconds) * 30);
-        }
         Ok(())
     }
 

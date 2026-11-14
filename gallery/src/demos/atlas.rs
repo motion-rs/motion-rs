@@ -379,25 +379,6 @@ mod tests {
     }
 
     #[test]
-    fn capability_atlases_have_unique_pages_and_exact_durations() -> motion::Result {
-        let project = crate::project(RenderOptions::default())?;
-        for (id, _, pages) in cases() {
-            let mut titles = std::collections::BTreeSet::new();
-            for page in pages {
-                assert!(titles.insert(page.title), "duplicate title in {id}");
-                assert!(page.lines.iter().all(|line| !line.is_empty()));
-            }
-            for seconds in [1, 8, 60] {
-                let timeline = project.build(id, Some(serde_json::json!({"seconds": seconds})))?;
-                assert_eq!(timeline.duration(), seconds.seconds(), "{id}");
-                assert_eq!(timeline.frame_count(), seconds as u64 * 30, "{id}");
-            }
-        }
-        assert_eq!(crate::catalog()[0].id, "animation-atlas");
-        Ok(())
-    }
-
-    #[test]
     #[ignore = "requires explicit MOTION_TEST_FONT; every new capability page, CPU subjects and replay"]
     fn capability_atlases_render_animate_clip_and_replay() -> motion::Result {
         let font = std::env::var_os("MOTION_TEST_FONT")

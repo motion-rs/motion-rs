@@ -64,7 +64,7 @@ Static titles, fixed rings, decorative paths and unchanged ribbon gradients are
 retained through SceneContext caches; animation still updates original parameters,
 transforms, waveforms and ribbon geometry each frame. Stroke outlines and gradient
 tables can be reused without caching whole rendered frames or changing blend order.
-See [Studio](../docs/studio.md).
+See [Studio](../docs/en/studio.md).
 
 ## Film Program
 
@@ -184,6 +184,11 @@ do not simplify artwork or infer throughput from admission tests.
 
 ## Validation
 
+Gallery tests cover catalog registration, parameter validation, authored adapters,
+rendering, deterministic replay and backend parity. Shared duration checks live at
+the catalog level; engine primitives are tested in their owning crates. Artwork
+titles, descriptions and fixed catalog or page counts are not separate test contracts.
+
 ```sh
 CARGO_INCREMENTAL=0 cargo test --locked --offline -j 2 -p motion-gallery --lib
 MOTION_TEST_FONT=/path/to/font.ttf CARGO_INCREMENTAL=0 cargo test --locked --offline -j 2 -p motion-gallery --lib every_demo_renders_its_subject_and_replays_exactly -- --ignored --nocapture
@@ -207,8 +212,9 @@ studies are not exhaustive acceptance of every particle parameter combination or
 The ten capability atlases have separate CPU checks for visible subjects, motion,
 viewport isolation and exact replay on all 193 pages. The typography and caption
 cases explicitly discover system fonts, including Chinese coverage; the other eight
-use `MOTION_TEST_FONT`. Metadata checks exercise
-one-, eight- and sixty-second durations. Audio checks cover finite deterministic
+use `MOTION_TEST_FONT`. Catalog checks exercise one- and eight-second durations;
+atlas adapter and page-rendering checks also cover sixty-second timelines.
+Audio checks cover finite deterministic
 PCM, real DSP changes, limiting and audible delay/reverb tails. These sampled
 checks do not establish full-resolution GPU parity or physical audio-device behavior.
 The separate native GPU check samples two times on each of the 193 pages at

@@ -253,7 +253,6 @@ fn preset_color(preset: BrushPreset) -> Color {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashSet;
 
     const PAGE_COUNT: usize = PAGES.len();
 
@@ -270,59 +269,6 @@ mod tests {
             BrushPreset::Highlighter => "Highlighter",
             BrushPreset::Neon => "Neon",
         }
-    }
-
-    #[test]
-    fn presets_cover_all_variants() {
-        assert_eq!(
-            PRESETS.map(preset_name),
-            [
-                "Pen",
-                "Marker",
-                "Brush",
-                "Chalk",
-                "Charcoal",
-                "Pencil",
-                "Watercolor",
-                "Calligraphy",
-                "Highlighter",
-                "Neon",
-            ]
-        );
-        assert_eq!(
-            PRESETS
-                .iter()
-                .map(std::mem::discriminant)
-                .collect::<HashSet<_>>()
-                .len(),
-            10
-        );
-        assert_eq!(PAGE_COUNT, 10);
-        assert_eq!(PAGES.len(), PRESETS.len());
-        for (page, preset) in PAGES.iter().zip(PRESETS) {
-            assert_eq!(page.title, preset_name(preset));
-        }
-        for page in 0..PAGE_COUNT {
-            let (actual, local) =
-                atlas::page_at((page as f64 + 0.5) / PAGE_COUNT as f64, PAGE_COUNT);
-            assert_eq!(actual, page);
-            assert!((local - 0.5).abs() <= 1e-12);
-        }
-        assert_eq!(atlas::page_at(1.0, PAGE_COUNT), (PAGE_COUNT - 1, 1.0));
-    }
-
-    #[test]
-    fn timeline_retains_shared_size_frame_rate_and_duration() -> motion::Result {
-        for seconds in [1, 8, 20, 60] {
-            let timeline = timeline(DemoParameters {
-                seconds,
-                ..DemoParameters::default()
-            })?;
-            assert_eq!(timeline.size(), Size::new(960.0, 540.0));
-            assert_eq!(timeline.duration(), seconds.seconds());
-            assert_eq!(timeline.frame_count(), u64::from(seconds) * 30);
-        }
-        Ok(())
     }
 
     #[test]

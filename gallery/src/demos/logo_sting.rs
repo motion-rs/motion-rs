@@ -146,35 +146,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn motion_identity_compiles_at_requested_durations() -> motion::Result {
-        let document: serde_json::Value = serde_json::from_str(DOCUMENT).unwrap();
-        let children = document["tracks"][0]["items"][0]["scene"]["content"]["children"]
-            .as_array()
-            .unwrap();
-        let wordmark = children
-            .iter()
-            .find(|node| node["id"] == "wordmark")
-            .unwrap();
-        assert_eq!(wordmark["text"]["content"], "motion");
-        assert_eq!(wordmark["text"]["letter_spacing"], 0);
-        let source = SvgAsset::from_bytes(PRIMITIVES.as_bytes())?;
-        let target = SvgAsset::from_bytes(MARK)?;
-        let morph = Morph::new(&source.tree, &target.tree)?;
-        for progress in [0.0, 0.5, 1.0] {
-            morph.sample(progress)?;
-        }
-        for seconds in [1, 8, 30, 60] {
-            let film = timeline(DemoParameters {
-                seconds,
-                ..DemoParameters::default()
-            })?;
-            assert_eq!(film.duration(), seconds.seconds());
-            assert_eq!(film.frame_count(), u64::from(seconds) * 30);
-        }
-        Ok(())
-    }
-
-    #[test]
     #[ignore = "requires explicit MOTION_TEST_FONT and native GPU when enabled; identity frames and replay"]
     fn motion_identity_renders_morphs_and_replays() -> motion::Result {
         let font = std::env::var_os("MOTION_TEST_FONT")
