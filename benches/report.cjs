@@ -4,7 +4,7 @@ const assert = require("node:assert/strict");
 
 const ROOT = path.resolve(__dirname, "..");
 const MANIFEST_SCHEMA = "motion-performance-history-v1";
-const BENCHMARKS_DOCUMENT = path.join(ROOT, "docs/benchmarks.md");
+const BENCHMARKS_DOCUMENT = path.join(ROOT, "docs/en/benchmarks.md");
 const REPORT_START = "<!-- performance-report:start -->";
 const REPORT_END = "<!-- performance-report:end -->";
 

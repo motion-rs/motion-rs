@@ -386,77 +386,77 @@ pub mod prelude {
 /// Compiles the Rust blocks in the tutorial and reference pages so renamed APIs break the build.
 #[cfg(doctest)]
 mod tutorial {
-    #[doc = include_str!("../../../docs/design/rendering.md")]
+    #[doc = include_str!("../../../docs/en/design/rendering.md")]
     struct DesignRendering;
 
     #[cfg(feature = "text")]
-    #[doc = include_str!("../../../docs/design/resources.md")]
+    #[doc = include_str!("../../../docs/en/design/resources.md")]
     struct DesignResources;
 
-    #[doc = include_str!("../../../docs/cli.md")]
+    #[doc = include_str!("../../../docs/en/cli.md")]
     struct CliReference;
 
     #[cfg(feature = "particles")]
-    #[doc = include_str!("../../../docs/tutorial/00-overview.md")]
+    #[doc = include_str!("../../../docs/en/tutorial/00-overview.md")]
     struct Chapter00;
 
-    #[doc = include_str!("../../../docs/tutorial/01-quick-start.md")]
+    #[doc = include_str!("../../../docs/en/tutorial/01-quick-start.md")]
     struct Chapter01;
 
-    #[doc = include_str!("../../../docs/tutorial/02-foundations.md")]
+    #[doc = include_str!("../../../docs/en/tutorial/02-foundations.md")]
     struct Chapter02;
 
-    #[doc = include_str!("../../../docs/tutorial/03-animation.md")]
+    #[doc = include_str!("../../../docs/en/tutorial/03-animation.md")]
     struct Chapter03;
 
-    #[doc = include_str!("../../../docs/tutorial/04-scenes-and-timeline.md")]
+    #[doc = include_str!("../../../docs/en/tutorial/04-scenes-and-timeline.md")]
     struct Chapter04;
 
     #[cfg(feature = "ink")]
-    #[doc = include_str!("../../../docs/tutorial/05-drawing.md")]
+    #[doc = include_str!("../../../docs/en/tutorial/05-drawing.md")]
     struct Chapter05;
 
     #[cfg(feature = "text")]
-    #[doc = include_str!("../../../docs/tutorial/06-content.md")]
+    #[doc = include_str!("../../../docs/en/tutorial/06-content.md")]
     struct Chapter06;
 
     #[cfg(feature = "particles")]
-    #[doc = include_str!("../../../docs/tutorial/07-particles.md")]
+    #[doc = include_str!("../../../docs/en/tutorial/07-particles.md")]
     struct Chapter07;
 
     #[cfg(feature = "formula")]
-    #[doc = include_str!("../../../docs/tutorial/08-formula-typst.md")]
+    #[doc = include_str!("../../../docs/en/tutorial/08-formula-typst.md")]
     struct Chapter08;
 
-    #[doc = include_str!("../../../docs/tutorial/09-rendering.md")]
+    #[doc = include_str!("../../../docs/en/tutorial/09-rendering.md")]
     struct Chapter09;
 
     #[cfg(feature = "audio")]
-    #[doc = include_str!("../../../docs/tutorial/10-audio.md")]
+    #[doc = include_str!("../../../docs/en/tutorial/10-audio.md")]
     struct Chapter10;
 
     #[cfg(feature = "ffmpeg")]
-    #[doc = include_str!("../../../docs/tutorial/11-export.md")]
+    #[doc = include_str!("../../../docs/en/tutorial/11-export.md")]
     struct Chapter11;
 
     #[cfg(feature = "studio")]
-    #[doc = include_str!("../../../docs/tutorial/12-studio.md")]
+    #[doc = include_str!("../../../docs/en/tutorial/12-studio.md")]
     struct Chapter12;
 
-    #[doc = include_str!("../../../docs/tutorial/13-performance-and-reliability.md")]
+    #[doc = include_str!("../../../docs/en/tutorial/13-performance-and-reliability.md")]
     struct Chapter13;
 
-    #[doc = include_str!("../../../docs/tutorial/14-architecture-and-extending.md")]
+    #[doc = include_str!("../../../docs/en/tutorial/14-architecture-and-extending.md")]
     struct Chapter14;
 
     #[cfg(all(feature = "particles", feature = "ffmpeg"))]
-    #[doc = include_str!("../../../docs/tutorial/15-cinematic.md")]
+    #[doc = include_str!("../../../docs/en/tutorial/15-cinematic.md")]
     struct Chapter15;
 
     #[cfg(feature = "declarative")]
-    #[doc = include_str!("../../../docs/tutorial/16-declarative.md")]
+    #[doc = include_str!("../../../docs/en/tutorial/16-declarative.md")]
     struct Chapter16;
 
-    #[doc = include_str!("../../../docs/tutorial/appendix-gallery.md")]
+    #[doc = include_str!("../../../docs/en/tutorial/appendix-gallery.md")]
     struct AppendixGallery;
 }

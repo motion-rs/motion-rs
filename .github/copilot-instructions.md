@@ -2,9 +2,9 @@
 
 Motion is a programmable 2D video engine in Rust (edition 2024, Cargo workspace). A scene is a
 pure function of explicit time; the same prepared frame feeds a CPU backend and a GPU backend.
-Read [docs/design/README.md](../docs/design/README.md) (principles, glossary) and
-[docs/design/architecture.md](../docs/design/architecture.md) (package ownership and dependency
-direction) before changing structure. Rust conventions are in [docs/style.md](../docs/style.md) and
+Read [docs/design/README.md](../docs/en/design/README.md) (principles, glossary) and
+[docs/design/architecture.md](../docs/en/design/architecture.md) (package ownership and dependency
+direction) before changing structure. Rust conventions are in [docs/style.md](../docs/en/style.md) and
 are repeated for code generation in [rust.instructions.md](instructions/rust.instructions.md).
 
 ## Hard Rules
@@ -68,13 +68,13 @@ node tools/check-features.cjs --offline   # feature matrix, when features or cfg
 ```
 
 Ignored tests need a GPU, fonts or FFmpeg; select them by name and see
-[docs/development.md](../docs/development.md). A zero-test filter or a successful compile is not
+[docs/development.md](../docs/en/development.md). A zero-test filter or a successful compile is not
 runtime acceptance.
 
 ## More
 
-[Tutorial](../docs/tutorial/README.md) · [Command line](../docs/cli.md) ·
-[Source style](../docs/style.md) · [Development plan](../docs/plan.md) ·
+[Tutorial](../docs/en/tutorial/README.md) · [Command line](../docs/en/cli.md) ·
+[Source style](../docs/en/style.md) · [Development plan](../docs/en/plan.md) ·
 [Docs index](../docs/README.md). Documentation rules are in
 [docs.instructions.md](instructions/docs.instructions.md) and shader rules in
 [wgsl.instructions.md](instructions/wgsl.instructions.md).

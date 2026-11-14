@@ -35,12 +35,12 @@ over remembered APIs.
 - [JSON Schema](../../../schemas/motion.schema.json): accepted fields,
   enum names and structural constraints. Inspect relevant definitions rather than
   reading the entire schema.
-- [Declarative tutorial](../../../docs/tutorial/16-declarative.md): geometry,
+- [Declarative tutorial](../../../docs/en/tutorial/16-declarative.md): geometry,
   animation, text, resources, bindings and reusable definitions.
-- [Document contracts](../../../docs/design/documents.md): determinism, budgets,
+- [Document contracts](../../../docs/en/design/documents.md): determinism, budgets,
   compilation, parameters and validation boundaries.
-- [CLI reference](../../../docs/cli.md): exact command grammar, codecs and errors.
-- [Studio guide](../../../docs/studio.md): document hot reload and preview behavior.
+- [CLI reference](../../../docs/en/cli.md): exact command grammar, codecs and errors.
+- [Studio guide](../../../docs/en/studio.md): document hot reload and preview behavior.
 - [Intro document](../../../examples/documents/intro.json) and
   [Orbit document](../../../examples/documents/orbit.json): small working examples.
 - [Animation Atlas](../../../gallery/assets/animation-atlas.json),

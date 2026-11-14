@@ -6,7 +6,7 @@ applyTo: 'docs/**/*.md,README.md,gallery/README.md'
 # Documentation Conventions
 
 Index: [docs/README.md](../../docs/README.md). Terms: the glossary in
-[docs/design/README.md](../../docs/design/README.md#glossary). Use them consistently: Timeline,
+[docs/design/README.md](../../docs/en/design/README.md#glossary). Use them consistently: Timeline,
 Scene, Node, Project, Composition, still, film, Studio (capitalized), CPU backend / GPU backend (not
 "renderer").
 

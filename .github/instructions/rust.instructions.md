@@ -5,7 +5,7 @@ applyTo: '**/*.rs'
 
 # Rust Conventions
 
-Source of truth: [docs/style.md](../../docs/style.md). Before editing, read the file and its
+Source of truth: [docs/style.md](../../docs/en/style.md). Before editing, read the file and its
 neighbors and match them. Move code rather than rewriting it when reorganizing.
 
 ## File Layout

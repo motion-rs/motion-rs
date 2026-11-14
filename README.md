@@ -1,5 +1,7 @@
 # motion-rs
 
+[English](README.md) | [简体中文](README.zh-CN.md)
+
 Programmable motion graphics and deterministic video rendering in Rust.
 The Cargo package is `motion-rs`; the library import is `motion`.
 
@@ -86,11 +88,11 @@ unsupported path or device loss.
 
 ## Guides
 
-- [Tutorial](docs/tutorial/README.md): first still, animation, scenes, content, audio and export
+- [Tutorial](docs/en/tutorial/README.md): first still, animation, scenes, content, audio and export
 - [Documentation index](docs/README.md): learning, design and maintenance references
-- [Design contracts](docs/design/README.md): architecture, rendering, export, audio, resources, GPU and ownership
-- [Command line](docs/cli.md): `list`, `still`, `export`, `studio` and `schema` commands and flags
-- [Studio](docs/studio.md): preview, playback and export workbench
+- [Design contracts](docs/en/design/README.md): architecture, rendering, export, audio, resources, GPU and ownership
+- [Command line](docs/en/cli.md): `list`, `still`, `export`, `studio` and `schema` commands and flags
+- [Studio](docs/en/studio.md): preview, playback and export workbench
 - [Gallery](gallery/README.md): finished short films
 
 Exact API contracts and executable examples live in [Rustdoc](crates/motion/src/lib.rs).
@@ -104,6 +106,6 @@ and documentation tests with `cargo test --workspace --all-features --doc`.
 Tests needing explicit fonts, a GPU or FFmpeg fixtures are selected separately;
 ignored tests are not evidence of runtime support on an untested machine.
 
-See [development checks](docs/development.md) for feature/fixture procedures,
-[reliability](docs/design/reliability.md) for validation boundaries and the
-[development plan](docs/plan.md) for remaining engineering and feature work.
+See [development checks](docs/en/development.md) for feature/fixture procedures,
+[reliability](docs/en/design/reliability.md) for validation boundaries and the
+[development plan](docs/en/plan.md) for remaining engineering and feature work.

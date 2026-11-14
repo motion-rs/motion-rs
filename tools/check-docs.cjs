@@ -6,6 +6,7 @@ const root = path.resolve(__dirname, "..");
 
 const roots = [
   "README.md",
+  "README.zh-CN.md",
   "gallery/README.md",
   "gallery/assets/README.md",
   "tests/fixtures/fonts/README.md",

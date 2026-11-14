@@ -1,0 +1,160 @@
+# Content Contracts
+
+Images, SVG, text, formulas and authored artwork use the same scene and rendering
+pipeline. This document records preparation and ownership decisions, not a second
+set of public API signatures. Start with [content](../tutorial/06-content.md),
+[formulas](../tutorial/08-formula-typst.md) and [audio](../tutorial/10-audio.md).
+
+## Assets and Images
+
+Assets owns preloaded values and lazy typed handles in one explicit ResourceStore.
+Clones share registrations; snapshots isolate later edits. Handles retain shared
+loading/success/failure results and their logical charges. Removing a registration
+does not invalidate existing handles. Relative files require a configured root;
+an empty owner does not authorize implicit working-directory access.
+
+Image::open and Svg::open retain sources without decoding at authoring time.
+Compilation uses the session owner and font snapshot. Strict production output
+rejects missing resources; explicit placeholder policy retains typed diagnostics.
+Custom decoded data implements Asset, while pure non-resource computation belongs
+in the scene cache. Resource stores, compute caches and external Arc holders have distinct lifetimes.
+See [resource accounting](rendering.md#resources-and-content).
+
+ImageAsset retains immutable linear-premultiplied image data and bounded mipmaps.
+Fit, mapping, sampling and rounded presentation belong to the drawable, not a new
+decoder. AnimatedImageAsset retains composed GIF/APNG or explicit timed frames.
+Tick lookup, loop, ping-pong, trimming and reversal are stateless source-time
+operations; endpoint durations are not duplicated. Image storage, GPU working
+precision and output precision are separate boundaries.
+
+## Procedural paints
+
+Core owns the immutable procedural paint descriptions and mathematical definitions.
+`Paint::Mesh` retains a bounded control lattice rather than preparing an image.
+Each backend independently inverts bilinear patch geometry and blends straight
+Oklab and alpha using cubic smoothstep weights. Overlapping patches use lattice
+order, with the last matching patch owning a sample; uncovered mesh regions are
+transparent. Mesh coordinates map through the painted shape's local bounds.
+Analytic patches admit normalized coordinates up to an absolute million and
+Oklab components up to an absolute ten billion, keeping GPU intermediates finite.
+
+`AtmospherePaint` retains a canvas, explicit signed time, seed, tint, drift,
+amplitude-normalized Perlin fBm and a fog, dust or elliptical light-leak envelope.
+Its canvas defines pixel wavelengths and velocities; the shape's local bounds map
+to that canvas. The content recipe's `paint` operation captures this description
+without generating pixels. CPU and WGSL independently evaluate the same core
+formula, including wrapping mote hashes and the fixed dust neighborhood.
+Paint construction checks the full canvas's octave lattice support and shader
+envelope range, independent of visibility. Canvas axes are limited to 16384;
+normalized dust radii and light-leak extents must be at least `1e-15`.
+
+Preparation admits mesh descriptors and upload storage before allocation.
+Pixel work includes every candidate patch or every atmospheric noise octave and
+envelope. GPU uploads contain patch descriptors or atmospheric parameters, not
+CPU-evaluated procedural texels. Independent f32 GPU arithmetic is visually
+equivalent, not bit-identical to CPU f64 evaluation.
+
+Explicit `MeshGradient::rasterize`, `MeshGradient::pattern`, `MeshPaint::pattern`,
+and `Atmosphere::render`, `render_region` and `overlay` retain image baking.
+Existing image-based artwork is unchanged. Choosing authored analytic mesh paint
+instead of baking can change pixels because it removes image resolution,
+tessellation and bilinear image-filter quantization.
+
+## SVG and Vector Trees
+
+SVG uses usvg's parsing layer, not resvg rendering. Supported paths, groups, images,
+text, clipping, masks and filters convert into Motion's shared vector/command model.
+Path types from parser dependencies are converted at the boundary. Unsupported
+semantics retain diagnostics or fail; there is no hidden browser or bitmap renderer.
+
+VectorTree retains group transforms, opacity, IDs, paths, paints and image content.
+Element selection modifies ordinary Nodes. SVG, text and formulas share vector
+writing, geometric morphing and surface sampling rather than each owning an effect
+engine. They also share one deferred-content pipeline: a compile key produces a
+compiled result (a vector tree, or a paragraph layout for text), authored
+`VectorSelection` values pick original groups, and `VectorTree::reveal` applies
+them and the optional write effect. A `CompileCache` is created from its immutable
+key; changing a compile parameter yields a new cache and nothing is cleared by hand. Stroke writing uses arc length; fill reveal and temporary outline behavior
+remain part of the chosen effect. Morphing needs explicit leaf/subpath correspondence
+and must handle unmatched geometry rather than assuming compatible topology.
+
+Seeded surface sampling uses filled geometry, not arbitrary bounding-box samples.
+Sampling prepares particle origins/targets without introducing a second simulation
+runtime. Caching a VectorTree does not cache rendered frames or bypass admission.
+
+## Fonts and Text
+
+FontLibrary owns an explicit font database shared with text and SVG. A new library
+is empty. Project files/bytes are immutable registrations; system discovery is an
+explicit metadata-indexing step, with selected sources loaded lazily. Deterministic
+projects freeze their inputs and fallback choices rather than depend on discovery
+inside scene callbacks.
+
+One paragraph engine uses cosmic-text for shaping, wrapping, bidi and fallback;
+skrifa supplies glyph outlines. Glyph artwork follows the shared coverage pipeline,
+not a second size-dependent text renderer. Font identity and variation coordinates
+are part of glyph/cache identity. Unsupported color-glyph formats are not implied
+by ordinary outline support.
+
+Text is split into three stages. `ParagraphStyle` describes the paragraph (text, style,
+width, alignment, fonts). Shaping it yields `ParagraphLayout`, the single intermediate
+representation, which retains measured lines, baselines, glyphs, grapheme boundaries and
+source information. `Text` adds ink and one reveal effect (`write` or part animation;
+the last one requested wins) that reads that layout. Static drawing, handwriting, part
+animation and caption vectors are all produced from the same layout. Complete
+text/style/width/font-snapshot keys govern layout reuse through a `CompileCache`. Position
+and paint changes need not reshape text. Per-part transforms reuse layout and the
+inherited scene-local clock; visible parts must not split UTF-8 or graphemes. Explicit
+eager APIs support inspection and truncation before rendering. Captions reuse
+`ParagraphStyle` and keep only timing, stacking and caption-specific validation.
+
+ExportReport.fonts records actually observed faces and source-byte hashes, including
+cached draws. These are auditing aids, not cryptographic identity or a promise of
+identical glyph rasterization on another platform.
+
+## Typst and Formulas
+
+The typst feature compiles trusted single-page markup; formula adds math authoring,
+selection, writing and morphing. Heavy compiler dependencies stay in motion-formula.
+Formula::typst retains source/options without initializing a compiler or reading
+fonts. `size` and `fill` create a new immutable compile key (source plus options) with its
+own empty `CompileCache`, so a stale compilation is never reused; selections cache their
+pruned tree the same way. There is no LaTeX
+conversion API or on-disk formula cache.
+
+A frozen compiler environment produces vector glyphs and geometric marks while
+retaining source ranges and rendered symbol occurrences in FormulaAsset. Source,
+style and environment identity govern bounded in-memory reuse. Lazy rendering
+uses the shared formula cache partition; eager compilation provides metadata and
+precise selection before rendering. Failed compilation/selection keeps node paths
+and frame diagnostics. FormulaMorph delegates geometry to the shared vector model.
+
+Typst is trusted code, not a sandbox for unbounded external markup. Compilation,
+font loading and cache lifetime are preparation responsibilities, not per-frame
+I/O hidden inside an unrelated renderer.
+
+## Authored Tools and Audio
+
+Ink, diagrams and captions are optional content tools. Ink preparation retains
+path, pressure, load and material continuity; procedural bleed/grain/pooling is not
+a physical fluid simulation. Draft may use approximations confined to preview.
+Charts, rulers and callouts keep f64 units and explicit fonts. Captions precompute
+safe-area layout and use exact half-open cues; narration retiming does not stretch
+audio or rebuild derived layouts automatically.
+
+AudioClip is an occurrence over a shared random-access AudioSource. Start, source
+offset, trim and envelopes have independent clocks. File sources remain lazy and
+must stay unchanged during execution; explicit PCM freezes samples. Offline
+decoding, resampling, mixing and analysis need no playback device. Prepared traces
+avoid repeated I/O/FFT work; RMS is not LUFS or a causal microphone measurement.
+Studio owns optional real-time playback separately from headless authoring.
+Encoding, mix bounds and transactions are in [rendering](rendering.md#video-and-audio).
+
+## Owning Sources
+
+- [Assets](../../../crates/motion-core/src/asset.rs)
+- [Content](../../../crates/motion-content/src/lib.rs)
+- [Fonts](../../../crates/motion-content/src/font.rs)
+- [Formulas](../../../crates/motion-formula/src/lib.rs)
+- [Audio preparation](../../../crates/motion-encode/src/audio.rs)
+- [Particle instances](particles.md)
