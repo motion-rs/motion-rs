@@ -180,18 +180,7 @@ pub fn flatten_curve(
     if curve.p0 == curve.p1 && curve.p0 == curve.p2 && curve.p0 == curve.p3 {
         return Ok(());
     }
-    let magnitude = [curve.p0, curve.p1, curve.p2, curve.p3]
-        .iter()
-        .fold(0.0f64, |scale, point| {
-            scale.max(point.x.abs()).max(point.y.abs())
-        });
-    if magnitude * (128.0 * f64::EPSILON) > tolerance * 0.25 {
-        return Err(ValidationError::invalid(
-            path,
-            "geometry",
-            "Device-space curve arithmetic cannot resolve the requested tolerance",
-        ));
-    }
+    validate_curve_precision(curve, tolerance, path)?;
     let first = (curve.p2 - curve.p1) - (curve.p1 - curve.p0);
     let second = (curve.p3 - curve.p2) - (curve.p2 - curve.p1);
     let curvature = libm::hypot(first.x, first.y).max(libm::hypot(second.x, second.y));
@@ -218,6 +207,40 @@ pub fn flatten_curve(
         let current = Point::new(point.x, point.y);
         add_edge(edges, previous, current, budget, path)?;
         previous = current;
+    }
+    Ok(())
+}
+
+/// Checks whether curve arithmetic resolves a finite positive device-space tolerance.
+///
+/// Degenerate curves need no evaluation. This check allocates no edges, so normalization
+/// can reject unresolvable hidden curves before deciding whether to generate coverage.
+pub fn validate_curve_precision(
+    curve: CubicBez,
+    tolerance: f64,
+    path: &str,
+) -> Result<(), ValidationError> {
+    if !tolerance.is_finite() || tolerance <= 0.0 {
+        return Err(ValidationError::invalid(
+            path,
+            "tolerance",
+            "Curve tolerance must be finite and positive",
+        ));
+    }
+    if curve.p0 == curve.p1 && curve.p0 == curve.p2 && curve.p0 == curve.p3 {
+        return Ok(());
+    }
+    let magnitude = [curve.p0, curve.p1, curve.p2, curve.p3]
+        .iter()
+        .fold(0.0f64, |scale, point| {
+            scale.max(point.x.abs()).max(point.y.abs())
+        });
+    if magnitude * (128.0 * f64::EPSILON) > tolerance * 0.25 {
+        return Err(ValidationError::invalid(
+            path,
+            "geometry",
+            "Device-space curve arithmetic cannot resolve the requested tolerance",
+        ));
     }
     Ok(())
 }

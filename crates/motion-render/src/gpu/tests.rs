@@ -5,6 +5,43 @@ use motion_core::ValidationErrorKind;
 use motion_core::{Color, Node, NodeModifiers, Rect, Shape, Size, ValidationLimits};
 
 #[test]
+fn zero_opacity_scopes_schedule_no_gpu_passes_and_restore_visible_siblings() -> motion_core::Result
+{
+    let limits = RasterLimits::default();
+    let mut work = None;
+    for count in [1, 128] {
+        let hidden = Node::group((0..count).map(|_| tile()))
+            .filter(motion_core::Filter::Blur { sigma: 0.5 })
+            .mask(tile().opacity(0.0), motion_core::MaskMode::InvertedAlpha)
+            .opacity(0.0);
+        let frame = prepared(Node::group([tile(), hidden, tile().opacity(0.5)]));
+        let plan = Plan::new(&frame, limits)?;
+        let operations = plan
+            .steps
+            .iter()
+            .map(|step| step.parameters.operation.code)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            operations,
+            [
+                GpuOp::Clear as u32,
+                GpuOp::Fill as u32,
+                GpuOp::Clear as u32,
+                GpuOp::Fill as u32,
+                GpuOp::Composite as u32,
+            ]
+        );
+        if let Some(first) = work {
+            // Hidden commands still consume one walk unit each, not per-pixel GPU work.
+            assert_eq!(plan.stats.work - first, (count - 1) as u64);
+        } else {
+            work = Some(plan.stats.work);
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn batch_data_topology_distinguishes_long_runs_from_isolated_pairs() -> motion_core::Result {
     let limits = RasterLimits {
         max_bytes: 1 << 30,

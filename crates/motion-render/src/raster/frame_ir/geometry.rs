@@ -132,6 +132,11 @@ pub(crate) fn wang(
     path: &str,
 ) -> Result<u64, ValidationError> {
     let [first, second, third, fourth] = points;
+    motion_core::geometry::flatten::validate_curve_precision(
+        kurbo::CubicBez::new(first, second, third, fourth),
+        tolerance,
+        path,
+    )?;
     let left = (third - second) - (second - first);
     let right = (fourth - third) - (third - second);
     let curvature = libm::hypot(left.x, left.y).max(libm::hypot(right.x, right.y));

@@ -31,6 +31,9 @@ flowchart TD
 After normalization, both backends skip fill coverage inside zero-opacity layers, including
 nested filter and mask scopes. Hidden content still undergoes structural and geometry validation;
 it does not consume device fill, pixel or coverage-work ceilings.
+GPU planning also skips the complete zero-opacity scope, so hidden fills, filter passes,
+mask captures and layer composites allocate no execution textures or GPU passes. The command
+walk remains budgeted, and visible siblings resume after the matching scope closes.
 
 The public `RenderPrepare` and `PreparedCpuFrame` describe CPU coverage only. GPU sessions and
 packed export workers use a separate preparation result and never build a CPU prepared

@@ -114,8 +114,25 @@ impl Plan {
                 .map_or([0.0; 4], |paint| paint.linear_premultiplied),
         )?;
         let mut walker = items::ItemPlanner::new(planner, root)?;
+        let mut hidden_depth = 0_usize;
         for (index, item) in frame.items.iter().enumerate() {
             walker.planner.budget.work(1, "gpu.commands")?;
+            // Preparation validates every branch. A zero-opacity layer contributes nothing,
+            // including its nested filters and mask captures, so do not schedule its passes.
+            if hidden_depth > 0 {
+                match item {
+                    PreparedItem::PushLayer { .. } | PreparedItem::BeginMask { .. } => {
+                        hidden_depth += 1;
+                    }
+                    PreparedItem::EndMask | PreparedItem::PopLayer => hidden_depth -= 1,
+                    _ => {}
+                }
+                continue;
+            }
+            if matches!(item, PreparedItem::PushLayer { layer } if layer.opacity == 0.0) {
+                hidden_depth = 1;
+                continue;
+            }
             match item {
                 PreparedItem::ParticleInstances { batch, transform } => {
                     walker.particles(batch, transform)?

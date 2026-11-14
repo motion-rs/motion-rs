@@ -503,6 +503,93 @@ mod tests {
 
     #[cfg(feature = "gpu")]
     #[test]
+    #[ignore = "requires explicit MOTION_TEST_FONT and native GPU; JSON versus native frame work"]
+    fn json_compositing_atlas_gpu_work_tracks_visible_page() -> motion::Result {
+        let font = std::env::var_os("MOTION_TEST_FONT")
+            .ok_or_else(|| std::io::Error::other("Set MOTION_TEST_FONT"))?;
+        let options = render_options(Some(std::path::Path::new(&font)))?
+            .backend(BackendPreference::gpu())
+            .gpu_context(motion::render::GpuContext::new()?);
+        let project = project(options.clone())?;
+        for index in [0, 899, 1799] {
+            let mut work = Vec::new();
+            let mut reference: Option<motion::render::FrameBuffer> = None;
+            for mode in ["default", "json"] {
+                let timeline = project.build(
+                    "compositing-atlas",
+                    Some(serde_json::json!({"seconds":60,"mode":mode})),
+                )?;
+                let mut renderer = motion::render::Composition::for_timeline(&timeline, &options)?
+                    .frame_renderer(timeline.size())?;
+                renderer.enable_timings(true);
+                renderer.render_frame(index, |context| timeline.render(context))?;
+                let actual = renderer.render_frame(index, |context| timeline.render(context))?;
+                if let Some(reference) = &reference {
+                    let difference = reference
+                        .bytes()
+                        .iter()
+                        .zip(actual.bytes())
+                        .map(|(reference, actual)| reference.abs_diff(*actual))
+                        .max()
+                        .unwrap();
+                    assert!(
+                        difference <= 2,
+                        "JSON/native GPU pixels at frame {index}: {difference}"
+                    );
+                } else {
+                    reference = Some(actual);
+                }
+                let report = renderer.report();
+                let stats = report.stats.unwrap();
+                work.push(stats.linear.work + stats.output.work);
+                let timings = report.timings.unwrap();
+                println!(
+                    "{mode} frame={index}: work={} compile={:?} coverage={:?} plan={:?} encode={:?} readback={:?}",
+                    work.last().unwrap(),
+                    timings.compile,
+                    timings.coverage,
+                    timings.plan,
+                    timings.encode,
+                    timings.readback,
+                );
+            }
+            assert!(
+                work[1] <= work[0] * 2,
+                "JSON/native composition work at frame {index}: {work:?}"
+            );
+        }
+        Ok(())
+    }
+
+    #[cfg(feature = "gpu")]
+    #[test]
+    #[ignore = "requires explicit MOTION_TEST_FONT and native GPU; Full HD JSON compositing pages"]
+    fn json_compositing_atlas_full_hd_gpu_frames_and_replay() -> motion::Result {
+        let font = std::env::var_os("MOTION_TEST_FONT")
+            .ok_or_else(|| std::io::Error::other("Set MOTION_TEST_FONT"))?;
+        let options = render_options(Some(std::path::Path::new(&font)))?
+            .backend(BackendPreference::gpu())
+            .gpu_context(motion::render::GpuContext::new()?);
+        let timeline = project(options.clone())?.build(
+            "compositing-atlas",
+            Some(serde_json::json!({"seconds":60,"mode":"json"})),
+        )?;
+        for index in [0, 899, 1799] {
+            let time = Time::from_frame(index, timeline.frame_rate());
+            let actual = render_still(&timeline, time, &options)?;
+            assert_eq!(actual.size(), PixelSize::new(1920, 1080));
+            let replay = render_still(&timeline, time, &options)?;
+            assert_eq!(
+                actual.bytes(),
+                replay.bytes(),
+                "GPU replay at frame {index}"
+            );
+        }
+        Ok(())
+    }
+
+    #[cfg(feature = "gpu")]
+    #[test]
     #[ignore = "requires explicit MOTION_TEST_FONT and native GPU; no window or encoder"]
     fn films_match_cpu_gpu_and_replay() -> motion::Result {
         let font = std::env::var_os("MOTION_TEST_FONT")

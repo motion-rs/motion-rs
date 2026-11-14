@@ -283,6 +283,8 @@ pub(crate) fn prepare_scene(
     };
     let mut rectangles = rect_clip::Preparation::new(backend.clip_cache());
     let mut has_plus_layers = false;
+    let mut visibility = Vec::new();
+    let mut hidden = false;
     for (index, item) in ir.items().iter().enumerate() {
         budget.bytes(COMMAND_PATH_BYTES, "prepared.commands")?;
         let path = format!("display_list.commands[{index}]");
@@ -306,6 +308,8 @@ pub(crate) fn prepare_scene(
                 rectangle_clip,
                 shape_clip,
             } => {
+                budget.push(&mut visibility, hidden, &path)?;
+                hidden |= layer.opacity == 0.0;
                 if layer.filters.is_some() {
                     rectangles.begin_mask();
                 }
@@ -329,14 +333,23 @@ pub(crate) fn prepare_scene(
                 PreparedItem::PushLayer { layer }
             }
             IrItem::PopLayer => {
+                hidden = visibility.pop().ok_or_else(|| {
+                    ValidationError::invalid(&path, "scope", "Unbalanced preparation scope")
+                })?;
+                budget.release(size_of::<bool>() as u64);
                 rectangles.pop();
                 PreparedItem::PopLayer
             }
             IrItem::BeginMask { mode } => {
+                budget.push(&mut visibility, hidden, &path)?;
                 rectangles.begin_mask();
                 PreparedItem::BeginMask { mode: *mode }
             }
             IrItem::EndMask => {
+                hidden = visibility.pop().ok_or_else(|| {
+                    ValidationError::invalid(&path, "scope", "Unbalanced preparation scope")
+                })?;
+                budget.release(size_of::<bool>() as u64);
                 rectangles.pop();
                 PreparedItem::EndMask
             }
@@ -349,7 +362,11 @@ pub(crate) fn prepare_scene(
                 let strip_start = frame.strips.len();
                 let span_start = frame.spans.len();
                 let mut scope = RasterScope::new(&mut budget, &path);
-                backend.fill(&mut frame, geometry, paint, ir.tolerance(), &mut scope)?;
+                // The IR already validates hidden geometry; zero-opacity ancestors cannot
+                // contribute pixels, so their fills need no CPU or device coverage.
+                if !hidden {
+                    backend.fill(&mut frame, geometry, paint, ir.tolerance(), &mut scope)?;
+                }
                 let paint = frame.add_paint(
                     paint.source,
                     paint.bounds,

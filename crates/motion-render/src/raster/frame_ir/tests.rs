@@ -180,6 +180,93 @@ fn ir_rechecks_hidden_content_against_requested_structural_limits() -> Result<()
 }
 
 #[test]
+fn zero_opacity_layers_skip_nested_fill_coverage_and_preserve_siblings() -> motion_core::Result {
+    let geometry = Path2D::builder()
+        .move_to(Point::new(1.0, 1.0))
+        .quadratic_to(Point::new(4.0, 7.0), Point::new(7.0, 1.0))
+        .close()
+        .build()?;
+    let visible = Node::from(geometry.fill(Color::WHITE));
+    let hidden = Node::group([
+        Node::group((0..128).map(|_| visible.clone()))
+            .clip_with(
+                Rect::new(0.0, 0.0, 8.0, 8.0),
+                motion_core::ClipMode::Geometric,
+            )
+            .filter(Filter::Blur { sigma: 0.5 })
+            .mask(visible.clone(), motion_core::MaskMode::Alpha),
+        visible.clone().opacity(0.0),
+    ])
+    .opacity(0.0);
+    let source = Node::group([hidden, visible.clone()]).compile(
+        Size::new(8.0, 8.0),
+        PixelSize::new(8, 8),
+        ValidationLimits::default(),
+    )?;
+    let reference = visible.compile(
+        Size::new(8.0, 8.0),
+        PixelSize::new(8, 8),
+        ValidationLimits::default(),
+    )?;
+    let ir = build(&source)?;
+    let limits = RasterLimits::default();
+    let cpu = prepare_ir(&ir, limits, None)?;
+    let expected = prepare_ir(&build(&reference)?, limits, None)?;
+    let fills = cpu
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            crate::prepared::PreparedItem::Fill { strips, spans, .. } => Some((strips, spans)),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        fills[..fills.len() - 1]
+            .iter()
+            .all(|(strips, spans)| strips.is_empty() && spans.is_empty())
+    );
+    let (strips, spans) = fills.last().unwrap();
+    assert!(!strips.is_empty() || !spans.is_empty());
+    assert_eq!(
+        cpu.render_linear(limits)?.bytes(),
+        expected.render_linear(limits)?.bytes()
+    );
+    #[cfg(feature = "gpu")]
+    {
+        let gpu = PreparedGpuFrame::prepare(&ir, limits, None)?;
+        assert_eq!(gpu.geometry.device_fills.len(), 1);
+    }
+    Ok(())
+}
+
+#[test]
+fn zero_opacity_mask_content_preserves_inverted_mask_semantics() -> motion_core::Result {
+    let visible = Node::from(Rect::new(0.0, 0.0, 4.0, 4.0).fill(Color::WHITE));
+    for (mode, expected) in [
+        (motion_core::MaskMode::Alpha, [0.0; 4]),
+        (motion_core::MaskMode::Luminance, [0.0; 4]),
+        (motion_core::MaskMode::InvertedAlpha, [1.0; 4]),
+        (motion_core::MaskMode::InvertedLuminance, [1.0; 4]),
+    ] {
+        let source = visible
+            .clone()
+            .mask(visible.clone().opacity(0.0), mode)
+            .compile(
+                Size::new(4.0, 4.0),
+                PixelSize::new(4, 4),
+                ValidationLimits::default(),
+            )?;
+        let limits = RasterLimits::default();
+        let cpu = prepare_ir(&build(&source)?, limits, None)?;
+        assert_eq!(
+            cpu.render_linear(limits)?.linear_pixel(1, 1),
+            Some(expected)
+        );
+    }
+    Ok(())
+}
+
+#[test]
 #[cfg(feature = "gpu")]
 fn cpu_reference_numeric_coverage_is_unchanged() -> Result<(), ValidationError> {
     let geometry = Path2D::builder()

@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::gpu::visual::VisualTolerance;
-use motion_core::{ClipMode, Color, FillRule, Filter, Node, Path2D, Point, Rect, Size};
+use motion_core::{ClipMode, Color, FillRule, Filter, MaskMode, Node, Path2D, Point, Rect, Size};
 
 fn curve(rule: FillRule) -> motion_core::Result<Node> {
     let path = Path2D::builder()
@@ -174,6 +174,71 @@ fn gpu_curve_flattening_cpu_gpu_equivalence_and_replay() -> motion_core::Result 
             VisualTolerance::COVERAGE,
         );
         assert_eq!(actual, replay);
+    }
+    Ok(())
+}
+
+#[test]
+#[ignore = "requires native GPU; hidden fills with nested filters, masks and visible siblings"]
+fn gpu_hidden_curve_scopes_cpu_gpu_equivalence_and_replay() -> motion_core::Result {
+    let limits = RasterLimits::default();
+    let mut gpu = Gpu::new()?;
+    let visible = curve(FillRule::EvenOdd)?;
+    let hidden = Node::group((0..128).map(|_| visible.clone()))
+        .filter(Filter::Blur { sigma: 0.3 })
+        .mask(visible.clone(), MaskMode::InvertedAlpha)
+        .opacity(0.0);
+    let node = Node::group([hidden, visible.clone()]);
+    let device = prepare(&node)?;
+    let visible_device = prepare(&visible)?;
+    assert_eq!(
+        device.geometry.device_fills.len(),
+        visible_device.geometry.device_fills.len()
+    );
+    let cpu = visible
+        .compile(
+            Size::new(40.0, 40.0),
+            PixelSize::new(40, 40),
+            ValidationLimits::default(),
+        )?
+        .prepare(ValidationLimits::default(), limits)?;
+    let reference = cpu
+        .0
+        .compose_linear(limits)?
+        .to_rgba8_frame(false, limits)?;
+    let actual = gpu
+        .render(&device.records, Plan::new(&device, limits)?)?
+        .to_rgba8_frame(false, limits)?;
+    let replay = gpu
+        .render(&device.records, Plan::new(&device, limits)?)?
+        .to_rgba8_frame(false, limits)?;
+    super::device_coverage_tests::assert_visually_equivalent(
+        &actual,
+        &reference,
+        VisualTolerance::COVERAGE,
+    );
+    assert_eq!(actual, replay);
+    Ok(())
+}
+
+#[test]
+#[ignore = "requires native GPU; hidden mask content with all four mask modes"]
+fn gpu_zero_opacity_mask_content_preserves_inverted_mask_semantics() -> motion_core::Result {
+    let limits = RasterLimits::default();
+    let mut gpu = Gpu::new()?;
+    let visible = Node::from(Rect::new(0.0, 0.0, 40.0, 40.0).fill(Color::WHITE));
+    for (mode, expected) in [
+        (MaskMode::Alpha, [0.0; 4]),
+        (MaskMode::Luminance, [0.0; 4]),
+        (MaskMode::InvertedAlpha, [1.0; 4]),
+        (MaskMode::InvertedLuminance, [1.0; 4]),
+    ] {
+        let node = visible.clone().mask(visible.clone().opacity(0.0), mode);
+        let device = prepare(&node)?;
+        let actual = gpu.render(&device.records, Plan::new(&device, limits)?)?;
+        assert_eq!(actual.pixel(1, 1), Some(expected));
+        let replay = gpu.render(&device.records, Plan::new(&device, limits)?)?;
+        assert_eq!(actual.pixels(), replay.pixels());
     }
     Ok(())
 }
