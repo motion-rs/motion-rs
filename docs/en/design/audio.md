@@ -1,168 +1,140 @@
 # Audio
 
-Audio is split into a pure authoring description and an offline, deterministic
-preparation step. Nothing in either layer needs a playback device. Real-time playback
-exists only in Studio, as a separate consumer. Exact signatures are in Rustdoc;
-this page records ownership, limits, ordering and failure behavior. Asset-level
-context is in [Content](content.md#authored-tools-and-audio) and container/commit
-rules are in [Rendering and export](rendering.md#video-and-audio).
+Audio is split into a pure authoring description and an offline, deterministic preparation pipeline. Neither layer touches a physical playback device; real-time audio output exists only in Studio as an isolated consumer. Exact signatures live in Rustdoc; this page records ownership, limits, signal-flow order, determinism, and failure contracts. Asset-level context is in [Content](content.md#authored-tools-and-audio) and container/commit rules are in [Export and FFmpeg](export.md).
 
-## Ownership Split
+```mermaid
+flowchart LR
+    subgraph Authoring["Authoring (motion-core / motion-scene)"]
+        Clips["AudioClip / AudioSpec<br/>(file, PCM, Synth, composition)"]
+        Graph["Timeline soundtrack<br/>(AudioBus, Master, Ducking)"]
+    end
+    subgraph Prep["Offline preparation (motion-encode::audio)"]
+        Resolve["Resolve files &amp;<br/>nested compositions"]
+        PerClip["Per-clip chain:<br/>native DSP -> resample -> gain/fades -> width/pan -> clip duck"]
+        Buses["Buses in order:<br/>sum -> DSP -> gain -> bus duck -> 50 ms meters"]
+        MasterChain["Master:<br/>gain -> EBU R128 LUFS -> lookahead limiter -> true-peak ceiling"]
+    end
+    subgraph Outputs["Consumers"]
+        Mix["MixedAudio<br/>(f64 query-independent read)"]
+        Analysis["AudioAnalysis<br/>(cached RMS / FFT / BeatGrid)"]
+        Wav["export_audio<br/>(transactional RIFF / RF64 WAV)"]
+        Mux["Video export<br/>(native AAC in MP4 / MOV)"]
+        Preview["Studio preview<br/>(worker + 8,192-frame ring + cpal)"]
+    end
+    Clips --> Resolve
+    Graph --> Resolve
+    Resolve --> PerClip --> Buses --> MasterChain --> Mix
+    Mix --> Wav
+    Mix --> Mux
+    Mix --> Preview
+    Mix -. "from_source / PCM" .-> Analysis
+```
+
+## Ownership split
 
 | Layer | Crate | Owns |
 | --- | --- | --- |
-| Description | [`motion-core`](../../../crates/motion-core/src/audio.rs) | `AudioSource`, `AudioClip`, `AudioBus`, `Master`, `Duck`/`Ducking`, `PanLaw`, `AudioEffect`, `AudioMetadata`; validation only |
-| Preparation | [`motion-encode`](../../../crates/motion-encode/src/audio.rs) | `PcmBuffer`, `MixedAudio`, `BusMeter`, resampling, built-in effects, master processing, analysis, synthesis, WAV export |
-| Preview | [`motion-studio`](../../../crates/motion-studio/src/audio/preview.rs) | `cpal` playback, ring buffer, readout model |
+| Core description | [`motion-core`](../../../crates/motion-core/src/audio.rs) | `AudioSource`, `AudioClip`, `AudioBus`, `Master`, `Limiter`, `Loudness`, `Duck` / `Ducking`, `PanLaw`, `AudioEffect`, `AudioMetadata`, `ResolvedAudio`; structural validation without I/O or DSP state |
+| Declarative schema | [`motion-scene`](../../../crates/motion-scene/src/audio.rs) | `AudioSpec`, `SpatialSpec`, `BusSpec`, `MasterSpec`, `EffectSpec`, `DuckSpec`; JSON lowering into `Timeline` audio |
+| Offline preparation & DSP | [`motion-encode`](../../../crates/motion-encode/src/audio.rs) | `PcmBuffer`, `MixedAudio`, `BusMeter`, `LoudnessReport`, source transforms, resampling, built-in `Effect` / `AnimatedEq`, `Synth`, `AudioAnalysis`, `WaveformPyramid`, transactional `export_audio` |
+| Interactive preview | [`motion-studio`](../../../crates/motion-studio/src/audio/preview.rs) | Background mix worker, lock-free playback ring buffer, `cpal` stream lifecycle, `AudioReadout` |
 
-- An `AudioClip` is an immutable occurrence over a shared `AudioSource`. Start, source
-  offset, trim, volume envelope and fades have independent clocks; a pan animation
-  is sampled on the occurrence clock.
-- `AudioSource` is a pure, concurrent, random-access interleaved f32 source. Repeated
-  reads must not depend on earlier reads; short reads and EOF leave the rest of the
-  buffer silent; returned samples must be finite. Mixing supports mono and stereo.
-- File and nested-timeline sources are deferred. `Timeline::resolve_audio` returns a
-  `ResolvedAudio` (clips plus the output duration they need) without changing the timeline. `MixedAudio::new` resolves
-  them into sources at an execution boundary (export, mixing, `fit_timeline`),
-  never during scene evaluation; callers holding a `ResolvedAudio` pass it with
-  `MixSource::resolved`. File sources are decoded
-  lazily in windows and must not change while executing; explicit `PcmBuffer` data is
-  frozen. Nested compositions are limited to 16 levels.
+- **Stateless random-access sources**: `AudioSource` is a pure, concurrent (`Send + Sync`), random-access interleaved `f32` reader. Repeated reads must never depend on prior read history; short reads and EOF fill the trailing region with silence; nonfinite samples are rejected. Mixing supports mono (`1`) and stereo (`2`) channels.
+- **Deferred occurrences**: `AudioClip::file` and `AudioClip::composition` record paths or nested `Timeline`s without opening files or decoding media during scene construction. `Timeline::resolve_audio` produces a `ResolvedAudio` snapshot without mutating the `Timeline`, and `MixedAudio::new` resolves deferred sources only at an execution boundary (export, standalone mixing, Studio preview, or duration fitting). Nested audio compositions are bounded to `16` levels.
+- **Explicit timeline fitting**: when a `Timeline` opts into `fit_to_audio`, `audio::fitted` extends the effective timeline duration to cover resolved clips and effect tails without mutating authored visual scenes; visual tracks hold past their natural end while trailing audio finishes.
 
 ## Limits
 
 | Limit | Value | Where checked |
 | --- | --- | --- |
-| Source sample rate / channels | 1..=192000 Hz, mono or stereo | `AudioClip::resolved_duration` |
-| Clips per prepared mix, file export or Studio list | 256 (`MAX_CLIPS`) | `MixedAudio::new`, Studio audio settings |
-| Buses / effects per chain / ducking per clip | 16 / 16 / 4 | `Timeline` validation, `AudioClip` |
-| Effect tail | 0..=30 s; added to the clip duration | `AudioClip::resolved_duration` |
-| Declared span | at most 24 h (`MAX_SECONDS = 86_400`) | clip and mix validation |
-| Volume / pan / stereo width | 0..=16 / -1..=1 / 0..=2 | `AudioClip::resolved_duration` |
-| Retained PCM | 32 Mi f32 samples = 128 MiB (`MAX_SAMPLES`) | `PcmBuffer`, mixes, bus submixes, snapshots, resampling scratch |
-| Encoded input | 64 MiB (`MAX_ENCODED_BYTES`) | `PcmBuffer::from_bytes`/`open` |
-| Bus meter traces | 16 MiB | `process_buses` |
-| Metadata | 64 tags, 4096 chapters, 4096-byte text | `AudioMetadata::validate` |
-| Mix rate | 1..=192000 Hz; video AAC requires 44.1/48/96 kHz | `MixedAudio`, `NativeOptions::audio_mix` |
+| Source sample rate / channels | `1..=192,000 Hz`, mono (`1`) or stereo (`2`) | `AudioClip::resolved_duration`, `PcmBuffer::new` |
+| Clips per prepared mix, WAV export, or Studio list | `256` (`MAX_CLIPS`) | `MixedAudio::new`, Studio audio settings |
+| Buses / effects per chain / ducking triggers per target | `16` / `16` / `4` | `Timeline` validation, `AudioClip::resolved_duration` |
+| Bus name length / nested composition depth | `1..=128` bytes / `16` levels | `AudioClip`, `prepare_timeline` |
+| Effect tail | `0..=30 s` (appended as silent input to the occurrence) | `AudioClip::resolved_duration` |
+| Declared span | `<= 86,400 s` (`24 h`) | Clip, loop, ADSR, and mix validation |
+| Volume / pan / stereo width | `0..=16` / `-1..=1` / `0..=2` | `AudioClip::resolved_duration` |
+| Spatial rolloff / width | `0..=1,000` / finite `> 0` design units | `AudioClip::spatial`, `SpatialSpec` |
+| Speed / WSOLA time-stretch / pitch-shift | `0.25..=4.0`x / `0.25..=4.0`x (`128,000,000` correlation ops) / `-12..=12` semitones | `SpeedSource`, `PcmBuffer::time_stretch`, `PcmBuffer::pitch_shift` |
+| Retained PCM buffer | `32 Mi` `f32` samples = `128 MiB` (`MAX_SAMPLES`) | `PcmBuffer`, mixes, bus submixes, snapshots, resampling scratch |
+| Encoded audio input | `64 MiB` (`MAX_ENCODED_BYTES`) | `PcmBuffer::from_bytes` / `open` |
+| Bus meter / analysis cache | `16 MiB` meter traces; `16` traces or `64 MiB` per `PcmBuffer` (`<= 1,000,000` points) | `process_buses`, `AudioAnalysis` |
+| Metadata | `64` tags, `4,096` chapters, `4,096`-byte text | `AudioMetadata::validate` |
+| Output sample rate | `1..=192,000 Hz` (`MixedAudio`); `8,000..=192,000 Hz` (WAV); `44,100` / `48,000` / `96,000 Hz` (video AAC) | `MixedAudio`, `AudioExportOptions`, `ExportOptions` |
 
-These are allocation/work limits, not a process memory cap. Oversized requests are
-rejected rather than truncated.
+These bounds cap per-artifact allocation and algorithmic work rather than process RSS. Oversized inputs fail with `ValidationError` instead of truncating silently.
 
-## Preparation Order
+## Occurrences, transforms, and spatial placement
 
-Per clip (in `MixedAudio::new`): read the source window → effect chain at the
-**source rate** → resample to the mix rate → volume, envelope and fades → stereo
-width and pan → clip-level ducking → store as a `PreparedClip`.
+- **Independent clip clocks**: an `AudioClip` wraps a shared `AudioSource` with timeline `start`, source `offset`, optional `duration` (or `trim(start, end)`), containing-scene `limit` crop, linear `volume`, `fade_in` / `fade_out` (overlapping fades multiply), and local-time `Signal<f64>` animations for `volume_envelope` and `pan_animation`.
+- **Source-time transforms (`AudioClipExt` and `PcmBuffer`)**:
+  - `ReverseSource` (`.reverse()`) reflects frame indices across a finite source without mutating shared PCM buffers.
+  - `SpeedSource` (`.speed(factor)`) resamples with a stateless 33-tap Hann-windowed sinc kernel over `0.25..=4.0`, coupling playback speed and pitch.
+  - `LoopSource` (`.loop_until(duration, crossfade)`) repeats a finite region up to `86,400 s` with an equal-power crossfade seam (`crossfade < 0.5 * region`); `.crossfade` overlaps two consecutive clips with equal-power gain curves.
+  - `PcmBuffer::time_stretch` runs deterministic mono-correlated WSOLA overlap-add over `0.25..=4.0` without changing pitch, and `PcmBuffer::pitch_shift` shifts `-12..=12` semitones while preserving exact frame count by pairing `SpeedSource` with inverse WSOLA stretch.
+- **2D screen-coupled spatialization**: `AudioClip::spatial` (and declarative `SpatialSpec`) couples an animated 2D `Point` against a `listener` point and stereo `width` into local-time pan (`[-1, 1]`) and inverse-distance gain attenuation (`rolloff` in `0..=1,000`), multiplying any existing volume envelope. It is an explicit 2D screen-space mapping, not 3D HRTF or room acoustics.
 
-Then, once for the whole mix:
+## Preparation and signal-flow order
 
-1. Buses (`process_buses`), in declaration order. Each bus sums its clips, runs its
-   effects, applies static gain, then its ducking. Unbussed clips bypass buses. A clip
-   naming an undeclared bus fails.
-2. Bus meters record 50 ms RMS and sample-peak traces after effects, gain and ducking.
-3. Master (`MixedAudio::apply_master`): static gain → optional loudness normalization →
-   optional lookahead limiter → a reconstructed-peak correction below the ceiling.
-   `Master::default()` is identity; `Master::safe()` is a -1 dB limiter without
-   normalization.
+For each occurrence in `MixedAudio::new`:
 
-Ducking triggers are rendered completely before the target is touched. A bus trigger
-must be declared earlier than the ducked bus; a clip trigger is rendered standalone
-at its own gain and pan and its own ducking is ignored. Detector, attack, release
-and lookahead run offline on the full trigger signal.
+1. Read the source window (including any declared effect-tail silence) at the **native source sample rate**.
+2. Run the clip's `effects` chain in order at the native source rate.
+3. Resample to the mix sample rate when native and mix rates differ.
+4. Apply static `volume`, clip-local `volume_envelope`, and linear `fade_in` / `fade_out`.
+5. Apply mid/side `stereo_width` (`1.0` preserves the stereo image; `0.0` collapses to mono) and `pan` / `pan_animation`. Mono sources always pan with constant power; stereo balance follows `PanLaw::ConstantPower` (default), `PanLaw::Minus4_5dB` (both unity-normalized at center), or `PanLaw::Linear` (attenuates only the opposite channel).
+6. Apply clip-level sidechain `ducking` and retain the result as an immutable `PreparedClip`.
 
-Panning: `PanLaw::ConstantPower` is the default; it and `Minus4_5dB` are normalized
-at center, while `Linear` attenuates only the opposite channel; mono sources always pan with constant power.
+Then, once across the mix:
 
-## Effects: Statefulness, Tails, Random Access
+1. **Buses (`process_buses`)**: evaluated in declaration order. Each `AudioBus` sums its routed clips, runs its bus `effects`, applies static gain, applies bus-level `ducking`, and records `50 ms` RMS and sample-peak `BusMeter` traces. Unbussed clips bypass buses; referencing an undeclared bus fails validation.
+2. **Sidechain ducking isolation**: every ducking trigger is rendered completely before its target is attenuated. A bus trigger must be declared earlier than the ducked bus; a clip trigger is rendered standalone at its own gain and pan with its own ducking ignored. Peak-hold detection, attack, release, and lookahead run offline over the complete trigger envelope.
+3. **Master (`MixedAudio::apply_master`)**: static `gain_db` (`-96..=24 dB`) -> optional EBU R128 gated integrated loudness normalization (`Loudness`, `-70..=-5 LUFS` with a true-peak ceiling) -> optional lookahead limiter (`Limiter`, `<= 20 ms` lookahead, `(0, 2] s` linear recovery) -> 4x windowed-sinc reconstructed true-peak clamp below the ceiling. `Master::default()` is bit-transparent identity (never normalizing peaks automatically); `Master::safe()` enables a `-1.0 dBFS` ceiling limiter (`5 ms` lookahead, `100 ms` release) without loudness normalization.
 
-`AudioEffect::process` receives whole interleaved buffers from a zero initial
-state. Filter/dynamics state exists only during preparation; the mixer processes
-each occurrence from its origin once and retains the result, so later reads never
-warm up IIR state. Built-in `Effect` variants are EQ, compressor, gate, de-esser,
-delay and reverb; `AnimatedEq` samples automation on the clip's native clock.
-Delay and reverb declare an explicit `tail` that truncates the decay; `tail()` extends
-the occurrence by that much silent input. Custom effects must be deterministic and
-implement `validate` without processing PCM.
+## Offline effects and tails
 
-Consequence: `MixedAudio::new` with `MixOptions::range` is only a direct window when there are no
-effects, ducking, buses or master settings; otherwise it prepares the full timeline
-and crops, so effect and normalization clocks never restart at the window edge.
-`MixedAudio::crop` likewise crops prepared output.
+`AudioEffect::process` receives complete interleaved buffers starting from a zeroed state. Filter and dynamics state exists only during offline preparation: the mixer processes each clip or bus once from its origin and retains the resulting samples, so random-access reads never encounter uninitialized IIR history.
 
-## Determinism and Seek-Replay
+- **Built-in DSP (`Effect` and `AnimatedEq`)**: RBJ biquad `Eq` (`HighPass`, `LowPass`, `Peak`, `LowShelf`, `HighShelf`, `Notch` with `Q` in `0.1..=20` and gain in `-24..=24 dB`), `AnimatedEq` (sampled on the clip's native clock with `64`-frame coefficient ramps), linked-channel `Compressor`, smoothed `Gate`, split-band `DeEsser`, feedback `Delay` (`<= 5 s`, `|feedback| < 0.99`), and parallel-comb / all-pass `Reverb`.
+- **Explicit tails**: `Delay` and `Reverb` require an explicit `tail` (`0..=30 s`) that deterministically pads silent input and truncates the decay. Custom `AudioEffect` implementations must be deterministic and implement `validate(rate)` without touching PCM.
+- **Windowing rule**: `MixedAudio::new` with `MixOptions::range` reads a direct sub-window only when the soundtrack has no clip effects, no ducking, no buses, and `Master::default()`. Whenever stateful DSP, buses, ducking, or master processing is active, `MixedAudio::new` prepares the full timeline from `Time::ZERO` and crops the prepared output so IIR states, envelopes, and EBU R128 gating never restart at a range boundary.
 
-- Prepared reads (`MixedAudio::read`) sum prepared clips in fixed order in f64
-  and never touch sources or resampler state; results do not depend on query order.
-- Source reads, effects, ducking and master processing are pure functions of the
-  timeline and options. User sources and envelopes are trusted pure callbacks; panics
-  propagate.
-- The resampler is chosen explicitly: `ResampleQuality::Fast` (FFT, default,
-  needs `audio`) or `Sinc` (windowed sinc, 32 zero crossings per side).
-- Synthesis (`Synth`) integrates phase analytically from the frame index; noise is a
-  hash of frame and seed, so seek-and-replay reproduces the same samples for a
-  fixed seed. Time-to-frame conversion is integer arithmetic. Sinusoids read a fixed
-  4096-segment table with linear interpolation (error below `3e-7`, about -130 dB)
-  instead of evaluating `sin` per sample.
-- Analysis signals are frozen traces, so sampling them inside a frame callback has
-  no I/O or FFT cost.
+## Determinism, synthesis, and analysis
 
-## Analysis Signals
-
-`AudioAnalysis` (feature `audio`) wraps one immutable `PcmBuffer`, or freezes a bounded
-interval of any pure source via `from_source`. It yields `AudioSignal`
-(a stateless finite `FiniteAnimation<f64>`, linear interpolation, 0 outside its duration):
-`loudness` (linear RMS, not LUFS), `band`, `pitch`, `onset_strength`;
-`AudioSpectrum` (`spectrum`, `chroma`); `AudioMarkers` (`onsets`, JSON read/write);
-and `BeatGrid`. Traces are computed with forward Hann windows, cached per PCM
-(16 traces / 64 MiB) and capped at one million time points. Analysis of a source
-is not analysis of the final mix; analyze a prepared mix when visuals should follow
-the delivered track. `WaveformPyramid` builds peak envelopes (at most 1M base bins).
+- **Query-order-independent mixing**: `MixedAudio::read` sums prepared clips in fixed declaration order using `f64` accumulation before converting to `f32`, never touching underlying sources or resampler state. Seeking or changing read chunk sizes yields identical samples.
+- **Explicit resampling**: `ResampleQuality::Fast` (FFT resampler, default, requires feature `audio`) or `ResampleQuality::Sinc` (windowed sinc with `32` zero crossings per side).
+- **Analytic procedural synthesis (`Synth`)**: integrates oscillator phase analytically from integer frame indices and hashes noise directly from `(seed, frame)`. Sinusoids interpolate a fixed `4,096`-segment table (error `< 3e-7`, ~`-130 dB`) instead of calling platform `sin`. Includes `Wave` (`Sine`, `Saw`, `Square`, `Triangle`, `White`, `Pink`, `Brown`), `Adsr` envelopes, seeded `Sound` accents (`Whoosh`, `Click`, `Pop`, `Tick`, `Riser`, `Impact`, `SubDrop`, `Kick`, `Snare`, `Hat`, `Ambience`), `metronome`, and 16-step `drums`.
+- **Frozen visual analysis (`AudioAnalysis`)**: wraps an immutable `PcmBuffer` (via `Handle<PcmBuffer>` or `from_pcm`) or freezes a bounded interval of any `AudioSource` via `from_source`. Produces stateless `AudioSignal` curves (`FiniteAnimation<f64>`, linearly interpolated between hop frames and `0.0` outside `[0, duration)`): `loudness` (linear forward-window RMS, not LUFS), `band`, `pitch`, and `onset_strength`, alongside `AudioSpectrum` (`spectrum`, `chroma`), `AudioMarkers` (`onsets`, JSON import/export), `BeatGrid`, and `WaveformPyramid` (`<= 1,000,000` base bins). Sampling an analysis signal inside `Scene::render` performs zero I/O or FFT work. Analyze a prepared `MixedAudio` rather than a raw source when visuals must react to post-DSP or ducked levels.
 
 ## Export
 
-- Video: `export` resolves audio, builds one `MixedAudio::new` with `MixSource::resolved` and a `MixOptions::range` for the
-  selected range at `ExportOptions.audio_sample_rate`, and passes it to
-  `Encoder::open` before any frame is written.
-- Standalone: `export_audio` writes WAV (RIFF, or RF64 for large data) through a
-  temporary file beside the destination. Existing destinations survive unless
-  `overwrite` is set; failure leaves no partial file; the destination may not be an
-  input source. Rates 8000..=192000; chapters are rejected for WAV.
-- Loudness (`MixedAudio::loudness_report`) is gated 400 ms integrated LUFS plus
-  a reconstructed true peak; outputs shorter than a block have no integrated value.
+- **Video containers**: `export` resolves timeline audio up front, rejects output paths that alias any audio input file (checked via canonical paths), prepares one `MixedAudio` over the selected export range at `ExportOptions::audio_sample_rate` (`44,100`, `48,000`, or `96,000 Hz`), and passes it to `Encoder::open` before frame `0` renders. Native MP4 and MOV encode stereo `aac` capped to the exact video duration (`ceil(frames * sample_rate / fps)`); codecs without audio support (`Vp9`, `Gif`, `PngSequence`) reject non-empty soundtracks before frame work begins.
+- **Standalone WAV (`export_audio`)**: writes `AudioFormat::Wav16` (with optional deterministic hashed TPDF dither), `AudioFormat::Wav24` (default), or `AudioFormat::WavF32` in `AudioChannels::Stereo` or `AudioChannels::Mono` (`(L + R) / 2`), automatically switching from RIFF to RF64 when payload size requires it. Stages output in a sibling temporary file, writes bounded RIFF `LIST INFO` tags (chapters are rejected for WAV), refuses to overwrite existing files unless `overwrite` is set, and rejects destination paths that alias an input source.
+- **Loudness inspection**: `MixedAudio::loudness_report` computes EBU R128 `400 ms` gated integrated LUFS, sample peak, 4x oversampled true peak, and cross-channel phase correlation (`None` on silent signals or clips shorter than one gating block), memoizing results by exact sample-bit content.
 
-## Studio Preview vs Export
+## Studio preview boundary
 
-Studio plays audio through a worker thread, `cpal` and a lock-free ring buffer; it
-is not an export path. It requires 48 kHz stereo f32 output and mixes in 512-frame
-blocks, preparing the whole timeline for processed timelines or short 8192-frame
-`MixOptions::range` windows otherwise. A request is cancelled by `stop`; underruns, device
-loss and mix errors surface as `AudioStatus::Failed` and never alter export.
-`AudioReadout` reports integrated LUFS, sample/true peak, correlation and bus
-meters from a prepared mix without a device. Audio drafts load without opening
-media sources. See [Studio guide](../studio.md).
+Studio previews audio through a dedicated `motion-audio-preview` worker thread, a lock-free `8,192`-frame stereo ring buffer (`512`-frame producer steps), and `cpal` at `48 kHz` stereo `f32`. Timelines with buses, effects, ducking, or master processing prepare once in full; dry timelines stream `8,192`-frame `MixOptions::range` windows on demand. Playback stops cooperatively via atomic cancellation, and device loss, stream underruns, or mix errors report `AudioStatus::Failed` in the UI without affecting deterministic export. `AudioReadout` computes LUFS, sample/true peaks, correlation, and bus meters from `MixedAudio` without opening an audio device. See [Studio workbench](studio.md).
 
-## Features and Failure
+## Features and failure
 
-| Feature | Effect |
+| Feature | Capability |
 | --- | --- |
-| `audio` (default in `motion-encode`) | Decoding (WAV/MP3/AAC/FLAC/Vorbis), FFT resampling, analysis |
-| `ffmpeg` (implies `audio`) | Native AAC muxing into video |
-| neither | Explicit PCM and same-rate mixing work; file audio and rate conversion fail with explicit errors |
+| `audio` (default in `motion-encode`; opt-in on `motion-rs` unless implied by `ffmpeg`) | Symphonia decoding (WAV, MP3, AAC, FLAC, Vorbis in MP4/OGG/WAV containers), `rubato` resampling, `rustfft` analysis, declarative `EffectSpec` |
+| `ffmpeg` (implies `audio`) | In-process `libavcodec` AAC encoding and MP4/MOV muxing |
+| Neither enabled | Explicit `PcmBuffer`, `Synth`, and same-rate mixing remain available; file decoding and rate conversion fail with explicit errors |
 
-Failures are `motion_core::Error` values: invalid parameters are field-tagged
-validation errors (`audio.<field>`), unreadable or changed files are asset errors,
-and nonfinite PCM from a source, gain or master is rejected rather than stored.
-Preparation errors surface before video encoding starts.
+All failures surface as `motion_core::Error`: invalid parameters return field-tagged `ValidationError`s (`audio.<field>`), missing or mutated files return `Error::Asset`, and nonfinite samples from sources, envelopes, effects, or master stages abort preparation before any output file is committed.
 
-## Tutorial Coverage
+## Tutorial coverage
 
-[Chapter 10](../tutorial/10-audio.md) teaches authoring: sources, occurrences, narration
-clock, mixing, buses, ducking, synthesis, analysis-driven visuals and pitfalls. This
-page owns the contracts behind it: layer split, limits, processing order and
-determinism.
+[Chapter 10](../tutorial/10-audio.md) walks through authoring: sources, occurrences, narration clocks, buses, sidechain ducking, procedural synthesis, audio-reactive visuals, and common pitfalls.
 
-## Related
+## Owning sources
 
-- [Content](content.md#authored-tools-and-audio) · [Rendering and export](rendering.md#video-and-audio) · [Reliability](reliability.md)
-- [Studio guide](../studio.md) · [`audio_export` example](../../../examples/audio_export.rs)
-- [`mix.rs`](../../../crates/motion-encode/src/audio/pcm/mix.rs) · [`master.rs`](../../../crates/motion-encode/src/audio/master.rs) · [`effects.rs`](../../../crates/motion-encode/src/audio/effects.rs)
+- Core audio model & validation: [`crates/motion-core/src/audio.rs`](../../../crates/motion-core/src/audio.rs), [`crates/motion-core/src/audio/clip.rs`](../../../crates/motion-core/src/audio/clip.rs), [`crates/motion-core/src/audio/metadata.rs`](../../../crates/motion-core/src/audio/metadata.rs)
+- Declarative audio schema: [`crates/motion-scene/src/audio.rs`](../../../crates/motion-scene/src/audio.rs)
+- PCM, source transforms, & mixing: [`crates/motion-encode/src/audio.rs`](../../../crates/motion-encode/src/audio.rs), [`crates/motion-encode/src/audio/pcm.rs`](../../../crates/motion-encode/src/audio/pcm.rs), [`crates/motion-encode/src/audio/pcm/mix.rs`](../../../crates/motion-encode/src/audio/pcm/mix.rs), [`crates/motion-encode/src/audio/sources.rs`](../../../crates/motion-encode/src/audio/sources.rs)
+- Offline DSP, master loudness, synthesis, & analysis: [`crates/motion-encode/src/audio/effects.rs`](../../../crates/motion-encode/src/audio/effects.rs), [`crates/motion-encode/src/audio/master.rs`](../../../crates/motion-encode/src/audio/master.rs), [`crates/motion-encode/src/audio/synth.rs`](../../../crates/motion-encode/src/audio/synth.rs), [`crates/motion-encode/src/audio/analysis.rs`](../../../crates/motion-encode/src/audio/analysis.rs)
+- Standalone WAV export & Studio preview: [`crates/motion-encode/src/audio/export.rs`](../../../crates/motion-encode/src/audio/export.rs), [`crates/motion-studio/src/audio/preview.rs`](../../../crates/motion-studio/src/audio/preview.rs)
+

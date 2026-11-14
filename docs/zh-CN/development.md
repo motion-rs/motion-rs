@@ -1,7 +1,7 @@
 # 开发与维护检查
 
 本文档是代码编译、测试套件、固件与持续集成（CI）的维护指南。
-以下命令均为可选的本地验证流程；查阅文档本身不执行任何命令。关于失败与所有权保证请参见[可靠性契约](design/reliability.md)，关于工作负载与测量规则请参见[性能基准](benchmarks.md)，关于待完成的验收缺口请参见[开发规划](plan.md)。
+以下命令均为可选的本地验证流程；查阅文档本身不执行任何命令。关于失败与所有权保证请参见[可靠性契约](design/reliability.md)，关于工作负载与测量规则请参见[性能基准](benchmarks.md)。
 
 ## 持续集成 (CI)
 
@@ -45,7 +45,7 @@ RUSTDOCFLAGS="-D rustdoc::broken_intra_doc_links -D rustdoc::private_intra_doc_l
 
 对于被忽略的字体测试固件，将 `MOTION_TEST_FONT` 设置为内嵌的 `tests/fixtures/fonts/NotoSans-Regular.ttf`，将 `MOTION_TEST_FALLBACK_FONT` 设置为 `tests/fixtures/fonts/NotoSansCJKsc-Regular.otf`。纯中文固件需要将 CJK 字体作为 `MOTION_TEST_FONT`。彩色位图 Emoji 固件还需要固件 README 中描述的 `MOTION_TEST_EMOJI_FONT`。通过全名选择被忽略的测试。请勿将忽略的测试、无测试匹配的过滤器或成功的编译等同于运行时验收通过。
 
-像素对比检查要求非空白的主体区域、指定命名的[视觉验收](design/reliability.md#视觉验收标准)级别或档位、精确的 CPU 定位重放以及 Replay 档位的 GPU 重放。音频固件检查实际解码的采样与时间戳；视频固件解码帧数与元数据。任何测试均不应调用 ffmpeg/ffprobe 外部进程可执行文件。原生窗口交互、真实输出设备及其他平台需要单独验证。当前的缺口与验收准则见[开发规划](plan.md)。
+像素对比检查要求非空白的主体区域、指定命名的[视觉验收](design/reliability.md#视觉验收标准)级别或档位、精确的 CPU 定位重放以及 Replay 档位的 GPU 重放。音频固件检查实际解码的采样与时间戳；视频固件解码帧数与元数据。任何测试均不应调用 ffmpeg/ffprobe 外部进程可执行文件。原生窗口交互、真实输出设备及其他平台需要单独验证。
 
 ### 独立后端验收
 
@@ -55,7 +55,7 @@ RUSTDOCFLAGS="-D rustdoc::broken_intra_doc_links -D rustdoc::private_intra_doc_l
 cargo test --locked --offline -p motion-render --all-features --lib gpu:: -- --include-ignored --test-threads=1
 ```
 
-渲染器测试套件包括两种绕数规则下的 24 个固定随机种子、精确的重复奇偶抵消、tile 拼缝、大坐标、保护带滤镜、程序化画刷、解析轨迹、内存驻留以及精确的字节/工作量/设备限制准入。现有的 CPU 参考测试和黄金标准样本保持不变。GPU 固件仅认证实际使用的适配器。涵盖文本、SVG、裁剪和粒子的超大场景验收属于[规划事项](plan.md#独立-gpu-准备路径)。
+渲染器测试套件包括两种绕数规则下的 24 个固定随机种子、精确的重复奇偶抵消、tile 拼缝、大坐标、保护带滤镜、程序化画刷、解析轨迹、内存驻留以及精确的字节/工作量/设备限制准入。现有的 CPU 参考测试和黄金标准样本保持不变。GPU 固件仅认证实际使用的适配器。涵盖文本、SVG、裁剪和粒子的超大场景验收属于规划事项。
 
 ## 帧时间诊断
 

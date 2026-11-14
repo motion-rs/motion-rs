@@ -1,125 +1,76 @@
-# Particle Instance Contracts
+# Particle instance contracts
 
-Use the [particle tutorial](../tutorial/07-particles.md) for trajectories, simulation,
-styles and examples. This document owns CPU/GPU instance protocols and admission.
-Particle is a 72-byte state record with finite linear-premultiplied color, distinct
-from the 48-byte upload primitive and the independent 48-byte GPU support metadata.
-There is no second Layer-based runtime or GPU trajectory-program interpreter.
+Particle systems execute as single `InstanceBatch` display-list operations rather than trees of child `Node` values. This document defines the record layouts, CPU/GPU evaluation and spatial-tiling protocols, admission limits and deterministic replay invariants shared across [`motion-core`](../../../crates/motion-core/src/instances.rs), [`motion-content`](../../../crates/motion-content/src/particles.rs) and [`motion-render`](../../../crates/motion-render/src/gpu/particle_tiles.rs). See the [particles tutorial](../tutorial/07-particles.md) for authoring APIs, [rendering](rendering.md#gpu-rendering) for frame-level GPU scheduling, and [resources](resources.md#limits-and-accounting) for shared sprite residency.
 
-## CPU Composition
+## Record layouts and execution flow
 
-Built-in batches scatter conservative per-instance supports into 16x16 device
-tiles. Each tile retains ascending original instance indices; sampling uses the
-same scalar coverage/compositor and preserves zero-source identity and nonzero
-order. Glow's existing three-radius cutoff, rotated sprites, line/trail extents,
-antialiasing and numeric padding remain intact. Bounds that cannot be handled
-reliably fall back to the full-batch path. Other InstanceBatch implementations
-use that path unless they explicitly supply SpatialInstances.
+Motion separates authoring and simulation state (`Particle`) from backend-independent primitive records (`InstanceRecord`, `ExtendedInstanceRecord`), closed-form GPU trajectory uploads (`AnalyticInstanceUpload`) and device-side support metadata. No second `Layer`-based particle runtime and no arbitrary GPU trajectory-program interpreter exist.
 
-Tile metadata and index entries count toward logical live/peak bytes. Work charges
-cover bin construction and tile-instance pixel visits, rather than every instance
-at every output pixel. This changes algorithm-work admission, not the configured
-budget. Failed renders do not commit a partially updated public output frame.
-No CPU/GPU equivalence or real-time guarantee follows from reduced work totals.
+```mermaid
+flowchart LR
+    subgraph Author["Authoring & Simulation (motion-content)"]
+        Sim["Fixed-step Simulation / Replay\nor Custom Trajectory"]
+        Ana["Closed-form AnalyticEmitter\n(Disc, Glow, Sprite)"]
+    end
+    subgraph Proto["Backend-Neutral Protocols (motion-core)"]
+        Batch["InstanceBatch + SpatialInstances\n/ InstanceUpload (12w or 16w)"]
+        AUpload["AnalyticInstanceUpload\n(20w header + 8w state)"]
+    end
+    subgraph Exec["Backend Preparation & Composition (motion-render)"]
+        CpuTile["CPU 16×16 Spatial Bins\n(source-order scalar composition)"]
+        GpuEval["GPU Analytic Compute\n(48 B primitive records)"]
+        GpuTile["GPU 64-thread Support (48 B)\n→ <256 direct / 16×16 bitset / prefix-fill"]
+    end
+    Sim --> Batch
+    Ana --> AUpload
+    Batch --> CpuTile
+    Batch --> GpuTile
+    AUpload --> GpuEval --> GpuTile
+    AUpload -. "precision fallback\n(instances.analytic.precision)" .-> Batch
+```
 
-## GPU State Preparation
+| Structure | Owner | Layout | Contract |
+| --- | --- | --- | --- |
+| `Particle` | `motion-content` | `72` bytes (`#[repr(C)]`) | Runtime simulation and trajectory state: `position`, `velocity`, finite linear premultiplied `color` (`alpha` in `0..=1`, unclipped HDR RGB, zero RGB when `alpha == 0`), `size` (`0..=4096`), `rotation`, `age >= 0`, `lifetime` (`(0, 3600]` s), nonrecycled `index: u64` and `custom: [f32; 4]`. |
+| `InstanceRecord` | `motion-core` | `12` `f32` words (`48` bytes) | Base evaluated primitive (`Disc`, `Glow`, `Sprite`, `Segment`): `position`, `start`, `color`, `radius`, `rotation`, `width` and `InstanceKind` (`0..=3`). Carries no age, velocity, seed, model or simulation history. |
+| `ExtendedInstanceRecord` | `motion-core` | `16` `f32` words (`64` bytes) | `InstanceRecord` (`base`) plus `extra: [f32; 4]` supporting all 13 `InstanceKind` variants (`0..=12`), adding `SpriteSheet`, `TaperedSegment`, `Polygon`, `Ring`, `Capsule`, `Soft`, `Quad`, `Bokeh` and `Ribbon`. |
+| `InstanceUpload` | `motion-core` | `4`-word (`16`-byte) header + `count * stride` words + optional RGBA texels | Header `[count, sprite_width, sprite_height, layout]` where `layout = stride + (blend_id << 5)` (`stride` is `12` or `16` in the low 5 bits; `InstanceBlend` is encoded above bit 5, exact in `f32`). |
+| `AnalyticInstanceUpload` | `motion-core` | `20`-word (`80`-byte) header + `8` words (`32` bytes) per instance | Admitted explicit seed, frame time, bounded model parameters and per-instance `AnalyticInstanceState` for closed-form GPU evaluation into `48`-byte primitive records. |
+| GPU support metadata | `motion-render` | `48` bytes per instance (`max(count * 48, 16)`) | Separate charged device buffer derived by a `64`-thread compute pass; never an alias for `InstanceUpload`. |
 
-The legacy upload path supplies Rust-evaluated primitive positions, radius,
-color, rotation, kind and independently sampled segment endpoints through
-`Canvas::instances` and `InstanceBatch`. It remains the boundary for arbitrary
-custom trajectories and CPU fixed-step simulations.
+## CPU spatial binning and composition
 
-Eligible built-in analytic trajectories additionally supply admitted explicit
-seed/time/model descriptions. A GPU pass evaluates those descriptions into the
-48-byte primitive records that are then consumed by support preparation,
-binning and composition. It is not a disconnected diagnostic calculation:
-eligible analytic rendering does not upload CPU-evaluated primitive positions.
-Precision or unsupported-model cases retain diagnosed CPU materialization,
-including an analytic fallback count, without changing the selected backend.
-The CPU reference and keyed streams remain unchanged.
+Built-in batches scatter conservative per-instance supports into `16×16` device-space tiles when `InstanceBatch::spatial()` supplies `SpatialInstances`. Each tile retains ascending original instance indices so per-pixel scalar coverage and compositing visit only overlapping primitives while preserving exact source order.
 
-Analytic uploads admit at most 1,048,576 instances with
-`0 <= age < lifetime <= 3600` seconds. Numeric magnitudes are bounded by one
-million and temporal/noise phases by 8192 for the f32 device path. Precision
-rejection uses the `Unsupported` diagnostic at `instances.analytic.precision`;
-the batch's `analytic_fallback` observation and preparation's
-`analytic_cpu_fallbacks` count distinguish it from a backend change.
+- **Conservative support bounds.** Bounds preserve `Glow`'s `3×` radius cutoff, rotated sprites, line and trail extents, antialiasing feather and numeric guard bands. Batches whose bounds cannot be formed reliably in finite device coordinates, or custom `InstanceBatch` implementations that do not supply `SpatialInstances`, fall back to traversing the full ordered slice.
+- **Zero-source identity.** Sampling skips destination read-modify-write on zero-source samples (`alpha == 0` and RGB all `0`) and executes every nonzero contribution in original order.
+- **Admission and failure atomicity.** Tile metadata and index entries count toward logical live and peak bytes. Work charges cover bin construction and actual tile-instance pixel visits rather than `instances * frame_pixels`; this refines algorithm-work accounting without changing configured `RasterLimits`. Failed renders never commit a partially updated public output frame, and reduced logical work totals do not imply cross-backend byte identity or real-time frame-rate guarantees.
 
-A separate 64-thread compute pass derives conservative local support in a
-48-byte metadata record from either form of primitive storage.
-Batches below 256 instances retain the full-loop path to avoid fixed
-binning/synchronization overhead. Larger batches use ordered 16x16 tiles. When
-the bitset layout and its conservative work bound fit the budgets, one 64-thread
-compute pass assigns an invocation to each particle. It transforms the
-particle's conservative support to device space and atomically sets that
-particle's source-order bit in every overlapped tile. Composition enumerates
-set bits from low to high, preserving source order without a GPU summary
-readback. If the bitset is too large or cannot be admitted, the exact-size
-count/prefix/fill list path remains available.
+## Upload protocols and extended primitives
 
-`InstanceUpload::new` accepts typed `InstanceRecord` values: Disc, Glow, Sprite or
-Segment. The upload is a four-word header (record stride in the low five bits of word three,
-the batch `InstanceBlend` above them) followed by twelve words (48 bytes) per
-primitive and optional shared linear RGBA sprite texels. Each record contains
-position, segment start, color, radius, rotation, segment width and kind; sprites
-sample the full shared image. Records contain no age, velocity, seed, model or
-simulation parameters. Count, dimensions, finite values, texel count and checked
-allocation are validated. Planning checks the exact declared byte charge and
-instance count. CPU-only batches default to no upload and are rejected by explicit
-GPU consumers rather than silently falling back.
+`Canvas::instances` and `InstanceBatch` remain the Rust-evaluated boundary for custom trajectories, CPU fixed-step simulations and styles outside the closed analytic set. `InstanceUpload` validates `count <= MAX_INSTANCE_COUNT` (`1,048,576`), finite geometry and colors, sprite dimensions (`width` and `height` both `0` or both in `1..=16_384`), exact linear RGBA texel counts and checked allocations. CPU-only batches that omit GPU upload data are rejected explicitly by GPU consumers rather than silently switching backends.
 
-GPU planning separates immutable sprite atlas texels from the per-draw header
-and records, for both ordinary and extended strides. Binding 11 consumes the
-context-resident atlas, so changing time, record positions or draw transforms does
-not upload its pixels again on a cache hit. The raw `InstanceUpload` protocol
-still includes optional trailing texels; CPU consumers are unchanged.
-Atlas host storage, worst-case device upload and comparison work are admitted
-even on a hit. Device storage limits apply independently of cache occupancy.
-See [resource residency](resources.md#limits-and-accounting).
+- **Unified header and blend policy.** Both `InstanceUpload::new` / `new_blended` (`stride = 12`) and `InstanceUpload::new_extended` (`stride = 16`) encode `stride + (blend_id << 5)` in header word `3`, with optional shared sprite texels starting at word `4 + count * stride`. `InstanceBlend` (`SourceOver`, `Plus`, `Screen`, `Multiply`) is a batch-wide compositing policy: `GlowDots` defaults to `Plus`, all other built-in styles default to `SourceOver`, and `ParticleVisual::blend` overrides any style on both backends.
+- **Extended primitive invariants (`ExtendedInstanceRecord`).** Extended kinds keep `Disc`, `Glow`, `Sprite` and `Segment` discriminants (`0..=3`) unchanged and validate finite parameters at construction without clipping HDR RGB:
+  - `SpriteSheet`: `base.width` stores stretch aspect in `(0, 64]`; `extra` holds normalized `[u0, v0, u1, v1]` cell bounds in `0..=1` with `u0 < u1` and `v0 < v1`.
+  - `TaperedSegment` and `Ribbon`: `base.width` stores the start diameter, `base.radius` and `base.color` store the endpoint radius and color, and `extra` holds linear premultiplied start RGBA with endpoint alphas constrained to `0..=1`.
+  - `Polygon`, `Ring`, `Soft`, `Capsule`, `Quad` and `Bokeh`: validate integer polygon sides (`3..=32`), ring ratio (`(0, 1]`), softness (`0..=1`), aspect ratio in `extra[2]` (`1..=64` for `Capsule` and extended `Sprite`, `(0, 64]` for `Quad`), and bokeh blades (`0` or integer `3..=32`) with roundness and rim in `0..=1`.
+- **Sprite atlas residency.** GPU planning separates immutable trailing sprite texels from per-draw headers and records for both `12`-word and `16`-word strides. Binding `11` consumes the `GpuContext`-resident atlas so changing time, positions or transforms reuses resident pixels on cache hits. Raw `InstanceUpload` keeps trailing texels intact for CPU consumers, and GPU admission still charges host storage, worst-case device upload and comparison work on hits independently of cache occupancy (see [resources](resources.md#limits-and-accounting)).
+- **Bounded neighbor and historical queries.** `Plexus` emits segments via deterministic spatial hashing (`NeighborIndex`) up to `65,536` states with explicit pair and logical-work caps, never unbounded $O(n^2)$ scans. Historical trail and ribbon segments share one sample and ID lookup per timestamp, advancing a render-local forward `ReplayCursor` across ascending query times within admitted working buffers (`64 MiB` history/index ceiling) and dropping it at render end so repeated renders of the same frame remain identical.
 
-The analytic protocol is a bounded set of supported models, not an arbitrary GPU
-program interpreter. Custom trajectories need not implement it and retain their
-existing Rust-evaluated boundary. Fixed-step simulation is not executed on the GPU.
-`MAX_INSTANCE_COUNT` permits up to 1,048,576 uploaded primitives or analytic
-trajectory states, replacing the old 65,536 protocol ceiling. Memory, work,
-device-storage and index checks still apply; simulation and per-step emitter
-quotas remain separate. Plexus uses deterministic spatial hashing up to 65,536 states, with pair and logical-work bounds.
-A native regression renders and replays 65,537 instances. The 48-byte GPU metadata
-record is separate charged storage, not a second name for the upload record.
+## GPU evaluation and ordered tiling
 
-Bit positions encode the original indices, so atomic writes do not introduce
-unordered compositing. The complete state and bitset storage, worst-case
-particle-to-tile build work and conservative maximum composition work are
-admitted before execution. The fallback uses separate count, prefix and fill
-passes to retain original instance order; it reads back a 16-byte summary before
-allocating exact index storage and admitting actual tile-instance pixel work.
-Each fallback reference has an independent 16-byte storage record to avoid
-concurrent read/modify/write races between packed vector components. Metadata,
-scan work, duplicate state storage and references all count toward logical
-budgets. Index, device-storage or work overflow fails the frame before public
-output commits; indices are never silently truncated. Returned frame stats
-include path-specific work and storage; the internal GPU plan statistics
-contain static admission charges only.
+The GPU backend prepares `48`-byte primitive records from either uploaded records or closed-form analytic state before deriving support metadata and ordered `16×16` tiles:
 
-Tile composition has a separate shader-specialized pipeline. Ordinary scenes
-and small batches do not execute the tile lookup. Scalar WGSL coverage, blend
-order, numeric-error reporting and existing CPU/GPU pixel tolerances are unchanged.
-Default-budget admission and replay checks are separate from throughput acceptance
-and Gallery budget reduction. Current measured workloads and their provenance
-belong to [Benchmarks](../benchmarks.md), not historical timings embedded in this contract.
+- **Closed-form analytic evaluation (`AnalyticInstanceUpload`).** Eligible built-in `AnalyticEmitter` batches (`Disc`, `Glow` and `Sprite` under `Ballistic`, `Converge`, `Orbit` or `NoiseDrift`) upload explicit seed, frame time and model parameters instead of CPU-evaluated positions. Uploads admit up to `1,048,576` states with `0 <= age < lifetime <= 3600` seconds, numeric magnitudes `<= 1,000,000` and temporal/noise phases `<= 8192`. Out-of-range `f32` precision emits `Unsupported` at `instances.analytic.precision`, increments `InstanceBatch::analytic_fallback` and preparation's `analytic_cpu_fallbacks`, and materializes primitives on the CPU without changing the selected frame backend or CPU reference streams. Fixed-step simulation never runs on the GPU.
+- **Support pass and `< 256` direct loop.** A `64`-thread compute pass transforms each primitive's conservative support into a separate charged `48`-byte metadata buffer (`max(count * 48, 16)` bytes). Batches below `256` instances keep the direct full-loop shader path without tiling dispatches or tile lookups.
+- **Source-order bitset tiling (`>= 256`, primary path).** When the bitset layout and conservative work bound fit device storage and `RasterLimits`, one `64`-thread compute pass assigns an invocation per particle and atomically sets its source-order bit (`32` particles per `u32` word) in every overlapped `16×16` tile. A tile-specialized composition pipeline enumerates set bits from low to high, preserving exact blend order with no GPU summary readback.
+- **Count–prefix–fill fallback.** When the bitset exceeds budget or device storage limits, GPU tiling executes `count`, `prefix` and `fill` passes, reading back a `16`-byte summary (`references`, 64-bit work, `overflow`) before allocating exact `16`-byte-aligned reference records (avoiding packed-component read/modify/write races) and admitting actual tile-instance pixel work. Any index, storage or work overflow fails the frame before output commits; indices are never truncated. Frame reports reflect path-specific storage and work, whereas internal GPU plan stats record static admission charges. Current throughput measurements live in [benchmarks](../benchmarks.md).
 
-## Extended Uploads
+## Simulation replay and collisions
 
-Original uploads keep header word three zero and twelve-word records unchanged. new_extended uses sixteen words with header word three equal to 16 + (blend_id << 5), exactly represented as f32. Consumers derive stride from the low five bits and compositing from the remaining bits; texture data starts after count*stride.
+Fixed-step CPU simulations (`Simulation`) step deterministically from explicit seeds (`1/240` s default step) and retain bounded snapshots in `PreparedReplay` for random-access frame evaluation.
 
-Extra words contain a UV cell, tapered start RGBA or analytic shape parameters. Tapered width is the start diameter; base radius/color are the endpoint. SpriteSheet stores stretch aspect in base width. New kinds do not renumber Disc/Glow/Sprite/Segment. Geometry, finite values, UVs and endpoint alpha are validated; HDR RGB is not clipped. Shape evaluation, CPU binning, upload and GPU storage retain independent budget gates. SourceOver/Plus/Screen/Multiply are batch policies; without an explicit blend, `GlowDots` uses Plus and every other style uses SourceOver.
-
-Historical segments share one sample and ID lookup per time. One render queries those times in ascending order through a forward cursor held in the admitted working buffers: a query continues stepping from the previous one when it lies between the nearest retained snapshot and the target, and otherwise restarts from that snapshot. Fixed steps are deterministic, so results equal independent queries; the cursor is dropped with the render and never carries state between frames. A conservative 64 MiB logical history/index bound rejects excess storage without silently reducing segment counts. Interval/subdivision/count limits bound record generation. CPU tiled work uses declared per-instance sampling cost. Extended styles retain the 72-byte Particle and 48-byte GPU metadata. Style operations not represented by an admitted analytic upload retain their Rust-evaluated path; neither upload path moves fixed-step simulation to the GPU.
-
-## Replay Extensions
-
-Defaults keep old snapshots and keyed streams. Event/population/time/worker/intensity features select enhanced snapshots with birth-color/depth metadata. Nonrecycled IDs, ordered event queues and per-rule random keys make events independent of worker count. Logical snapshot admission includes events and working buffers; both loop phases share query work. Custom callback panics propagate, including joined worker panics.
-
-SDF grids retain signed samples and exact cached boundary guards. Resolution/budgets are explicit, with speed*step below a grid cell. Cache keys include geometry identity, bounds, resolution and preparation budgets. Boundary guards protect resolved thin geometry but cannot recover curves omitted by declared surface flattening tolerance. Shared external pins follow existing SceneCache cost semantics.
-
-Parallelism and reduced logical work do not certify real-time throughput. These contracts are covered by functional tests separately from timing benchmarks.
+- **Quotas (`SimulationLimits`).** Defaults cap live state at `16,384` particles (`max_particles / 2` per lane when dual-phase `loop_period` is active), `64 MiB` total bytes across retained snapshots plus working buffers and event queues, `1,000,000` steps, `100,000,000` work units, sub-emitter depth `8` (at most `32`), `1,000,000` cumulative births and `65,536` queued events per step. Both phases of a seamless loop share the render query work budget.
+- **Standard vs enhanced snapshots.** Simple simulations keep compact snapshots and original keyed streams. Simulations using events, sub-emitters, group modifiers (`Boids`, `ParticleCollisions`), `prewarm`, `loop_period`, time remapping, multi-worker evaluation or birth-dependent intensity/color rules select enhanced snapshots carrying birth color and sub-emitter depth. Monotonic nonrecycled `u64` IDs, ordered event queues and per-rule/per-step `Random` keys keep simulation results independent of worker thread count. Panics inside user callbacks propagate across joined worker threads.
+- **Swept and SDF colliders.** Analytic colliders and `SignedDistanceGrid` (`SdfCollider`) use `Particle::size` as collision radius. SDF grids retain signed distance samples and exact cached boundary guards, require explicit resolution and preparation budgets with `speed * step < cell_size`, and key `SceneCache` entries by geometry identity, bounds, resolution and budget. Boundary guards protect thin features resolved after curve flattening, while curves omitted by the declared flattening tolerance are not recovered.

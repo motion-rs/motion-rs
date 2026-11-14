@@ -27,7 +27,7 @@ fn main() -> motion::Result {
 }
 ```
 
-运行程序会直接打开该单一场景，而非弹出场景目录列表。修改 Rust 源码需要重新编译，界面不支持动态编辑参数。声明式 JSON 文档是一个例外：通过 `studio film.json` 打开的文档在保存时会自动就地热重载并保留当前播放指针位置（参见 [热重载](../studio.md#热重载)）。
+运行程序会直接打开该单一场景，而非弹出场景目录列表。修改 Rust 源码需要重新编译，界面不支持动态编辑参数。声明式 JSON 文档是一个例外：通过 `studio film.json` 打开的文档在保存时会自动就地热重载并保留当前播放指针位置（参见 [热重载](../design/studio.md#热重载)）。
 
 也可以直接在仓库根目录下运行现成示例：
 
@@ -98,5 +98,5 @@ Pixels 像素检查开关会显式触发内存输出与数据回读。检查器�
 ## 后续章节
 
 下一章：[13 性能与可靠性](13-performance-and-reliability.md)。
-完整工作流与限制说明：[Studio 用户指南](../studio.md)、[Studio 示例源码](../../../examples/studio.rs)。
+完整工作流与限制说明：[Studio 用户指南](../design/studio.md)、[Studio 示例源码](../../../examples/studio.rs)。
 范例短片：[Gallery 展厅指南](appendix-gallery.md)。

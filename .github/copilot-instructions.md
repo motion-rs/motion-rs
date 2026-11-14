@@ -74,7 +74,7 @@ runtime acceptance.
 ## More
 
 [Tutorial](../docs/en/tutorial/README.md) · [Command line](../docs/en/cli.md) ·
-[Source style](../docs/en/style.md) · [Development plan](../docs/en/plan.md) ·
-[Docs index](../docs/README.md). Documentation rules are in
+[Source style](../docs/en/style.md) ·
+[Docs index](../docs/en/README.md). Documentation rules are in
 [docs.instructions.md](instructions/docs.instructions.md) and shader rules in
 [wgsl.instructions.md](instructions/wgsl.instructions.md).

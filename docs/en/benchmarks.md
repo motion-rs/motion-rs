@@ -192,65 +192,6 @@ This refresh records only `performance`; `breadth` and `criterion_frames` are
 deferred, and `films` is deliberately excluded. Do not infer film-export or Studio FPS from
 these frame, stage and microbenchmark measurements.
 
-The registered baseline predates the R3-8 rolling CPU blur change. It remains
-evidence for its frozen executable. The separate focused comparison below uses
-fresh control/candidate runs; it does not turn the original full-suite timings
-into a measurement of the optimization.
-
-### R3-8 Paired Check
-
-Six alternating AB/BA pairs on Apple M3/Metal, 640x360 Final, two warmups and
-101 samples. Only Empty/Shapes/Blur/Shadow/Bloom were measured, with CPU stages;
-sequences, microbenchmarks, cold sessions and video were disabled. Both frozen
-executables produced exactly matching reference pixels and checksums in all runs.
-
-| CPU Warm Frame | Control P50 (ms) | Candidate P50 (ms) | Paired Improvement (95% Interval) | Assessment |
-| --- | ---: | ---: | --- | --- |
-| Blur (small kernel) | 13.228 | 27.372 | -106.70% [-116.20, -100.56] | regressed |
-| Shadow (sigma 2) | 17.301 | 28.136 | -64.78% [-65.86, -58.27] | regressed |
-| Bloom (sigma 8) | 83.408 | 46.990 | +42.88% [41.05, 45.79] | improved |
-
-Displayed P50 values are medians across runs; improvement is the median of
-paired relative changes, not the ratio of those two displayed medians. CPU
-stage-linear measurements confirm the same directions. Empty/Shapes and GPU
-warm-frame P50 changes are uncertain; GPU Empty P95 has a small borderline
-regression (-1.12%, interval [-1.56, -0.01]) and remains in the report.
-
-This first all-rolling variant did not pass performance acceptance: smaller
-uniform kernels regressed and needed further work. Do not average these outcomes or extrapolate them
-to films, Studio FPS, larger sigma/resolutions, or process RSS. All 50 case/phase
-results were recorded in the local, untracked `target/performance/r3-8-1793849842040/`
-report; incomplete or disk-full attempts are not counted as pairs.
-
-### R3-8 Small-Kernel Follow-Up
-
-Uniform radii 1/2 now use direct integer weighted taps; larger radii keep the
-compensated rolling path. Six new alternating AB/BA pairs use the same settings
-and original pre-R3-8 control, not the all-rolling candidate. This cohort is
-registered separately; it is not pooled with the first comparison above.
-
-| CPU Warm Frame | Control P50 (ms) | Candidate P50 (ms) | Paired Improvement (95% Interval) | Assessment |
-| --- | ---: | ---: | --- | --- |
-| Blur (small kernel) | 13.138 | 5.520 | +57.97% [57.26, 58.41] | improved |
-| Shadow (sigma 2) | 16.949 | 7.477 | +55.89% [55.59, 56.24] | improved |
-| Bloom (sigma 8) | 81.626 | 46.645 | +42.91% [42.76, 43.35] | improved |
-
-All three CPU P95 and stage-linear estimates also improve. CPU Empty/Shapes
-warm-frame and all GPU warm-frame P50/P95 changes are uncertain. The off-target
-Shapes hot-node compilation P50 has a borderline regression (-1.39%, interval
-[-4.58, -0.01]); it is retained and not attributed to filter logic. This supports
-the measured CPU filter targets, not regression-free overall acceptance or
-film/Studio FPS, RSS, larger-sigma/resolution or cross-device claims.
-
-All 12 runs match exact reference pixels/checksums, configuration and frozen
-programs. Default/GPU CPU-filter regressions, production checking and the native
-53-case GPU parity check pass. Post-measurement source changes are comments and
-existing tests only; measured runtime equivalence is verified. All 50 outcomes,
-both quantiles and provenance were recorded in the local, untracked
-`target/performance/r3-8-small-kernel-1793853335012/` report and its sibling
-comparison/source-verification files. Previous regressions and
-failed attempts remain intact.
-
 The report markers delimit the section maintained by `node benches/report.cjs`;
 the running guide above remains handwritten.
 
@@ -308,6 +249,5 @@ node benches/report.cjs --details --output target/performance/details.md
 1. Keep the initial run directories and frozen executable. Run the same cohort before and after each focused optimization.
 2. Register raw directories and change/verification/negative-result notes in [performance-runs.json](../performance-runs.json). Use a new series for different workloads or hosts.
 3. Run `node benches/report.cjs`. This validates every registered run and rebuilds the concise conclusions table; use --details with a separate --output for full tables.
-4. Read the [performance plan](plan.md#performance) for the remaining optimization work and acceptance gates.
 
 <!-- performance-report:end -->

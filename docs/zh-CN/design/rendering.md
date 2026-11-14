@@ -1,22 +1,10 @@
-# 渲染与导出
+# 渲染与合成
 
-使用 `motion::prelude` 进行创作，`motion::render` 获取渲染契约，`motion::encode` 获取编码器与进度接收器，`motion::extend` 获取实现协议。已准备的覆盖率（strip、span、画刷记录与图层）以及 GPU 计划是 `motion-render` 的 crate 私有内容；`PreparedCpuFrame` 只公开尺寸、统计与计数。逻辑尺寸使用 f64；输出的 `PixelSize` 使用正整数维度。Composition 会把逻辑内容等比包含进输出视口。本文是 [rendering.md](../../en/design/rendering.md) 的中文翻译，以英文版为准。
+使用 `motion::prelude` 进行创作，`motion::render` 获取渲染契约，`motion::extend` 获取实现协议。已准备的覆盖率（strip、span、画刷记录与图层）以及 GPU 计划是 [`motion-render`](../../../crates/motion-render/src/lib.rs) 的 crate 私有内容；`PreparedCpuFrame` 只公开尺寸、统计与计数。逻辑尺寸使用 `f64`；输出的 `PixelSize` 使用正整数维度。`Composition` 会把逻辑内容等比包含进输出视口。多帧时间线导出、并发工作线程调度以及视频/GIF/序列帧编码归属[导出与 FFmpeg](export.md)。英文原文（以英文为准）：[../../en/design/rendering.md](../../en/design/rendering.md)。
 
 ## 后端准备与效果
 
-`FrameIr` 在分配任何覆盖率之前，先校验全部内容，并规范化设备空间曲线、作用域、画刷、裁剪与滤镜域。它准入结构存储、资源字节以及保守的 Wang 线段上界。CPU 与 GPU 后端各自独立消费这份不可变描述：
-
-```mermaid
-flowchart TD
-    Node["Node"] -->|编译| List["ValidatedDisplayList"]
-    List -->|准入| IR["FrameIr：设备曲线、作用域、画刷、裁剪、滤镜域"]
-    IR --> CPUPrep["CPU 准备：展平、积分面积、量化"]
-    IR --> GPUPrep["GPU 准备：曲线描述符、上传、tile 上界"]
-    CPUPrep --> Prepared["PreparedCpuFrame：strip、span、u8 alpha"]
-    GPUPrep --> GpuFrame["PreparedGpuFrame：设备边记录"]
-    Prepared --> CPUComp["CPU 合成"]
-    GpuFrame --> GPUComp["GPU 覆盖率 pass 与合成"]
-```
+`FrameIr` 在分配任何覆盖率之前，先校验全部内容，并规范化设备空间曲线、作用域、画刷、裁剪与滤镜域。它准入结构存储、资源字节以及保守的 Wang 线段上界。CPU 后端与 GPU 后端各自独立消费这份不可变描述。
 
 规范化后，两个后端都跳过零透明度图层内的填充覆盖率，包括嵌套的滤镜和遮罩作用域。隐藏内容仍需通过结构与几何校验，但不会占用设备填充数、像素数或覆盖率工作量上限。
 GPU 规划也跳过完整的零透明度作用域，因此隐藏的填充、滤镜 pass、遮罩捕获和图层合成不会分配执行纹理或生成 GPU pass。命令遍历仍计入预算，匹配的作用域闭合后恢复处理可见的兄弟节点。
@@ -52,12 +40,12 @@ flowchart TD
 
 ### CPU 合成
 
-CPU 合成是标量实现。纯色 SourceOver 的 span 把剩余 alpha 项提到像素循环之外；其他所有模式保持逐像素公式与运算顺序。不使用乘加融合。每个像素在发布前都检查工作存储是否有限，合成失败时目标保持不变。
+CPU 合成采用标量、面向行的实现。纯色 `SourceOver` 的 span 把剩余 alpha 项提到像素循环之外；其他所有模式保持逐像素公式与精确运算顺序，不使用乘加融合。每个像素在发布前都检查工作存储是否有限，合成失败时目标保持不变。
 
-下面两项实验都与它们所取代的代码做过对比测量，因为更慢或在噪声之内且增加了数百行代码而被移除。只有在存在一个获胜且没有任何失败的测量用例时才可重新引入。
+合成有意排除以下两条经场景实测证明开销大于收益的路径：
 
-- **显式通道向量化**（`wide` 的 f32x4/f32x8 SourceOver、f64x4 混合与覆盖率量化）。逐像素的通道打包与有限值检查与其替代的运算开销相当。只对先经测量的逐行循环做向量化。
-- **tile 并行合成**（私有 Rayon 线程池）与**融合的点滤镜**。它们只对少数图层密集的用例有帮助，对多数用例反而更慢，带滤镜的帧从不适用，而导出工作线程本来就运行在 Rayon 线程上。
+- **逐像素通道向量化（`wide` 的 `f32x4`/`f32x8` `SourceOver`、`f64x4` 混合与覆盖率量化）：** 逐像素通道打包与有限值检查的开销与被替代的标量运算相当；仅事先实测获胜的逐行循环才可引入 SIMD。
+- **帧内分块并行 Rayon 池与融合点滤镜：** 带滤镜的帧无法使用，多数图层规模会因同步开销回退，而 CPU 导出工作线程本就在帧粒度上通过 Rayon 并行。
 
 ### 效果
 
@@ -75,9 +63,7 @@ CPU 合成是标量实现。纯色 SourceOver 的 span 把剩余 alpha 项提到
 
 ## 帧与静帧
 
-Composition 拥有一个 `FrameClock`（有理帧率与帧数，不设默认值）和一个 `RenderOptions`（尺寸、背景、资源、后端策略等）；除 `with_options` 与 `configure` 之外没有逐项设置器。随机访问帧与缓存复用请复用 `frame_renderer(size)`，其 `FrameRenderer` 包装一个 `RenderSession`。对于 Timeline 输出，`render_still` 与导出使用相同的 `RenderOptions` 策略。`render_frame` 与 `render_frame_sampled` 返回完全不透明的直通 `SrgbRgba8` `FrameBuffer`：帧合成在 `RenderOptions::background`（取为不透明）之上，未设置时合成在白色之上。其 `write_ppm` 与 `write_rgb` 显式截断或替换所选文件，并拒绝非不透明缓冲区。需要透明 PNG 与受保护的输出位置时，请使用 `render_still` 与直通 RGBA8 `FrameBuffer`。
-
-在 Unix 上，事务性的 PNG、GIF 与原生视频输出请求 0666 权限；PNG 序列目录请求 0777。创建新文件与覆盖已有文件时都会应用进程的 umask；导出从不读取或修改该 umask。
+Composition 拥有一个 `FrameClock`（有理帧率与帧数，不设默认值）和一个 `RenderOptions`（尺寸、背景、资源、后端策略等）；除 `with_options` 与 `configure` 之外没有逐项设置器。随机访问帧与缓存复用请复用 `frame_renderer(size)`，其 `FrameRenderer` 包装一个 `RenderSession`。对于 Timeline 输出，`render_still` 与导出使用相同的 `RenderOptions` 策略。`render_frame` 与 `render_frame_sampled` 返回完全不透明的直通 `SrgbRgba8` `FrameBuffer`：帧合成在 `RenderOptions::background`（取为不透明）之上，未设置时合成在白色之上。其 `write_ppm` 与 `write_rgb` 显式截断或替换所选文件，并拒绝非不透明缓冲区。需要透明 PNG 时请使用 `render_still` 与直通 RGBA8 `FrameBuffer`：它在目标目录内创建临时文件过渡暂存（Unix 下请求 `0666` 权限并遵循进程 `umask`，不读取或修改 `umask`），且除非显式允许覆盖否则保护已有目标文件。多帧导出的暂存与目录权限见[导出与 FFmpeg](export.md#事务性落盘与防覆盖保证)。
 
 ```rust,no_run
 use motion::prelude::*;
@@ -94,7 +80,7 @@ frame.write_ppm("frame.ppm")?;
 
 `RenderOptions` 选择输出尺寸、背景与透明度、后端、资源、结构与光栅限制，以及可选的快门采样。`FrameBuffer` 保留其声明的平面与格式：直通或预乘的 sRGB RGBA8、线性预乘的 RGBA16F 或未量化的 RGBA32F，或有限范围 BT.709 的 8 或 10 位 YUV420。YUV 要求偶数维度与不透明像素。没有隐式的 HDR 色调映射。`PreparedCpuFrame::render_linear` 与 `Gpu::render_linear` 返回 RGBA32F 的 `FrameBuffer`，可由 `FrameBuffer::linear_pixel`、`linear_pixels` 与 `to_format` 读取或转换；它们背后的 CPU 工作帧是 crate 私有的。
 
-`RenderQuality::Final` 是默认的生产策略。Draft 显式允许在几何、快门采样与墨迹材质上使用预览近似；它不是不同的输出分辨率，也不等价于 Final 的结果。当 sigma 至少为 1 时，Draft 模糊使用一个方差匹配的盒，更小的 sigma 保持 Final 的小核策略。质量必须在重放与缓存标识中保持固定。Studio 在播放与拖动时请求 Draft，导出时强制使用 Final；参见 [Studio 指南](../studio.md#预览与回放)。
+`RenderQuality::Final` 是默认的生产策略。Draft 显式允许在几何、快门采样与墨迹材质上使用预览近似；它不是不同的输出分辨率，也不等价于 Final 的结果。当 sigma 至少为 1 时，Draft 模糊使用一个方差匹配的盒，更小的 sigma 保持 Final 的小核策略。质量必须在重放与缓存标识中保持固定。Studio 在播放与拖动时请求 Draft，导出时强制使用 Final；参见 [Studio 指南](studio.md#预览与回放)。
 
 ### 执行与输出路径
 
@@ -178,115 +164,55 @@ session.render(FrameRequest {
 `FrameAt::Time` 不会对齐到帧网格；`FrameAt::Index` 按请求的帧率精确换算。`FrameRenderer::render_frame*`、`Composition::render_frame*` 与 `render_still` 都是这一条请求路径的薄封装。`device_packing` 让 GPU 渲染的直通 `SrgbRgba8` 请求在设备上打包字节，其结果可能因 GPU 的 f32 舍入而与主机转换不同。运动模糊可能多次调用构建器。
 
 - 内存目标仅在成功时才被替换，渲染期间其旧的保留载荷仍然计费。外部纹理在 GPU 失败后没有回滚保证。
-- 每个请求安装新的诊断并清除之前的总量。`last_stats` 描述成功的内存输出，而不是外部纹理的转换。每个阶段报告 `WorkStats { peak_bytes, work }`，`RenderSession::report()` 把统计、计时与渲染器汇总为一个 `FrameReport`。
+- 每个请求安装新的诊断并清除之前的总量。`last_stats` 描述成功的内存输出，而不是外部纹理的转换。每个阶段报告 `WorkStats { peak_bytes, work }`，`RenderSession::report()` 把统计、计时与后端类型汇总为一个 `FrameReport`。
 - 请求中的背景覆盖选项中的背景。`render_frame*` 合成在 `RenderOptions::background`（取为不透明）之上，未设置时为白色；`render_still` 与直接请求在没有给定背景时保持透明。
 - `backend_kind()` 报告由后端偏好确定的后端类型；`requested_backend()` 报告偏好本身。
 
 ## 资源与内容
 
-缓存保留、可复用的空闲存储与逐请求准入衡量的是不同的东西。共享同一个所有者并不会合并这些额度，也不构成 RSS 上限。
+缓存保留、可复用的空闲存储与逐请求准入衡量的是不同的东西。共享同一个所有者并不会合并这些额度，也不构成 RSS 上限。完整的资源、字体、惰性句柄与中毒恢复契约见[资源与字体](resources.md)；下表汇总渲染会话与设备上下文如何与各所有者交互。
 
 | 所有者 | 保留的数据 | 共享与计费边界 |
 | --- | --- | --- |
-| Assets / ResourceStore | 已解码的类型化资源 | 克隆的 Assets 共享注册；with_store 让相互独立的所有者共享存储。 |
-| SceneCache | 纯场景计算 | 默认按条目数限制；按字节计费需要声明键与值的开销。 |
-| RenderCache | 覆盖率、段落、字形、渐变、公式 | RenderOptions.cache 可以在会话与导出工作线程之间共享分区；命中仍要经过光栅准入。 |
-| RenderSession 池 | 空闲的 CPU scratch 与编码平面存储 | 活动帧与捕获仍是存活载荷，而不是空闲容量；被丢弃的输出平面可以回到共享池。 |
-| GpuContext | 设备状态与可复用的 GPU 工作资源 | 克隆共享设备身份；飞行中的租约保留在其提交上，直到成功完成。 |
-
-`Assets` 惰性加载类型化资源，结果是粘性共享的，逻辑保留有界。`FontLibrary` 是显式的；渲染前请在资源或文本上冻结它。缺失资源会使生产输出失败。占位渲染是显式的预览策略，仍保留带类型的诊断。
-
-`Assets::preload` 把已解码对象注册到与惰性句柄相同的条目中。每个新的 `Assets` 所有者从自己的 256 MiB/4096 条目 `ResourceStore` 开始；克隆共享它，`with_store` 让相互独立的所有者共享计费与缓存标识。`ResourceStore::with_limits` 配置正的字节额度与 1..=4096 个条目。`snapshot()` 隔离后续的修改，`remove::<A>(source)` 取消注册但不使句柄失效；保留的快照与句柄使其载荷继续计费，直接持有的已解码 `Arc` 可能比所有者、句柄及其计费存活得更久。`RequestDiagnostics` 加 `Handle::get_with` 把资源错误关联到调用方管理的后台工作。不存在环境式的帧作用域：由请求的 `Assets` 视图创建的句柄继承其接收器，而捕获的外部句柄必须在绘制边界处使用 `get_with(context.diagnostics())`。
+| `Assets` / `ResourceStore` | 已解码的类型化资源（默认 `256 MiB` / `4096` 条目） | 克隆的 `Assets` 共享注册；`with_store` 让相互独立的所有者共享计费；保留的快照与直接持有的 `Arc` 在释放前持续存活。 |
+| `SceneCache` | 纯场景计算（默认 `256` 条目） | 默认按条目数限制；通过 `with_limits` 与 `cache_with_cost` 声明拥有的堆键值字节时按字节计费。 |
+| `RenderCache` | `Coverage`、`Paragraph`、`Glyph`、`Gradient`、`Formula`、`Ink`、`Scene` | `RenderOptions.cache` 在会话与导出工作线程之间共享分区；缓存命中仍要经过每帧光栅准入。 |
+| `RenderSession` 池 | 空闲 CPU scratch、编码平面存储与渐变 LUT | 活动帧与捕获仍是存活载荷；被丢弃的输出平面归还给有界共享池。 |
+| `GpuContext` | 设备状态、可变工作池与 binding 11 不可变 LRU | 克隆共享设备身份；飞行中的租约保留在其提交上，直到成功完成。 |
 
 ### 缓存
 
-`SceneCache` 是独立的纯计算 LRU。其默认的 256 条目限制不是字节上限。`with_limits` 与 `cache_with_cost` 支持协作式的载荷计费，包括内联的键与值大小；请在开销中声明两者拥有的堆载荷。键会被保留，要求 `Eq + Hash + Send + Sync + 'static`；哈希匹配仍要求键相等，且调用位置与值类型相同。条目元数据、分配器开销与外部 `Arc` 持有均不计入，因此该额度不是进程 RSS。
+`RenderOptions.cache` 在 `FrameRenderer`、`RenderSession` 与导出工作线程的克隆之间共享七个 `RenderCache` 分区（定义于 [`partition.rs`](../../../crates/motion-core/src/authoring/context/partition.rs)）：
 
-`RenderOptions.cache` 在 `FrameRenderer`、`RenderSession` 与导出工作线程的克隆之间共享 `RenderCache` 分区。各分区的默认值如下：
-
-| 分区 | 条目数 | 字节 |
+| 分区（`CachePartition`） | 条目数 | 字节 |
 | --- | --- | --- |
-| 覆盖率 | 2048 | 16 MiB |
-| 段落 | 256 | 8 MiB |
-| 字形 | 2048 | 16 MiB |
-| 渐变 LUT | 64 | 8 MiB |
-| 公式 | 32 | 32 MiB |
+| `Coverage` | `2048` | `16 MiB` |
+| `Paragraph` | `256` | `8 MiB` |
+| `Glyph` | `2048` | `16 MiB` |
+| `Gradient` | `64` | `8 MiB` |
+| `Formula` | `32` | `32 MiB` |
+| `Ink` | `64` | `32 MiB` |
+| `Scene` | `256` | `8 MiB` |
 
-各分区独立淘汰最旧的单个条目，命中时仍会检查光栅预算。公开的 `RenderPrepare` 调用不会隐式获得跨帧缓存。
+各分区独立淘汰最旧条目，`RenderCache::fork_scene` 可隔离单场景的 `Scene` 计算而共享其余六个分区，且命中时仍会检查光栅预算。公开的 `RenderPrepare` 调用不会隐式获得跨帧缓存。
 
-覆盖率键保留完整的动词相等性、填充规则、容差与光栅尺寸。当曲线与多轮廓字形路径的仿射项恰好位于有界的 1/65536 网格上，且其控制凸包位于光栅内四像素时，可以复用任意整数平移相位。冷路径与缓存路径使用相同的规范原点。小数相位、被裁剪的路径与不安全的精度会回退，缓存命中仍要经过请求的存储与工作量准入。
+覆盖率键保留完整的动词相等性、填充规则、容差与光栅尺寸。当曲线与多轮廓字形路径的仿射项恰好位于有界的 `1/65536` 网格上，且其控制凸包位于光栅内四像素时，可以复用任意整数平移相位。冷路径与缓存路径使用相同的规范原点。小数相位、被裁剪的路径与不安全的精度会回退，缓存命中仍要经过请求的存储与工作量准入。
 
-不可变的 `Path2D` 快照为每个源路径保留最多四个成功的描边轮廓，逻辑动词与条目载荷合计不超过 1 MiB，以完整的描边样式为键。成功的路径编辑通过写时复制使该缓存失效；失败的编辑保留它，旧的克隆仍可复用。缓存的快照不固定派生的弧长或更多描边缓存。`Canvas` 在命中时仍计费源与输出的结构限制；这并不冻结自定义绘制回调。
+不可变的 `Path2D` 快照为每个源路径保留最多四个成功的描边轮廓，逻辑动词与条目载荷合计不超过 `1 MiB`，以完整的描边样式为键。成功的路径编辑通过写时复制使该缓存失效；失败的编辑保留它，旧的克隆仍可复用。缓存的快照不固定派生的弧长或更多描边缓存。`Canvas` 在命中时仍计费源与输出的结构限制；这并不冻结自定义绘制回调。
 
-`RenderSession` 还保留最多 64 个渐变颜色表，逻辑载荷合计不超过 8 MiB。完整的色标与颜色位模式以及插值空间标识一张表；几何、变换、LOD 与有效性检查仍是逐请求的。表通过 `Arc` 共享，活动帧的工作量与字节计费不变。请分别查询 `cached_paint_bytes()` 与 `cached_coverage_bytes()`。这些限制不含分配器容量、驱动开销与外部持有的快照，也不是 RSS。
+`RenderSession` 还保留最多 `64` 个渐变颜色表，逻辑载荷合计不超过 `8 MiB`。完整的色标与颜色位模式以及插值空间标识一张表；几何、变换、LOD 与有效性检查仍是逐请求的。表通过 `Arc` 共享，活动帧的工作量与字节计费不变。请分别查询 `cached_paint_bytes()` 与 `cached_coverage_bytes()`。这些限制不含分配器容量、驱动开销与外部持有的快照，也不是 RSS。
 
 ### 内容
 
-`Image` 解码 PNG、JPEG 与 WebP；`AnimatedImage` 支持 GIF、APNG 与显式帧序列。SVG 变成共享的 `VectorTree` 几何，而不是私有的光栅后端。文本使用一个段落排版器与共享的字形图形。`FormulaCompiler` 把受信任的 Typst 数学公式直接转换为该矢量模型；Typst 还支持通过其轮廓化 SVG 输出导入的单页标记。
+内容解码、矢量/文本/公式编译与字体索引归属 `motion-content` 与 `motion-formula`（见[内容](content.md)与[资源](resources.md#字体库管理)）。在渲染交接边界上：
 
-`Node::compile` 在增量命令校验后返回 `ValidatedDisplayList`；普通准备会复用其已测得的需求，不再对命令做一次成功的扫描。帧内的命令准备是串行的；导出工作线程提供跨帧的并发，而不是单独的并行覆盖率准备后端。`DisplayList` 对底层调用方保持可编辑，编辑后必须重新校验：使用 `into_editable` 进行显式修改，使用 `with_background` 获得仅背景的快照。图像画刷通过 `ImagePattern` 引用不可变的 `ImagePixels`；准备帧不需要单独的图像解析阶段。`RenderContext` 携带资源与结构限制。`RenderOptions.gpu_context` 是显式的 GPU 注入点，`FrameRenderer::submit_to_texture` 支持无需整帧 CPU 回读的同设备预览输出。内存输出与外部纹理输出仍是各自独立的契约。
-
-系统字体索引不会保留每个字体文件的字节。被选中的文本字体面按需加载；`ExportReport.fonts` 列出实际观察到的名称与来源哈希。即使复用选项与缓存，每次导出也会启动新的观察接收器。
-
-## 视频与音频
-
-原生视频编码使用有界的两帧队列与渲染重叠。原生编码器始终位于一个专用线程上，包括创建与销毁。不使用原始帧临时假脱机，也没有原始字节的时长上限。只有显式的成功完成才会提交编码后的临时文件；取消、编码器被丢弃、渲染错误与工作线程 panic 都会汇合工作线程并丢弃它。自定义 `Encoder::open` 在任何写入调用之前接收规范化的选项、帧率与已准备好的裁剪音频混音；`Encoder::finish` 不接收音频参数。
-
-Project 与 `export` 使用 `Timeline`、`ExportOptions`、`ProgressSink` 与有序的 `Encoder` 操作。范围是对齐到所表示帧边界的半开绝对时间。回调保持绝对场景时间；输出时间戳从零开始。取消是协作式的，并在提交目标之前检查。
-
-两槽的原生通道限制的是排队的帧消息，而不是所有存活的帧或进程 RSS：生产者与编码器也可能各自持有一帧。音频准备与该视频队列相互独立。
-
-```mermaid
-flowchart TD
-    Frames["有序的 FrameBuffer"] --> Queue["有界通道：2 槽"]
-    Queue --> Native["专用原生编码线程"]
-    Mix["可选的已准备 44.1/48/96 kHz 立体声混音"] --> PCM["有界 f32 PCM 读取"]
-    PCM --> Native
-    Native --> Temporary["编码后的临时文件"]
-    Temporary --> Finish{"完成成功且未取消？"}
-    Finish -->|是| Commit["提交目标文件"]
-    Finish -->|否| Discard["丢弃临时输出；保留目标文件"]
-```
-
-### 导出调度
-
-导出先渲染第一个被选中的帧，并用其实际的启动后端决策与输出来调度其余帧。
-
-```mermaid
-flowchart TD
-    First["渲染第一个选定帧"] --> Backend{"选定的后端"}
-    Backend -->|CPU| Par["并行 CPU 槽位，显式为 CPU"]
-    Backend -->|GPU| Gpu["一个渲染会话；经测量的规划槽位与有界队列"]
-    Par --> Slot{"帧能放入其槽位？"}
-    Slot -->|是| Ordered["有序消费者写入并编码"]
-    Slot -->|"字节准入失败"| Join["汇合工作线程；在原始限制下串行继续"]
-    Gpu --> Ordered
-```
-
-- CPU 选择会启用对显式 CPU 请求以及未启用 `gpu` feature 的构建的并行渲染。并行 CPU 槽位显式选择 CPU，保留第一个会话的选择，而不是再次探测 GPU。
-- 请求的工作线程数默认取可用并行度，上限为 64；帧数与第一帧逻辑峰值的两倍会进一步限制并发。并行 CPU 槽位平分 `max_parallel_bytes`，而不是各自预留配置的单帧上限。`.workers(1)` 保持串行求值。
-- 如果后续的帧需要超过其槽位，工作线程会被汇合，尚未写入的帧在原始限制下串行继续。只有字节准入失败才会触发这次重试；无效内容、工作量限制错误与 panic 仍是失败。场景回调必须是纯的，并且可能被重试。
-- 编码器与进度回调通过公开的 `Encoder` 与 `ProgressSink` 协议在调用方上保持有序；原生编解码执行在其专用线程上运行。
-- GPU 选择保持一个渲染会话。工作线程构建 GPU 计划与打包输出计费，有序消费者负责准入、提交与编码，详见 [GPU 渲染](#gpu-导出工作线程)。
-- 聚合额度不含编码器存储、共享资源、缓存与空闲池，也不是 RSS 上限。无法放入并行槽位的帧仍可在其配置的单帧限制下串行渲染。
-
-### 音频
-
-Timeline 的 `AudioClip` 源默认为 48 kHz 立体声，AAC 交付选项支持 44.1 与 96 kHz。`AudioClip::file(path)` 是固有且惰性的：创作时不会打开或解码文件。执行时解析元数据并解码有界的请求窗口；文件错误以 `Asset` 失败传播。已准备的 PCM 受 128 MiB 混音额度约束。被选中的范围保留原始片段的淡入淡出与包络时钟。执行期间请保持文件源不变；读取是随机访问的，不是保留的不可变 PCM。
-
-### 编码器
-
-原生适配器通过第一方 FFmpeg 绑定（而不是可执行文件）编码 H.264/MP4、H.265/MP4、VP9/WebM（可选 alpha）与 ProRes 4444/MOV。编解码器可用性在打开输出之前探测。MP4 与 MOV 支持 AAC 音频；在提供 Opus/Vorbis 适配器之前，WebM 音频会被拒绝。视频帧从内存流式传入，不经过临时 YUV 或 RGBA 文件。音频直接从不可变的已准备 f32 PCM 读取，使用绝对采样时间戳，不经过临时 WAV。编码后的容器先写入同目录的临时文件，再事务性提交。离线效果与母带烘焙、准备上限与测量近似参见[音频契约](../tutorial/10-audio.md)。
-
-`PngSequenceEncoder` 以原子方式提交同目录的暂存目录，支持奇数尺寸与完整 alpha，并拒绝音频。在平台支持重命名交换的情况下，覆盖会原子地交换真实目录。`GifEncoder` 使用请求的输出帧网格、逐帧调色板与累计的有理延迟。GIF 为一位透明、2..=256 个调色板颜色、无音频、最高 100 fps。不支持的组合会在创建输出之前失败。所有编解码器使用 `ExportOptions` 的构建器设置尺寸、范围、后端、`motion_blur` 与覆盖，并共享 `ProgressSink`。
-
-`Encoder::capabilities` 声明音频支持、最大尺寸与维度倍数。维度在打开输出之前检查；不支持的时间线音频在 PCM 准备与帧渲染之前就被拒绝。自定义编码器仍负责事务性提交、特定编解码器的检查与清理；能力声明的默认值是宽松的。
-
-已有的输出文件受到保护，除非显式允许覆盖。提交之前的失败、取消与 panic 都使已提交的输出保持不变。输出不得替换音频源。预览与导出期间请保持流式源文件不变。
+- `Node::compile` 在增量命令校验后返回 `ValidatedDisplayList`；普通准备会复用其已测得的需求，不再重扫命令。帧内的命令准备是串行的；导出工作线程提供跨帧并发，而不是帧内并行覆盖率后端。
+- `DisplayList` 对底层调用方保持可编辑（通过 `into_editable` 修改并重新校验，通过 `with_background` 获取仅背景快照）。图像画刷通过 `ImagePattern` 引用不可变的 `ImagePixels`，无需单独的图像解析阶段。
+- `RenderContext` 携带 `Assets` 与结构限制；`RenderOptions.gpu_context` 是显式 GPU 注入点，`FrameRenderer::submit_to_texture` 支持无需整帧 CPU 回读的同设备预览输出。内存输出与外部纹理输出仍是各自独立的契约。
 
 ## GPU 渲染
 
-本文说明 GPU 后端的契约：设备归属、一帧如何从共享的 Frame IR 走到像素、工作纹理、上传、调度、完成与限制。
+GPU 后端基于 `wgpu` 执行，具备显式的设备归属、确定性的分块覆盖率计算 pass、池化的 `RGBA32F` 工作纹理、异步提交追踪以及严格的字节与工作量准入。
 
 ### 后端选择与设备归属
 
@@ -302,30 +228,19 @@ Timeline 的 `AudioClip` 源默认为 48 kHz 立体声，AAC 交付选项支持 
 
 首次选择 GPU 时会运行一次所有克隆共享的视觉自检：独立准备 CPU 参考覆盖率与 GPU 边记录，并比较小型夹具：空间画刷、分组混合、曲线、两种填充规则下的自相交、亚像素轮廓、嵌套几何裁剪、滤镜保护带以及大坐标覆盖率。几何夹具必须确实包含 GPU 覆盖率。比较在黑、白背景上检查 alpha 与线性光合成，使用各夹具自己的 RMS 容差，因此透明填充区域不会稀释误差。自检成功不会掩盖之后发生的设备丢失。它是正确性检查，不是延迟基准。
 
-### 帧流水线
-
-```mermaid
-flowchart TD
-    IR["FrameIr：设备空间曲线、画刷、裁剪、作用域"] --> Prep["GPU 准备：描述符、上传、准入"]
-    Prep --> Plan["GPU 计划：有序步骤与纹理调度"]
-    Plan -->|被拒绝| Err["带类型的验证错误"]
-    Plan --> Submit["编码并提交"]
-    Submit --> Cov["覆盖率 pass：计数、前缀和、散射、面积"]
-    Cov --> Comp["合成：批处理绘制或计算 pass"]
-    Comp --> Out{"输出类型"}
-    Out -->|线性回读| Lin["解析到线性缓冲区"]
-    Out -->|打包 RGBA8、YUV420| Pack["从 RGBA32F 纹理打包"]
-    Out -->|外部纹理| Pres["呈现为 RGBA16F、RGBA8 或 BGRA8"]
-    Lin --> Done["完成：状态、作用域、设备健康"]
-    Pack --> Done
-    Pres --> Done
-```
-
-图中只展示主路径，不包含所有常量帧或格式的快速路径。提交之前的每一步都要按字节和工作量限制准入，参见[限制与验证](#限制与验证)。
-
 ### 共享数据与输出
 
-`FrameIr` 在任一后端准备覆盖率之前，先准入 f64 设备曲线、线段上界、不可变资源以及规范化的合成语义。CPU 与 GPU 的准备共用一次场景遍历，通过后端接口只决定：填充如何产生覆盖率、哪些资源保持存活、粒子如何被观察。`FrameIr` 按身份对每张不同的图案图像只计费一次；CPU 帧借用不可变资源并释放这部分 IR 计费，GPU 帧则保留它以供上传。
+`FrameIr` 在任一后端准备覆盖率之前，先准入 `f64` 设备曲线、线段上界、不可变资源以及规范化的合成语义。CPU 与 GPU 的准备共用一次场景遍历，通过后端接口只决定：填充如何产生覆盖率、哪些资源保持存活、粒子如何被观察。`FrameIr` 按身份对每张不同的图案图像只计费一次；CPU 帧借用不可变资源并释放这部分 IR 计费，GPU 帧则保留它以供上传。
+
+```mermaid
+flowchart LR
+    IR["FrameIr"] --> Prep["GPU 准备：描述符、上传、准入"]
+    Prep --> Plan["GPU 计划：有序步骤与纹理调度"]
+    Plan -->|被拒绝| Err["带类型的 ValidationError"]
+    Plan --> Cov["覆盖率 pass：展开、计数、前缀和、散射、面积"]
+    Cov --> Comp["合成：批处理绘制或计算 pass"]
+    Comp --> Out["目标输出 + 健康与有限值完成检查"]
+```
 
 GPU 准备独立持有设备边记录，与公开的 CPU `PreparedCpuFrame` 分开。`FrameRenderer` 的 GPU 准备与打包导出工作线程既不构造 CPU 准备帧，也不初始化设备。底层 API 仍可上传显式准备好的 CPU 帧。
 
@@ -366,7 +281,7 @@ flowchart LR
 
 坐标超出范围、tile 密度过高、贴花图像图案或超出上述上限时，返回指明路径的不受支持 `gpu.coverage` 验证错误；不存在 CPU 覆盖率路线。调用方的字节或工作量额度耗尽同样是验证错误。
 
-计划阶段会预留主机、上传与设备描述符、tile 计数器与偏移、完整的保守索引容量，以及每行五个值：积分后的有符号高度和四个采样行各自的绕数。细化工作量按每个 tile 的每个像素针对每条边引用执行全部 16 个采样计入。计数、前缀和、散射 pass 从不扩容缓冲区，也不回读。设备缓冲区与二维 dispatch 的限制在编码前检查。池化的计数器在每次计数 pass 之前清零，每个行进位和输出采样都只有一个写入者。打包计划按实际的打包缓冲区校验设备限制；线性回读计划则保留浮点缓冲区检查，包括滤镜填充。
+计划阶段会预留主机、上传与设备描述符、tile 计数器与偏移、完整的保守索引容量，以及每行五个值：积分后的有符号高度和四个采样行各自的绕数。细化工作量按每个 tile 的每个像素针对每条边引用执行全部 16 个采样计入。前缀 pass 先对每个填充在 64 个 tile 的分段块内做块扫描，再以有界批次扫描各填充的块和，并在独立的 dispatch 中把所得基址加回；每个 tile 记录中的保留字复用为块和临时存储，因此无需额外设备缓冲区，且前缀诊断覆盖全部三个 dispatch。计数、前缀和、散射 pass 从不扩容缓冲区，也不回读。设备缓冲区与二维 dispatch 的限制在编码前检查。池化的计数器在每次计数 pass 之前清零，每个行进位和输出采样都只有一个写入者。打包计划按实际的打包缓冲区校验设备限制；线性回读计划则保留浮点缓冲区检查，包括滤镜填充。
 
 #### 覆盖率与裁剪上传
 
@@ -376,7 +291,7 @@ flowchart LR
 
 #### 粒子实例
 
-实例上传使用经过检查、与渲染器无关的 Disc、Glow、Sprite 与 Segment 记录：16 字节头部、每个图元 48 字节，以及可选的共享 sprite 纹素。符合条件的内置解析轨迹则改为上传显式的种子、时间与模型参数，由一个 GPU pass 生成支撑区域、有序 tile 与合成所使用的图元记录。不支持或精度不足的解析情形采用带诊断的 CPU 物化，而不是切换后端。上传、生成状态与元数据存储分别计费，定步长模拟仍在 CPU 上。数量、工作量与重放约束参见[粒子](particles.md)。
+实例上传在 `16` 字节头部之后携带经过检查、与后端无关的 `InstanceRecord`（`48` 字节，`12` 字）或 `ExtendedInstanceRecord`（`64` 字节，`16` 字）载荷，以及可选的驻留在 binding `11` 上的共享精灵纹素。符合条件的内置解析轨迹则改为上传显式的种子、时间与模型参数，由一个 GPU pass 生成支撑区域、有序 `16×16` tile 与合成所使用的 `48` 字节图元记录。不支持或精度不足的解析情形采用带诊断的 CPU 物化，而不是切换后端。上传、生成状态与 `48` 字节支撑元数据存储分别计费，定步长模拟仍在 CPU 上。记录布局、数量/工作量限制与重放约束参见[粒子](particles.md)。
 
 #### 诊断
 
@@ -384,7 +299,7 @@ flowchart LR
 
 #### Uniform ABI
 
-每次合成 dispatch 使用 256 字节的 `#[repr(C)]` Pod 结构 `GpuUniforms`。帧、边界、操作、值行、源矩形与标志分别从字节偏移 0、16、32、64、192 与 240 开始。WGSL 的 `Settings` 结构具有相同布局，`crates/motion-render/src/gpu/layout.rs` 中的断言与 ABI 测试会检查大小、偏移以及 Naga 验证。着色器装配从 Rust 的判别值生成操作与混合常量，因此 WGSL 不重复维护数值表。
+每次合成 dispatch 使用 256 字节的 `#[repr(C)]` Pod 结构 `GpuUniforms`。帧、边界、操作、值行、源矩形与标志分别从字节偏移 0、16、32、64、192 与 240 开始。WGSL 的 `Settings` 结构具有相同布局，[`layout.rs`](../../../crates/motion-render/src/gpu/layout.rs) 中的断言与 ABI 测试会检查大小、偏移以及 Naga 验证。着色器装配从 Rust 的判别值生成操作与混合常量，因此 WGSL 不重复维护数值表。
 
 ### 输出目标
 
@@ -459,9 +374,9 @@ flowchart TD
 
 `RenderSession::enable_timings` 分别记录求值、编译、覆盖率准备、GPU 规划、命令编码与提交、完成与回读、输出转换的主机端观测。CPU 分带输出把合成与转换作为一个融合阶段报告。命令编码并不是视频或音频编码器的耗时。
 
-设备只协商 `TIMESTAMP_QUERY`；每个时间戳是一个标记计算 pass 的起点，因此不需要在命令之间写入的特性（有意不使用 `TIMESTAMP_QUERY_INSIDE_ENCODERS`）。导入的设备只使用其已有特性，不支持的设备继续渲染，只是不报告设备时间戳。
+设备只协商 `TIMESTAMP_QUERY`（有意不使用 `TIMESTAMP_QUERY_INSIDE_ENCODERS`）。合成、最终输出与回读拷贝边界使用标记计算 pass 记录时间戳，六个覆盖率计算 pass 则各自写入起止时间戳，因此无需编码器内部写时间戳特性。导入的设备只使用其已有特性，不支持的设备继续渲染，只是不报告设备时间戳。
 
-启用观测的提交拥有六个查询以及两个 48 字节的解析与回读载荷（共 96 字节，与光栅化总量分开报告）。未启用观测时不分配任何资源。GPU 时间戳覆盖合成与滤镜、最终打包、解析与呈现，以及输出与状态回读拷贝；不包括主机等待、映射回调、像素提取与队列延迟。每个提交有自己的句柄，可隔离飞行中的结果，包括倒序完成；只有该帧通过设备、作用域错误、有限值与输出检查后才发布结果。被丢弃或失败的帧不发布任何时间戳。Studio 的 Stats 将设备区间与主机墙钟时间分开显示。
+启用观测的提交拥有 `18` 个查询以及两个 `144` 字节的解析与回读载荷（共 `288` 字节，与光栅化总量分开报告）。未启用观测时不分配任何资源。GPU 时间戳覆盖覆盖率 pass（曲线展开、分箱计数、前缀扫描、散射、行高与细化光栅化）、合成与滤镜、最终打包/解析/呈现，以及输出与状态回读拷贝；不包括主机等待、映射回调、像素提取与队列延迟。在任何覆盖率 pass 未执行时，覆盖率槽位清零，不会留下过期的池化值。回读还会校验起止顺序、相邻阶段单调性以及保守的回读前主机墙钟上界：`NotExecuted`、`Reversed`、`OutOfOrder` 与 `ExceedsWallTime` 状态不产生时长，因此过期的驱动计数器或时间戳回绕绝不会发布伪造耗时。每个提交有自己的句柄，可隔离飞行中的结果（包括乱序完成）；只有该帧通过设备、作用域错误、有限值与输出检查后才发布结果。被丢弃或失败的帧不发布任何时间戳。Studio 的 Stats 将设备区间与主机墙钟时间分开显示。
 
 ### 限制与验证
 
@@ -476,26 +391,12 @@ flowchart TD
     Slot -->|是| Go["提交"]
 ```
 
-- `FrameQueue` 为每个已提交计划预留其逻辑峰值，而不是配置的上限；最多接纳三帧，并在执行计划之前拒绝超出的聚合字节。打包输出使用 `OutputPlan::peak_bytes` 把输出与回读资源计入。计划本身是 crate 私有的；调用方通过 `OutputPlan`、`FrameQueue::submit` 与 `Gpu::render_linear` 规划。
+- `FrameQueue` 为每个已提交计划预留其逻辑峰值，而不是配置的上限；最多接纳三帧，并在执行计划之前拒绝超出的聚合字节。打包输出使用 `OutputPlan::peak_bytes` 把输出与回读资源计入，`OutputPlan::with_planning_limit` 则独立于提交额度限制 CPU 侧计划构造开销（供 [GPU 导出工作线程](export.md#流式处理与多线程架构)使用）。计划本身是 crate 私有的；调用方通过 `OutputPlan`、`FrameQueue::submit` 与 `Gpu::render_linear` 规划。
 - 内存输出与 GPU 导出使用专用的打包计划。它们先于可选的批数据填充预留输出资源，省略未使用的 RGBA32F 映射回读与 CPU 线性帧预留，并保留真实的 RGBA32F 工作与输出纹理。打包存储、映射回读与 CPU 持有的输出同时存在，因此三份载荷以及状态与元数据字都要计费。输出尺寸与格式由规划固定；打包计划不能复用于浮点回读或外部纹理。不支持的打包格式使用线性回读。可选的布局回退是事务性的。
-- 光栅限制统计的是逻辑存活载荷与保守工作量，而不是物理显存或进程 RSS。本地图像容量、元数据、上传、暂存与输出都在提交前计费，逻辑峰值不等于实际分配或 RSS 的节省。其余的池化与减少拷贝的输出工作属于[计划事项](../plan.md#性能优化)。
-
-#### GPU 导出工作线程
-
-```mermaid
-flowchart LR
-    First["首个选定帧：正常准备并提交"] --> Slots["推导工作槽位大小与队列峰值"]
-    Slots --> Workers["有界工作线程：准备并构建 OutputPlan"]
-    Workers --> Consumer["有序消费者：准入、提交、完成"]
-    Consumer --> Enc["编码器"]
-    Workers -->|槽位字节准入失败| Drain["汇合工作线程，排空队列"]
-    Drain --> Serial["在原始限制下串行继续"]
-```
-
-准备与规划的最大值以及打包计划的峰值，把 CPU 工作槽位与 GPU 队列区分开。规划计费会保守地包含设备与暂存预留。`OutputPlan::with_planning_limit` 独立于提交额度限制构造开销，工作线程数量既不固定为两个，也不由光栅上限推导。每个完成的计划都会对照飞行中字节检查，队列需要空间时先完成最早的输出。计划保持原始的提交限制；较小的槽位限制只约束 CPU 准备与设备无关的规划。只有槽位字节准入失败才会触发串行重试；无效内容、工作量限制错误与 panic 仍是失败。策略、打包、帧顺序与事务性失败处理均不改变。
+- 光栅限制统计的是逻辑存活载荷与保守工作量，而不是物理显存或进程 RSS。本地图像容量、元数据、上传、暂存与输出都在提交前计费，逻辑峰值不等于实际分配或 RSS 的节省。其余的池化与减少拷贝的输出工作属于计划事项。
 
 ### 验证范围
 
 GPU 夹具与 CPU 后端对比，覆盖裁剪、遮罩、混合、滤镜、文本、图像、矢量与粒子输出、外部纹理以及设备失败，并检查视觉上稳定的重放。比较使用[视觉验收](reliability.md#视觉验收标准)中的级别与命名档位：在黑白背景上分别计算全局 RMS、16x16 分块 RMS 与 3x3 邻域离群像素，而不是全局 LSB 阈值或逐字节一致；几何缺失、裁剪泄漏和可见的重放闪烁属于缺陷。更严格的既有夹具只是局部回归检查，不限制新的 GPU 算法。CPU 确定性检查保持精确。原生夹具还覆盖线性与 HDR 输出、打包 RGBA 与 YUV、有序的三帧完成、共享顶点与 uniform 缓冲区、全部四种遮罩模式、Plus 与 Hue 边界以及纯计算路径。字体与硬件输入是显式的；编译通过并不能证明适配器可用或跨平台像素一致，这些检查也都不是 FPS、RSS 或跨设备性能结果。测量数据见[基准报告](../benchmarks.md#当前实测数据)。
 
-各自的具体契约参见 [GPU 渲染](#gpu-渲染)、[效果](core.md#图层合成与采样)、[Studio](../studio.md) 与[可靠性](reliability.md)。
+其他关联契约参见[核心创作模型](core.md#图层合成与采样)、[导出与 FFmpeg](export.md)、[资源与字体](resources.md)、[粒子](particles.md)、[Studio](studio.md) 与[可靠性](reliability.md)。

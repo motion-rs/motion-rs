@@ -58,7 +58,7 @@ clap parser (adding `--font` and the `--demo` alias of `--timeline`) and calls `
 | `list` | Prints a pretty JSON array of `{name, defaults}`; takes no options | none |
 | `still NAME` | Renders one frame to a PNG | none |
 | `export NAME` | Encodes a film (or PNG sequence/GIF) | `ffmpeg` for H.264/H.265/VP9/ProRes |
-| `studio [NAME]` | Opens the [Studio](studio.md) workbench for one timeline | `studio` |
+| `studio [NAME]` | Opens the [Studio](design/studio.md) workbench for one timeline | `studio` |
 | `validate NAME` | Builds and checks a film without rendering it; takes only `--params`/`--params-file` | none |
 | `schema` | Prints the JSON Schema of declarative documents; takes no options | `declarative` |
 
@@ -211,7 +211,7 @@ between the checked ones are not evaluated.
 
 `studio NAME` on a `.json` document or a timeline registered with `Project::document`
 opens the document reloadably: saving it, or a file it refers to, reloads the scene in
-place. See [Studio hot reload](studio.md#hot-reload).
+place. See [Studio hot reload](design/studio.md#hot-reload).
 
 ## Exit Codes and Errors
 
@@ -243,7 +243,7 @@ from the crate root but not the prelude, and the CLI, rendering and export never
 
 ## Related
 
-- [Studio guide](studio.md)
+- [Studio guide](design/studio.md)
 - [Export tutorial](tutorial/11-export.md)
 - [Rendering and export contracts](design/rendering.md)
 - [Reliability](design/reliability.md)

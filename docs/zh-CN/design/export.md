@@ -1,100 +1,98 @@
-# 导出系统与 FFmpeg 设计契约
+# 导出与 FFmpeg
 
-本页面记录导出链路的设计契约：时间轴上的帧如何变为像素、像素如何送达编码器、支持哪些编解码器，以及产物文件如何提交或丢弃。[渲染与导出设计](rendering.md)负责覆盖率计算、缓存与预算；[系统可靠性](reliability.md)负责全局错误模型。[导出教程第 11 章](../tutorial/11-export.md)详细讲解了操作工作流（PNG 序列示例、`ExportOptions`、编码器生命周期、进度回调与踩坑点）；本文档重点阐明其背后的不变式契约。
+本页记录导出链路的设计契约：时间轴上的帧如何变为像素、像素如何送达编码器、支持哪些编解码器与像素格式，以及产物文件如何原子提交或在失败时丢弃。[渲染与合成](rendering.md)负责单帧覆盖率、GPU 执行、缓存与帧预算；[音频系统](audio.md)负责离线 PCM 准备；[系统可靠性](reliability.md)负责全局故障模型。使用引导见[导出教程第 11 章](../tutorial/11-export.md)。英文原文（以英文为准）：[../../en/design/export.md](../../en/design/export.md)。
 
 ## 流水线模型
 
-```text
-时间轴帧索引 -> Time::from_frame -> FrameRenderer::render_output_at
-  -> FrameBuffer (格式符合 Encoder::input_format) -> Encoder::write -> Encoder::finish
+```mermaid
+flowchart LR
+    Prepare["准备阶段 (Preparing)<br/>音频适配 + 选项规范化<br/>目标路径与 EncoderCapabilities 预检"] --> Probe["第 0 帧探测<br/>峰值内存测量与 GPU 资格判定"]
+    Probe --> Render["渲染阶段 (Rendering)<br/>串行 / CPU Rayon 槽位 / GPU FrameQueue<br/>Time::from_frame(n, rate)"]
+    Render --> Write["严格保序交付<br/>FrameBuffer (input_format)<br/>-> Encoder::write"]
+    Write --> Finalize["终结与完成 (Finalizing -> Completed)<br/>Encoder::finish + 原子事务落盘<br/>-> ExportReport (+ 实际绘制字体)"]
 ```
 
-[`export`](../../../crates/motion-encode/src/export.rs) 负责统一编排内置与自定义编码器（`ExportOptions::encoder`）；它在调用者主线程上运行，始终保证按帧严格保序写入。
+[`export`](../../../crates/motion-encode/src/export.rs) 在调用者线程上统一编排内置编码器与自定义编码器（`ExportOptions::encoder`），并始终按递增帧索引严格保序写入：
 
 | 阶段 | 契约与职责 |
 | --- | --- |
-| 准备阶段 (Preparing) | 音频完成离线准备，配置选项完成校验与规范化（`selected`），在任何实际输出文件生成前先行执行目标路径与硬件/软件编码能力检查。 |
-| 渲染阶段 (Rendering) | 帧 `n` 在 `Time::from_frame(n, rate)` 时刻求值；编码器的 `input_format()` 决定其像素格式且绝不发生二次错误解释。 |
-| 终结阶段 (Finalizing) | `Encoder::finish` 冲刷编码器尾部数据，随后执行原子事务提交。`ExportReport` 仅描述已成功提交的产物。 |
-
-`ExportPhase` 的生命周期通知严格保序（`Preparing`、`Rendering`、`Finalizing`、`Completed`）；仅当 `finish` 成功返回后才会发出 `Completed`。`frame_completed` 统计的是已经交付给编码器的帧数，而非已最终提交的产物帧数。
+| `Preparing` | 解析时间轴音频（若存在 `AudioDuration::Fit` 场景则先行适配总时长）、规范化导出选项与帧区间（`selected`）、拦截覆盖冲突与音频源文件自覆写、校验 `EncoderCapabilities`、将时间轴音频混音为 `MixedAudio`，并在渲染任何一帧前调用 `Encoder::open`。 |
+| `Rendering` | 帧 `n` 在 `Time::from_frame(n, rate)` 时刻直接渲染为 `Encoder::input_format()` 所声明的 `PixelFormat`（绝不二次重解释），并在每帧交付给 `Encoder::write` 时上报 `ProgressSink::frame_completed`。 |
+| `Finalizing` | 调用 `Encoder::finish` 冲刷延迟编码包、关闭临时封装容器并原子提交目标路径，随后附上从每次导出新建观测接收器记录并去重后的 `Vec<FontIdentity>`（字体族名称与来源哈希，复用 `RenderOptions` 或 `RenderCache` 亦不串扰）。 |
+| `Completed` | 仅在 `Encoder::finish` 成功提交且 `ExportReport`（含 `path`、`frames`、`range`、`elapsed_seconds`、`bytes`、`fonts`）准备就绪后发出。 |
 
 ## 纯原生 API 绑定
 
-视频和音频编码在进程内直接通过 [`motion-ffmpeg`](../../../crates/motion-ffmpeg/src/lib.rs) 调用底层 libav* 原生 C 库函数。系统绝不启动外部 `ffmpeg` 可执行文件进程，也不提供命令行子进程降级通道；测试套件所使用的媒体信息自检工具（[`inspect.rs`](../../../crates/motion-ffmpeg/src/inspect.rs)）同样基于原生 API 构建。PNG 序列帧与 GIF 编码器由纯 Rust 实现，完全不依赖 FFmpeg。
+视频与音频编码在进程内直接通过 [`motion-ffmpeg`](../../../crates/motion-ffmpeg/src/lib.rs) 调用 `libav*` 原生 C 库函数。引擎绝不派生外部 `ffmpeg` 可执行文件子进程，也不设命令行回退通道；测试套件使用的媒体流自检工具（[`inspect.rs`](../../../crates/motion-ffmpeg/src/inspect.rs)）同样基于原生 `libavformat` / `libavcodec` 解复用构建。`PngSequence` 与 `Gif` 编码器由纯 Rust 实现，完全不依赖 FFmpeg 库。
 
-## 帧区间与帧率换算
+## 默认值、帧区间与帧率换算
 
-| 规则约束 | 源码依据 |
+`ExportOptions::new(path)` 默认使用 `Codec::h264(18)`（`EncoderPreset::Medium`）、不透明纯黑背景（`Color::BLACK`）、`48,000 Hz` 音频采样率、`overwrite = false`、`workers = available_parallelism().min(64)` 与 `max_parallel_bytes = 4 GiB`。
+
+| 规则约束 | 契约说明 |
 | --- | --- |
-| `range` 为左闭右开区间，必须满足 `0 <= start < end <= duration`。 | [`render.rs`](../../../crates/motion-encode/src/export/render.rs) |
-| 区间起止时间向上取整到下一个帧时刻点；不包含任何完整帧的时间区间直接被拒绝。导出报告携带规范化后的实际区间。 | 同上 |
-| 输出帧率默认与时间轴帧率完全相同，唯一的例外是 `Codec::Gif`，它按自身独立的 `frame_rate` 进行时间采样。 | 同上 |
-| `workers` 必须介于 `1..=64` 之间，且 `max_parallel_bytes` 必须为正数。 | 同上 |
+| 半开区间 `range` | 必须满足 `0 <= start < end <= duration`；`None` 默认选取 `0..duration`。 |
+| 帧网格向上取整 | `start` 与 `end` 按输出帧网格向上取整到下一个帧边界；不包含任何帧的空区间直接校验失败，`ExportReport::range` 记录规范化后的实际区间。 |
+| 输出帧率 | 与 `timeline.frame_rate()` 一致；唯一例外是 `Codec::Gif { frame_rate, .. }`，它按自身独立的 `frame_rate` 网格对时间轴采样。 |
+| 并发参数边界 | `workers` 必须在 `1..=64` 范围内，且 `max_parallel_bytes` 必须严格大于 `0`。 |
 
 ## 编解码器矩阵
 
-在 [`options.rs`](../../../crates/motion-encode/src/export/options.rs)、[`settings.rs`](../../../crates/motion-ffmpeg/src/settings.rs) 与 [`ffmpeg.rs`](../../../crates/motion-encode/src/encoder/ffmpeg.rs) 中实现并验证：
+| `Codec` 变体 | 封装容器 / 底层库 | `input_format()` | `EncoderCapabilities` | Alpha | 核心约束与说明 |
+| --- | --- | --- | --- | --- | --- |
+| `H264 { quality, preset }` | MP4 / `libx264` | `Yuv420 { bit_depth: 8 }` | 支持音频，最大 `16,384²`，偶数尺寸 | 不支持 | CRF `0..=51`；`preset`：`Medium`、`Slow`、`Slower` |
+| `H265 { quality, preset, bit_depth, params }` | MP4 / `libx265` | `Yuv420 { bit_depth: 8 \| 10 }` | 支持音频，最大 `16,384²`，偶数尺寸 | 不支持 | CRF `0..=51`；`BitDepth::Ten` 选择 Main10（`yuv420p10le`）；可选 `params` `<= 4,096 B` 且严禁 NUL |
+| `Vp9 { quality, alpha }` | WebM / `libvpx-vp9` | `Yuv420 { bit_depth: 8 }`；开启 `alpha` 时为非预乘 `SrgbRgba8` | 不支持音频，最大 `16,384²`，偶数尺寸 | 可选 | CQ `0..=63`；拒绝时间轴音频（`WebM` 不提供 AAC 复用路径） |
+| `ProRes4444` | MOV / `prores_ks` | 非预乘 `SrgbRgba8`（`yuva444p10le`） | 支持音频，最大 `16,384²`，偶数尺寸 | 支持 | 固定广播级配置，无可调质量或预设 |
+| `PngSequence` | `NNNNNN.png` 序列目录 | 非预乘 `SrgbRgba8` | 不支持音频，尺寸无硬上限，倍数 `1` | 非预乘 | 纯 Rust；拒绝时间轴音频与容器元数据 |
+| `Gif { frame_rate, colors }` | GIF | 非预乘 `SrgbRgba8` | 不支持音频，最大 `65,535²`，倍数 `1` | 1-bit 透明色板 | 纯 Rust；`2..=256` 色调色板；累积有理数帧延时须落入 `1..=65,535` 厘秒 |
 
-| `Codec` 变体 | 封装容器 / 底层库 | 输入像素格式 | 透明通道 Alpha | 核心参数与说明 |
-| --- | --- | --- | --- | --- |
-| `H264 { quality, preset }` | MP4 / `libx264` | `Yuv420` 8-bit | 不支持 | CRF 取值 `0..=51` |
-| `H265 { quality, preset, bit_depth, params }` | MP4 / `libx265` | `Yuv420` 8 或 10-bit | 不支持 | `BitDepth::Ten` 选择 Main10（`yuv420p10le`）；可选 `params` 传递 x265 专属参数串（最多 4096 字节，严禁 NUL 字符） |
-| `Vp9 { quality, alpha }` | WebM / `libvpx-vp9` | `Yuv420`；开启 `alpha` 时为直通 `SrgbRgba8` | 可选支持 | 质量参数 `0..=63`；导出 VP9 时直接拒绝时间轴音频 |
-| `ProRes4444` | MOV / `prores_ks` | 直通 `SrgbRgba8` (`yuva444p10le`) | 默认支持 | 固定广播级画质，无额外可调参数 |
-| `PngSequence` | 存放 PNG 帧的目录 | 编码器自行定义 | 默认直通 | 无音频轨，无视频容器元数据 |
-| `Gif { frame_rate, colors }` | GIF | 编码器自行定义 | 支持索引透明 | `2..=256` 色；单帧延时必须能够放入 `1..=65535` 厘秒（分秒）范围内 |
-
-更进一步的边界约束：编码器专属的配置仅存在于使用它们的特定枚举变体中（如 H.264/H.265 的 `preset`，H.265 的 `bit_depth` 与 `params`），`ExportOptions` 本身不携带多余字段；`preset` 预设为 `medium`、`slow` 或 `slower`；原生编码器强制要求分辨率各维度为偶数，单边不超过 16,384 像素（`EncoderCapabilities`），总帧数在 1 至 `u32::MAX` 之间，总时长不超过 86,400 秒。伴音编码为 AAC，采样率支持 44,100、48,000（默认）或 96,000 Hz。通过 `ExportOptions::codec` 选取支持 Alpha 通道的编码器、PNG 或 GIF 会自动清除默认的不透明纯黑底色；其余编码器默认将透明内容合成在黑色背景上。若链接的 FFmpeg 动态库中缺少某个编码器，在 `open` 时会直接抛出 `ErrorKind::Unsupported` 错误（由 `VideoCodec::available` 预检）。
-
-色彩元数据规范：原生视频默认标记为 BT.709 色域基色与转换矩阵，受限范围（Limited Range）；色彩传输特性默认标记为 sRGB（IEC 61966-2-1），在设置 `gamma24` 时标记为 BT.709（[`codec.rs`](../../../crates/motion-ffmpeg/src/encoder/codec.rs)）。MP4 导出启用 `+faststart` 标记（将 moov 原子前置以便网页秒开），视频时间刻度（timescale）与章节标记采用每秒 705,600,000 ticks。容器级标签（最多 64 个）与章节信息（最多 4096 个，有序且不得相互重叠）在 [`encoder.rs`](../../../crates/motion-ffmpeg/src/encoder.rs) 中完成校验。
+- **透明编解码器自动清除底色：** 通过 `ExportOptions::codec` 选择 `PngSequence`、`ProRes4444`、`Vp9 { alpha: true, .. }` 或 `Gif` 时，会自动将默认的 `Color::BLACK` 背景置为 `None` 以保留透明通道；不透明编解码器默认压平至纯黑背景（可通过 `.render(...)` 显式覆盖）。
+- **原生时长、音频与容器元数据：** 原生 FFmpeg 导出要求总帧数在 `1..=u32::MAX` 之间且总时长不超过 `86,400` 秒。时间轴音频编码为双声道立体声 AAC-LC，采样率支持 `44,100`、`48,000`（默认）或 `96,000 Hz`。原生视频流标记为 BT.709 基色与矩阵、受限范围（Limited Range），传递函数默认为 sRGB（`IEC 61966-2-1`），当 `DisplayTransform` 选择 `gamma24` 时切换为 BT.709。MP4 封装启用 `+faststart` 并使用 `705,600,000` ticks/秒作为影片时间刻度与章节刻度。`AudioMetadata` 最多校验 `64` 个容器标签与 `4,096` 个有序不重叠章节，在 `PngSequence` 与 `Gif` 上会被拒绝。若所链接的 FFmpeg 构建缺少对应编码器，将在 `open` 阶段返回 `io::ErrorKind::Unsupported`（由 `VideoCodec::available` 判定）。
 
 ## 像素数据交换
 
-[`output.rs`](../../../crates/motion-render/src/output.rs) 定义了 CPU 与 GPU 后端共享的 `PixelFormat` 格式契约：包含 `LinearRgba16Float`、`LinearRgba32Float`、`SrgbRgba8 { premultiplied }` 与 `Yuv420 { bit_depth }`（8 或 10-bit，偶数尺寸，BT.709 受限范围，10-bit 存储为小端序 `u16`）。`FrameBuffer` 拥有紧凑打包的平面，附带字节跨度（Stride）。[`yuv.rs`](../../../crates/motion-render/src/output/yuv.rs) 负责 4:2:0 分块色彩空间转换；显示变换路径在执行色彩量化时额外应用 4x4 有序抖动。不透明的 `SrgbRgba8` `FrameBuffer`（[`rgb.rs`](../../../crates/motion-render/src/output/rgb.rs)）支持 `write_ppm` (P6) 与 `write_rgb`；它们不依赖 FFmpeg 也无需遵循视频防覆盖策略，无条件覆写目标路径。
+[`output.rs`](../../../crates/motion-render/src/output.rs) 定义了 CPU 与 GPU 后端共享的 `PixelFormat` 契约：
+
+- **受支持的像素布局：** `LinearRgba16Float`、`LinearRgba32Float`、`SrgbRgba8 { premultiplied }` 与 `Yuv420 { bit_depth }`（`8` 或 `10` 位、偶数尺寸、BT.709 受限范围，10-bit 按小端序 `u16` 存储）。`FrameBuffer` 持有经过严格边界校验的平面与显式字节步幅（Stride）。
+- **量化抖动与裸像素写入：** [`yuv.rs`](../../../crates/motion-render/src/output/yuv.rs) 执行 4:2:0 色度子采样，显示变换量化路径施加确定性的 `4×4` 有序抖动。不透明 `SrgbRgba8` 帧缓冲还额外提供独立的 `write_ppm`（P6）与 `write_rgb` 辅助方法（[`rgb.rs`](../../../crates/motion-render/src/output/rgb.rs)），无需依赖 FFmpeg 或导出级防覆盖暂存即可直接写出裸像素。
 
 ## 流式处理与多线程架构
 
-导出流水线绝不会在内存中缓存整部短片的画面帧。原生编码器运行在独立的专用 `motion-encoder` 线程上，由容量为 2 帧的有界队列负责供给画面（[`worker.rs`](../../../crates/motion-encode/src/encoder/ffmpeg/worker.rs)）；libav* C 对象被完全限制在该线程内部，工作线程发生 panic 会自动转换为 `Error::Encoder`。
+导出流水线逐帧流式推进，绝不在内存中缓存整部影片：
 
-CPU 工作线程池使用容量为 `workers` 个槽位的私有 Rayon 线程池（[`parallel.rs`](../../../crates/motion-encode/src/export/parallel.rs)）。第 `i` 个槽位按步长负责渲染帧 `i, i+workers, ...`；导出线程严格按帧索引顺序依次消费结果，确保并发执行的输出顺序和比特完全等价于串行执行的结果（由测试用例 `parallel_export_matches_serial_pixels_ntsc_ranges_and_progress` 保障）。第一帧始终先在主线程串行渲染以测量单帧峰值内存；并发工作线程数受限于总帧数与 `max_parallel_bytes`。如果后续某一帧超出槽位的字节预算，仅有该 `max_bytes` 结构性失败才会触发从该帧开始无缝回退为串行继续执行；其余算法错误与 panic 均直接向上冒泡。因此场景构建回调必须保证可重复求值。
-
-GPU 导出路径（[`gpu.rs`](../../../crates/motion-encode/src/export/gpu.rs)，需要 `gpu` 特性）在满足以下条件时生效：后端非 CPU、导出的帧数大于 1、像素格式可直接在 GPU 端打包，且确实成功初始化了 GPU 上下文。CPU 准备槽位将任务送入有界的 `FrameQueue`，其产物被保序完成并编码。
+- **专用 `motion-encoder` 编码线程：** `FfmpegEncoder` 启动专用的 `motion-encoder` 工作线程，由容量为 `2` 帧的有界通道供给画面（[`worker.rs`](../../../crates/motion-encode/src/encoder/ffmpeg/worker.rs)）。所有 `libav*` 裸指针（含创建与销毁）完全隔离在该线程内部，工作线程发生 panic 会安全转换为 `Error::Encoder`。注意 `2` 槽通道限制的是排队中的帧消息而非全部存活帧或进程 RSS（生产者与编码器各自还可能同时持有一帧）；音频 PCM 直接从不可变的已准备 `f32` 采样读取，独立于该视频队列。
+- **CPU 并发槽位与结构性串行回退：** 当 CPU 后端配置 `workers > 1` 时（[`parallel.rs`](../../../crates/motion-encode/src/export/parallel.rs)；`.workers(1)` 保持串行），第 `0` 帧先行在主线程串行渲染以测量单帧峰值内存，据此在总帧数、首帧逻辑峰值两倍与 `max_parallel_bytes` 约束下收敛并发工作槽位数。并行槽位显式沿用首帧的 CPU 后端决策而不再重新探测 GPU，并平分 `max_parallel_bytes` 而非为每个槽位预留完整的单帧上限。私有 Rayon 线程池令槽位 `i` 按步长渲染帧 `i, i + workers, ...`，协调器严格按帧索引顺序退休并写出帧，确保输出字节与串行执行逐位一致（`parallel_export_matches_serial_pixels_ntsc_ranges_and_progress`）。若后续某帧超出单槽位的 `max_bytes` 预算上限，**唯有**该结构性内存准入错误会汇合工作线程并在原始单帧限制下串行继续尚未写入的帧；无效内容、工作量限制错误与 panic 立即向上传播。因此场景闭包必须是纯函数且可重复求值。
+- **GPU 准备与回读队列：** 当启用 `gpu` 特性、`backend != Cpu`、导出帧数大于 `1`、`Gpu::supports_packed_output` 支持当前 `(size, format)` 且成功激活 `GpuContext` 时（[`gpu.rs`](../../../crates/motion-encode/src/export/gpu.rs)），第 `0` 帧同时探测 CPU 准备/规划最大值与 `OutputPlan::peak_bytes`，将并行 CPU 工作槽位与单一渲染会话的 `FrameQueue`（`1..=3` 个在途槽位；工作线程数由实测决定而非固定为两个）分离。工作线程通过 `OutputPlan::with_planning_limit` 在各自槽位内约束 CPU 准备与设备无关规划开销（保守计入设备与暂存预留），而完成的计划保留原始提交限制，并在提交到 `FrameQueue` 前检查在途字节（空间不足时先完成最早的输出），再严格按序提交与编码。仅有槽位字节准入失败会汇合工作线程、排空队列并在原始单帧限制下串行重试。聚合并行额度不含编码器存储、共享 `Assets`、缓存与空闲池，也不构成进程 RSS 上限。
 
 ## 事务性落盘与防覆盖保证
 
-| 输出形式 | 事务安全机制 |
+| 输出目标 | 事务暂存机制 |
 | --- | --- |
-| 视频文件、GIF | 在目标目录下生成临时文件 `.motion-video-*` / `.motion-gif-*`，渲染完成后使用 `persist`（允许覆盖）或 `persist_noclobber` 原子提交。 |
-| PNG 序列帧 | 在临时目录中生成，随后通过 `renameat_with` 系统调用原子替换目标目录（无覆盖使用 `NOREPLACE`，覆盖使用 `EXCHANGE`；覆盖要求目标必须为真实目录）。 |
-| 自定义编码器 | 必须自行维护事务边界；在遇到错误或被 Drop 时必须彻底清除残留的半成品文件。 |
+| 视频（`MP4`、`MOV`、`WebM`）与 `Gif` | 先写入目标父目录下的临时文件 `.motion-video-*` / `.motion-gif-*`，终结时通过 `persist`（`overwrite = true`）或 `persist_noclobber`（`overwrite = false`）原子替换落盘。 |
+| `PngSequence` | 将序列帧写入同级 `.motion-png-*` 临时目录，终结时原子安装或交换目标目录（在支持的平台上调用 `renameat_with` 的 `NOREPLACE` 或 `EXCHANGE`；覆盖时要求已有目标必须为真实目录）。 |
+| 自定义 `Encoder` | 自行维护暂存事务边界；发生错误或被取消后 Drop 未完成的编码器必须彻底丢弃半成品产物。 |
 
-未传入 `overwrite` 时，若目标文件已存在，流水线会在打开编码器或渲染第一帧画面之前立即报错 `AlreadyExists`。开启 `overwrite` 后，旧文件在最终事务提交完成前保持完全不受破坏。若已存在的目标文件同时也是当前时间轴的输入音频源，即使传入了 `overwrite` 也会被直接拒绝。任务取消、抛出异常或对象 Drop 时会自动彻底清理临时文件（[`native.rs`](../../../crates/motion-encode/src/encoder/ffmpeg/native.rs)）。
+- **目标路径保护与 Unix 创建权限：** 当 `overwrite = false` 时，若目标已存在，流水线会在调用 `Encoder::open` 或求值任何一帧之前直接报错 `io::ErrorKind::AlreadyExists`。当 `overwrite = true` 时，旧文件或旧目录在最终原子提交前保持完好无损。若导出目标规范化路径正被时间轴的某个 `AudioSource::File` 引用，即便 `overwrite = true` 也会无条件拒绝，防止边读边覆写音频源。在 Unix 上，事务性的 PNG、GIF 与原生视频文件请求 `0666` 创建权限，`PngSequence` 暂存目录请求 `0777` 权限；新建与覆盖输出均遵循进程 `umask`，导出过程绝不读取或修改 `umask`。取消、报错或提前 Drop 均会自动清理暂存临时文件与目录（[`native.rs`](../../../crates/motion-encode/src/encoder/ffmpeg/native.rs)）。
 
 ## 协作式取消与错误处理
 
-`ProgressSink::is_cancelled` 会在任务启动前、各帧之间、等待队列阻塞时（工作线程每 10 ms 轮询一次）以及冲刷编码器时密集轮询；一旦被取消立即返回 `Error::Cancelled` 且不执行最终文件提交。渲染错误通过 `at_frame` 挂载发生错误的具体帧号；工作线程槽位或并行首帧抛出的 panic 会被捕获并转化为场景 panic 错误。编码器底层失败封装为 `Error::Encoder`，内含底层 `io::Error` 以及 FFmpeg 的原生错误码与文本消息。`Encoder::write` 严禁乱序写入帧索引、分辨率不匹配或格式错误，`finish` 会校验写入的总帧数是否完整。
+- **协作式轮询：** `ProgressSink::is_cancelled` 在准备前、帧与帧之间、有界工作队列阻塞等待期间（每 `10 ms` 轮询一次）及终结冲刷阶段持续检查；一旦触发立即返回 `Error::Cancelled` 且零产物落盘。
+- **带帧号的类型化归因：** 场景求值与光栅化错误通过 `Error::at_frame` 附带出错帧索引。第 `0` 帧或并发工作线程上的 panic 由 `catch_unwind` 捕获并报告为 `Error::ScenePanic`。原生编解码与封装错误统一封装为 `Error::Encoder`（内含附带 FFmpeg 错误码与消息的 `io::Error`）。`Encoder::write` 拒绝乱序帧索引、尺寸不匹配或像素格式不符的帧，而 `Encoder::finish` 拒绝帧数未写满的终结请求。
 
-## 平台要求与依赖项
+## 特性开关、平台要求与 `unsafe` 边界
 
-| 依赖要求 | 说明细节 |
+| 维度 | 说明细节 |
 | --- | --- |
-| `ffmpeg` 特性 (`motion-encode`, `motion`) | 启用原生视频/音频编码；若未开启，视频编码器在 `open` 时报错 `Unsupported`，但纯 Rust 实现的 PNG 序列与 GIF 仍可正常导出。facade 中默认启用。 |
-| `gpu` 特性 | 启用 GPU 端打包与导出流水线。 |
-| 构建环境依赖 | 需要系统安装 `pkg-config`、FFmpeg C 开发库（libavformat, libavcodec, libavfilter, libswscale, libswresample, libavutil）以及用于 bindgen 绑定的 libclang（[`build.rs`](../../../crates/motion-ffmpeg/build.rs)）。 |
-| 运行时动态库 | 链接的动态库必须包含实际所需的编码器（如 `libx264`、`libx265`、`libvpx-vp9`、`prores_ks`、AAC）。在 Unix 平台上通过二进制内置的 rpath 查找动态库。 |
+| `ffmpeg` 特性（`motion-encode`，`motion` 默认启用） | 启用进程内 `libav*` 音视频编码；关闭时视频编解码器在 `open` 阶段返回 `Unsupported`，而纯 Rust 的 `PngSequence` 与 `Gif` 保持可用。 |
+| `gpu` 特性 | 启用 GPU 端输出像素打包与流水线化 `FrameQueue` 导出路径。 |
+| 构建与运行时依赖 | 构建需安装 `pkg-config`、FFmpeg 开发头文件与库（`libavformat`、`libavcodec`、`libavfilter`、`libswscale`、`libswresample`、`libavutil`）以及供 `bindgen` 使用的 `libclang`（[`build.rs`](../../../crates/motion-ffmpeg/build.rs)）；运行时动态库（Unix 下通过 `rpath` 解析）须包含 `libx264`、`libx265`、`libvpx-vp9`、`prores_ks` 与 `aac`。 |
+| 隔离的 `unsafe` FFI 边界 | 全工作区所有 `unsafe` 代码块均隔离在 `motion-ffmpeg` 内，受 `unsafe_op_in_unsafe_fn = "deny"` 与 `clippy::undocumented_unsafe_blocks = "warn"` 约束，每处均附带显式 `// SAFETY:` 不变式注释。`bindgen` 仅白名单导出所需 C 符号，`Encoder` 独占持有并在 `Drop` 中释放 `libav*` 句柄（且绝不提交半成品），向 `motion-encode` 及上层仅暴露纯安全 Rust 接口。 |
 
-## Unsafe 代码的严格边界
+## 归属源码 (Owning sources)
 
-全工程的所有 FFI 外部函数调用均集中在 `motion-ffmpeg` 内部（涵盖 `lib.rs`、`settings.rs`、`audio.rs`、`inspect.rs`、`encoder.rs` 及其 `codec`/`mux` 模块）。工作区配置了 `unsafe_op_in_unsafe_fn = "deny"` 以及 `clippy::undocumented_unsafe_blocks = "warn"`：每个 `unsafe` 代码块均必须附带 `// SAFETY:` 注释详述其所有权或生命周期不变式保证。`Encoder` 独占拥有其 libav 结构体指针，并在 `Drop` 时自动安全释放，且 `Drop` 过程关闭输出绝不触发未决提交。bindgen 绑定仅白名单暴露桥接所需的最小函数集；`motion-encode` 以及工作区其余所有包仅使用安全的纯 Rust 代码。
-
-## 测试与质量验证
-
-测试套件重点校验实际解码出的画面与音频内容，而非浅层断言 API 调用顺序：`inspect` 从生成的文件中回读流信息、准确帧数、AAC 音频与 10-bit 亮度平面；自动化测试严格断言编码格式、位深、色彩标记、目标文件未破坏以及临时文件干净清理（[`export_tests.rs`](../../../crates/motion-encode/src/encoder/ffmpeg/export_tests.rs)、[`export/tests.rs`](../../../crates/motion-encode/src/export/tests.rs)）。自定义编码器测试使用录制型 `Encoder` 严格检验帧顺序、任务取消以及能力匹配。
-
-## 相关参考
-
-- [导出教程](../tutorial/11-export.md)
-- [渲染与导出设计](rendering.md)、[系统可靠性](reliability.md)
-- [开发维护检查](../development.md)
-- 源码实现：[`export.rs`](../../../crates/motion-encode/src/export.rs)、[`options.rs`](../../../crates/motion-encode/src/export/options.rs)、[`motion-ffmpeg`](../../../crates/motion-ffmpeg/src/lib.rs)
+- [`crates/motion-encode/src/export.rs`](../../../crates/motion-encode/src/export.rs)、[`export/options.rs`](../../../crates/motion-encode/src/export/options.rs)、[`export/render.rs`](../../../crates/motion-encode/src/export/render.rs) — `export`、`ExportOptions`、`Codec`、`Encoder`、`EncoderCapabilities`、`ExportReport` 与帧区间规范化。
+- [`crates/motion-encode/src/export/parallel.rs`](../../../crates/motion-encode/src/export/parallel.rs)、[`export/gpu.rs`](../../../crates/motion-encode/src/export/gpu.rs) — 有界 Rayon CPU 工作槽位、结构性预算串行回退与流水线化 GPU `FrameQueue` 导出。
+- [`crates/motion-encode/src/encoder/ffmpeg.rs`](../../../crates/motion-encode/src/encoder/ffmpeg.rs)、[`encoder/png.rs`](../../../crates/motion-encode/src/encoder/png.rs)、[`encoder/gif.rs`](../../../crates/motion-encode/src/encoder/gif.rs) — `FfmpegEncoder`（`motion-encoder` 线程）、`PngSequenceEncoder` 与 `GifEncoder`。
+- [`crates/motion-ffmpeg/src/lib.rs`](../../../crates/motion-ffmpeg/src/lib.rs)、[`encoder.rs`](../../../crates/motion-ffmpeg/src/encoder.rs)、[`settings.rs`](../../../crates/motion-ffmpeg/src/settings.rs)、[`inspect.rs`](../../../crates/motion-ffmpeg/src/inspect.rs) — `unsafe` `libav*` FFI 边界、色彩元数据、`+faststart` MP4 封装与原生媒体流自检。
+- [`crates/motion-render/src/output.rs`](../../../crates/motion-render/src/output.rs)、[`output/yuv.rs`](../../../crates/motion-render/src/output/yuv.rs)、[`output/rgb.rs`](../../../crates/motion-render/src/output/rgb.rs) — `PixelFormat`、`FrameBuffer`、BT.709 `Yuv420` 转换与裸 RGB/PPM 写入器。

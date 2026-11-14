@@ -10,15 +10,16 @@
 | [系统架构](architecture.md) | 求值流水线、Package 所有权划分、依赖方向与 Feature 特性管理 |
 | [Core 核心创作](core.md) | 数值精度规则、时间模型、动画系统、快照、布局引擎与绘制录制 |
 | [Content 内容系统](content.md) | 外部资源、位图图像、矢量图形、文本排版、Typst 公式与音频准备 |
-| [渲染与导出](rendering.md) | 覆盖率计算、GPU 设备所有权、任务调度与完成、输出格式、缓存、预算、并发控制与视频编码（英文原版参见 [rendering.md](../../en/design/rendering.md)） |
-| [导出与 FFmpeg](export.md) | 编解码器矩阵、原生编码器边界、事务性文件输出、取消机制与帧保序 |
+| [渲染与合成](rendering.md) | 覆盖率计算、CPU/GPU 合成、GPU 设备所有权、工作纹理、输出格式、会话缓存与单帧预算（英文原版参见 [rendering.md](../../en/design/rendering.md)） |
+| [导出与 FFmpeg](export.md) | 编解码器矩阵、CPU/GPU 并发导出调度、原生编码器边界、事务性文件输出、取消机制与帧保序 |
 | [音频系统](audio.md) | 音频片段（Clip）、总线（Bus）、音频效果器、主输出链路、流式分析、音频合成与离线准备 |
 | [资源管理](resources.md) | 资产与字体所有权、显式 I/O、多级缓存、配额限制与故障处理行为 |
 | [粒子系统](particles.md) | 求值后实例协议（Instance Protocol）、保序分块（Tiling）与准入控制 |
 | [系统可靠性](reliability.md) | 故障模型、确定性重放保证、所有权与事务保证 |
 | [声明式文档](documents.md) | 声明式 JSON 格式规范、版本管理、相对资源路径、编译期校验与错误诊断 |
+| [Studio 工作台](studio.md) | 桌面工作台架构、预览与回放调度、导出队列、热重载与无头入口契约 |
 
-维护命令请参阅[开发指南](../development.md)，客观性能测量见[性能基准](../benchmarks.md)，后续演进工作见[开发规划](../plan.md)（含[性能优化章节](../plan.md#性能优化)）。[Studio 用户指南](../studio.md)记录了桌面工作台的使用与预览机制。
+维护命令请参阅[开发指南](../development.md)，客观性能测量见[性能基准](../benchmarks.md)。
 
 ## 设计词汇表
 

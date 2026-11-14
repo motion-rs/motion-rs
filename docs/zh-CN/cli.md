@@ -38,7 +38,7 @@ fn main() -> std::process::ExitCode {
 | `list` | 打印格式化 JSON 数组形式的 `{name, defaults}`；不接受额外选项 | 无 |
 | `still NAME` | 渲染指定的一帧并输出为 PNG | 无 |
 | `export NAME` | 编码导出短片（或 PNG 序列/GIF） | H.264/H.265/VP9/ProRes 需要 `ffmpeg` |
-| `studio [NAME]` | 为指定 Timeline 打开 [Studio](studio.md) 工作台 | `studio` |
+| `studio [NAME]` | 为指定 Timeline 打开 [Studio](design/studio.md) 工作台 | `studio` |
 | `validate NAME` | 编译并校验短片而不进行渲染；仅接受 `--params`/`--params-file` | 无 |
 | `schema` | 输出声明式文档的 JSON Schema；不接受任何选项 | `declarative` |
 
@@ -127,7 +127,7 @@ cargo run -p motion-cli -- schema > schemas/motion.schema.json
 
 ### Studio 与文档联动
 
-对 `.json` 文档或通过 `Project::document` 注册的 Timeline 执行 `studio NAME` 会以可热重载模式打开文档：保存该文档或其引用的文件，场景会即时就地重新加载。参见 [Studio 热重载](studio.md#热重载)。
+对 `.json` 文档或通过 `Project::document` 注册的 Timeline 执行 `studio NAME` 会以可热重载模式打开文档：保存该文档或其引用的文件，场景会即时就地重新加载。参见 [Studio 热重载](design/studio.md#热重载)。
 
 ## 退出状态码与错误
 
@@ -147,7 +147,7 @@ Gallery 封装了相同的 CLI 架构（[`gallery/src/lib.rs`](../../gallery/src
 
 ## 相关参考
 
-- [Studio 用户指南](studio.md)
+- [Studio 用户指南](design/studio.md)
 - [导出教程](tutorial/11-export.md)
 - [渲染与导出契约](design/rendering.md)
 - [系统可靠性](design/reliability.md)

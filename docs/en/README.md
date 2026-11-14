@@ -4,10 +4,9 @@
 
 - [Tutorial](tutorial/README.md): the authoring learning path, from the first still
   to animation, content, audio, export and extensions.
-- [Motion Studio](studio.md): desktop workbench operation, preview and playback.
+- [Motion Studio](design/studio.md): desktop workbench architecture, preview, playback and API.
 - [Gallery](../../gallery/README.md): finished short films.
 - [Command line](cli.md): the `list`, `still`, `export`, `studio` and `schema` commands of a `Project` binary.
-- [Rustdoc source](../../crates/motion/src/lib.rs): exact public signatures and examples.
 
 ## Understand the Engine
 
@@ -20,7 +19,6 @@ for integration and contribution, not prerequisites for the tutorial.
 
 - [Development checks](development.md): feature matrices, tests, fixtures and CI.
 - [Source style](style.md): file layout, field order, comments and lint conventions.
-- [Development plan](plan.md): project priorities, remaining work and the performance plan.
 - [Benchmarks](benchmarks.md): workloads, procedures and current measured results.
 - [Measurement manifest](../performance-runs.json): recorded runs and provenance.
 - [Quality report](quality-report.md): image-quality measurements, with provenance.

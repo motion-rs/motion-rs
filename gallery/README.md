@@ -64,7 +64,7 @@ Static titles, fixed rings, decorative paths and unchanged ribbon gradients are
 retained through SceneContext caches; animation still updates original parameters,
 transforms, waveforms and ribbon geometry each frame. Stroke outlines and gradient
 tables can be reused without caching whole rendered frames or changing blend order.
-See [Studio](../docs/en/studio.md).
+See [Studio](../docs/en/design/studio.md).
 
 ## Film Program
 

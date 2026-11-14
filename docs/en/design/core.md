@@ -1,178 +1,217 @@
-# Core Authoring Contracts
+# Core authoring contracts
 
-Core owns time, geometry, scene snapshots, layout and the drawing protocol. It does
-not initialize fonts, rendering devices, codecs or playback clocks. See the
+`motion-core` owns exact time, geometry, stateless animation, immutable `Node`
+snapshots, layout, structural and logical budgets, color grading/optics data and the
+backend-neutral drawing protocol. It never initializes font engines, GPU devices,
+media codecs, desktop windows or playback clocks. Optional `serde` and `schema`
+features expose JSON serialization and JSON Schema on plain value and policy types so
+`motion-scene` reuses core definitions directly without mirror structs. See the
 [tutorial](../tutorial/README.md) for runnable authoring examples.
 
-## Numeric Boundaries
+## Numeric boundaries
 
-Authoring geometry, angles, interpolation progress and easing parameters use f64.
-Raster integration retains f64 areas before u8 coverage quantization. Color stores
-finite extended encoded-sRGB f32 channels; shading and linear-premultiplied working
-pixels use f32. Image storage and output formats have independent precision
-contracts. There is no blanket f64 promise for every public numeric parameter.
+- **Precision split.** Authoring geometry (`Point`, `Vector2`, `Size`, `Rect`,
+  `Transform`, `Perspective`), rotation angles, interpolation progress and easing
+  parameters use `f64`. CPU area integration retains `f64` trapezoids before single
+  `u8` coverage quantization. `Color` stores finite extended encoded-sRGB `f32`
+  channels; shading, grading (`Cdl`, `Lut1d`, `Lut3d`) and linear-premultiplied
+  working pixels use `f32`. Image storage and output `PixelFormat` targets maintain
+  independent precision contracts; there is no blanket `f64` guarantee across every
+  public numeric API.
+- **Coordinate space and viewport mapping.** Logical design coordinates place the
+  origin at the top-left with `+x` right and `+y` down. `Rect` stores opposite corners
+  and uses half-open containment (`left <= x < right`, `top <= y < bottom`); empty or
+  inverted geometry fails validation instead of silently normalizing. Rotations use
+  radians (`AngleLiteral` converts degrees and turns explicitly). A composition
+  uniformly scales and centers logical design dimensions (`contain`) inside the
+  integer `PixelSize` viewport; stroke widths and filter radii follow the composed
+  transform while curve-flattening tolerance is measured in device pixels.
+- **Tick arithmetic and frame rates.** `Time` (signed timeline point), `Duration`
+  (nonnegative span) and `TimeOffset` (signed displacement) wrap exact integer ticks
+  at `TICKS_PER_SECOND = 705_600_000` (an exact multiple of standard cinema/broadcast
+  rates `24`, `25`, `30`, `48`, `50`, `60`, `120` and common audio sample rates up to
+  `192,000` Hz):
+  - `Time - Time -> TimeOffset`
+  - `Time ± Duration -> Time` and `Time ± TimeOffset -> Time`
+  - `Time + Time` is rejected at compile time, and negative `Duration` values cannot be
+    constructed.
+  Literals such as `2.seconds()` construct `Duration`; `Duration::after_origin`,
+  `Duration::offset` and `Time::since_origin` convert explicitly. `FrameRate` stores a
+  nonzero rational pair (`fps!(30)`, `FrameRate::NTSC` at `30_000/1001`,
+  `FrameRate::new` or fallible `FrameRate::try_new`), converting each frame boundary
+  independently via integer arithmetic rather than accumulating floating-point
+  seconds. `f64` seconds (`SceneContext::seconds`) are a read-only view for animation
+  formulas, never mutable playback state.
 
-Logical coordinates have a top-left origin, x right and y down. Rect stores
-opposite corners and uses half-open containment. Invalid geometry is not silently
-normalized. Rotation uses radians; degree and turn literals convert to radians.
-The root uniformly contains design dimensions in the output viewport. Stroke and
-effect distances follow that mapping; flattening tolerance is in device pixels.
+## Stateless animation
 
-Time (a signed point on a timeline), Duration (a nonnegative span) and TimeOffset (a signed
-displacement) are distinct types over integer ticks at 705600000 ticks per second:
-`Time - Time` is a TimeOffset, `Time ± Duration` and `Time ± TimeOffset` are Times, and
-`Time + Time` does not compile. A negative Duration cannot be constructed, so spans need no
-sign checks; clip shifts and other places that really move earlier use TimeOffset. Literals
-such as `2.seconds()` are Durations; `Duration::after_origin`, `Duration::offset` and
-`Time::since_origin` convert explicitly. FrameRate is a pair of nonzero integers, built with
-`fps!(30)`, `FrameRate::new(NonZeroU32, NonZeroU32)` or the fallible `FrameRate::try_new`;
-convert each frame boundary
-independently. Interval tests use ticks, not accumulated floating seconds. Seconds
-are a view for animation mathematics, not mutable playback state. Frame indices,
-sample indices and time points are distinct inputs even when conversion is exact.
+`Signal` samples a value purely from an explicit local `Time` and has no intrinsic end.
+`FiniteAnimation` extends `Signal` with a nonnegative `duration()`; only finite
+animations provide `delay`, `then`, `repeat` and `ping_pong`, preventing combinators
+from inventing a duration for an unbounded signal.
 
-## Stateless Animation
+- **Intervals, easing and interpolation.** `Interval { start, duration }` is the single
+  definition of clamped progress and eased progress over a half-open tick span, shared
+  by `SceneContext::progress_in`, `SceneContext::ease_in` and `Tween`. `Interpolate`
+  accepts `f64` progress and permits overshoot/extrapolation: Oklab color
+  interpolation may extrapolate extended RGB while clamping alpha to `0..=1`, and
+  `Transform` interpolation decomposes translation, rotation, scale and skew
+  (`TransformComponents`) rather than interpolating matrix entries or pixels.
+- **Keyframes, procedural signals and curves.** `Keyframes` takes strictly increasing
+  local destination times (equal or decreasing timestamps fail rather than sorting),
+  relative `hold` spans and per-segment arrival `Easing`. Built-in easings pin `0.0`
+  and `1.0`; `Easing::Custom` clamps its input progress while preserving callback
+  overshoot. `Spring` evaluates closed-form damped motion with a conservative tick
+  envelope (`settle_duration`) rather than frame-to-frame integration; like `Noise`
+  and `Oscillator`, it implements `Signal` only. `FollowPath` (`PathSample` position
+  and tangent), `remap` / `try_remap` and `piecewise` / `try_piecewise` compose
+  without hidden state.
+- **Validation boundaries.** `SpringBuilder`, `OscillatorBuilder` and `NoiseBuilder`
+  validate parameters once in `build()` so sampling cannot overflow. Convenience
+  combinators delegate to fallible `try_*` counterparts and document `# Panics`;
+  dynamic or untrusted inputs use `try_*`. Checked parameter contracts do not sandbox
+  arbitrary user closures. See [animation](../tutorial/03-animation.md).
 
-`Signal` samples a value at an explicit local Time and has no end. `FiniteAnimation`
-extends it with a nonnegative `duration()`; only finite animations offer `delay`, `then`,
-`repeat` and `ping_pong`, so composition cannot invent an end time for an unbounded
-signal. `Interval { start, duration }` is the single definition of clamped progress and
-easing over a time range; `SceneContext::progress_in`, `ease_in` and `Tween` use it. Interpolate
-accepts f64 progress and permits deliberate extrapolation. Oklab color interpolation
-can extrapolate RGB while clamping alpha. Transform interpolation accounts for
-translation, rotation, scale and skew rather than interpolating pixels.
+## Scenes and snapshots
 
-Keyframe destinations are absolute local times; holds are relative durations.
-The arriving point owns easing. Equal or decreasing times are errors, not sorted
-inputs. Built-in easing pins endpoints; Custom clamps its input but preserves its
-callback output. Springs use a conservative settling envelope rounded to ticks
-(`settle_duration`), not frame-by-frame state; they, like Noise and Oscillator, are
-`Signal` only. Path following is a finite animation.
+A `Scene` maps `&SceneContext` to an immutable `Node` (with `IntoSceneOutput`
+supporting `Drawable` leaves, heterogeneous tuples and `Result<_, ValidationError>`).
+Validation or callback failures preserve their `ValidationErrorKind`, structural
+`path`, `field` and optional `frame` index across hidden branches and memoized
+subtrees—a failed scene never degrades into empty output.
 
-Combinators keep timing independent of seek order and thread scheduling. Finite-only
-operations, invalid factors and overflow have checked `try_*` boundaries; the
-convenience methods delegate to them and document `# Panics`. Springs, oscillators and
-noise validate once in a builder's `build()`, which bounds parameters so that sampling
-cannot overflow. A checked input/output contract is not a custom-callback sandbox.
-See [animation](../tutorial/03-animation.md) for composition and dynamic-input use.
+- **Evaluation context.** `SceneContext` carries signed local/global `Time`, clip
+  `Duration`, `FrameRate`, logical `Size`, keyed `Random` streams, an author
+  `SceneCache` and one shared `Arc<Evaluation>` (`RenderQuality`, `Assets`,
+  `FontEnvironment`, `RequestDiagnostics`, `RenderCache`). Time shifting, nested
+  timelines and shutter sub-frame sampling derive explicit child contexts. Random keys
+  and `SceneCache` keys must include every result-defining input; cache hits never
+  permit side effects or frame-to-frame history.
+- **Copy-on-write `Node` trees and modifiers.** `Node` values share immutable `Arc`
+  subtrees on clone and allocate only along mutated paths. Siblings draw in stable
+  `z_index` order, preserving insertion order on ties (`z_index` is local to a group,
+  neither global 3D depth sorting nor a layout reordering). Spatial and compositing
+  modifiers live on `NodeModifiers`: default `Pivot` is the measured bounds center;
+  placement (`at`, `align_to`, `next_to`) positions the pivot while `translate`
+  offsets local coordinates; group `opacity` composites the completed subtree once
+  rather than multiplying each overlapping child independently; and `Elevation`
+  (`0..=1024` local units) expands into contact, directional key and ambient
+  `ShadowLayer` silhouettes.
 
-## Scenes and Snapshots
+## Layout and timelines
 
-The canonical Scene returns a Node for a SceneContext. IntoSceneOutput adapters accept
-drawables, heterogeneous tuples or supported Result outputs. Failures retain their
-original category, source and requested frame, including in hidden or memoized
-subtrees. A failed scene is not successful empty artwork.
+- **Deterministic layout.** `Row` and `Column` measure transformed children in
+  insertion order using the exact `FontEnvironment` and `ValidationLimits` active at
+  compilation (`SceneContext::measure` forwards the shared `Evaluation` at local
+  time). Text aligns on its shaped typographic baseline while non-text nodes use an
+  explicit geometric fallback; deferred relative placement never measures against a
+  mismatched font snapshot.
+- **Cameras, depth planes and skeletons.** `Camera` (`camera` / `try_camera`) applies
+  a validated finite, invertible inverse-view `Transform` (`center`, positive `zoom`,
+  clockwise `rotation`) to an ordinary group; `world_to_screen` and `screen_to_world`
+  convert viewport points without ancestor transforms, while HUD overlays remain
+  outside the camera node. `DepthOfField::capture` sorts up to `256` `DepthPlane`s
+  far-to-near, applying thin-lens circle-of-confusion blur (exact zero at
+  `focus_distance`, capped at `max_radius`) and optional pinhole parallax. `Skeleton`
+  evaluates 2D forward kinematics from `Pose` values into `BoneTransform`s on ordinary
+  `Node`s.
+- **Immutable `Timeline` and `Project`.** `TimelineBuilder::build` freezes design
+  `Size`, rational `FrameRate`, ordered `Track`s, `Soundtrack` (`AudioClip`
+  occurrences, `AudioBus`es, `Master`) and total `Duration` (accumulating bounded
+  builder errors into `ErrorReport`). Clip boundaries snap independently to frame
+  ticks and record alignment `TimelineWarning`s in `Diagnostics`. `Transition`s join
+  at most two adjacent clips (no triple overlaps), keeping independent local clocks on
+  both scenes. Higher tracks composite above lower tracks. `Timeline` is not a
+  `Scene`: `TrackBuilder::nest` embeds a child `Timeline` (up to `16` nesting levels)
+  by clipping and `contain`-mapping its viewport while merging its audio into the
+  parent `Soundtrack`, without retiming the parent clock. In the facade, `Project`
+  registers lazy timeline factories and typed CLI parameters so `--list` and `--help`
+  never build timelines or touch external resources.
 
-SceneContext supplies local/global time, rate, clip duration, design bounds,
-resource snapshots, keyed randomness and bounded computation caches. Shifting,
-embedding and subframe sampling establish explicit clock boundaries. Random keys
-and cache keys must cover all result-defining inputs; cache hits do not justify
-side effects or mutable frame history.
+## Geometry and recording
 
-Nodes are immutable copy-on-write snapshots. Shared leaves and memoized subtrees
-avoid rebuilding static content without freezing dynamic callbacks. Siblings draw
-in stable z-index order, preserving insertion order on ties. z-index is not global
-depth sorting and does not change layout order. Higher timeline tracks compose
-above lower ones.
+```mermaid
+flowchart LR
+    Geom["Shape / Path2D / Perspective / Path2D::boolean"] --> Styled["Styled / Drawable / Paint"]
+    Styled -->|"DrawContext + Canvas"| Compile["Node::compile (ValidationLimits)"]
+    Deferred["DeferredContent::resolve"] --> Compile
+    Compile --> VDL["ValidatedDisplayList (immutable Arc)"]
+```
 
-Spatial/compositing modifiers belong to nodes; content builders describe geometry,
-style and assets. The default pivot is the measured center. Placement positions
-the pivot, while translation offsets existing local coordinates. Group opacity
-applies once to the completed subtree, not independently to each overlapping child.
+- **Paths, booleans and planar 2.5D perspective.** `Shape` defines pure geometry;
+  fill/stroke styling produces a `Drawable`. `Path2D` is a copy-on-write `f64` Bezier
+  path (`MAX_PATH_VERBS = 16_384`, `MAX_SVG_PATH_BYTES = 1_048_576`) with cached exact
+  curve-extrema bounds and Gaussian arc-length tables that preserve Bezier segments
+  under `trim` and dash splitting; a subsequent valid mutation never clears an earlier
+  builder error. `Path2D::boolean` (`Union`, `Intersection`, `Difference`, `Xor`)
+  admits edge counts (`MAX_BOOLEAN_EDGES`), scratch bytes and quadratic intersection
+  work through `Budget`, flattens and splits crossings in `f64`, and emits closed
+  line contours before backend preparation so the CPU backend and GPU backend agree
+  by construction. `Perspective` rotates the `z = 0` plane around a pivot (`z`, `y`,
+  then `x`) in front of a pinhole camera (`distance > 0`), projecting lines to lines
+  and curves to at most `MAX_PERSPECTIVE_CURVE_PIECES` (`64`) cubics; points closer
+  than `1e-3 * distance` to the camera plane fail explicitly rather than clipping, and
+  `faces_camera` reports orientation for optional backface culling. Selected curve,
+  stroke and arc primitives use `kurbo` as part of the numerical environment while
+  coverage rasterization remains Motion-owned.
+- **Paints and procedural descriptions.** `Paint` covers solid `Color`, linear/radial/
+  sweep gradients, immutable `ImagePattern` (`ImagePixels` + `Sampling`) and two
+  analytic procedural variants: `Paint::Mesh(MeshPaint)` (`MAX_MESH_POINTS_PER_AXIS = 64`)
+  and `Paint::Atmosphere(AtmospherePaint)`. Both analytic paints retain compact
+  mathematical descriptions evaluated independently on the CPU backend and GPU WGSL
+  shaders without per-frame CPU bitmap baking, while explicit `MeshGradient::rasterize`,
+  `MeshGradient::pattern` and `MeshPaint::pattern` (`1..=32` `MAX_MESH_SUBDIVISIONS`)
+  preserve opt-in image baking. See [procedural paints](content.md#procedural-paints).
+- **Recording and structural budgets.** `Drawable::draw` emits commands into a checked
+  `Canvas` under `DrawContext` (retaining the first error even if user code ignores a
+  `Result`), while `DeferredContent` resolves into ordinary `Node`s at compile time.
+  `Node::compile` validates every branch—including invisible layers and inactive
+  transition scenes—against `ValidationLimits` (default `100,000` nodes and `64`
+  depth; custom caps up to `1,000,000` nodes and `128` depth, counting structural
+  occurrences rather than unique `Arc`s) and freezes an `Arc`-backed
+  `ValidatedDisplayList`. Low-level `DisplayList` edits require re-validation;
+  `Budget` / `RasterLimits` (`RasterLimits::authoring()` at `16,777,216` pixels and
+  `256 MiB` live bytes; `RasterLimits::sandbox()` adding a `200,000,000`-unit work
+  cap) enforce pixel and memory admission downstream during preparation and rendering.
 
-## Layout and Timelines
+## Layers and sampling
 
-Row and Column measure transformed children in insertion order. Text uses its actual
-baseline; non-text content has an explicit fallback. Relative positioning and
-measurement use the same font environment and structural limits as compilation.
-Deferred next-to/alignment is not a measurement made against another font snapshot.
+- **Ordered filters, grading and optics.** `Filter` is a closed data model (`Blur`,
+  `DropShadow`, `Glow`, pyramid `Bloom`, `Cdl`, `Lut`, `Optics`, `ColorAdjust` and
+  `Custom(Vec<FilterOperation>)`), never an arbitrary per-backend pixel callback.
+  Child effects complete before parent effects: a completed source is filtered,
+  clipped or masked, and then composited with group `opacity` and `BlendMode`. In
+  `Filter::Custom`, `CompositeWithSource` always references that filter's original
+  input rather than the preceding primitive. `Optics` encapsulates bounded spatial
+  effects (`LensFlare`, radial/chromatic `Lens`, `cos^4` `LensVignette`, Vogel-spiral
+  `Bokeh` with `Disc` or `3..=16`-blade `Polygon` apertures, `RadialBlur`, horizontal
+  `Anamorphic` streaks and Sobel/Lambert/Blinn-Phong `Relight` driven by `HeightFrom::Luma`
+  or `Alpha`). Filters never alter layout or pivot bounds; preparation derives
+  conservative device-space capture halos separately.
+- **Clips, masks and blend spaces.** Coverage clips multiply quantized coverage
+  independently; geometric clips (`RectClip`, `ShapeClip`) intersect analytically
+  before quantization—attaching a second geometric clip on the same `Node` replaces
+  the first, whereas nested nodes intersect them. Content masks weight coverage by
+  alpha (`MaskMode::Alpha`) or Rec.709 linear-premultiplied luminance
+  (`MaskMode::Luminance`). `BlendSpace::LinearRgb` is the default compositing space;
+  `BlendSpace::Srgb` introduces an explicit transfer conversion boundary.
+- **Temporal shutter sampling.** A `Node` is a single-instant snapshot and cannot be
+  resampled in time. Whole-frame or subtree `MotionBlur` (`shutter_angle` in
+  `0..=360` degrees, `1..=64` samples) and `ShutterSampling` (`ShutterCurve::Box`,
+  `Triangle` or `Cosine`, optional `jitter_seed`, and `adaptive` `8..=64` sample
+  selection from endpoint displacement) invoke the scene builder at exact integer-tick
+  offsets and accumulate linear-premultiplied samples, preserving empty-sample
+  weights and rejecting nested shutter captures. `RenderQuality::Draft` collapses
+  shutter capture to one sample and relaxes filter/flattening approximations; final
+  exports use `RenderQuality::Final`.
 
-Cameras apply an inverse view transform to an ordinary subtree. World/screen
-conversion excludes ancestor transforms and requires finite invertible mappings.
-Keep fixed HUD content outside the camera. Skeleton hierarchy transforms attach
-ordinary Node artwork; they do not introduce a separate 3D engine.
+## Owning sources
 
-Timeline is built once by TimelineBuilder and never changes afterwards. It owns design
-dimensions, rational rate, tracks, a Soundtrack (audio occurrences, buses, master) and
-its final duration. Clip boundaries align independently to frame ticks with warnings
-in Diagnostics.
-Transitions admit two neighboring clips, not arbitrary triple overlaps; both
-endpoints keep their local clocks and share global resources. Scene is picture only
-(render, duration, validate); Timeline is not a Scene. TrackBuilder::nest places a child
-Timeline as a picture-only clip and appends its audio to the parent's Soundtrack. Nested timelines clip
-their own viewport before centered contain mapping; child rates do not retime the
-parent clock implicitly.
-
-Ordinary builders retain bounded errors that build() reports together.
-Explicit try_* methods provide immediate failure. Project registers lazy factories
-and typed parameters; listing/help does not build timelines or discover resources.
-Preview, stills and export select the same authored timeline.
-
-## Geometry and Recording
-
-Shape describes geometry; styling makes it drawable. Path2D retains curves, fill
-rules, trimming, dashes and stroke outlines. Copy-on-write path edits preserve old
-snapshots; a later valid edit cannot erase an earlier retained authoring error.
-Source paths and generated stroke outlines both undergo structural admission.
-`Path2D::boolean` computes union, intersection, difference and xor before pixel execution.
-It flattens both operands, splits edges at every intersection, keeps edges whose two sides
-differ in the combined region and chains them into line-only contours. Backends only see
-the resulting path, so CPU and GPU output agree. Edge count, storage and quadratic
-intersection work are admitted through `Budget` first.
-
-`MeshGradient` is a lattice of colored control points. It rasterizes through `Budget` into a
-linear-premultiplied `MeshImage` and reaches renderers as an ordinary `ImagePattern`, so the
-CPU path, GPU plan and WGSL shader need no mesh-specific code and cannot disagree. Colors blend
-in Oklab with smoothstep weights and alpha blends linearly; cells are bilinear patches.
-`Paint::Mesh(MeshPaint)` carries the mesh with its bake size and subdivisions; preparation bakes
-it with `MeshGradient::pattern` over the painted bounds, so it renders exactly like the explicit
-pattern. The bake runs on the CPU at every preparation.
-
-`Perspective` rotates a flat layer about a pivot and projects it through a pinhole camera.
-It maps path geometry, not pixels: lines stay lines, curves become subdivided cubics, and a
-point that reaches the camera plane is an error instead of being clipped. `faces_camera`
-reports backfacing so callers decide whether to draw. Because backends only see the projected
-path, CPU and GPU output agree without a new shader.
-
-Selected curve, stroke and arc operations use kurbo. Shared coverage remains
-Motion-owned, not a complete third-party raster backend. Arc-length lookup, curve
-splitting and geometric morphing operate before pixel execution; topology,
-subpath pairing and winding remain explicit inputs. These dependencies are part
-of the numerical environment, not proof of cross-platform byte identity.
-
-Drawable uses the supplied DrawContext and checked Canvas. DeferredContent is a separate
-node kind: it only resolves to an ordinary Node at the drawing time. Recording retains the
-first error even if a custom callback ignores it. Compilation measures layout,
-composes transforms and validates all branches, including invisible content.
-It returns ValidatedDisplayList, an immutable checked command snapshot. Editable
-DisplayList requires validation after mutation; structural validity does not prove
-resource availability, device support or sufficient raster allowance.
-
-## Layers and Sampling
-
-Filters are ordered data over shared primitives, not arbitrary per-backend pixel
-callbacks. Child effects complete before parent effects. The completed source is
-filtered, masked/clipped, then composited with opacity and blending. Saved-source
-operations reference their input explicitly. Layout bounds differ from device
-capture bounds expanded for filters.
-
-Coverage clips multiply independently rasterized coverage. Geometric clips
-intersect before quantization; another geometric clip on one Node replaces the
-previous one, while nesting intersects them. Content masks use alpha or Rec.709
-linear-premultiplied luminance. LinearRgb is the default blending space; sRGB
-composition is an explicit conversion boundary.
-
-A Node is one snapshot and cannot be resampled as a scene. Motion blur invokes the
-scene builder at repeatable subframe times and averages linear-premultiplied
-captures. Empty samples retain their weight. Keep intentionally sharp overlays
-outside the sampled subtree. Draft approximations are not Final export semantics.
-
-## Owning Sources
-
-- [Time](../../../crates/motion-core/src/time.rs)
-- [Animation](../../../crates/motion-core/src/animation.rs) (`Signal`, `FiniteAnimation`, `Interval`)
-- [Authoring](../../../crates/motion-core/src/authoring.rs)
-- [Paths](../../../crates/motion-core/src/path2d.rs)
-- [Drawing](../../../crates/motion-core/src/drawing.rs)
-- [Rendering and output](rendering.md)
-- [Validation and failure](reliability.md)
+- [Time and frame rates](../../../crates/motion-core/src/time.rs) (`Time`, `Duration`, `TimeOffset`, `FrameRate`)
+- [Animation](../../../crates/motion-core/src/animation.rs) (`Signal`, `FiniteAnimation`, `Interval`, `Keyframes`, `Spring`)
+- [Authoring, layout and timelines](../../../crates/motion-core/src/authoring.rs) (`Scene`, `Node`, `Row`, `Column`, `Camera`, `DepthOfField`, `Timeline`)
+- [Geometry and perspective](../../../crates/motion-core/src/geometry.rs) and [paths](../../../crates/motion-core/src/path2d.rs) (`Path2D`, `MorphPath`, `PathBooleanOp`)
+- [Drawing, meshes and atmosphere](../../../crates/motion-core/src/drawing.rs) (`Canvas`, `Paint`, `MeshGradient`, `AtmospherePaint`)
+- [Filters](../../../crates/motion-core/src/filter.rs), [optics](../../../crates/motion-core/src/optics.rs) and [grading](../../../crates/motion-core/src/grading.rs)
+- [Validation](../../../crates/motion-core/src/validation.rs), [budgets](../../../crates/motion-core/src/budget.rs) and [instances](../../../crates/motion-core/src/instances.rs)
+- [Rendering and export](rendering.md) · [Reliability](reliability.md)

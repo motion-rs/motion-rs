@@ -1,151 +1,154 @@
 # 声明式文档设计契约
 
-文档（Document）是对完整时间轴进行版本化描述的纯数据 JSON 格式：涵盖画布尺寸、帧率、背景色、多轨道时序场景、转场、音频事件、字体文件以及可选的胶片 Look 风格。`motion-scene` 包负责管理该数据模型、其 JSON Schema 规范以及到 `Timeline` 的编译流水线；facade 在开启 `declarative` 特性时将其重新导出为 `motion::declarative`，并提供 `Project` 与命令行入口（参见[命令行文档](../cli.md#声明式文档)）。创作指引见[教程第 16 章](../tutorial/16-declarative.md)；具体类型定义见 Rustdoc。
+文档（Document）是对完整时间轴进行版本化描述的纯数据 JSON 格式：涵盖画布尺寸、帧率、背景色、多轨道时序场景、转场、音频事件、字体文件以及可选的胶片 Look 风格。`motion-scene` 包负责管理该数据模型、其 JSON Schema 规范以及到引擎 `Timeline` 的编译流水线；门面包在开启 `declarative` 特性时将其重新导出为 `motion::declarative`，并提供 `Project` 与命令行入口（参见[命令行文档](../cli.md#声明式文档)）。创作指引见[教程第 16 章](../tutorial/16-declarative.md)；具体类型定义见 Rustdoc。
 
-文档模型直接复用 Core 核心包的值类型。基础枚举（`BlendMode`、`FillRule`、`MaskMode`、`ClipMode`、`LineCap`、`LineJoin`、`GradientSpace`、`GradientUnits`、`GradientExtend`、`Waveform`、`ArrowHead`、`Sampling`、`Direction`、`IrisShape`、`Pivot`）以及纯值类型 `Color`、`Point`、`Rect` 在 `motion-core` 的 `serde` 和 `schema` 特性下直接实现序列化与 Schema，因此规范层不对其进行镜像重复定义。规范层仅保留 Core 类型无法直接表达的结构：动画包装器（`Animated<Color>`、`Animated<Point>`、`Animated<Rect>`）、参数占位符、以度数为单位的 `start`/`end`/`stops` 渐变对象、带动画宽度与虚线的描边，以及尺寸/偏移量等矢量简写。被复用类型的合法性校验（例如描边斜接限制）归属 Core 所有；编译器直接调用其校验逻辑，而非重复实现。
+```mermaid
+flowchart LR
+    JSON["JSON 文件或字符串<br/>+ 参数覆写"] --> Expand["加载期展开<br/>$calc · $param · defs / use"]
+    Expand --> Spec["Document (v1)<br/>纯数据可序列化模型"]
+    Spec --> Validate["编译期即时静态校验<br/>ErrorReport + 源码 (行, 列) 坐标"]
+    Validate --> Compiled["CompiledDocument<br/>Timeline + RenderOptions + resources()"]
+    Cache["CompileCache<br/>（单条目、调用方所有）"] <--> Compiled
+```
 
-这一原则同样适用于内容策略：图像填充（Fit）、段落对齐与拆分、矢量手写选项、粒子预设名称、颜色场坐标、碰撞响应模式、事件类型及继承规则均直接复用 `motion-content` 中的类型。粒子混合模式复用 Core 的 `InstanceBlend`。文档字段统一使用原始类型名称；重复的 `*Spec` 命名已被彻底移除，不作为兼容别名保留。Content 包的可选 `serde` 与 `schema` 特性向外暴露对应的 JSON 契约；纯策略类型在未开启文本排版或粒子准备引擎时依然可用。因此，即使禁用了某些文档内容特性，依然允许执行 JSON 的解析与序列化，仅在编译阶段才会明确报告特性不受支持。外部资源描述、动画属性以及保留 f64 创作精度的粒子几何参数依然保留为文档专属的定制结构。
+## 核心与内容类型的直接复用
+
+文档模型直接复用核心包与内容包的值类型，从根源上杜绝规范定义与引擎契约发生偏离：
+
+- **核心值类型（`motion-core`）：** 基础枚举（`BlendMode`、`FillRule`、`MaskMode`、`ClipMode`、`LineCap`、`LineJoin`、`GradientSpace`、`GradientUnits`、`GradientExtend`、`Waveform`、`ArrowHead`、`Sampling`、`Direction`、`IrisShape`、`Pivot`、`InstanceBlend`）与纯值类型（`Color`、`Point`、`Rect`）在 `motion-core` 的 `serde` 与 `schema` 特性下直接实现 `Serialize`、`Deserialize` 与 `JsonSchema`。被复用类型的合法性校验（例如描边斜接限制）归属 Core 所有，编译器直接调用核心构造器而非重复实现检查。
+- **内容策略类型（`motion-content`）：** 图像适配（Fit）、段落对齐与拆分、矢量手写选项、水墨笔尖模式、笔刷端帽、颜料混色模式、粒子预设名称、颜色场坐标、碰撞响应模式、事件类型及继承规则均直接复用 `motion-content` 通过独立于特性的 `serde` 与 `schema` 暴露的类型，不保留重复的 `*Spec` 兼容别名。
+- **规范层自有包装器（`motion-scene`）：** 规范层仅定义核心与内容值类型无法直接表达的结构：动画包装器（`Animated<T>`）、加载期参数与模板占位符、以度数为单位的 `start` / `end` / `stops` 渐变对象、带动画宽度与虚线进度的描边、资源路径规格以及保留 `f64` 创作精度的几何结构。禁用某项内容特性后依然支持 JSON 解析与序列化，仅在编译期明确报告该能力未启用。
 
 ## 数据模型与语法规则
 
-- 文档是纯粹的数据结构。解析与序列化操作绝不读取外部资源、扫描系统字体或对任何画面帧执行求值。同一套 Rust 类型同时作为 Builder API 使用，因此在代码中构造的文档与从 JSON 解析出的文档在数据上完全等价。
-- 每个元素至多选取一个内容键（`children`、`rect`、`circle`、`text`、`image`、`svg` 等）。同时指定两个内容键、未知字段键或未知枚举名称均属于解析语法错误；没有任何内容键的元素不绘制任何画面。
-- 物理单位约定：时间为秒，旋转角为顺时针度数，长度为设计坐标单位，点为 `[x, y]`，矩形为 `[left, top, right, bottom]`。帧率可以表示为整数或 `"分子/分母"` 分数字符串。颜色为 CSS 风格字符串，由 `Color::parse` 解析；文档序列化时输出 `#rrggbb[aa]`，当 8 位无法精确表达时输出带小数分量的 `rgb()`。描边连接点支持 `"round"`、`"bevel"` 或 `{"miter": {"limit": 4}}`，轴心（Pivot）支持预设名如 `"top_left"`、`{"relative": [x, y]}` 或 `{"point": [x, y]}`。
-- 动画属性既可以是一个固定常量值，也可以是一个恰好包含单个运动键的对象：`tween`、`keyframes`、`oscillate`、`noise`、`expr`、`spring`、`clock`、`map`、`follow_path`、`components` 或 `sum`。固定常量值绝不是 JSON 对象，因此这两种形态绝不会产生混淆。振荡器（Oscillator）与噪声（Noise）仅适用于数值型属性。缓动函数属于封闭的可序列化枚举集；用户自定义的动态回调无法在此表示。
+- **纯数据与 Builder 对等性：** 解析与序列化绝不读取外部文件、扫描系统字体或求值任何画面帧。同一套 Rust 结构体同时充当编程式 Builder API，因此在 Rust 代码中构造的 `Document` 与从 JSON 解析出的实例完全等价，并可通过 `Document::from_json` 与 `Document::to_json` 无损往返。
+- **元素结构：** 每个 `Element` 包含可选的标识（`id`、`name`）、样式（`fill`、`stroke`、`fill_rule`、`trim`）、局部变换（`position`、`translate`、`rotate`、`scale`、`scale_xy`、`pivot`）、合成属性（`opacity`、`blend`、`z_index`、`hidden`）与效果（`filters`、`clip`、`mask`），并至多选取一个内容键（`children`、`rect`、`circle`、`ellipse`、`line`、`polyline`、`polygon`、`regular_polygon`、`star`、`arc`、`ring`、`arrow`、`spline`、`path`、`morph`、`text`、`image`、`svg`、`svg_morph`、`particles`、`trajectory`、`ruler`、`callout`、`line_chart`、`captions`、`formula`、`brush_stroke` 或 `ink_fill`）。同时指定两个内容键、未知字段键或未知枚举变体均属于解析错误；不含内容键的元素不绘制任何内容。
+- **单位与字面格式：** 时间单位为秒，角度为顺时针度数，长度为设计坐标单位，点为 `[x, y]`，矩形为 `[left, top, right, bottom]`。帧率支持整数或 `"NUMERATOR/DENOMINATOR"` 分数字符串。颜色采用由 `Color::parse` 解析的 CSS 风格字符串；序列化时输出 `#rrggbb[aa]`，当 8 位整数无法无损表示时输出带小数分量的 `rgb()`。描边连接点支持 `"round"`、`"bevel"` 或 `{"miter": {"limit": 4}}`；轴心支持预设名如 `"top_left"`、`{"relative": [x, y]}` 或 `{"point": [x, y]}`。
+- **动画属性（`Animated<T>`）：** 任何动画字段既接受固定常量，也接受恰好携带单个运动键的对象：`tween`、`keyframes`、`oscillate`、`noise`、`expr`、`spring`、`clock`、`map`、`follow_path`、`components` 或 `sum`。固定常量绝不会是包含这些运动键的 JSON 对象，因此常量与动画形态不会产生歧义。振荡器与噪声仅适用于数值属性；缓动函数为封闭的可序列化集合，不支持自定义 Rust 回调。
 
-## 动画组合机制
+## 加载期展开机制
 
-`spring` 采用 Core 核心包中具备解析解的弹簧模型，包含 `from`、`to` 以及可选的 `mass`（质量）、`stiffness`（刚度）、`damping`（阻尼）、`initial_velocity`（初速度）与 `settling_threshold`（静止阈值）。省略的物理参数保持 Core 默认值；非法配置或计算出的静止时长超过 1e6 秒会在编译期报错。`follow_path` 沿 SVG 路径采样弧长运动，支持 `data`、`duration`、`easing` 以及分量标识 `component`（顺时针度数下的 `x`、`y` 或 `angle`）。它不引入独立的路径近似算法。
+### 参数化与编译期计算
 
-`clock` 接收嵌套的 `source`、有限的 `scale` 以及有符号的秒数 `offset`（其绝对值均不得超过 1e6）。它在 `clamp(t * scale + offset, -1e6, 1e6)` 秒时刻对源执行采样，并按引擎 ticks 对齐。负的 scale 代表时间倒流；表达式及其属性绑定均读取重新映射后的时钟。`map` 接收数值型 `source` 与算术表达式 `expr`。仅在该映射内部，`t` 代表源属性的瞬时数值而非秒数。映射表达式支持读取数值型的文档参数，但严禁引用元素属性绑定。
+根级 `params` 对象声明具名的默认参数值——支持数值、布尔值、字符串、颜色、数组或任意 JSON 子树：
 
-`components` 接收多个数值型动画，分别驱动数值、坐标点或矩形的各个独立分量。`sum` 接收 1..=32 个数值源并按顺序累加。将其与 `map` 配合使用，可以在无需编写代码回调的前提下描述复杂的配对数值信号。递归动画组合深度上限为 32 层。`Animated<f64>::compile` 负责验证独立的采样器（不含参数、绑定或 I/O）；Rust 文档 Builder 可以复用该定义提前预计算静态采样曲线。
+- **参数覆写与 `$param`：** 参数覆写通过 `Document::from_json_with`、`load_with`、`Project::document` 或 CLI `--params` 传入，其所有键必须已在 `params` 中声明，并整字段替换对应的默认值。`params` 之外的任何 `{"$param": "name"}` 对象在加载阶段、类型检查之前被替换为生效值。未知覆写键或未知 `$param` 名称会附带引用路径直接报错。
+- **加载期算术计算（`$calc`）：** 任何 `{"$calc": "ceil($seconds * $fps / $pages) / $fps"}` 对象在参数覆写合并之后、`$param` 替换与 `defs` 展开之前求值一次有限 `f64` 浮点数。`$calc` 既可用于 `params` 内部，也可用于正文任意位置，以 `$name` 读取数值型或布尔型参数并按拓扑依赖自动解析（不受声明顺序限制）。严禁引用场景时间 `t`、元素属性绑定、循环依赖或产生非有限结果。落在精确 `f64` 整数范围内的整数值结果同样适用于整数字段；未参与算术运算的原始参数（如全宽 `u64` 随机种子）绝不会被强转为 `f64`。
+- **准入计量与回写：** 单个参数上限为 `64 KiB`（每篇文档最多 `256` 个参数，计算依赖链最深 `32` 层），替换展开后的文档总体积不得超过 `MAX_DOCUMENT_BYTES`（`16 MiB`）——每次 `$param` 展开计费一次，声明本身不重复计费。加载后的 `Document` 在 `params` 中保留最终生效值并展开正文中所有占位符，同时数值参数仍可在运行期表达式中以 `$name` 读取。
 
-## 子树裁剪
+### 可复用定义模板
 
-元素的 `clip.shape` 支持在元素局部坐标系下选取 `rect`、`rounded_rect`、`circle` 或 `path`。`rounded_rect`（圆角矩形）复用矩形内容的 `bounds` 与可选的 `corner_radius` 字段；两者均支持动画，圆角半径默认为 0。编译器将其降级为 Core 的圆角矩形，与其他形状共享相同的覆盖率或几何裁剪模式。采样得到的非法几何直接返回校验错误，而非静默丢弃裁剪效果。
+根级 `defs` 对象声明具名的值、样式或组件子树，在参数替换之后、类型检查之前完成加载期展开：
 
-## 数值文本读数 (Numeric Text Readouts)
+- **模板展开（`use`）：** 根级 `params` 之外的任何 `{"use": "name"}` 对象都会展开为对应定义。对象引用点上的同级字段会整字段替换模板的顶层同名字段（不对嵌套对象或数组做深度合并）；标量与数组模板拒绝同级覆盖字段。模板自身可通过 `use` 继承其他模板并引用 `$param`；由参数值引入的 `use` 对象同样在引用点展开，且不修改已存储的 `params`。
+- **保留键与实例隔离：** `$param`、`$calc` 与 `use` 在整份 Schema（`ValueRef`）中均为保留关键字，携带任一关键字的对象都会被无歧义地识别为加载期引用。实例 `id` 不会自动重命名，同一场景内多次复用带 `id` 的组件时需通过同级字段显式覆盖 `id`。未被引用的模板仅检查体积上限（`<= 64 KiB`），不执行展开与类型检查。引用链最深 `32` 层，展开后 JSON 嵌套最深 `128` 层，克隆累计字节数（无需分配临时 JSON 缓冲区即可精确统计）必须落在 `16 MiB` 上限之内。加载完成的 `Document` 保存展开后的结构并移除 `defs`。
 
-文本内容接受 `content`、`spans` 或 `number` 三者之一。数值读数包含动画化的 `value`、0..=16 范围内的十进制小数精度 `precision`，以及可选的固定 `prefix`（前缀）与 `suffix`（后缀），其总长度不超过 4096 字节。它与普通文本复用相同的段落排版配置与显式字体环境。非有限的表达式计算结果采用 Rust 标准数值拼写；系统绝不执行无界的用户字符串格式化程序。
+## 动画组合、表达式与属性绑定
 
-## 参数化系统 (Parameters)
+### 动画组合机制
 
-根级的 `params` 对象声明具名的默认参数值：支持数值、字符串、颜色、数组或完整的组件子树。在 `params` 之外出现的任何 `{"$param": "name"}` 对象在文档加载阶段、类型检查执行之前被直接替换为对应的值，因此参数既可以代表半径数值、颜色代码，也可以代表文本内容或子节点列表。覆写参数来自 `Document::from_json_with`、`load_with`、`Project::document` 以及命令行的 `--params`：传入的 JSON 对象中所有键必须已在文档中声明，每个键完整替换对应的默认值。未声明的未知键或未知的 `$param` 引用会作为错误报告，并附带引用所在的具体路径。
+- **解析解弹簧（`spring`）与路径跟随（`follow_path`）：** `spring` 复用 Core 解析解 `Spring` 模型，接收 `from`、`to` 及可选的 `mass`、`stiffness`、`damping`、`initial_velocity` 与 `settling_threshold`；非法物理参数或超过 `1e6` 秒的静止时长在编译期报错。`follow_path` 沿 SVG `data`、`duration`、`easing` 与目标分量 `component`（`x`、`y` 或顺时针度数 `angle`）直接采样核心弧长运动，不引入额外的路径近似算法。
+- **时钟重映射（`clock`）与值域映射（`map`）：** `clock` 接收嵌套 `source`、有限 `scale` 与有符号秒数 `offset`（绝对值均不超过 `1e6`），在对齐引擎 ticks 后的 `clamp(t * scale + offset, -1e6, 1e6)` 时刻对源采样；负 `scale` 实现倒放，嵌套表达式与绑定读取重映射后的时钟。`map` 通过算术表达式 `expr` 变换数值型 `source`，仅在该表达式内 `t` 代表源输出值而非秒数（允许读取 `$param`，拒绝 `@id` 元素绑定）。
+- **多通道组合（`components`）与求和（`sum`）：** `components` 为标量、`Point` 或 `Rect` 的每个通道提供独立的数值动画；`sum` 按序累加 `1..=32` 个数值源。递归动画组合深度上限为 `32` 层。`Animated::<f64>::compile` 支持在无参数、无绑定、无 I/O 的前提下校验独立采样器，方便 Rust Builder 预计算静态采样曲线。
 
-`{"$calc": "ceil($seconds * $fps / $pages) / $fps"}` 在加载期间执行一次有限数值的算术求值（在参数覆写合并之后、`$param` 替换与 `defs` 展开之前）。动态计算既可在参数值内部使用，也可在文档其他任意位置使用。计算遵循数值表达式语法并采用 f64 双精度浮点计算，通过 `$name` 读取数值型或布尔型参数；计算型参数支持按依赖拓扑自动解析，不受书写声明顺序限制。计算严禁引用时间变量 `t`、元素属性绑定，严禁循环依赖或产生非有限浮点数。计算出的数值结果依然必须通过目标字段的常规类型与取值范围校验。在精确 f64 整数范围内的整数计算结果同样适用于纯整数字段。
+### 表达式与同场景属性绑定
 
-每次动态计算最多接受 4096 字节源码、1024 个表达式节点与 48 层嵌套深度；参数解析允许最多 32 层嵌套依赖。原始参数值（包括 64 位整数随机种子）除非参与算术运算，否则绝不转为 f64。
+- **纯算术语法：** 数值、坐标点（`{"expr": ["x", "y"]}`）与矩形属性支持纯 `f64` 表达式，涵盖运算符 `+ - * / % ^`、比较运算（返回 `1.0` 或 `0.0`）、常量（`pi`、`tau`）、场景局部时间 `t`、数值参数 `$parameter`、属性绑定 `@id.path` 以及内置数学函数（`sin`、`cos`、`tan`、`asin`、`acos`、`atan`、`atan2`、`sqrt`、`abs`、`floor`、`ceil`、`round`、`fract`、`exp`、`ln`、`sign`、`radians`、`degrees`、`min`、`max`、`pow`、`mod`、`clamp`、`lerp`、`smoothstep`、`step`、`if`）。源码上限为 `4,096` 字节、`1,024` 个词法项与 `48` 层语法嵌套。
+- **同场景属性绑定（`@id.path`）：** 场景内具有唯一 `id` 的元素可向同场景表达式暴露其自身的数值型创作属性（如 `@dot.rotate`、`@dot.position.x` 或 `@ring.circle.radius`），在相同场景局部时刻求值（读取元素自身属性，而非累积后的全局世界变换）。绑定依赖链最深 `32` 层（单场景最多 `1,024` 个独立绑定）；循环依赖、重复或未知 `id` 以及非数值目标路径均在编译期报错。表达式绝不读取历史帧、磁盘文件或全局状态。
 
-加载后的 `Document` 在 `params` 中保存生效后的最终取值，`params` 之外的占位引用已被完全解析展开，因此将其写回磁盘可直接固化解析后的短片。每个声明或覆写的参数体积上限为 64 KiB，整篇文档最多允许 256 个参数，替换展开后的文档受限于整篇文档的总大小上限：每个 `$param` 引用计入其自身的一份体积，参数声明不再重复计费。数值型参数同样可以在表达式内部以 `$name` 形式读取。`schema()` 在所有允许出现值的位置均接受 `$param` 与 `$calc` 对象。
+## 内容类型与特性门控
 
-## 可复用定义模版 (Defs)
-
-根级的 `defs` 对象声明具名的公共值、样式或组件子树。在根级 `params` 之外出现的任何 `{"use": "name"}` 对象在文档加载阶段被直接替换为对应的模板定义（在参数替换之后、类型检查之前）。模板定义支持嵌套引用其他定义，且定义内部的 `$param` 引用读取当前文档生效的参数值。通过参数值传入的模板引用同样在引用点被正常展开；存储的参数值本身不因模板展开而改变。`use`、`$param` 与 `$calc` 均为系统保留关键字：任何文档字段均不得使用这些名称，因此携带这些键的对象始终被唯一识别为引用项。
-
-同级并列的字段会直接覆盖对象模板中的对应字段，且执行的是整字段替换，而非对嵌套对象或数组进行深度合并。标量与数组定义不接受同级字段覆盖。定义模板自身支持通过 `use` 继承另一个定义。未声明的模板名、非字符串引用以及循环引用均会精确报错其文档路径；遇到未知名称时会自动提示相似的已声明模板。未被使用的模板仅做体积合法性检查，不执行展开与类型校验。加载完成的文档包含完全展开后的具体数值，且不再保留根级 `defs`，因此将其序列化保存记录的是展开后的完整短片，而非抽象模板。这些纯粹是加载期的 JSON 便捷语法，在 Rust 内存 Builder 模型中不保留对应字段。
-
-每篇文档最多准入 256 个定义，经参数替换后且在模板展开前单个定义不得超过 64 KiB。引用调用链深度上限为 32，展开后的 JSON 嵌套深度上限为 128 层；元素自身的嵌套限制依然生效。解析后的有效输入加上克隆定义的累积序列化字节数必须严格处于 16 MiB 的文档上限之内（在每次克隆前执行预检）。这种保守的准入策略可能会拒绝少数在字段覆盖后最终体积反而缩小的展开情况。计算序列化字节数绝不分配临时的 JSON 格式化内存缓冲区。实例的 `id` 在展开时不会自动重命名，因此创作者在同一场景内复用带有 `id` 的组件时，必须通过同级字段显式覆盖 `id` 以防重复。
-
-## 表达式与属性绑定
-
-数值、坐标点或矩形属性支持写为 `{"expr": "..."}`；坐标点支持分量表达式 `{"expr": ["x", "y"]}`。表达式是纯粹的数值算术运算，支持操作符 `+ - * / % ^`、比较运算符（产生 1 或 0）以及丰富的数学函数：`sin cos tan asin acos atan atan2 sqrt abs floor ceil round fract exp ln sign radians degrees min max pow mod clamp lerp smoothstep step if`。内置命名变量包括 `t`（场景局部秒数）、`pi`、`tau`、`$parameter`（参数）以及 `@id.path`（属性绑定）。表达式源码限制为 4096 字节、1024 个词法项与 48 层嵌套。
-
-带有 `id` 的元素可被同一场景内的表达式通过 `@id.property` 语法读取，属性路径严格遵循该元素的 JSON 结构，例如 `@dot.rotate`、`@dot.position.x` 或 `@ring.circle.radius`。属性绑定读取的是目标元素自身的属性计算值，而非其经过层层变换后的全局世界坐标，并在完全相同的场景局部时间点进行求值。绑定依赖链最深支持 32 层；循环依赖、未知 ID、重复 ID 或引用的路径非数值型均会被记录为诊断错误。元素 ID 的作用域严格限定在其所属的 Scene 内部。表达式绝不读取渲染帧号、磁盘文件或其他全局隐式状态，确保求值全程保持为时间的纯函数。
-
-## 矢量画刷与效果
-
-线性渐变的端点、径向渐变的圆心/半径/焦点以及扫描渐变的中心/起始角度均支持动画属性。色标（Stops）与插值选项保持固定。扫描渐变角度使用度数；整圈旋转仅允许浮点转换带来的微小舍入误差，严禁声明超过 360 度的无效范围。渐变几何在初次编译时验证，并在每一帧准备阶段再次校验。
-
-多边形（Polygon）与折线（Polyline）的数据源严格接受 `points`、`sample` 或 `animated` 三者之一。`animated` 是一组独立的 `[x, y]` 动画点列表，在场景时钟上动态采样，而非在某一区间内预先烘焙。多边形至少需要 3 个点，折线至少需要 2 个点；所有形式的数据源均统一受限于 65,536 个点的上限。
-
-滤镜支持 `blur_xy`、带种子的 `grain`（颗粒胶片）以及共享的 `optics` 光学效果：镜头光晕、镜头畸变/色散、暗角、散景虚化、径向模糊、变形光斑与重打光。这些操作所支持的空间与强度属性均支持动画化；Bloom 泛光强度与光晕强弱同样支持动画。散景多边形旋转角度采用度数。编译器将光学参数的校验委托给 Core 核心滤镜模型，完整继承其采样孔径与方向有限性约束。Grain 胶片颗粒保留完整的无符号 64 位随机种子，绝不引入隐藏的可变随机状态。每个滤镜在编译阶段和渲染每一帧时均会执行校验，因此如果在后续某一帧动画参数变得非法，会在该帧的 `filters[i]` 路径处明确报错，而不会将脏数据送入渲染后端。
-
-## 内容类型与 Feature 特性门控
-
-| 内容关键字 | 所需 Feature | 特性说明 |
+| 内容键 | 所需特性 | 说明 |
 | --- | --- | --- |
-| 基础几何, `path`, `morph` | 无 | `morph` 一次性配对两个 SVG 路径字符串，并按进度值执行几何插值 |
-| `text` | `text` | 文本 Run (`spans`)、`split` 拆分、`visible_parts` 与逐字动画 `parts` |
-| `image`, `svg`, `svg_morph` | `image`, `svg` | 外部文件相对于文档所在目录解析；SVG 额外支持嵌入式内联源码 |
-| `particles`, `trajectory` | `particles` | 带随机种子的物理模拟；读取场景时钟、缓存与片段时长 |
-| `ruler`, `callout`, `line_chart` | `diagram` | 文本标签使用全局渲染字体环境排版 |
-| `captions` | `captions` | 在编译期结合文档声明的 `fonts` 完成布局排版 |
-| `formula` | `formula` | Typst 数学公式排版，支持书写动画与 Morph 变形 |
+| `children`, `rect`, `circle`, `ellipse`, `line`, `polyline`, `polygon`, `regular_polygon`, `star`, `arc`, `ring`, `arrow`, `spline`, `path`, `morph` | 无 | 内置矢量几何与分组；`morph` 一次性配对两条 SVG 路径字符串并按进度插值 |
+| `image` | `image` | 相对于 `base_dir` 解析的位图文件（在 `motion-scene` 内对应 `vector`，由门面包 `image` 转发） |
+| `svg`, `svg_morph` | `svg` | 外部 SVG 文件或内联 `{"data": "<svg ...>"}`（`<= 16 MiB`），在编译期即时解析 |
+| `text` | `text` | 纯文本 `content`、富文本 `spans`（`<= 256`）、`number` 数值读数、`split`、`visible_parts` 与逐切片 `parts` 动画 |
+| `brush_stroke`, `ink_fill` | `ink` | 可变宽笔尖描边、数位板采样序列、纸纹颗粒、干湿晕染/沸腾抖动与颜料混色 |
+| `particles`, `trajectory` | `particles` | 固定种子粒子模拟、预设配方、场算子、子发射器与解析轨迹模型 |
+| `ruler`, `callout`, `line_chart` | `diagram` | 数据标注与折线图；文本标签通过渲染字体环境绘制 |
+| `captions` | `captions` | 逐词/逐短语时间轴字幕，在编译期结合文档 `fonts` 完成排版 |
+| `formula` | `formula` | Typst 数学公式编译、可选手写揭示与公式变形 |
 
-当文档使用了未开启对应特性的内容关键字时，JSON 仍可正常解析并序列化，但在编译阶段会产生特性未启用的诊断错误并中止。`ruler`、`callout` 与 `line_chart` 依赖渲染环境绘制文本，因此 `CompiledDocument::render_options`（同样被 `Project` 和命令行使用）会将文档中的 `fonts` 自动注入该环境中；若调用方使用无关选项直接渲染 `timeline()`，必须自行提供字体配置。粒子系统在每一帧根据场景上下文动态重建；其余所有内容均在编译阶段即时（Eager）构建，确保 Typst、SVG 与排版布局错误能够立即准确定位报错路径。
+当文档使用了未开启对应 Cargo 特性的内容键时，JSON 依然能够正常解析与序列化，仅在编译阶段报告明确的特性未启用诊断。编译器在编译期即时构建静态矢量、SVG、文本、字幕与 Typst 公式，使语法与排版错误立即在对应的 JSON 路径处暴露；同时 `CompiledDocument::render_options`（由 `Project` 与 CLI 自动调用）会将文档 `fonts` 注入 `RenderOptions`，供 `diagram` 图表标签直接复用。
 
-SVG 的 `source` 以及 SVG Morph 的 `from` / `to` 接受文件路径字符串或形如 `{"data": "<svg ...>...</svg>"}` 的内联源码。数据源限制在 16 MiB 以内并在编译期一次性解析完成。嵌入的内联源码不引入受监视的文件依赖。SVG 的 `write_options` 支持配置正数描边宽度 `width` 以及在 `0..=1` 范围内的轮廓比例 `outline_fraction`；省略选项保留 Core 核心手写默认行为。
+### 矢量画刷与光学效果
 
-## 粒子系统配置
+- **动画渐变与顶点列表：** 线性渐变端点、径向渐变圆心/半径/焦点以及扫描渐变中心/角度（顺时针度数；整圈仅容忍浮点舍入误差，拒绝超过 `360°` 的跨度）均支持 `Animated` 属性，色标与插值模式保持固定。多边形（`>= 3` 点）与折线（`>= 2` 点）严格三选一接收静态 `points`、路径采样 `sample` 或逐顶点独立动画 `animated`（统一上限 `65,536` 个点）。
+- **空间与光学滤镜：** 元素 `filters` 支持 `blur`、`blur_xy`、`drop_shadow`、`glow`、`color_adjust`、带种子的 `grain`（保留完整 `u64` 种子，并支持可选的 `0..=u32::MAX` 动画 `frame` 取整后与种子按位异或）以及共享的 `optics` 光学通道（镜头光晕、畸变/色散、暗角、带度数旋转的多边形散景、径向模糊、变形宽银幕光斑、重打光）；`LookSpec` 进一步提供快门运动模糊、空间泛光/光晕（支持动画化的 `intensity` 与 `strength`）、片门抖动、CDL 调色与色调映射。所有动画渐变与滤镜在编译期与每帧准备期双重校验，一旦动态参数越界即在该帧的 `filters[i]` 路径处报错，绝不向渲染后端传递非法参数。
 
-`particles` 接受显式配置的发射器、修饰器与样式，或者直接使用预设 `preset`。预设委托给与代码创作完全相同的 Core 核心配方：`sparks`、`embers`、`dust`、`motes`、`snow`、`rain`、`smoke`、`fire`、`confetti`、`fireworks`、`fireflies`、`logo_dissolve` 以及 `logo_assemble`。预设提供 `kind` 与局部 `bounds`，附带可选的 `density`、`speed` 与 `intensity` 乘数。预设不得与显式发射器、修饰器、样式或混合模式混用；`step` 步长与 `max_particles` 依然可独立配置。预设要求在 `(0, 3600]` 秒范围内显式声明物理模拟 `duration`，并严格遵守核心配方的验证与准入配额。
+### 子树裁剪
 
-Logo 粒子预设要求在 `preset.logo` 中提供固定的彩色矢量路径，使用预设的包围盒。每条路径提供 SVG `data` 与固定的 `fill` 画刷（包含渐变）；带有动画的源画刷将被直接拒绝。在编译阶段分配源矢量树之前，最多接受 256 条路径。不涉及外部文件加载或位图替换。
+元素的 `clip.shape` 在元素局部坐标系下选取 `rect`、`rounded_rect`、`circle` 或 `path`。`rounded_rect` 复用矩形的 `bounds` 与可选 `corner_radius`（默认为 `0`），两者均支持 `Animated` 动画，并与其余裁剪形状共享相同的覆盖率或几何 `ClipMode`。采样出非法裁剪几何时直接返回 `ValidationError`，绝不静默丢弃裁剪。
 
-可选的动画化 `sample_time` 允许在 `0..=1e6` 秒范围内独立于场景时钟控制物理模拟时间。它在场景时钟上采样，并通过显式平移后的上下文应用；传入的物理模拟时长同时成为被采样上下文的片段时长。省略该参数时保持场景局部时间行为。编译期对每个模拟实例仅保留一份，Seek 跳转完全不依赖前序帧的累加求值。
+### 数值文本读数 (Numeric Text Readouts)
 
-显式粒子源额外支持着色矢量表面、按 Alpha 或亮度加权的内联 RGBA8 图像、动画路径进度以及基于外置字体的字形矢量轮廓。字形粒子在场景缓存中延迟准备，并在准备失败时完备保留其不可变源定义。编译或采样期间绝不发生隐式字体探测。`premultiplied_color` 直接提供有限的线性空间出生能量，无需经历 sRGB 色彩空间转换。
+`text` 严格三选一接收 `content`、`spans` 或 `number`。数值读数将动画化的 `value`、`0..=16` 范围内的十进制小数精度 `precision` 以及可选的固定前后缀 `prefix` / `suffix`（合并 UTF-8 长度上限 `4,096` 字节）组合在一起，并与普通文本共享段落对齐、排版与显式字体绑定。非有限表达式结果按 Rust 标准数值拼写输出，不执行任何无界的用户格式化脚本。
 
-`configuration` 支持配置预热（Prewarm）、双阶段循环、显式查询重映射、倒放开关、工作线程数与工作量准入，以及拖尾、拉伸、视差与翻转策略。按序排列的 `operator` 算子修饰器支持引入群体作用力、连续扫动碰撞体、有向距离场网格、颜色场以及稳定 ID 的 0 至 2 号自定义数据槽位。`sub_emitters` 声明派生子事件与继承属性；`root_only` 将 3 号自定义槽位保留为非递归的子级标记，因此 `custom_slot` 算子无法覆写它。旋度噪声（Curl Noise）与旋度流的随机种子采用 32 位数值，超大种子会被直接报错拒绝而非截断。预设配方直接拒绝额外的事件规则与外观覆盖，保持其自身的完整性。生成的 Sprite Atlas 允许 2 至 256 像素的帧边长，在生成实际画面帧前先准入累积构建字节。纯数据的 `node_circles` 能够精确还原与年龄相关的矢量外观展示，无需执行代码级用户回调。
+### 水墨与笔刷内容
 
-`trajectory`（轨迹系统）支持 Ballistic（弹道）、Orbit（轨道）、NoiseDrift（噪声漂移）与 Converge（汇聚），支持可选的显式 `sample_time`。Converge 与 Seek 目标点集合复用有界的编译期点位采样；拒绝逐帧动态变化的动画目标点集合。
+- **笔刷描边与压感：** `brush_stroke` 严格三选一接收固定 SVG `path`、编译期采样折线 `points` 或录制采样点序列 `samples`（`<= 512` 项，含位置、压感、顺时针度数 `tilt` 倾角与秒级时间戳），并配对 `width` 与自有 `paint`（元素级 `fill`、`stroke`、`trim` 与 `fill_rule` 不适用于该内容）。压感支持三段式 `pressure`、有序 `pressure_curve` 或算术表达式 `pressure_from`（其中 `t` 表示归一化弧长而非场景秒数；允许读取 `$param`，拒绝 `@id` 绑定）。
+- **书写揭示时钟：** `write` 按归一化全路径弧长（`0..=1`）揭示笔迹；`write_time` 提供显式的非负秒数（`0..=86,400`），驱动源既可使用录制样本自带的时间戳，也可指定显式 `timing` 描述（`<= 512` 项，包含落笔运动时长、单调控制点与子路径提笔停顿）。
+- **墨水材质、纸纹与颜料混色：** `ink` 配置确定性的枯笔度（Dryness）、渗化（Bleed）、毛刺纤维、颗粒沉淀、水渍边缘、灰度高度、可选的 `wetness` 干湿年龄与干燥时长（`0..=86,400` 秒）、可选的双帧沸腾抖动 `wobble.frame`（`<= 2 * u32::MAX`）、6 系数仿射 `paper_transform` 以及 `paper` 纸纹（支持程序化噪声、显式内联 RGBA8 纹理或编译期按种子生成的 `noise_texture`，纹理边长均为 `1..=512` 纹素）。`ink_fill` 基于自有的 `path`、`paint` 与 `ink` 执行有界奇偶轮廓填充。`PaintSpec` 同时支持颜料混色 `{"pigment": {"first": ..., "second": ..., "amount": ..., "mode": ...}}`（动画 `amount` 位于 `0..=1`），通过原生线性光 `linear` 或六波段 `kubelka_munk` 模型混合颜色，而非合成器混合模式。固定笔刷配方在多个揭示帧之间共享同一份不可变的烘焙笔迹材质；动画化的画刷、湿度或沸腾帧则直接根据显式输入重建，不维护任何可变流体播放状态。
 
-## 音频声明规范
+### 粒子模拟与解析轨迹
 
-`audio` 音频片段接受 `volume`、`pan` 与 `spatial` 空间坐标作为动画属性，在以片段开始时刻为基准的相对时间上采样（动画化的 `volume` 转换为音量包络线，动画化的 `pan` 转换为声相自动化动画）。`bus` 将片段路由至 `buses` 中声明的具体总线条目，每个总线具备独立的增益、效果器链与闪避配置。`master` 配置全局增益、限幅器与广播级响度归一化。`effects` 效果器（`eq`、`compressor`、`gate`、`de_esser`、`delay`、`reverb`）需要开启 `audio` 特性；带有动画化频率或增益的 `eq` 会自动转换为参数自动化 EQ。片段可通过 `id` 被先前的片段动态压低音量：`ducked_by` 声明触发源 `{"clip": id}`；总线级触发源作用于总线，且必须在被控制的总线之前先行声明。引擎的硬性限制在校验与混音阶段强制生效：单个混音最多 256 个片段、16 条总线、每个片段或总线最多 16 个效果器，以及每个片段最多 4 个闪避触发项。
+- **预设配方与显式模拟：** `particles` 既支持显式声明 `emitters` / `modifiers` / `style`，也支持直接选用 `preset` 预设（`sparks`、`embers`、`dust`、`motes`、`snow`、`rain`、`smoke`、`fire`、`confetti`、`fireworks`、`fireflies`、`logo_dissolve`、`logo_assemble`），配合局部 `bounds`、可选的 `density` / `speed` / `intensity` 乘数以及必填的 `(0, 3,600]` 秒模拟 `duration`（`preset.logo` 最多接收 `256` 条固定着色的 SVG 路径）。可选的动画化 `sample_time`（`0..=1e6` 秒）可在无状态跳转的前提下将模拟时钟与场景时钟解耦。
+- **发射源、场算子与轨迹：** 显式发射源支持着色矢量表面、按 Alpha 或亮度加权的内联 RGBA8 图像（边长 `1..=512` 纹素）、动画路径进度、线性出生能量 `premultiplied_color` 以及在 `Scene` 缓存分区中惰性准备的字形轮廓。`configuration` 控制预热、双阶段循环、查询重映射、倒放许可、工作线程与工作量准入、拖尾、速度拉伸、视差与翻转策略；有序 `operator` 修饰器提供群体力、扫掠碰撞体、有向距离场网格、颜色场、32 位 `curl_noise` / `curl_flow` 随机种子（`0..=u32::MAX`）以及自定义槽位 `0..=2`（槽位 `3` 由 `root_only` 的 `sub_emitters` 保留）。生成的精灵图集帧边长限定在 `2..=256` 像素，纯数据 `node_circles` 则在无代码回调的前提下复现随年龄演化的矢量粒子外观。`trajectory` 求值解析轨迹模型 `Ballistic`、`Orbit`、`NoiseDrift` 与 `Converge`（`1..=65,536` 个编译期采样点）。
 
-## 重载机制与验证边界
+### 音频声明
 
-`CompiledDocument::resources()` 列出文档引用的所有外部文件路径（相对于根基准目录解析，自动去重）；`load` 将文档主文件排在首位。`Project` 在两处复用该依赖列表：`Project::check` 与 `validate` 命令强制要求列表中所列的所有文件必须真实存在，并在不渲染画面的情况下对首帧、中间帧与尾帧执行 preflight 试飞检查。Studio 实时监视该列表：在 Studio 中打开的文档通过调用相同的加载器自动重建，重建失败会自动保留上一版本的有效场景（参见 [Studio 热重载](../studio.md#热重载)）。每次成功的重载都会将受监视的文件依赖集合更新为最新编译后的实际依赖。在编译期间被后续保存覆盖的结果会被立即丢弃，并在下一个静止周期后重新触发重建。
+根级 `audio` 片段、`buses`、`master`、`effects`、`spatial` 与 `ducked_by` 直接编译为核心包的 `AudioTrack` 与 `AudioMix` 模型（最多 `256` 个片段、`16` 条总线、每条处理链 `16` 个效果器、每个目标 `4` 路闪避触发）。片段的 `volume`、`pan`、`spatial` 空间坐标以及自动化 EQ 的 `frequency` / `gain` 均按片段局部秒数采样；`effects` 需要开启 `audio` 特性。完整的混音、DSP 与导出契约详见[音频设计契约](audio.md)。
 
-## 版本规范与向前兼容
+## 版本规范与 JSON Schema
 
-文档的 `version` 字段必须精确等于 `FORMAT_VERSION`（当前为 `1`）。其余版本会在编译前直接抛出不受支持的值诊断错误；系统不提供隐式的数据迁移机制。文档允许声明 `$schema` 键以便编辑器提供智能补全与校验，引擎在解析时会忽略该键。由 `motion::declarative::schema()` 生成的 JSON Schema（草案 2020-12）负责校验文档结构、数据类型以及选定的静态数值范围：包括格式版本、文档与场景时间跨度，以及粒子预设的输入参数。各类引用形式统一共享 `ValueRef` 定义，避免在每个取值位置冗余展开三个分支。动画求值结果、复杂的时序规则以及外部资产文件的可用性依然属于编译或运行时校验的范畴。[`schemas/motion.schema.json`](../../../schemas/motion.schema.json) 为自动生成的标准 Schema 文件，受自动化测试保护确保与实现完全同步。
+- **严格格式版本：** `version` 必须精确等于 `FORMAT_VERSION`（`1`）；其余任何数值都会在编译前报不受支持的值错误，不提供隐式迁移。解析器接受可选的 `$schema` 键供编辑器补全使用并在运行时忽略。
+- **自动生成 Schema：** `motion::declarative::schema()` 生成 Draft 2020-12 JSON Schema，覆盖文档结构、封闭枚举、共享的 `ValueRef`（`$param` / `$calc` / `use`）分支以及静态数值范围；仓库提交的 [`schemas/motion.schema.json`](../../../schemas/motion.schema.json) 受自动化测试保护，确保与代码实现逐字节同步。
+- **兼容性边界：** 只要所有旧版合法 JSON 文档仍以完全相同的语义解析通过，放宽现有字段以接受新的 JSON 表达形式即可保持 `FORMAT_VERSION = 1` 不变；即便对应的 Rust 规范类型随之放宽（例如升级为 `Animated<T>` 或 `SvgSourceSpec`，纯常量可通过 `.into()` 转换）。
 
-在保证所有旧版合法 JSON 语义完全不变的前提下，向现有字段放宽以接受新的 JSON 表达形式保持格式版本号不变。但 Rust 规范类型仍然可能会发生调整，这对于直接在代码中构建文档的调用方属于源码级变更：例如渐变几何与角度、Bloom 的 `intensity` 与光晕 `strength` 调整为 `Animated` 动画类型，SVG `source` 与 SVG Morph 的 `from` / `to` 调整为 `SvgSourceSpec`，旋度噪声的 `seed` 升级为 `u64`。纯常量值可通过 `.into()` 方便地完成转换。
+## 编译、缓存与热重载
 
-## 编译阶段与缓存
-
-编译流水线优先校验所有属性并在构建实际时间轴之前集中收集诊断信息，因此单次执行可以完整汇总所有不合法的属性位置，而非遇到首个错误便立即中断。
-
-- 场景内容严格在场景局部时间维度求值。不包含任何动画属性的静态元素仅构建一次，其生成的 Node 快照在所有时间帧之间安全共享；包含动画属性的元素在每个时刻仅针对其自身的子树执行重新构建。画面输出严格取决于当前时刻与文档自身，确保视口预览、静帧导出与视频渲染输出绝对一致。
-- 轨道元素严格遵守引擎的时序连续性规则：各 Scene 自动向前推进游标或使用显式的 `start` 定位，`gap` 显式产生空白间隙，`transition` 将下一个场景与前一个场景产生指定时长的重叠。
-- 风格外观 Look 将其场景阶段（快门、空间滤镜、胶片抖晃）注入到每个 Scene 内部，并通过 `CompiledDocument::render_options` 应用其显示变换阶段。`Project` 将该显示阶段透明传递给静帧、视频导出与 Studio Composition，确保文档在所有使用入口下表现完全一致。
-
-`CompileCache` 是调用方拥有的针对单文件的单条目编译缓存。`Project` 在其注册的具名文档、直接传入的 JSON 文件路径与克隆实例之间共享同一个缓存实例；纯 Rust 代码闭包工厂绝不参与缓存。缓存命中严格要求文档的绝对文件路径、完整源码内容、参数覆写以及所有被监视依赖文件的内容必须完全一致。加载流程依然会读取源码和有界的依赖快照，因此即使文件修改时间未变但相同长度的内容发生变化，也会使旧缓存失效。系统不引入任何全局可变缓存或可变帧历史。
-
-仅有编译成功的产物才会更新缓存条目。快照准入严格限制在 16 MiB 的源码、序列化覆写参数与依赖项字节总和之内，且依赖项数量不超过 256 个；超大或无法读取的依赖集合会正常执行全量编译而不参与缓存。这些限制约束的是保留的输入数据量，独立于编译后时间轴自身的资源配额限制。重载失败绝不替换上一次成功的缓存条目，也不替换当前正在运行的 Studio 场景。
-
-## 资源路径解析
-
-相对字体、图像、SVG 与音频路径基于 `CompileOptions::base_dir` 解析；直接加载磁盘文件时默认以文档所在目录作为基准。包含 `..` 的非法相对路径会被直接拒绝。在 `fonts` 中列出的字体文件在编译期被读取，并强制绑定至每个文本元素，覆盖渲染环境默认的全局字体。位图图像通过渲染环境的 `Assets` 所有者进行延迟加载；SVG 源码在编译期被同步读取与解析；外部音频文件在导出阶段按需流式解码，全部遵循与代码创作完全相同的底层规则（参见[资源管理契约](resources.md)）。若未提供基准目录，图像相对于资产根路径解析，SVG 与音频相对于当前工作目录解析。
+- **全量错误收集与不可变求值：** `Document::compile` 先校验全部属性并汇总诊断，随后再构造 `Timeline`。在每个场景内部，不含动画属性的静态元素仅构建一次并在所有帧间共享同一份 `Node` 快照；含动画的子树仅在场景局部时刻 `t` 重建自身。轨道项遵循引擎顺序游标规则（`scene`、`gap`、`transition`），`LookSpec` 则清晰拆分为场景内滤镜阶段与 `CompiledDocument::render_options` 显示阶段。
+- **调用方所有的 `CompileCache`：** `CompileCache` 是面向磁盘文档的单条目编译缓存，在 `Project` 注册的具名文档、CLI 直接传入的 `.json` 路径及其克隆实例之间共享（纯 Rust 闭包工厂绝不缓存）。缓存命中要求规范化绝对路径、文档完整字节、序列化后的参数覆写以及所有受监视依赖文件的字节内容完全一致——即使文件修改时间未变但发生等长内容编辑，也会精准失效。快照准入上限为 `16 MiB` 输入总字节与 `256` 个依赖文件；超出上限的依赖集合正常执行全量编译而不写入缓存，重载失败绝不覆盖上一次成功的缓存条目。
+- **资源路径与热重载：** 相对字体、图像、SVG 与音频路径相对于 `CompileOptions::base_dir`（`load` 默认取文档所在目录）解析，并拒绝任何包含 `..` 的父级越界路径。文档 `fonts` 在编译期读取并覆盖渲染环境的默认字体；位图 `image` 通过渲染 `Assets` 惰性加载；`svg` 在编译期解析；`audio` 在导出期流式解码（参见[资源管理契约](resources.md)）。`CompiledDocument::resources()` 返回去重后的依赖文件列表（文档主文件排在首位），同时供 `Project::check` / `validate`（对首帧、中间帧与尾帧执行无渲染预检）以及 Studio [热重载](studio.md#热重载)文件监视器复用。
 
 ## 配额与参数上限
 
 | 约束项 | 上限阈值 |
 | --- | --- |
-| 单个文档文件体积 | 16 MiB (`MAX_DOCUMENT_BYTES`) |
-| 时间戳、时长、延时与重复运动时长 | 0..=1e6 秒 |
-| 设计画布宽高尺寸 | 1..=65536 |
-| 元素嵌套层级（含遮罩） | 64 层 |
-| 多边形、折线与样条曲线点数 | 65536 个点 |
-| 正多边形边数与星形顶点数 | 边数 3..=4096，顶点数 2..=4096 |
-| 单次编译保留的诊断信息条数 | 256 条 |
-| 单文档参数数量上限 / 单个参数体积上限 | 256 个, 64 KiB |
-| 单文档模板定义数量上限 / 单个定义体积上限 | 256 个, 64 KiB |
-| 模板定义引用调用链深度 / 展开后的 JSON 嵌套层数 | 32 层, 128 层 |
-| 表达式源码体积 / 词法项上限 / 嵌套深度 | 4096 字节, 1024 项, 48 层 |
-| 动画组合嵌套深度 / 单次求和累加的源数量 | 32 层, 32 个 |
-| 数值文本小数精度 / 前后缀文本组合并体积 | 0..=16 位, 4096 字节 |
-| 属性绑定链深度 / 单场景内独立绑定总数 | 32 层, 1024 个 |
-| 富文本样式切片（Span）上限 | 256 个 |
-| 粒子单次请求量、爆发量或轨迹点数上限 | 1,000,000 个 |
+| 单个文档文件体积（`MAX_DOCUMENT_BYTES`） | `16 MiB` |
+| 内联或外部 SVG 源码（`svg`, `svg_morph`） | `16 MiB` |
+| `CompileCache` 快照总字节 / 受监视依赖文件数 | `16 MiB` / `256` 个文件 |
+| 时间戳、时长、延迟、`clock` 偏移/缩放与 `sample_time` | `0..=1e6 s`（`clock` 为 `±1e6`） |
+| 设计画布宽高尺寸 | `1..=65,536` |
+| 元素嵌套层级（含遮罩） | `64` 层 |
+| 多边形、折线、样条曲线、`Converge` 与 `Seek` 点数 | `65,536` 个点 |
+| 正多边形边数 / 星形顶点数 | `3..=4,096` / `2..=4,096` |
+| 单次编译保留的诊断条数 | `256` 条 |
+| 单文档参数个数 / 单个参数体积 / `$calc` 依赖链深度 | `256` 个 / `64 KiB` / `32` 层 |
+| 单文档模板定义个数 / 单个定义体积 | `256` 个 / `64 KiB` |
+| 模板 `use` 调用链深度 / 展开后 JSON 嵌套深度 | `32` 层 / `128` 层 |
+| 表达式或 `$calc` 源码体积 / 词法项 / AST 嵌套深度 | `4,096 B` / `1,024` 项 / `48` 层 |
+| 动画组合嵌套深度 / 单次 `sum` 输入源数量 | `32` 层 / `32` 个 |
+| 属性绑定链深度 / 单场景独立绑定总数 | `32` 层 / `1,024` 个 |
+| 富文本 `spans` 数量 / 数值读数小数位与前后缀总字节 | `256` 段 / `0..=16` 位, `4,096 B` |
+| 水墨录制 `samples` 或 `timing` 项数 / 纸纹或内联图像边长 | `512` 项 / `1..=512` 纹素 |
+| 水墨录制时间戳、`write_time` 与 `wetness` 时钟 | `0..=86,400 s` |
+| 粒子预设时长 / `preset.logo` 路径数 / 精灵图集单帧边长 | `(0, 3,600] s` / `256` 条 / `2..=256` px |
+| 粒子请求数量、单次爆发量或轨迹点数 | `1,000,000` |
+| 音频片段数 / 总线数 / 单链效果器数 / 单目标闪避触发数 | `256` / `16` / `16` / `4` |
 
-针对矢量路径、描边拓扑、滤镜效果与光栅化内存的底层引擎配额，在渲染执行期依然严格生效。
+针对矢量路径、描边拓扑、滤镜效果、缓存分区与光栅化内存的底层引擎配额在渲染执行期依然严格生效（参见[可靠性契约](reliability.md)与[资源管理契约](resources.md)）。
 
-## 诊断与错误定位
+## 诊断与源码定位
 
-从磁盘文件加载时产生的诊断信息会携带精确的源码行列位置。`load`、`Project` 以及 CLI 命令行会将每条诊断信息的 JSON 路径与出错字段在原始文本中精确定位，并追加 `(line L, column C)` 位置信息；当引发错误的具体字段不存在时（例如通过 `$param` 参数对象代替了数值），系统会回溯报告最深一级的有效父级键名。遇到未知字段键时，指针直接定位在该键本身，并在可选合法字段超过 8 个时省略 serde 庞大的候选列表。对于拼写错误的未知键名、枚举变体、参数名、元素 ID、音频片段与总线名称以及表达式函数名，系统会在编辑距离（Levenshtein distance）小于等于 3 的范围内自动推荐最接近的合法名称。源码行列位置基于磁盘文件提取，因此对于直接从字符串通过 `Document::from_json` 解析的文档，仅在语法解析错误时能够报告位置，编译期错误则不包含行列号。
+- **源码行列号映射：** 从磁盘文件加载产生的诊断会在原始文本中精确定位失败的 JSON 路径与字段，并追加 `(line L, column C)`——当具体子键因 `$param` 或 `use` 展开而不存在于原始文本中时自动回退到最深的有效父键；遇到未知字段键时直接指向该键本身（当合法候选字段超过 `8` 个时省略 serde 冗长的候选列表）；仅在通过 `Document::from_json` 直接解析内存字符串时省略编译期行列号。
+- **拼写纠错提示与结构化路径：** 对于未知字段键、枚举变体、参数名、场景元素 `id`、音频片段与总线名称以及表达式函数名，编译器会在编辑距离（Levenshtein distance）`<= 3` 的范围内推荐最接近的合法名称。语法解析失败返回携带 JSON 路径的 `ValidationError`；编译失败返回单个 `ValidationError` 或汇总所有非法属性的 `ErrorReport`（如 `tracks[0].items[0].scene.content.children[2].circle.radius`）。
 
-语法解析失败返回 `ValidationError`，其错误路径严格遵循 JSON 的树形结构，如 `tracks[0].items[1].scene.content`。编译期失败返回单个 `ValidationError`，或聚合每个非法属性的 `ErrorReport`，带有具体的出错路径如 `tracks[0].items[0].scene.content.children[2].circle.radius` 以及具体的校验字段。参数与表达式错误会明确指出引发故障的属性名。时间轴构建失败（如转场重叠冲突）会在对应的轨道项路径处精准报错。文本、图像与 SVG 内容即使在未开启对应 Cargo 特性时也能顺利通过语法解析，但会在编译阶段抛出明确的特性未启用诊断。
+## 核心源码索引
+
+- [`crates/motion-scene/src/document.rs`](../../../crates/motion-scene/src/document.rs)、[`element.rs`](../../../crates/motion-scene/src/element.rs)、[`content.rs`](../../../crates/motion-scene/src/content.rs)、[`paint.rs`](../../../crates/motion-scene/src/paint.rs)、[`effects.rs`](../../../crates/motion-scene/src/effects.rs) — `Document`、`Element`、`Content`、`PaintSpec`、`FilterSpec` 与 JSON Schema 生成。
+- [`crates/motion-scene/src/params.rs`](../../../crates/motion-scene/src/params.rs)、[`definitions.rs`](../../../crates/motion-scene/src/definitions.rs) — 加载期 `$calc`、`$param` 与 `defs` / `use` 展开及字节准入计量。
+- [`crates/motion-scene/src/animation.rs`](../../../crates/motion-scene/src/animation.rs)、[`value.rs`](../../../crates/motion-scene/src/value.rs)、[`ink.rs`](../../../crates/motion-scene/src/ink.rs)、[`particles.rs`](../../../crates/motion-scene/src/particles.rs)、[`audio.rs`](../../../crates/motion-scene/src/audio.rs) — 声明式动画、水墨、粒子与音频规范定义。
+- [`crates/motion-scene/src/compile.rs`](../../../crates/motion-scene/src/compile.rs)、[`compile/`](../../../crates/motion-scene/src/compile)、[`cache.rs`](../../../crates/motion-scene/src/cache.rs)、[`diagnostics.rs`](../../../crates/motion-scene/src/diagnostics.rs) — 即时静态校验、`CompiledDocument`、`CompileCache`、源码行列映射与编辑距离纠错。
+- [`schemas/motion.schema.json`](../../../schemas/motion.schema.json) — 纳入版本控制的 Draft 2020-12 标准 JSON Schema 产物。

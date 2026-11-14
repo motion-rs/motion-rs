@@ -40,7 +40,7 @@ over remembered APIs.
 - [Document contracts](../../../docs/en/design/documents.md): determinism, budgets,
   compilation, parameters and validation boundaries.
 - [CLI reference](../../../docs/en/cli.md): exact command grammar, codecs and errors.
-- [Studio guide](../../../docs/en/studio.md): document hot reload and preview behavior.
+- [Studio guide](../../../docs/en/design/studio.md): document hot reload and preview behavior.
 - [Intro document](../../../examples/documents/intro.json) and
   [Orbit document](../../../examples/documents/orbit.json): small working examples.
 - [Animation Atlas](../../../gallery/assets/animation-atlas.json),

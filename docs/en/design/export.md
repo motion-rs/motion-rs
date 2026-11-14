@@ -1,174 +1,98 @@
 # Export and FFmpeg
 
-This page records the contracts of the export path: how a timeline frame becomes
-pixels, how pixels reach an encoder, which codecs exist, and how output is committed
-or discarded. [Rendering and export](rendering.md) owns coverage, caches and budgets;
-[Reliability](reliability.md) owns the general failure model. The
-[tutorial chapter](../tutorial/11-export.md) teaches the workflow (PNG sequence
-example, `ExportOptions`, the encoder lifecycle, progress, pitfalls); this page states
-the invariants behind it and does not repeat the walkthrough.
+This page records the contracts of the export path: how a timeline frame becomes pixels, how pixels reach an encoder, which codecs and pixel formats exist, and how output is committed atomically or discarded on failure. [Rendering](rendering.md) owns single-frame coverage, GPU execution, caches, and frame budgets; [Audio](audio.md) owns offline PCM preparation; [Reliability](reliability.md) owns the general failure model. Usage walkthroughs live in the [export tutorial](../tutorial/11-export.md).
 
 ## Pipeline
 
-```text
-Timeline frame index -> Time::from_frame -> FrameRenderer::render_output_at
-  -> FrameBuffer (in Encoder::input_format) -> Encoder::write -> Encoder::finish
+```mermaid
+flowchart LR
+    Prepare["Preparing<br/>audio fit + options<br/>dest & EncoderCapabilities"] --> Probe["Frame 0 probe<br/>peak bytes & GPU eligibility"]
+    Probe --> Render["Rendering<br/>serial / CPU Rayon slots / GPU FrameQueue<br/>Time::from_frame(n, rate)"]
+    Render --> Write["Ordered delivery<br/>FrameBuffer (input_format)<br/>-> Encoder::write"]
+    Write --> Finalize["Finalizing -> Completed<br/>Encoder::finish + atomic commit<br/>-> ExportReport (+ painted fonts)"]
 ```
 
-[`export`](../../../crates/motion-encode/src/export.rs) owns the
-orchestration for built-in and custom encoders (`ExportOptions::encoder`); it runs on the caller's thread and always write frames in order.
+[`export`](../../../crates/motion-encode/src/export.rs) orchestrates built-in and custom encoders (`ExportOptions::encoder`) on the caller's thread and always writes frames strictly in ascending index order:
 
 | Stage | Contract |
 | --- | --- |
-| Preparing | Audio is prepared, options are validated and normalized (`selected`), destination and capability checks run before any output exists. |
-| Rendering | Frame `n` is evaluated at `Time::from_frame(n, rate)`; the encoder's `input_format()` decides the pixel layout and it is never reinterpreted. |
-| Finalizing | `Encoder::finish` flushes, then commits. `ExportReport` describes committed output only. |
-
-`ExportPhase` notifications are ordered (`Preparing`, `Rendering`, `Finalizing`,
-`Completed`); `Completed` is reported only after `finish` returns. `frame_completed`
-counts frames handed to the encoder, not committed output.
+| `Preparing` | Resolves timeline audio (fitting `AudioDuration::Fit` scenes if present), normalizes options and frame range (`selected`), rejects overwrite or audio-source collisions, checks `EncoderCapabilities`, mixes any timeline audio into `MixedAudio`, and calls `Encoder::open` before rendering a single frame. |
+| `Rendering` | Evaluates frame `n` at `Time::from_frame(n, rate)` directly into the `PixelFormat` returned by `Encoder::input_format()` without reinterpretation, reporting `ProgressSink::frame_completed` as each frame is handed to `Encoder::write`. |
+| `Finalizing` | Calls `Encoder::finish` to flush delayed codec packets, close temporary containers, and atomically commit the output path, then attaches the deduplicated `Vec<FontIdentity>` (family names and source hashes) observed from a fresh per-export sink, unaffected by reused `RenderOptions` or `RenderCache`. |
+| `Completed` | Emitted only after `Encoder::finish` commits cleanly and `ExportReport` (`path`, `frames`, `range`, `elapsed_seconds`, `bytes`, `fonts`) is ready to return. |
 
 ## Native API only
 
-Video and audio are encoded by calling libav* through
-[`motion-ffmpeg`](../../../crates/motion-ffmpeg/src/lib.rs) in process. No `ffmpeg`
-executable is launched and there is no subprocess fallback; media inspection used by
-tests ([`inspect.rs`](../../../crates/motion-ffmpeg/src/inspect.rs)) is native as well.
-PNG sequence and GIF encoders are pure Rust and do not need FFmpeg.
+Video and audio encoding run in-process against `libav*` through [`motion-ffmpeg`](../../../crates/motion-ffmpeg/src/lib.rs). No `ffmpeg` executable is spawned and there is no subprocess fallback; media verification in the test suite ([`inspect.rs`](../../../crates/motion-ffmpeg/src/inspect.rs)) uses native `libavformat` / `libavcodec` demuxing as well. `PngSequence` and `Gif` encoders are pure Rust and require no FFmpeg libraries.
 
-## Frame range and rate
+## Defaults, frame range, and rate
 
-| Rule | Source |
+`ExportOptions::new(path)` defaults to `Codec::h264(18)` (`EncoderPreset::Medium`), an opaque `Color::BLACK` background, `48,000 Hz` audio, `overwrite = false`, `workers = available_parallelism().min(64)`, and `max_parallel_bytes = 4 GiB`.
+
+| Rule | Contract |
 | --- | --- |
-| `range` is half-open and must satisfy `0 <= start < end <= duration`. | [`render.rs`](../../../crates/motion-encode/src/export/render.rs) |
-| Start and end round up to the next frame timestamp; a range with no frame is rejected. The report carries the normalized range. | same |
-| Output rate is the timeline rate, except `Codec::Gif`, which samples at its own `frame_rate`. | same |
-| `workers` must be in `1..=64` and `max_parallel_bytes` positive. | same |
+| Half-open `range` | Must satisfy `0 <= start < end <= duration`; `None` selects `0..duration`. |
+| Frame-grid rounding | `start` and `end` round up to the next frame boundary on the output grid; ranges enclosing zero frames fail validation, and `ExportReport::range` records the normalized interval. |
+| Output frame rate | Matches `timeline.frame_rate()`, except `Codec::Gif { frame_rate, .. }`, which samples the timeline on its own `frame_rate` grid. |
+| Concurrency bounds | `workers` must be in `1..=64` and `max_parallel_bytes` must be positive (`> 0`). |
 
 ## Codec matrix
 
-Verified in [`options.rs`](../../../crates/motion-encode/src/export/options.rs),
-[`settings.rs`](../../../crates/motion-ffmpeg/src/settings.rs) and
-[`ffmpeg.rs`](../../../crates/motion-encode/src/encoder/ffmpeg.rs).
+| `Codec` | Container / library | `input_format()` | `EncoderCapabilities` | Alpha | Key constraints |
+| --- | --- | --- | --- | --- | --- |
+| `H264 { quality, preset }` | MP4 / `libx264` | `Yuv420 { bit_depth: 8 }` | audio: yes, max `16,384²`, even dims | no | CRF `0..=51`; `preset`: `Medium`, `Slow`, `Slower` |
+| `H265 { quality, preset, bit_depth, params }` | MP4 / `libx265` | `Yuv420 { bit_depth: 8 \| 10 }` | audio: yes, max `16,384²`, even dims | no | CRF `0..=51`; `BitDepth::Ten` selects Main10 (`yuv420p10le`); optional `params` `<= 4,096 B` without NUL |
+| `Vp9 { quality, alpha }` | WebM / `libvpx-vp9` | `Yuv420 { bit_depth: 8 }` or straight `SrgbRgba8` when `alpha` | audio: no, max `16,384²`, even dims | optional | CQ `0..=63`; timeline audio is rejected (`WebM` has no AAC mux path) |
+| `ProRes4444` | MOV / `prores_ks` | straight `SrgbRgba8` (`yuva444p10le`) | audio: yes, max `16,384²`, even dims | yes | Fixed broadcast profile, no quality/preset tuning |
+| `PngSequence` | Directory of `NNNNNN.png` | straight `SrgbRgba8` | audio: no, unbounded dims, multiple `1` | straight | Pure Rust; rejects timeline audio and container metadata |
+| `Gif { frame_rate, colors }` | GIF | straight `SrgbRgba8` | audio: no, max `65,535²`, multiple `1` | 1-bit index | Pure Rust; `2..=256` palette colors; cumulative rational delays in `1..=65,535` centiseconds |
 
-| `Codec` | Container / library | Input format | Alpha | Notes |
-| --- | --- | --- | --- | --- |
-| `H264 { quality, preset }` | MP4 / `libx264` | `Yuv420` 8-bit | no | CRF `0..=51` |
-| `H265 { quality, preset, bit_depth, params }` | MP4 / `libx265` | `Yuv420` 8 or 10-bit | no | `BitDepth::Ten` selects Main10 (`yuv420p10le`); optional `params` x265 string (at most 4096 bytes, no NUL) |
-| `Vp9 { quality, alpha }` | WebM / `libvpx-vp9` | `Yuv420` or straight `SrgbRgba8` when `alpha` | optional | quality `0..=63`; timeline audio is rejected |
-| `ProRes4444` | MOV / `prores_ks` | straight `SrgbRgba8` (`yuva444p10le`) | yes | fixed quality, no tuning |
-| `PngSequence` | directory of PNG frames | encoder-defined | straight | no audio, no container metadata |
-| `Gif { frame_rate, colors }` | GIF | encoder-defined | transparent entry | `2..=256` colors; delays must fit `1..=65535` centiseconds |
-
-Further constraints: encoder-specific settings live only on the codec variants that
-use them (`preset` for H.264/H.265, `bit_depth` and `params` for H.265), so
-`ExportOptions` carries none; `preset` is `medium`, `slow` or `slower`; the native encoder
-requires even dimensions, at most 16,384 per side (`EncoderCapabilities`), at least
-one and at most `u32::MAX` frames, and at most 86,400 seconds. Audio is AAC at
-44,100, 48,000 (default) or 96,000 Hz. Selecting an alpha-capable codec, PNG or GIF
-through `ExportOptions::codec` clears the default opaque black background; other
-codecs flatten onto black. A codec whose library is absent from the linked FFmpeg
-fails at `open` with `ErrorKind::Unsupported` (`VideoCodec::available`).
-
-Color metadata: native video is tagged BT.709 primaries and matrix, limited range;
-transfer is sRGB (IEC 61966-2-1) by default or BT.709 when `gamma24` is set
-([`codec.rs`](../../../crates/motion-ffmpeg/src/encoder/codec.rs)). MP4 output uses
-`+faststart`, and the movie timescale and chapters use 705,600,000 ticks per second.
-Container tags (at most 64) and chapters (at most 4096, ordered, non-overlapping) are
-validated in [`encoder.rs`](../../../crates/motion-ffmpeg/src/encoder.rs).
+- **Background clearing for alpha codecs:** Calling `ExportOptions::codec` with `PngSequence`, `ProRes4444`, `Vp9 { alpha: true, .. }`, or `Gif` automatically clears the default `Color::BLACK` background to `None` so transparency is preserved; opaque codecs composite onto black unless overridden via `.render(...)`.
+- **Native duration, audio, and container metadata:** Native FFmpeg exports require `1..=u32::MAX` frames and duration `<= 86,400` seconds. Timeline audio encodes as stereo AAC-LC at `44,100`, `48,000` (default), or `96,000 Hz`. Native video streams are tagged with BT.709 primaries and matrix in limited range, with sRGB (`IEC 61966-2-1`) transfer by default or BT.709 transfer when `DisplayTransform` selects `gamma24`. MP4 muxing enables `+faststart` and uses `705,600,000` ticks/second for movie timescales and chapter markers. `AudioMetadata` validates up to `64` container tags and up to `4,096` ordered, non-overlapping chapters, and is rejected on `PngSequence` and `Gif`. Missing encoders in the linked FFmpeg build fail at `open` with `io::ErrorKind::Unsupported` (`VideoCodec::available`).
 
 ## Pixels
 
-[`output.rs`](../../../crates/motion-render/src/output.rs) defines the `PixelFormat`
-contract shared by the CPU and GPU backends: `LinearRgba16Float`, `LinearRgba32Float`, `SrgbRgba8
-{ premultiplied }` and `Yuv420 { bit_depth }` (8 or 10, even dimensions, BT.709
-limited range, 10-bit as little-endian `u16`). `FrameBuffer` owns tightly packed
-planes with byte strides. [`yuv.rs`](../../../crates/motion-render/src/output/yuv.rs)
-does 4:2:0 block conversion; the display-transform path applies a 4x4 ordered
-dither when quantizing. An opaque `SrgbRgba8` `FrameBuffer` ([`rgb.rs`](../../../crates/motion-render/src/output/rgb.rs))
-writes `write_ppm` (P6) and `write_rgb`; they do not use FFmpeg
-or the video overwrite policy and overwrite their destination unconditionally.
+[`output.rs`](../../../crates/motion-render/src/output.rs) defines the `PixelFormat` contract shared across CPU and GPU backends:
+
+- **Supported layouts:** `LinearRgba16Float`, `LinearRgba32Float`, `SrgbRgba8 { premultiplied }`, and `Yuv420 { bit_depth }` (`8` or `10` bits, even dimensions, BT.709 limited range, 10-bit stored as little-endian `u16`). `FrameBuffer` owns tightly validated planes with explicit byte strides.
+- **Quantization and raw writers:** [`yuv.rs`](../../../crates/motion-render/src/output/yuv.rs) performs 4:2:0 chroma subsampling, and display-transform quantization applies a deterministic `4×4` ordered dither. Opaque `SrgbRgba8` buffers also expose standalone `write_ppm` (P6) and `write_rgb` helpers ([`rgb.rs`](../../../crates/motion-render/src/output/rgb.rs)), which write raw pixels directly without FFmpeg or export-level overwrite staging.
 
 ## Streaming and threads
 
-Export never buffers the whole film. The native encoder runs on a dedicated
-`motion-encoder` thread fed by a bounded queue of 2 frames
-([`worker.rs`](../../../crates/motion-encode/src/encoder/ffmpeg/worker.rs)); libav
-objects stay confined to that thread, and a worker panic becomes `Error::Encoder`.
+Export streams frame by frame and never buffers the entire film in memory:
 
-CPU workers use a private Rayon pool of `workers` slots
-([`parallel.rs`](../../../crates/motion-encode/src/export/parallel.rs)). Slot `i` renders
-frames `i, i+workers, ...`; the export thread consumes results strictly by frame
-index, so output order and bytes equal the serial result (covered by
-`parallel_export_matches_serial_pixels_ntsc_ranges_and_progress`). The first frame is
-rendered serially to measure its peak; the worker count is capped by frames and
-`max_parallel_bytes`. If a later frame exceeds a slot's byte budget, only that
-`max_bytes` structural failure triggers a serial resume from that frame; other errors
-and panics propagate. Scene callbacks must therefore be repeatable.
-
-The GPU path ([`gpu.rs`](../../../crates/motion-encode/src/export/gpu.rs), feature
-`gpu`) applies when the backend is not CPU, more than one frame is exported, the
-format can be packed on the GPU, and a GPU context was actually selected. CPU
-preparation slots feed a bounded `FrameQueue` whose results are completed and
-encoded in order.
+- **Dedicated `motion-encoder` worker:** `FfmpegEncoder` spawns a dedicated `motion-encoder` thread fed by a bounded `2`-frame channel ([`worker.rs`](../../../crates/motion-encode/src/encoder/ffmpeg/worker.rs)). All `libav*` pointers (including creation and teardown) stay confined to that thread, and any worker panic converts cleanly into `Error::Encoder`. The `2`-slot channel bounds queued frame messages rather than all live frames or process RSS (the producer and encoder may each hold an active frame concurrently), and audio PCM is read directly from immutable prepared `f32` samples independently of this video queue.
+- **CPU parallel slots and serial fallback:** When `workers > 1` on the CPU backend ([`parallel.rs`](../../../crates/motion-encode/src/export/parallel.rs); `.workers(1)` stays serial), frame `0` renders serially first to measure its peak memory footprint, bounding active worker count against total frames, twice the first frame's logical peak, and `max_parallel_bytes`. Parallel slots explicitly preserve the first frame's CPU choice rather than re-probing a GPU, and divide `max_parallel_bytes` across slots instead of reserving the full per-frame ceiling per slot. A private Rayon pool assigns slot `i` frames `i, i + workers, ...` while the coordinator retires frames strictly in index order, producing output bytes identical to serial execution (`parallel_export_matches_serial_pixels_ntsc_ranges_and_progress`). If a later frame exceeds its per-slot `max_bytes` allowance, only that structural budget error joins workers and resumes unwritten frames serially under the original per-frame limit; invalid content, work-limit errors, and panics propagate immediately. Scene closures must therefore be pure and repeatable.
+- **GPU preparation and readback queue:** When `gpu` is enabled, `backend != Cpu`, more than `1` frame is exported, `Gpu::supports_packed_output` holds for `(size, format)`, and a `GpuContext` is active ([`gpu.rs`](../../../crates/motion-encode/src/export/gpu.rs)), frame `0` probes CPU preparation/planning maximums alongside `OutputPlan::peak_bytes` to separate CPU worker slots from the single render session's `FrameQueue` (`1..=3` frames in flight; worker count is measured rather than fixed at two). Workers build packed plans under `OutputPlan::with_planning_limit` (conservatively charging device and staging reservations per slot), while completed plans keep the original submission limit and check in-flight bytes against `FrameQueue` (completing the oldest output when space is needed) before ordered submission and encoding. Only slot byte-admission failures join workers, drain the queue, and resume serially under the original per-frame limit. Aggregate parallel allowances exclude encoder storage, shared `Assets`, caches, and idle pools, and are not an RSS cap.
 
 ## Transactions and overwrite
 
-| Output | Mechanism |
+| Output target | Transactional staging mechanism |
 | --- | --- |
-| Video, GIF | Temporary file `.motion-video-*` / `.motion-gif-*` in the destination directory, committed with `persist` (overwrite) or `persist_noclobber`. |
-| PNG sequence | Temporary directory renamed into place with `renameat_with`: `NOREPLACE`, or `EXCHANGE` when overwriting; overwrite requires a real directory. |
-| Custom encoder | Owns its own transaction; dropping after an error must discard partial output. |
+| Video (`MP4`, `MOV`, `WebM`) & `Gif` | Writes to `.motion-video-*` / `.motion-gif-*` inside the destination's parent directory, then commits atomically via `persist` (`overwrite = true`) or `persist_noclobber` (`overwrite = false`). |
+| `PngSequence` | Writes frames into a sibling `.motion-png-*` temporary directory, then swaps or installs it atomically (`renameat_with` `NOREPLACE` or `EXCHANGE` where supported; overwriting requires the existing target to be a real directory). |
+| Custom `Encoder` | Owns its own staging transaction; dropping an unfinished encoder after an error or cancellation must discard partial output. |
 
-Without `overwrite`, an existing destination fails with `AlreadyExists` before the encoder
-opens or any frame is rendered. With `overwrite`, the old file is untouched until the final
-commit. An existing destination that is also a timeline audio source is rejected even
-with `overwrite`. Cancellation, errors and drops remove the temporary output
-([`native.rs`](../../../crates/motion-encode/src/encoder/ffmpeg/native.rs)).
+- **Destination safety and Unix modes:** With `overwrite = false`, an existing destination fails with `io::ErrorKind::AlreadyExists` before `Encoder::open` or frame evaluation runs. With `overwrite = true`, the previous file or directory remains intact until final commit. Exporting over a canonical path currently referenced as a timeline `AudioSource::File` is rejected unconditionally even when `overwrite = true`. On Unix, transactional PNG, GIF, and native video files request creation mode `0666` and `PngSequence` staging directories request `0777`; the process `umask` applies at creation for both new and overwritten outputs, and export never reads or mutates `umask`. Cancellation, errors, or early drops remove staged temporary files and directories ([`native.rs`](../../../crates/motion-encode/src/encoder/ffmpeg/native.rs)).
 
 ## Cancellation and errors
 
-`ProgressSink::is_cancelled` is polled before work, between frames, in queue waits
-(every 10 ms in the worker) and during flush; it yields `Error::Cancelled` and no
-commit. Render errors carry the frame via `at_frame`; panics on worker slots and the
-first parallel frame become scene-panic errors. Encoder failures surface as
-`Error::Encoder` wrapping `io::Error` with the FFmpeg message and code.
-`Encoder::write` rejects out-of-order indices, mismatched size or wrong format, and
-`finish` rejects an incomplete count.
+- **Cooperative polling:** `ProgressSink::is_cancelled` is checked before preparation, between frames, every `10 ms` while waiting on bounded worker queues, and during finalization, returning `Error::Cancelled` with zero committed output.
+- **Typed failure attribution:** Scene and raster errors carry the offending frame index via `Error::at_frame`. Panics on frame `0` or parallel worker threads are caught via `catch_unwind` and reported as `Error::ScenePanic`. Native codec and mux failures surface as `Error::Encoder` wrapping an `io::Error` with the FFmpeg error code and message. `Encoder::write` rejects out-of-order frame indices, mismatched dimensions, or wrong `PixelFormat`, and `Encoder::finish` rejects incomplete frame counts.
 
-## Features and platform
+## Features, platform, and `unsafe` boundary
 
 | Requirement | Detail |
 | --- | --- |
-| `ffmpeg` (`motion-encode`, `motion`) | Enables native video/audio encoding; without it, video codecs fail at `open` with `Unsupported`, while PNG/GIF still work. Default in `motion`. |
-| `gpu` | Enables the GPU export path. |
-| Build host | `pkg-config`, FFmpeg development libraries (libavformat, libavcodec, libavfilter, libswscale, libswresample, libavutil) and libclang for bindgen ([`build.rs`](../../../crates/motion-ffmpeg/build.rs)). |
-| Runtime | The linked FFmpeg must contain the needed encoders (`libx264`, `libx265`, `libvpx-vp9`, `prores_ks`, AAC). Libraries are found through rpath on Unix. |
+| `ffmpeg` feature (`motion-encode`, default in `motion`) | Enables in-process `libav*` video/audio encoding; when disabled, video codecs fail at `open` with `Unsupported` while pure-Rust `PngSequence` and `Gif` remain available. |
+| `gpu` feature | Enables GPU output packing and the pipelined `FrameQueue` export path. |
+| Build & runtime libraries | Requires `pkg-config`, FFmpeg development headers/libraries (`libavformat`, `libavcodec`, `libavfilter`, `libswscale`, `libswresample`, `libavutil`), and `libclang` for `bindgen` ([`build.rs`](../../../crates/motion-ffmpeg/build.rs)); linked libraries (resolved via `rpath` on Unix) must provide `libx264`, `libx265`, `libvpx-vp9`, `prores_ks`, and `aac`. |
+| Isolated `unsafe` FFI | Every workspace `unsafe` block lives inside `motion-ffmpeg` under `unsafe_op_in_unsafe_fn = "deny"` and `clippy::undocumented_unsafe_blocks = "warn"` with explicit `// SAFETY:` invariants. `bindgen` allowlists only required C symbols, `Encoder` exclusively owns and frees its `libav*` handles in `Drop` without committing, and `motion-encode` exposes safe Rust only. |
 
-## Where unsafe lives
+## Owning sources
 
-All FFI is in `motion-ffmpeg` (`lib.rs`, `settings.rs`, `audio.rs`, `inspect.rs`,
-`encoder.rs` and its `codec`/`mux` modules). The workspace sets
-`unsafe_op_in_unsafe_fn = "deny"` and `clippy::undocumented_unsafe_blocks = "warn"`:
-every `unsafe` block carries a `// SAFETY:` comment naming the ownership or lifetime
-invariant. `Encoder` exclusively owns its libav pointers, frees them in `Drop`, and
-`Drop` closes output without committing. Bindgen allowlists only the functions the
-boundary uses; `motion-encode` and the rest of the workspace see safe Rust only.
-
-## Testing
-
-Tests verify decoded output rather than call sequences: `inspect` reads stream
-info, frame counts, AAC audio and 10-bit luma back from the written file; tests
-assert codec, bit depth, color tags, preserved destinations and removed temporaries
-([`export_tests.rs`](../../../crates/motion-encode/src/encoder/ffmpeg/export_tests.rs),
-[`export/tests.rs`](../../../crates/motion-encode/src/export/tests.rs)). Custom-encoder
-tests use a recording `Encoder` to check ordering, cancellation and capabilities.
-
-## Related
-
-- [Tutorial: Export](../tutorial/11-export.md)
-- [Rendering and export](rendering.md), [Reliability](reliability.md), [GPU](rendering.md)
-- [Development checks](../development.md)
-- [`export.rs`](../../../crates/motion-encode/src/export.rs),
-  [`options.rs`](../../../crates/motion-encode/src/export/options.rs),
-  [`motion-ffmpeg`](../../../crates/motion-ffmpeg/src/lib.rs)
+- [`crates/motion-encode/src/export.rs`](../../../crates/motion-encode/src/export.rs), [`export/options.rs`](../../../crates/motion-encode/src/export/options.rs), [`export/render.rs`](../../../crates/motion-encode/src/export/render.rs) — `export`, `ExportOptions`, `Codec`, `Encoder`, `EncoderCapabilities`, `ExportReport`, and frame-range normalization.
+- [`crates/motion-encode/src/export/parallel.rs`](../../../crates/motion-encode/src/export/parallel.rs), [`export/gpu.rs`](../../../crates/motion-encode/src/export/gpu.rs) — bounded Rayon CPU worker slots, serial budget fallback, and pipelined GPU `FrameQueue` export.
+- [`crates/motion-encode/src/encoder/ffmpeg.rs`](../../../crates/motion-encode/src/encoder/ffmpeg.rs), [`encoder/png.rs`](../../../crates/motion-encode/src/encoder/png.rs), [`encoder/gif.rs`](../../../crates/motion-encode/src/encoder/gif.rs) — `FfmpegEncoder` (`motion-encoder` thread), `PngSequenceEncoder`, and `GifEncoder`.
+- [`crates/motion-ffmpeg/src/lib.rs`](../../../crates/motion-ffmpeg/src/lib.rs), [`encoder.rs`](../../../crates/motion-ffmpeg/src/encoder.rs), [`settings.rs`](../../../crates/motion-ffmpeg/src/settings.rs), [`inspect.rs`](../../../crates/motion-ffmpeg/src/inspect.rs) — `unsafe` `libav*` FFI boundary, color metadata, `+faststart` MP4 muxing, and native stream inspection.
+- [`crates/motion-render/src/output.rs`](../../../crates/motion-render/src/output.rs), [`output/yuv.rs`](../../../crates/motion-render/src/output/yuv.rs), [`output/rgb.rs`](../../../crates/motion-render/src/output/rgb.rs) — `PixelFormat`, `FrameBuffer`, BT.709 `Yuv420` conversion, and raw RGB/PPM writers.

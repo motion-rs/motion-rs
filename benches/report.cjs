@@ -712,7 +712,6 @@ function document(manifest, load = loadReport, details = false) {
     "1. Keep the initial run directories and frozen executable. Run the same cohort before and after each focused optimization.",
     "2. Register raw directories and change/verification/negative-result notes in [performance-runs.json](performance-runs.json). Use a new series for different workloads or hosts.",
     "3. Run `node benches/report.cjs`. This validates every registered run and rebuilds the concise conclusions table; use --details with a separate --output for full tables.",
-    "4. Read the [performance plan](plan.md#performance) for the remaining optimization work and acceptance gates.",
     "",
   );
   return lines.join("\n");

@@ -2,9 +2,8 @@
 
 This is the maintenance reference for compilation, tests, fixtures and CI.
 Commands below are opt-in validation procedures; reading documentation does not
-execute them. See [reliability](design/reliability.md) for failure/ownership guarantees,
-[Benchmarks](benchmarks.md) for workload and measurement rules, and
-[the plan](plan.md) for remaining acceptance gaps.
+execute them. See [reliability](design/reliability.md) for failure/ownership guarantees and
+[Benchmarks](benchmarks.md) for workload and measurement rules.
 
 ## Continuous Integration
 
@@ -103,7 +102,7 @@ Pixel checks require nonblank subject regions, a named
 seek replay and Replay-tier GPU replay. Audio fixtures inspect actual decoded samples and timing;
 video fixtures decode frame counts and metadata. No test should invoke ffmpeg/ffprobe
 executables. Native-window interaction, real output devices and other platforms need
-separate validation. Current gaps and acceptance criteria are in [the plan](plan.md).
+separate validation.
 
 ### Independent backend acceptance
 
@@ -121,7 +120,7 @@ large coordinates, guard-band filters, procedural paints, analytic trajectories,
 residency and exact byte/work/device-limit admission. Existing CPU reference
 tests and goldens remain unchanged. GPU fixtures certify only the adapter actually
 used. Large-scene acceptance across text, SVG, clipping and particles is
-[planned](plan.md#independent-gpu-preparation).
+planned.
 
 ## Frame timing diagnostics
 

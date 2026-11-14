@@ -1,32 +1,21 @@
-# Rendering and Export
+# Rendering
 
-Import `motion::prelude` for authoring, `motion::render` for rendering contracts,
-`motion::encode` for encoders and progress sinks, and `motion::extend` for implementation
-protocols. Prepared coverage (strips, spans, paint records and layers) and the GPU plan
-are crate-private to `motion-render`; `PreparedCpuFrame` exposes sizes, statistics and counts
-only. Logical sizes use f64; output `PixelSize` uses positive integer dimensions. A
-composition uniformly contains logical content in its output viewport. Chinese
-translation: [../../zh-CN/design/rendering.md](../../zh-CN/design/rendering.md); this English page is the source of
-truth.
+Import `motion::prelude` for authoring, `motion::render` for rendering contracts, and
+`motion::extend` for implementation protocols. Prepared coverage (strips, spans, paint
+records and layers) and the GPU plan are crate-private to
+[`motion-render`](../../../crates/motion-render/src/lib.rs); `PreparedCpuFrame` exposes sizes,
+statistics and counts only. Logical sizes use `f64`; output `PixelSize` uses positive
+integer dimensions. A `Composition` uniformly contains logical content in its output
+viewport. Multi-frame timeline export, worker scheduling and video/GIF/sequence encoding
+belong to [export and FFmpeg](export.md). Chinese translation:
+[../../zh-CN/design/rendering.md](../../zh-CN/design/rendering.md); this English page is the source of truth.
 
 ## Backend preparation and effects
 
 `FrameIr` validates all content and normalizes device-space curves, scopes, paints, clips
 and filter domains before any coverage is allocated. It admits structural storage,
-resource bytes and conservative Wang segment bounds. The CPU and GPU backends consume this
-immutable description independently:
-
-```mermaid
-flowchart TD
-    Node["Node"] -->|compile| List["ValidatedDisplayList"]
-    List -->|admit| IR["FrameIr: device curves, scopes, paints, clips, filter domains"]
-    IR --> CPUPrep["CPU preparation: flatten, integrate area, quantize"]
-    IR --> GPUPrep["GPU preparation: curve descriptors, uploads, tile bounds"]
-    CPUPrep --> Prepared["PreparedCpuFrame: strips, spans, u8 alpha"]
-    GPUPrep --> GpuFrame["PreparedGpuFrame: device edge records"]
-    Prepared --> CPUComp["CPU composition"]
-    GpuFrame --> GPUComp["GPU coverage passes and composition"]
-```
+resource bytes and conservative Wang segment bounds. The CPU backend and GPU backend consume this
+immutable description independently.
 
 After normalization, both backends skip fill coverage inside zero-opacity layers, including
 nested filter and mask scopes. Hidden content still undergoes structural and geometry validation;
@@ -38,7 +27,7 @@ walk remains budgeted, and visible siblings resume after the matching scope clos
 The public `RenderPrepare` and `PreparedCpuFrame` describe CPU coverage only. GPU sessions and
 packed export workers use a separate preparation result and never build a CPU prepared
 frame, while low-level GPU consumers can still explicitly upload one. GPU coverage is
-generated on the device for eligible fills; see [GPU rendering](#shared-data-and-output).
+generated on the device for eligible fills; see [GPU rendering](#gpu-rendering).
 
 `PreparedGpuFrame` directly owns shared `FrameRecords` and GPU-specific device geometry.
 Internal rendering and public output planning use the same prepared value, without a
@@ -99,21 +88,20 @@ allocates its own scratch.
 
 ### CPU composition
 
-CPU composition is scalar. Solid SourceOver spans hoist the remaining-alpha term out of the
-pixel loop; every other mode keeps its per-pixel formula and operation order. No
-multiply-add fusion is used. Every pixel checks finite working storage before publishing,
+CPU composition is scalar and row-oriented. Solid `SourceOver` spans hoist the remaining-alpha
+term out of the pixel loop; every other mode keeps its exact per-pixel formula and operation
+order without multiply-add fusion. Every pixel checks finite working storage before publishing,
 and failed composition leaves the destination unchanged.
 
-Two experiments were measured against the code they replaced and removed because they were
-slower or within noise while adding hundreds of lines. Reintroduce either only with a
-measured case that wins and no case that loses.
+Composition intentionally avoids two tempting paths whose overhead outweighed their gains across
+measured scenes:
 
-- **Explicit-lane vectorization** (`wide` f32x4/f32x8 SourceOver, f64x4 blending and
-  coverage quantization). Per-pixel lane packing and finite checks cost as much as the
-  arithmetic they replaced. Vectorize only row-wise loops that are measured first.
-- **Tile-parallel composition** on a private Rayon pool, and **fused point filters**. They
-  helped a few layer-heavy cases, regressed most others, never applied to filtered frames,
-  and export workers already run on Rayon threads.
+- **Per-pixel lane vectorization (`wide` `f32x4`/`f32x8` `SourceOver`, `f64x4` blending and
+  coverage quantization):** lane packing and finite checks cost as much as the scalar arithmetic
+  they replace; only pre-measured row-wise loops qualify for SIMD.
+- **Intra-frame tile-parallel Rayon pools and fused point filters:** filtered frames cannot use
+  them, most layer counts regress from synchronization overhead, and CPU export workers already
+  parallelize at frame granularity across Rayon threads.
 
 ### Effects
 
@@ -178,7 +166,7 @@ their full conservative capture, including halos; mask owners and particle captu
 their original bounds. This bound reduction applies to CPU and GPU consumers, and its
 conditional scan and stack metadata are admitted during preparation.
 
-## Frames and Stills
+## Frames and stills
 
 Composition owns a `FrameClock` (rational rate and frame count, never defaulted) and one
 `RenderOptions` (dimensions, background, resources, backend policy and the rest); there are
@@ -188,12 +176,11 @@ Timeline output, `render_still` and export apply the same `RenderOptions` policy
 `render_frame` and `render_frame_sampled` return a fully opaque straight `SrgbRgba8`
 `FrameBuffer`: the frame composites over `RenderOptions::background` made opaque, or over
 white when it is absent. Its `write_ppm` and `write_rgb` truncate or replace the selected
-file explicitly and reject non-opaque buffers. Use `render_still` and a straight RGBA8
-`FrameBuffer` for transparent PNG with protected output destinations.
-
-On Unix, transactional PNG, GIF and native video outputs request mode 0666; PNG sequence
-directories request 0777. The process umask is applied at creation for both new and
-overwritten outputs; export never reads or changes that umask.
+file explicitly and reject non-opaque buffers. Use `render_still` and a straight RGBA8 `FrameBuffer` for transparent PNG output: it stages
+a temporary file in the destination directory (requesting Unix mode `0666` subject to the
+process `umask`, without reading or mutating `umask`) and protects existing destinations
+unless overwrite is explicitly allowed. Multi-frame export staging and directory permissions
+live in [export and FFmpeg](export.md#transactions-and-overwrite).
 
 ```rust,no_run
 use motion::prelude::*;
@@ -222,9 +209,9 @@ approximations in geometry, shutter sampling and ink material; it is not a diffe
 resolution or an equivalent Final result. Draft blur uses one variance-matched box for sigma
 at least 1, while smaller sigmas keep Final's small-kernel policy. Quality must stay fixed
 for replay and cache identity. Studio requests Draft during playback and dragging and forces
-Final for export; see [the Studio guide](../studio.md#preview-and-playback).
+Final for export; see [the Studio guide](studio.md#preview-and-playback).
 
-### Execution and Output Paths
+### Execution and output paths
 
 Authoring, preparation and pixel execution are separate boundaries. Both backends consume
 `FrameIr`: the CPU backend prepares CPU coverage, while the GPU backend generates eligible
@@ -363,79 +350,61 @@ rounding. Motion blur may call the builder multiple times.
 - Each request installs new diagnostics and clears prior totals. `last_stats` describes
   successful memory output, not external-texture conversion. Each stage reports
   `WorkStats { peak_bytes, work }`, and `RenderSession::report()` aggregates stats, timings and
-  the renderer into one `FrameReport`.
+  the backend kind into one `FrameReport`.
 - The request background overrides the options' background. `render_frame*` composites over
   `RenderOptions::background` made opaque, or white when absent; `render_still` and direct
   requests keep transparency when no background is given.
 - `backend_kind()` reports the backend kind fixed by the backend preference; `requested_backend()`
   reports the preference itself.
 
-## Resources and Content
+## Resources and content
 
 Cache retention, reusable idle storage and per-request admission measure different things.
-Sharing one owner does not merge these allowances or establish an RSS cap.
+Sharing one owner does not merge these allowances or establish an RSS cap. Full resource,
+font, lazy-handle and poison-recovery rules live in [resources and fonts](resources.md); the
+table below summarizes how rendering sessions and device contexts interact with each owner.
 
 | Owner | Retained data | Sharing and accounting boundary |
 | --- | --- | --- |
-| Assets / ResourceStore | Decoded typed assets | Cloned Assets share registrations; with_store shares the store across independent owners. |
-| SceneCache | Pure scene computations | Entry-bounded by default; byte accounting requires declared key/value costs. |
-| RenderCache | Coverage, paragraphs, glyphs, gradients, formulas | RenderOptions.cache can share partitions across sessions and export workers; hits still undergo raster admission. |
-| RenderSession pools | Idle CPU scratch and encoded plane storage | Active frames and captures remain live payload, not idle capacity; dropped output planes can return to their shared pool. |
-| GpuContext | Device state and reusable GPU working resources | Clones share device identity; in-flight leases stay with their submission until successful completion. |
-
-`Assets` loads typed resources lazily with sticky shared results and bounded logical
-retention. `FontLibrary` is explicit; freeze it on resources or text before rendering.
-Missing assets fail production output. Placeholder rendering is an explicit preview policy,
-with typed diagnostics still retained.
-
-`Assets::preload` registers decoded objects in the same entries used by lazy handles. Each
-new `Assets` owner starts with its own 256 MiB/4096-entry `ResourceStore`; clones share it and
-`with_store` opts independent owners into shared accounting and cache identity.
-`ResourceStore::with_limits` configures a positive byte allowance and 1..=4096 entries.
-`snapshot()` isolates future edits, and `remove::<A>(source)` unregisters without invalidating
-handles; retained snapshots and handles keep their payload charged, and direct decoded `Arc`
-pins may outlive owners, handles and their charges. `RequestDiagnostics` plus
-`Handle::get_with` associate resource errors with caller-managed background work. There is no
-ambient frame scope: handles made by the request's `Assets` view inherit its sink, while
-captured external handles must use `get_with(context.diagnostics())` at the drawing boundary.
+| `Assets` / `ResourceStore` | Decoded typed assets (`256 MiB` / `4096` entries default) | Cloned `Assets` share registrations; `with_store` shares accounting across independent owners; retained snapshots and direct `Arc` pins stay live until dropped. |
+| `SceneCache` | Pure scene computations (`256` entries default) | Entry-bounded unless `with_limits` and `cache_with_cost` declare owned heap key/value bytes. |
+| `RenderCache` | `Coverage`, `Paragraph`, `Glyph`, `Gradient`, `Formula`, `Ink`, `Scene` | `RenderOptions.cache` shares partitions across sessions and export workers; cache hits still undergo per-frame raster admission. |
+| `RenderSession` pools | Idle CPU scratch, encoded plane storage and gradient LUTs | Active frames and captures remain live payload; dropped output planes return to their bounded shared pool. |
+| `GpuContext` | Device state, mutable working pools and immutable binding-11 LRU | Clones share device identity; in-flight leases stay with their submission until successful completion. |
 
 ### Caches
 
-`SceneCache` is a separate pure-computation LRU. Its default 256-entry limit is not a byte
-bound. `with_limits` and `cache_with_cost` support cooperative payload accounting, including
-inline key and value sizes; declare both owned heap payloads in the cost. Keys are retained and
-require `Eq + Hash + Send + Sync + 'static`; matching hashes still require equal keys of the
-same type, calling location and value type. Entry metadata, allocator overhead and external
-`Arc` pins are not accounted, so the allowance is not process RSS.
+`RenderOptions.cache` shares seven `RenderCache` partitions across `FrameRenderer`, `RenderSession`
+and export worker clones (defined in [`partition.rs`](../../../crates/motion-core/src/authoring/context/partition.rs)):
 
-`RenderOptions.cache` shares `RenderCache` partitions across `FrameRenderer`, `RenderSession`
-and export worker clones. Defaults per partition are:
-
-| Partition | Entries | Bytes |
+| Partition (`CachePartition`) | Entries | Bytes |
 | --- | --- | --- |
-| Coverage | 2048 | 16 MiB |
-| Paragraphs | 256 | 8 MiB |
-| Glyphs | 2048 | 16 MiB |
-| Gradient LUTs | 64 | 8 MiB |
-| Formulas | 32 | 32 MiB |
+| `Coverage` | `2048` | `16 MiB` |
+| `Paragraph` | `256` | `8 MiB` |
+| `Glyph` | `2048` | `16 MiB` |
+| `Gradient` | `64` | `8 MiB` |
+| `Formula` | `32` | `32 MiB` |
+| `Ink` | `64` | `32 MiB` |
+| `Scene` | `256` | `8 MiB` |
 
-Each evicts individual oldest entries independently, and raster budgets are still checked on
+Each partition evicts oldest entries independently, `RenderCache::fork_scene` isolates per-scene
+`Scene` computations while sharing the remaining six partitions, and raster budgets are still checked on
 hits. Public `RenderPrepare` calls do not implicitly gain a cross-frame cache.
 
 Coverage keys keep complete verb equality, fill rule, tolerance and raster size. Curves and
 multi-contour glyph paths can reuse any integer translation phase when their affine terms lie
-exactly on a bounded 1/65536 grid and their control hull stays four pixels inside the raster.
+exactly on a bounded `1/65536` grid and their control hull stays four pixels inside the raster.
 Cold and cached paths use the same canonical origin. Fractional phases, clipped paths and unsafe
 precision fall back, and cache hits still undergo the request's storage and work admission.
 
-Immutable `Path2D` snapshots keep up to four successful stroke outlines within 1 MiB of logical
+Immutable `Path2D` snapshots keep up to four successful stroke outlines within `1 MiB` of logical
 verb and entry payload per source path, keyed by the full stroke style. Successful path edits
 invalidate this cache through copy-on-write; failed edits preserve it and old clones remain
 reusable. Cached snapshots do not pin derived arc-length or further stroke caches. `Canvas`
 still charges source and output structural limits on hits; this does not freeze custom drawing
 callbacks.
 
-`RenderSession` also keeps up to 64 gradient color tables within 8 MiB of logical payload.
+`RenderSession` also keeps up to `64` gradient color tables within `8 MiB` of logical payload.
 Complete stop and color bit patterns and the interpolation space identify tables; geometry,
 transform, LOD and validity checks stay per request. Tables are shared through `Arc`, and
 active-frame work and byte charges are unchanged. Query `cached_paint_bytes()` separately from
@@ -444,138 +413,29 @@ externally held snapshots, and are not RSS.
 
 ### Content
 
-`Image` decodes PNG, JPEG and WebP; `AnimatedImage` supports GIF, APNG and explicit frame
-sequences. SVG becomes shared `VectorTree` geometry, not a private raster backend. Text uses one
-paragraph shaper and shared glyph artwork. `FormulaCompiler` converts trusted Typst math
-directly into that vector model; Typst also supports single-page markup imported through its
-outlined SVG output.
+Content decoding, vector/text/formula compilation and font indexing belong to `motion-content`
+and `motion-formula` (see [content](content.md) and [resources](resources.md#fonts)). At the
+rendering handoff:
 
-`Node::compile` returns `ValidatedDisplayList` after incremental command validation; ordinary
-preparation reuses its measured requirements without another successful command scan. Command
-preparation within a frame is serial; export workers provide concurrency across frames, not a
-separate parallel coverage-preparation backend. `DisplayList` stays editable for low-level
-callers and must validate after edits: use `into_editable` for explicit mutation and
-`with_background` for a background-only snapshot. Image paints reference immutable
-`ImagePixels` through `ImagePattern`; prepared frames do not require a separate image-resolution
-phase. `RenderContext` carries assets and structural limits. `RenderOptions.gpu_context` is the
-explicit GPU injection point, and `FrameRenderer::submit_to_texture` supports same-device
-preview output without full-frame CPU readback. Memory output and external texture output remain
-separate contracts.
+- `Node::compile` returns `ValidatedDisplayList` after incremental command validation; ordinary
+  preparation reuses its measured requirements without another command scan. Command preparation
+  within a frame is serial; export workers provide concurrency across frames, not a parallel
+  intra-frame coverage backend.
+- `DisplayList` stays editable for low-level callers via `into_editable` (re-validating after
+  edits) and `with_background` for background-only snapshots. Image paints reference immutable
+  `ImagePixels` through `ImagePattern` without a separate image-resolution phase.
+- `RenderContext` carries `Assets` and structural limits; `RenderOptions.gpu_context` is the
+  explicit GPU injection point, and `FrameRenderer::submit_to_texture` supports same-device
+  preview output without full-frame CPU readback. Memory output and external texture output
+  remain separate contracts.
 
-System font indexing does not retain every font file's bytes. Selected text faces are loaded on
-demand; `ExportReport.fonts` lists the actually observed names and source hashes. Each export
-starts a fresh observation sink even when options and cache are reused.
+## GPU rendering
 
-## Video and Audio
+The GPU backend executes over `wgpu` with explicit device ownership, deterministic tile-coverage
+passes, pooled `RGBA32F` working textures, asynchronous submission tracking and strict byte/work
+admission.
 
-Native video encoding overlaps rendering using a bounded two-frame queue. The native encoder
-stays on one dedicated thread, including creation and teardown. No raw-frame temporary spool or
-raw-byte duration cap is used. Only an explicit successful finish commits the encoded temporary
-file; cancellation, dropped encoders, render errors and worker panics join the worker and
-discard it. Custom `Encoder::open` receives normalized options, frame rate and the prepared
-cropped audio mix before any write calls; `Encoder::finish` takes no audio argument.
-
-Project and `export` use `Timeline`, `ExportOptions`, `ProgressSink` and ordered `Encoder`
-operations. Ranges are half-open absolute times aligned to represented frame boundaries.
-Callbacks keep absolute scene time; output timestamps start at zero. Cancellation is cooperative
-and checked before destination commit.
-
-The two-slot native channel bounds queued frame messages, not all live frames or process RSS: the
-producer and encoder can also own a frame. Audio preparation is separate from this video queue.
-
-```mermaid
-flowchart TD
-    Frames["Ordered FrameBuffer values"] --> Queue["Bounded channel: 2 slots"]
-    Queue --> Native["Dedicated native encoder thread"]
-    Mix["Optional prepared 44.1/48/96 kHz stereo mix"] --> PCM["Bounded f32 PCM reads"]
-    PCM --> Native
-    Native --> Temporary["Encoded temporary file"]
-    Temporary --> Finish{"Finish succeeds and not cancelled?"}
-    Finish -->|Yes| Commit["Commit destination"]
-    Finish -->|No| Discard["Discard temporary output; preserve destination"]
-```
-
-### Export scheduling
-
-Export renders the first selected frame and uses its actual startup backend decision and output
-to schedule the remaining frames.
-
-```mermaid
-flowchart TD
-    First["Render first selected frame"] --> Backend{"Selected backend"}
-    Backend -->|CPU| Par["Parallel CPU slots, explicitly CPU"]
-    Backend -->|GPU| Gpu["One render session; measured planning slots and bounded queue"]
-    Par --> Slot{"Frame fits its slot?"}
-    Slot -->|Yes| Ordered["Ordered consumer writes and encodes"]
-    Slot -->|"Byte admission fails"| Join["Join workers; resume serially under original limits"]
-    Gpu --> Ordered
-```
-
-- CPU selection enables parallel rendering of explicit CPU requests and of builds without
-  feature `gpu`. Parallel CPU slots explicitly select CPU, preserving the first session's choice
-  instead of probing a GPU again.
-- Requested workers default to available parallelism, capped at 64; frame count and twice the
-  first frame's logical peak further limit concurrency. Parallel CPU slots divide
-  `max_parallel_bytes` rather than reserving the configured per-frame ceiling. `.workers(1)`
-  keeps serial evaluation.
-- If a later frame needs more than its slot, workers are joined and unwritten frames resume
-  serially under the original limits. Only byte-admission failures trigger this retry; invalid
-  content, work-limit errors and panics remain failures. Scene callbacks must be pure and may be
-  retried.
-- Encoder and progress callbacks stay ordered on the caller through the public `Encoder` and
-  `ProgressSink` protocols; native codec execution runs on its dedicated thread.
-- A GPU selection keeps one render session. Workers build GPU plans and packed-output charges,
-  and the ordered consumer handles admission, submission and encoding, as described in
-  [GPU rendering](#gpu-export-workers).
-- The aggregate allowance excludes encoder storage, shared assets, caches and idle pools and is
-  not an RSS cap. A frame that cannot fit parallel slots can still render serially under its
-  configured per-frame limit.
-
-### Audio
-
-Timeline `AudioClip` sources default to 48 kHz stereo, with 44.1 and 96 kHz AAC delivery
-options. `AudioClip::file(path)` is inherent and lazy: it does not open or decode the file while
-authoring. Execution resolves metadata and decodes bounded requested windows; file errors
-propagate as `Asset` failures. Prepared PCM is bounded by the 128 MiB mix allowance. Selected
-ranges keep original clip fade and envelope clocks. Keep file sources unchanged during
-execution; reads are random-access, not retained immutable PCM.
-
-### Encoders
-
-The native adapter encodes H.264/MP4, H.265/MP4, VP9/WebM (optional alpha) and ProRes 4444/MOV
-through first-party FFmpeg bindings, not an executable. Codec availability is probed before
-opening output. AAC audio is supported in MP4 and MOV; WebM audio is rejected until an
-Opus/Vorbis adapter is available. Video frames are streamed from memory, not staged in
-temporary YUV or RGBA files. Audio is read directly from immutable prepared f32 PCM using
-absolute sample timestamps, without a temporary WAV. The encoded container is written to a
-same-directory temporary file before transactional commit. See
-[audio contracts](../tutorial/10-audio.md) for offline effect and master baking, preparation
-bounds and measurement approximations.
-
-`PngSequenceEncoder` commits a same-directory staging directory atomically, supports odd
-dimensions and full alpha, and rejects audio. Overwrite atomically exchanges real directories
-where the platform supports rename exchange. `GifEncoder` uses the requested output frame grid,
-per-frame palettes and cumulative rational delays. GIF has one-bit transparency, 2..=256 palette
-colors, no audio and at most 100 fps. Unsupported combinations fail before output creation. All
-codecs use `ExportOptions` builders for size, range, backend, `motion_blur` and overwrite, and
-share `ProgressSink`.
-
-`Encoder::capabilities` advertises audio support, maximum size and dimension multiples.
-Dimensions are checked before opening output; unsupported timeline audio is rejected before PCM
-preparation and frame rendering. Custom encoders still own transactional commit, codec-specific
-checks and cleanup; capability defaults are permissive.
-
-Existing output files are protected unless overwrite is explicit. Failures, cancellation and
-panics before commit leave committed output unchanged. An output must not replace an audio
-source. Keep streaming source files unchanged throughout preview and export.
-
-## GPU Rendering
-
-This page states the contracts of the GPU backend: device ownership, how a frame
-travels from the shared Frame IR to pixels, working textures, uploads, scheduling,
-completion and limits.
-
-### Selection and Device Ownership
+### Selection and device ownership
 
 - With feature `gpu` the engine defaults to the GPU backend; without it the CPU
   backend is the default. `BackendPreference::Cpu` explicitly selects the scalar
@@ -612,37 +472,24 @@ comparison checks alpha and linear-light compositing on black and white with
 fixture-specific RMS allowances, so transparent padding cannot dilute errors. Success
 never hides a later device loss. It is a correctness check, not a latency benchmark.
 
-### Frame Pipeline
+### Shared data and output
 
-```mermaid
-flowchart TD
-    IR["FrameIr: device curves, paints, clips, scopes"] --> Prep["GPU preparation: descriptors, uploads, admission"]
-    Prep --> Plan["GPU plan: ordered steps and texture schedule"]
-    Plan -->|rejected| Err["Typed validation error"]
-    Plan --> Submit["Encode and submit"]
-    Submit --> Cov["Coverage passes: count, prefix, scatter, area"]
-    Cov --> Comp["Composition: batched draws or compute passes"]
-    Comp --> Out{"Output kind"}
-    Out -->|Linear readback| Lin["Resolve to linear buffer"]
-    Out -->|Packed RGBA8, YUV420| Pack["Pack from the RGBA32F texture"]
-    Out -->|External texture| Pres["Present to RGBA16F, RGBA8 or BGRA8"]
-    Lin --> Done["Completion: status, scopes, device health"]
-    Pack --> Done
-    Pres --> Done
-```
-
-The diagram shows the main route, not every constant-frame or format fast path. Every
-step before submission is admitted against byte and work limits; see
-[limits and validation](#limits-and-validation).
-
-### Shared Data and Output
-
-`FrameIr` admits f64 device curves, segment upper bounds, immutable resources and
+`FrameIr` admits `f64` device curves, segment upper bounds, immutable resources and
 normalized composition semantics before either backend prepares coverage. CPU and GPU
 preparation share one scene walk through a backend interface that decides only how a
 fill produces coverage, which resources stay live and how particles are observed.
 `FrameIr` charges each distinct pattern image once by identity; a CPU frame borrows
 immutable resources and releases that charge, while a GPU frame keeps it for upload.
+
+```mermaid
+flowchart LR
+    IR["FrameIr"] --> Prep["GPU preparation: descriptors, uploads, admission"]
+    Prep --> Plan["GPU plan: ordered steps and texture schedule"]
+    Plan -->|rejected| Err["Typed ValidationError"]
+    Plan --> Cov["Coverage passes: expand, count, prefix, scatter, area"]
+    Cov --> Comp["Composition: batched draws or compute passes"]
+    Comp --> Out["Target output + health/finite completion"]
+```
 
 GPU preparation owns device edge records separately from the public CPU
 `PreparedCpuFrame`. `FrameRenderer`'s GPU preparation and packed export workers never
@@ -751,14 +598,15 @@ keep CPU f64 rejection and CPU coverage.
 
 #### Particle instances
 
-Instance uploads use checked, renderer-independent Disc, Glow, Sprite and Segment
-records: a 16-byte header, 48 bytes per primitive and optional shared sprite texels.
+Instance uploads use checked, backend-independent `InstanceRecord` (`48` bytes, `12` words) or
+`ExtendedInstanceRecord` (`64` bytes, `16` words) payloads behind a `16`-byte header, plus
+optional shared sprite texels resident on binding `11`.
 Eligible built-in analytic trajectories upload explicit seeds, times and model
-parameters instead, and a GPU pass generates the primitive records consumed by support,
-ordered tiles and composition. Unsupported or imprecise analytic cases use diagnosed CPU
-materialization, not a backend switch. Upload, generated state and metadata storage are
+parameters instead, and a GPU pass generates the `48`-byte primitive records consumed by support,
+ordered `16×16` tiles and composition. Unsupported or imprecise analytic cases use diagnosed CPU
+materialization, not a backend switch. Upload, generated state and `48`-byte support metadata storage are
 charged separately, and fixed-step simulation stays on the CPU. See
-[particles](particles.md) for count, work and replay constraints.
+[particles](particles.md) for record layouts, count/work limits and replay constraints.
 
 #### Diagnostics
 
@@ -773,11 +621,11 @@ preparation-only requests, including partial execution failure; a new request cl
 Each composition dispatch uses a 256-byte `#[repr(C)]` Pod `GpuUniforms`. Frame, bounds,
 operation, value rows, source rectangles and flags start at byte offsets 0, 16, 32, 64,
 192 and 240. The WGSL `Settings` struct has the same layout, and the assertions in
-`crates/motion-render/src/gpu/layout.rs` plus ABI tests check size, offsets and Naga
+[`layout.rs`](../../../crates/motion-render/src/gpu/layout.rs) plus ABI tests check size, offsets and Naga
 validation. Shader assembly generates operation and blend constants from the Rust
 discriminants, so WGSL does not duplicate numeric tables.
 
-### Output Targets
+### Output targets
 
 | Target | Behavior |
 | --- | --- |
@@ -825,7 +673,7 @@ sequenceDiagram
     Ctx-->>App: ok after status, scopes, device health
 ```
 
-### Working Textures and Batches
+### Working textures and batches
 
 All working color images are pooled RGBA32F textures, including isolated layers, masks
 and retained filter inputs. Intermediate images keep a global integer origin and bounds
@@ -923,7 +771,7 @@ batch. Layout metadata stays admitted even when every run is short. This policy 
 experimental: it is not an accepted general optimization, and measurements are kept in
 [the performance history](../../performance-runs.json).
 
-### Stage Observations
+### Stage observations
 
 `RenderSession::enable_timings` records separate host observations for evaluation,
 compilation, coverage preparation, GPU planning, command encoding and submission,
@@ -950,7 +798,7 @@ results publish only after the frame passes its device, scoped-error, finite-val
 output checks. Dropped or failed frames publish none. Studio Stats separates device
 intervals from host wall time and displays invalid or inactive intervals explicitly.
 
-### Limits and Validation
+### Limits and validation
 
 ```mermaid
 flowchart TD
@@ -965,7 +813,9 @@ flowchart TD
 
 - `FrameQueue` reserves each submitted plan's logical peak, not its configured ceiling,
   admits at most three frames and rejects excess aggregate bytes before executing a plan.
-  Packed output uses `OutputPlan::peak_bytes` to include output and readback resources.
+  Packed output uses `OutputPlan::peak_bytes` to include output and readback resources, and
+  `OutputPlan::with_planning_limit` bounds CPU-side plan construction independently of the
+  submission allowance (used by [GPU export workers](export.md#streaming-and-threads)).
   Plans are crate-private; callers plan through `OutputPlan`, `FrameQueue::submit` and
   `Gpu::render_linear`.
 - Memory output and GPU exports use dedicated packed plans. They reserve output
@@ -979,32 +829,9 @@ flowchart TD
 - Raster limits count logical live payloads and conservative work, not physical VRAM or
   process RSS. Local image capacities, metadata, uploads, staging and output are charged
   before submission, and logical peaks are not allocation or RSS savings. Remaining
-  pooling and lower-copy output work is [planned](../plan.md#performance).
+  pooling and lower-copy output work is planned.
 
-#### GPU export workers
-
-```mermaid
-flowchart LR
-    First["First selected frame: prepare and submit normally"] --> Slots["Derive worker slot size and queue peak"]
-    Slots --> Workers["Bounded workers: prepare and build OutputPlan"]
-    Workers --> Consumer["Ordered consumer: admit, submit, complete"]
-    Consumer --> Enc["Encoder"]
-    Workers -->|slot byte admission fails| Drain["Join workers, drain queue"]
-    Drain --> Serial["Resume serially under original limit"]
-```
-
-Preparation and planning maximums plus the packed-plan peak separate CPU worker slots
-from the GPU queue. Planning charges conservatively include device and staging
-reservations. `OutputPlan::with_planning_limit` bounds construction independently of the
-submission allowance, and worker count is neither fixed at two nor derived from the raster
-ceiling. Each completed plan is checked against in-flight bytes, and the oldest output
-completes when the queue needs space. Plans keep the original submission limit; the
-smaller slot limit bounds only CPU preparation and device-independent planning. Only slot
-byte-admission failures trigger the serial retry; invalid content, work-limit errors and
-panics remain failures. Policy, packing, frame order and transactional failure handling do
-not change.
-
-### Verification Scope
+### Verification scope
 
 GPU fixtures compare against the CPU backend for clipping, masks, blending, filters, text,
 image, vector and particle output, external textures and device failure, and check
@@ -1020,5 +847,5 @@ explicit; compilation does not establish adapter availability or cross-platform 
 parity, and none of these checks is an FPS, RSS or cross-device performance result.
 Measurements are in the [benchmark report](../benchmarks.md#current-measurements).
 
-See [GPU rendering](#gpu-rendering), [effects](core.md#layers-and-sampling), [Studio](../studio.md) and
-[reliability](reliability.md) for their specific contracts.
+See [core authoring](core.md#layers-and-sampling), [export and FFmpeg](export.md), [resources](resources.md),
+[particles](particles.md), [Studio](studio.md) and [reliability](reliability.md) for sibling contracts.

@@ -27,7 +27,7 @@ fn main() -> motion::Result {
 }
 ```
 
-Running opens one scene, not a scene catalog. Rust edits require recompilation and there is no parameter editing. A declarative document opened with `studio film.json` is the exception: saving the document, or a file it uses, reloads the scene in place and keeps the playhead (see [Hot reload](../studio.md#hot-reload)).
+Running opens one scene, not a scene catalog. Rust edits require recompilation and there is no parameter editing. A declarative document opened with `studio film.json` is the exception: saving the document, or a file it uses, reloads the scene in place and keeps the playhead (see [Hot reload](../design/studio.md#hot-reload)).
 
 Open the corresponding repository entry directly:
 
@@ -99,5 +99,5 @@ Session settings live in `.motion/studio.json` without automatic replay or expor
 ## Next Steps
 
 Next chapter: [13 Performance and Reliability](13-performance-and-reliability.md).
-Full workflows and limitations: [Studio](../studio.md), [Studio example](../../../examples/studio.rs).
+Full workflows and limitations: [Studio](../design/studio.md), [Studio example](../../../examples/studio.rs).
 Films: [Gallery guide](appendix-gallery.md).

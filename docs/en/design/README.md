@@ -15,18 +15,17 @@ Learn authoring through the [tutorial](../tutorial/README.md); consult
 | [Architecture](architecture.md) | Evaluation pipeline, package ownership, dependency direction and features |
 | [Core authoring](core.md) | Numeric rules, time, animation, snapshots, layout and recording |
 | [Content](content.md) | Assets, images, vectors, text, Typst and audio preparation |
-| [Rendering and export](rendering.md) | Coverage, GPU device ownership, scheduling and completion, output formats, caches, budgets, concurrency and encoding; [Chinese translation](../../zh-CN/design/rendering.md) |
-| [Export and FFmpeg](export.md) | Codec matrix, native encoder boundary, transactional output, cancellation and ordering |
+| [Rendering](rendering.md) | Coverage, CPU/GPU composition, device ownership, working textures, output formats, session caches and frame budgets; [Chinese translation](../../zh-CN/design/rendering.md) |
+| [Export and FFmpeg](export.md) | Codec matrix, parallel/GPU export scheduling, native encoder boundary, transactional output, cancellation and ordering |
 | [Audio](audio.md) | Clips, buses, effects, master chain, analysis, synthesis and offline preparation |
 | [Resources](resources.md) | Asset and font ownership, explicit IO, caches, limits and failure behavior |
 | [Particles](particles.md) | Evaluated-instance protocol, ordered tiling and admission |
 | [Reliability](reliability.md) | Failure, determinism, ownership and transaction guarantees |
 | [Documents](documents.md) | Declarative JSON format, versioning, resource paths, compilation and diagnostics |
+| [Studio](studio.md) | Workbench architecture, preview/playback scheduling, export queue, hot reload and headless entry contracts |
 
-Maintenance commands belong to [development checks](../development.md), measurements
-to [Benchmarks](../benchmarks.md), and remaining work to
-[the development plan](../plan.md) (including its [performance section](../plan.md#performance)).
-The [Studio guide](../studio.md) documents workbench operation and preview behavior.
+Maintenance commands belong to [development checks](../development.md) and measurements
+to [Benchmarks](../benchmarks.md).
 
 ## Glossary
 

@@ -1,71 +1,65 @@
 # Core 核心创作契约
 
-Core 包拥有时间模型、几何图形、场景快照、排版布局以及绘制指令录制协议。它不负责初始化外部字体、渲染硬件设备、媒体编解码器或回放时钟。可运行的创作示例请查阅[教程指南](../tutorial/README.md)。
+`motion-core` 拥有精确时间模型、几何图形、无状态动画、不可变 `Node` 快照、排版布局、结构与光栅逻辑预算、色彩调色/光学效果数据以及后端无关的绘制指令录制协议。它绝不初始化字体引擎、GPU 设备、媒体编解码器、桌面窗口或回放时钟。可选的 `serde` 与 `schema` 特性在纯值与策略类型上暴露 JSON 序列化与 JSON Schema，使 `motion-scene` 直接复用核心定义而无需维护镜像结构体。可运行的创作示例请查阅[教程指南](../tutorial/README.md)。
 
 ## 数值精度与坐标边界
 
-创作层的几何形状、旋转角度、插值进度与缓动参数统一使用 f64 双精度浮点。光栅化阶段在执行 u8 覆盖率量化之前，同样在 f64 精度下计算梯形积分面积。`Color` 存储有限的扩展编码 sRGB f32 通道；着色计算与线性预乘工作像素统一采用 f32 单精度浮点。图像存储与输出格式各自拥有独立的精度契约。系统绝不承诺对所有公开数值参数无条件提供 f64 保证。
-
-逻辑坐标系以左上角为原点，X 轴向右递增，Y 轴向下递增。`Rect` 存储对角顶点，并遵循左闭右开包含判定。退化或无效的几何形状绝不会被悄然隐式修正。旋转角度使用弧度制；角度（degrees）与转数（turns）字面量会自动换算为弧度。根画布统一将设计尺寸等比缩放并居中包含（contain）在输出视口内。描边宽度与滤镜距离跟随该映射变换；曲线展平容差在设备像素空间衡量。
-
-Time（时间轴上的有符号时刻）、Duration（非负时间跨度）与 TimeOffset（有符号时间偏移量）是基于每秒 705,600,000 整数 ticks 的三个独立强类型：`Time - Time` 产生 TimeOffset；`Time ± Duration` 与 `Time ± TimeOffset` 产生新的 Time；而 `Time + Time` 在编译期直接拒绝。Duration 无法构造负值，因此跨度无需进行符号判断；片段移动等确实需要提前时间的场合必须使用 TimeOffset。诸如 `2.seconds()` 等字面量构造的是 Duration；通过 `Duration::after_origin`、`Duration::offset` 与 `Time::since_origin` 进行显式转换。FrameRate 由一对非零整数构成，通过 `fps!(30)`、`FrameRate::new(NonZeroU32, NonZeroU32)` 或返回 Result 的 `FrameRate::try_new` 构建；每个帧边界的换算均独立计算。时间区间测试使用精确的 ticks 比较，而非浮点秒数的累加。秒仅作为动画数学计算的视图形式，绝非可变的回放状态。帧索引、采样点索引与时刻点是明确区分的独立输入，即使它们之间的换算在数值上精确等价。
+- **精度分工。** 创作层几何类型（`Point`、`Vector2`、`Size`、`Rect`、`Transform`、`Perspective`）、旋转角度、插值进度与缓动参数统一使用 `f64`。CPU 面积积分在执行单次 `u8` 覆盖率量化前保留 `f64` 梯形计算。`Color` 存储有限的扩展编码 sRGB `f32` 通道；着色、调色（`Cdl`、`Lut1d`、`Lut3d`）与线性预乘工作像素统一采用 `f32`。图像存储与输出 `PixelFormat` 各自维护独立的精度契约，系统不对所有公开数值参数做笼统的 `f64` 承诺。
+- **坐标系与视口映射。** 逻辑设计坐标系以左上角为原点，`+x` 向右、`+y` 向下。`Rect` 存储对角顶点并遵循左闭右开包含判定（`left <= x < right`、`top <= y < bottom`）；退化或反转的非法几何直接报错，绝不静默归一化修正。旋转角度使用弧度制（`AngleLiteral` 将角度与转数字面量显式换算为弧度）。合成根画布将逻辑设计尺寸等比缩放并居中包含（`contain`）在整数 `PixelSize` 输出视口内；描边宽度与滤镜半径跟随组合变换，而曲线展平容差在设备像素空间衡量。
+- **整数 Tick 算术与帧率。** `Time`（时间轴上的有符号时刻）、`Duration`（非负时长）与 `TimeOffset`（有符号时间偏移）是基于 `TICKS_PER_SECOND = 705_600_000` 整数 ticks 的三个独立强类型（精确整除 `24`、`25`、`30`、`48`、`50`、`60`、`120` 等影视帧率及最高 `192,000` Hz 的常见音频采样率）：
+  - `Time - Time -> TimeOffset`
+  - `Time ± Duration -> Time`、`Time ± TimeOffset -> Time`
+  - `Time + Time` 在编译期直接拒绝，且负值 `Duration` 无法被构造。
+  诸如 `2.seconds()` 等字面量构造 `Duration`；通过 `Duration::after_origin`、`Duration::offset` 与 `Time::since_origin` 显式转换。`FrameRate` 由一对非零整数构成（`fps!(30)`、`30_000/1001` 的 `FrameRate::NTSC`、`FrameRate::new` 或可失败的 `FrameRate::try_new`），每个帧边界通过整数算术独立换算，绝不累加浮点秒数。`f64` 秒数（`SceneContext::seconds`）仅作为动画数学公式的只读视图，绝非可变回放状态。
 
 ## 无状态动画体系
 
-`Signal` 用于在显式的局部时刻 Time 求值并返回数值，在时间维度上无始无终。`FiniteAnimation` 在此基础上扩展出非负的 `duration()` 时长；仅有限动画才提供 `delay`、`then`、`repeat` 与 `ping_pong` 等时间算子，从而杜绝由于图层嵌套而凭空为无限信号捏造结束时刻。`Interval { start, duration }` 是时间区间内被钳制进度与缓动计算的唯一权威定义；`SceneContext::progress_in`、`ease_in` 与 `Tween` 均基于此实现。`Interpolate` 接收 f64 进度并允许显式外推。Oklab 色彩插值可在限制 Alpha 通道的同时外推 RGB。变换矩阵插值针对位移、旋转、缩放与倾斜分别计算，而非对像素数据执行插值。
+`Signal` 在显式的局部 `Time` 上纯函数采样数值，没有固有终点。`FiniteAnimation` 在此基础上扩展出非负的 `duration()`；仅有限动画才提供 `delay`、`then`、`repeat` 与 `ping_pong` 组合算子，从类型层面防止为无限信号捏造结束时间。
 
-关键帧的目标时间为绝对局部时刻；Hold 保持段为相对持续时长。目标抵达点拥有缓动函数。时刻相等或逆序递减属于非法错误，而非自动排序的输入。内置缓动固定锚定在端点；自定义缓动（Custom）会钳制其输入进度，但完整保留用户回调的输出值。弹簧动画（Spring）采用基于 ticks 取整的保守静止包络线（`settle_duration`），而非基于逐帧迭代的状态；它与 Noise 噪声和 Oscillator 振荡器一样，均为纯 `Signal`。路径跟随（Path following）属于有限动画。
-
-组合子使时序计算完全独立于 Seek 跳转顺序与操作系统线程调度。仅限有限动画的操作、非法缩放系数与数值溢出均设有返回 Result 的 `try_*` 校验边界；便利性函数单行委托给它们并在文档的 `# Panics` 章节下记录触发条件。弹簧、振荡器与噪声在 Builder 的 `build()` 中一次性校验，严格限制参数以确保采样过程绝不溢出。经过校验的输入/输出契约绝非任意用户回调的安全沙箱。动画组合与动态输入用法参见[动画教程](../tutorial/03-animation.md)。
+- **时间区间、缓动与插值。** `Interval { start, duration }` 是左闭右开 tick 区间内钳制进度与缓动进度的唯一权威定义，`SceneContext::progress_in`、`SceneContext::ease_in` 与 `Tween` 均基于它实现。`Interpolate` 接收 `f64` 进度并允许显式外推：Oklab 色彩插值可在将 Alpha 钳制于 `0..=1` 的同时外推扩展 RGB，而 `Transform` 插值则分解平移、旋转、缩放与斜切分量（`TransformComponents`），而非对矩阵元素或光栅像素直接线性插值。
+- **关键帧、程序化信号与路径跟随。** `Keyframes` 要求严格递增的局部目标时刻（相等或递减的时间戳直接报错而非自动排序）、相对 `hold` 保持段以及由抵达关键帧持有的 `Easing`。内置缓动严格锚定 `0.0` 与 `1.0` 端点；`Easing::Custom` 钳制输入进度但保留回调自身的超调输出。`Spring` 采用闭式阻尼解析解与按 tick 取整的保守静止包络（`settle_duration`），而非逐帧状态积分；它与 `Noise`、`Oscillator` 一样仅实现 `Signal`。`FollowPath`（输出位置与切向 `PathSample`）、`remap` / `try_remap` 与 `piecewise` / `try_piecewise` 同样无状态组合。
+- **校验边界。** `SpringBuilder`、`OscillatorBuilder` 与 `NoiseBuilder` 在 `build()` 时一次性完成参数范围校验，确保后续任意采样绝不溢出。便捷组合方法委托给返回 `Result` 的 `try_*` 变体并在 `# Panics` 中声明触发条件；动态或外部输入应调用 `try_*`。参数校验契约不等同于任意用户闭包的安全沙箱。详见[动画教程](../tutorial/03-animation.md)。
 
 ## Scene 场景与 Node 快照
 
-规范的 Scene 接收一个 `SceneContext` 并返回一个 `Node`。`IntoSceneOutput` 适配器允许直接返回 Drawable、异构元组或受支持的 Result 返回值。执行失败会完备保留其原始分类、故障源以及请求的帧号，包括处于隐藏分支或被 Memoize 缓存的子树。执行失败的场景绝不会被视作空白画面而静默成功。
+规范的 `Scene` 接收 `&SceneContext` 并返回不可变 `Node`（`IntoSceneOutput` 同时支持直接返回 `Drawable` 叶子、异构元组或 `Result<_, ValidationError>`）。校验或回调失败会完整保留 `ValidationErrorKind`、结构路径 `path`、字段 `field` 以及可选的帧号 `frame`（包括隐藏分支与缓存子树内的错误），失败的场景绝不会被静默当成空白画面放行。
 
-SceneContext 提供局部/全局时间、帧率、片段时长、设计画布包围盒、资源快照、带键随机数与有界计算缓存。时间平移、嵌套嵌入与子帧采样均建立明确的局部时钟边界。随机数键与缓存键必须完备覆盖所有决定计算结果的输入；命中缓存绝不能成为产生副作用或记录可变帧历史的理由。
-
-Node 是不可变的写时复制快照。共享的叶子节点与被缓存的子树可避免重复重建静态内容，同时不影响动态回调的自由求值。同级兄弟节点按稳定的 Z-index 顺序绘制，Z-index 相同时严格保持插入顺序。Z-index 属于局部层级，并非全局深度排序，也不会更改布局测量顺序。时间轴上位于上方轨道的片段自然合成在下方轨道之上。
-
-空间变换与合成修饰器归属 Node 所有；内容 Builder 仅描述几何、样式与资源。默认轴心（Pivot）为测量得到的几何中心。Placement 用于定位该轴心，而 Translation 则直接偏移现有的局部坐标。Group Opacity（组不透明度）在子树完整绘制后统一应用一次，而非独立应用到各个重叠的子节点上。
+- **求值上下文。** `SceneContext` 提供有符号局部/全局 `Time`、片段 `Duration`、`FrameRate`、逻辑设计 `Size`、带键 `Random` 流、创作者侧 `SceneCache` 以及一份共享的 `Arc<Evaluation>`（内含 `RenderQuality`、`Assets`、`FontEnvironment`、`RequestDiagnostics` 与 `RenderCache`）。时间平移、嵌套时间轴与快门子帧采样均派生显式的子上下文。随机流键与 `SceneCache` 键必须完整覆盖决定计算结果的全部输入；命中缓存不能作为产生副作用或维护跨帧可变历史的理由。
+- **写时复制 `Node` 树与修饰器。** `Node` 克隆时共享不可变 `Arc` 子树，仅在修改路径上发生写时复制。同级兄弟节点按稳定的 `z_index` 顺序绘制，相同 `z_index` 严格保持插入顺序（`z_index` 仅作用于当前父组内部，既不是全局 3D 深度排序，也不改变布局测量顺序）。空间与合成修饰器集中在 `NodeModifiers` 上：默认轴心 `Pivot` 为测量包围盒中心；定位操作（`at`、`align_to`、`next_to`）放置该轴心，而 `translate` 直接偏移局部坐标；组级 `opacity` 在子树完整绘制后统一合成一次，而非分别乘到各个重叠子节点上；`Elevation`（`0..=1024` 局部单位）则自动展开为接触阴影、方向主阴影与环境漫射阴影三层 `ShadowLayer`。
 
 ## 布局引擎与时间轴
 
-Row（行）和 Column（列）容器按插入顺序依次测量经过变换的子节点。文本排版使用其真实的基准线（Baseline）；非文本内容拥有明确的基线回退机制。相对定位与测量计算使用与最终编译完全一致的字体环境与结构化配额。延迟计算的 next-to 相对对齐绝不会基于另一份不同的字体快照执行测量。
-
-Camera 摄像机向其包含的普通子树施加逆视口变换矩阵。世界坐标与屏幕坐标的互转排除上级祖先变换，并要求映射矩阵必须为有限且可逆。固定在屏幕上的 HUD UI 内容应置于摄像机之外。骨骼层级变换直接挂载普通的 Node 节点画面，不引入独立的 3D 渲染引擎。
-
-Timeline 由 `TimelineBuilder` 一次性构建，此后绝对不可变。它拥有设计尺寸、有理数帧率、轨道集合、Soundtrack 原声带（包含音频事件、总线与主混音链）以及最终时长。片段边界以帧 ticks 为单位独立对齐，若不对齐会在 Diagnostics 诊断中产生警告。
-转场（Transition）仅准入两个相邻片段，不接受任意三层重叠；转场两端的片段保持各自的局部时钟并共享全局资源。Scene 仅负责画面（渲染、时长、校验）；Timeline 明确不是 Scene。`TrackBuilder::nest` 将子 Timeline 作为纯画面片段放入轨道中，并将其音频追加至父级 Soundtrack。嵌套的子 Timeline 会在等比居中映射前先裁剪其自身的视口；子片段帧率不会隐式重定时父级的时钟。
-
-常规 Builder 收集有界错误并在 `build()` 时统一抛出。显式的 `try_*` 方法支持遇到错误即刻失败退出。`Project` 负责注册延迟工厂与类型化参数；获取列表（list）或打印帮助绝不构建 Timeline 也绝不探测外部资源。视口预览、静帧导出与视频导出均消费完全相同的已创作 Timeline。
+- **确定性布局。** `Row` 与 `Column` 按插入顺序依次测量变换后的子节点，并严格使用与最终编译一致的 `FontEnvironment` 与 `ValidationLimits`（`SceneContext::measure` 在局部时间上传递共享 `Evaluation`）。文本节点对齐其真实的塑形排版基线，非文本节点使用显式几何回退基线；延迟计算的 `next_to`/对齐绝不会基于另一份不一致的字体快照执行测量。
+- **摄像机、景深平面与骨骼。** `Camera`（`camera` / `try_camera`）向普通组子树施加经校验的有限可逆逆视图 `Transform`（`center`、正数 `zoom`、顺时针弧度 `rotation`）；`world_to_screen` 与 `screen_to_world` 在不含祖先变换的前提下互转视口坐标，固定 HUD 覆盖层应置于摄像机节点之外。`DepthOfField::capture` 将最多 `256` 个 `DepthPlane` 按远近排序，依据薄透镜弥散圆公式施加模糊（`focus_distance` 处精确为零，受 `max_radius` 封顶）及可选针孔视差缩放。`Skeleton` 在 2D 空间内根据 `Pose` 求解正向运动学并输出挂载于普通 `Node` 的 `BoneTransform`。
+- **不可变 `Timeline` 与 `Project`。** `TimelineBuilder::build` 一次性冻结设计 `Size`、有理数 `FrameRate`、有序 `Track`、`Soundtrack`（`AudioClip` 事件、`AudioBus` 总线、`Master` 母带链）与总 `Duration`（将构建期收集的有界错误汇总为 `ErrorReport`）。片段边界独立对齐至帧 ticks，非整帧边界在 `Diagnostics` 中记录 `TimelineWarning`。`Transition` 仅衔接相邻两个片段（禁止三层重叠），两端场景各自保持独立的局部时钟。上方轨道合成在下方轨道之上。`Timeline` 不是 `Scene`：`TrackBuilder::nest` 嵌入子 `Timeline`（最多 `16` 层嵌套）时先裁剪并等比居中映射子视口，同时将其音频并入父级 `Soundtrack`，且不会隐式重定时父级时钟。在 facade 层，`Project` 注册惰性时间轴工厂与强类型 CLI 参数，`--list` 与 `--help` 绝不触发时间轴构建或外部资源探测。
 
 ## 几何系统与指令录制
 
-`Shape` 描述纯几何轮廓；附加样式使其变为可绘制的 `Drawable`。`Path2D` 保存贝塞尔曲线、填充规则、路径修建（Trim）、虚线与描边轮廓。写时复制的路径编辑操作保留旧快照；后续追加的合法编辑绝不能擦除早期已记录的创作错误。源路径与生成的描边轮廓在处理前均须通过结构化配额准入。
-`Path2D::boolean` 在像素执行之前计算路径布尔运算（并集、交集、差集、异或）。它将两个操作数展平，在所有相交处切分边，保留两侧在新组合区域中内外属性发生翻转的有效边，并将其串联为纯线段构成的轮廓。底层渲染后端仅接收最终计算出的单条路径，因此 CPU 与 GPU 后端在布尔结果上绝对一致。边数量、存储大小与二次方相交检测开销必须先通过 `Budget` 预算准入。
+```mermaid
+flowchart LR
+    Geom["Shape / Path2D / Perspective / Path2D::boolean"] --> Styled["Styled / Drawable / Paint"]
+    Styled -->|"DrawContext + Canvas"| Compile["Node::compile（ValidationLimits）"]
+    Deferred["DeferredContent::resolve"] --> Compile
+    Compile --> VDL["ValidatedDisplayList（不可变 Arc）"]
+```
 
-`MeshGradient`（网格渐变）是由带颜色的控制点构成的网格晶格。它通过 `Budget` 光栅化为线性预乘的 `MeshImage`，随后作为标准的 `ImagePattern` 交由渲染器消费，因此 CPU 路径、GPU 计划与 WGSL 着色器无需添加任何网格专有代码，绝无产生分歧的可能。网格单元为双线性 Patch，颜色在 Oklab 空间中基于 smoothstep 权重平滑混合，Alpha 线性混合。`Paint::Mesh(MeshPaint)` 携带网格定义及其烘焙尺寸与细分参数；准备阶段在被绘制的包围盒上通过 `MeshGradient::pattern` 将其烘焙，其表现与显式的 ImagePattern 完全一致。该烘焙过程在每次准备阶段于 CPU 侧执行。
-
-`Perspective`（透视投影）通过针孔摄像机模型将平面图层绕指定轴心在 3D 空间中旋转并投影至 2D 平面。它投影的是路径几何本身而非光栅像素：线段保持为线段，曲线转换为经过细分的三次贝塞尔曲线，穿过摄像机成像平面的点会直接报错而非截断。`faces_camera` 返回图层当前是否正对摄像机，供调用方决定是否剔除背面。由于后端仅接收投影后的平坦路径，因此无需编写新的着色器即可保证 CPU 与 GPU 渲染输出完全一致。
-
-选定的曲线、描边与圆弧算法基于 kurbo 实现。共享的覆盖率计算始终为 Motion 专有实现，而非完整的第三方光栅化库。弧长查找、曲线切分与几何 Morph 变形均在像素光栅化之前完成；几何拓扑、子路径配对与绕数规则作为显式输入参数提供。这些依赖是数值环境的一部分，不代表跨平台逐比特一致。
-
-Drawable 消费传入的 `DrawContext` 与受校验的 `Canvas`。`DeferredContent` 是一种特殊的节点类型：它仅在实际执行绘制时才展开为常规的 Node。指令录制阶段会严格保留首个发生的错误，即使用户自定义回调将其吞掉。编译阶段测量布局、组合变换矩阵并验证所有分支（包括不可见图层）。编译最终输出 `ValidatedDisplayList`，一份不可变的已校验指令快照。可编辑的 `DisplayList` 在修改后必须重新通过校验；结构合法性并不证明外部资源存在、硬件支持或光栅化预算充足。
+- **路径、布尔运算与平面 2.5D 透视。** `Shape` 描述纯几何，附加填充或描边样式后生成 `Drawable`。`Path2D` 是写时复制的 `f64` 贝塞尔路径（`MAX_PATH_VERBS = 16_384`、`MAX_SVG_PATH_BYTES = 1_048_576`），缓存精确曲线极值包围盒与高斯积分弧长表，在 `trim` 与虚线切分时保留原始贝塞尔曲线段；后续合法编辑绝不会擦除早期已记录的构建错误。`Path2D::boolean`（`Union`、`Intersection`、`Difference`、`Xor`）先通过 `Budget` 准入边数上限（`MAX_BOOLEAN_EDGES`）、暂存字节与二次方求交工作量，在 `f64` 空间展平并在交点处切分重连为闭合线段轮廓，使 CPU 后端与 GPU 后端消费同一条结果路径。`Perspective` 将 `z = 0` 平面绕轴心按 `z`、`y`、`x` 顺序旋转并经针孔相机（`distance > 0`）投影：线段保持为线段，曲线细分为最多 `MAX_PERSPECTIVE_CURVE_PIECES`（`64`）段三次曲线；距相机平面不足 `1e-3 * distance` 或位于相机后方的点直接报错而非静默裁剪，`faces_camera` 返回朝向供调用方按需剔除背面。选定曲线、描边与圆弧计算使用 `kurbo`，而共享覆盖率光栅化完全由 Motion 自主实现。
+- **画刷与解析程序化描述。** `Paint` 涵盖纯色 `Color`、线性/径向/扫描渐变、不可变 `ImagePattern`（`ImagePixels` + `Sampling`），以及两类解析程序化画刷：`Paint::Mesh(MeshPaint)`（单轴最多 `MAX_MESH_POINTS_PER_AXIS = 64` 控制点）与 `Paint::Atmosphere(AtmospherePaint)`。两类解析画刷均保留紧凑数学描述，由 CPU 后端与 GPU WGSL 着色器各自独立求值，而不在准备阶段逐帧向 CPU 位图烘焙；显式调用的 `MeshGradient::rasterize`、`MeshGradient::pattern` 与 `MeshPaint::pattern`（细分上限 `MAX_MESH_SUBDIVISIONS = 32`）则保留按需烘焙位图的能力。详见[程序化画刷](content.md#程序化画刷-procedural-paints)。
+- **录制与结构配额。** `Drawable::draw` 在 `DrawContext` 下向受检 `Canvas` 写入指令（即使自定义回调忽略了 `Result`，`Canvas` 也会保留首个错误），`DeferredContent` 则在编译期展开为普通 `Node`。`Node::compile` 对所有分支（包括不可见图层与未激活的转场端点）执行 `ValidationLimits` 校验（默认上限 `100,000` 节点、`64` 层深度；自定义上限最高 `1,000,000` 节点、`128` 层深度，按结构出现次数而非唯一 `Arc` 计数），冻结并返回 `Arc` 共享的 `ValidatedDisplayList`。可编辑的底层 `DisplayList` 修改后必须重新校验；像素与内存配额则由下游 `Budget` / `RasterLimits`（默认 `RasterLimits::authoring()` 为 `16,777,216` 像素与 `256 MiB` 活跃字节；`RasterLimits::sandbox()` 额外施加 `200,000,000` 工作量上限）在准备与光栅化阶段强制执行。
 
 ## 图层合成与采样
 
-Filter 滤镜是作用于共享图元之上的有序数据描述，而非各个渲染后端私有的任意像素回调。子级效果必须先于父级效果完成。绘制完成的源图像经过滤镜处理、遮罩/裁剪后，再以指定的不透明度与混合模式进行合成。保存源图像的操作必须显式声明其输入。布局包围盒与为滤镜边缘光晕所扩展的设备捕获包围盒截然不同。
-
-覆盖率裁剪（Coverage clip）将独立光栅化得到的覆盖率直接相乘。几何裁剪（Geometric clip）在量化前执行多边形求交；在单个 Node 上附加新的几何裁剪会直接替换上一条，而嵌套层级之间的几何裁剪则执行相交计算。内容遮罩（Content mask）支持 Alpha 通道或 Rec.709 线性预乘亮度。`LinearRgb` 为默认的图层混合空间；sRGB 空间下的合成属于显式的格式转换边界。
-
-Node 仅代表某一瞬间的静态快照，无法作为 Scene 重新求值。运动模糊（Motion blur）在可重现的子帧时刻多次调用场景构建闭包，并将线性预乘的各次捕获结果求平均。空画面样本保留其均摊权重。故意保持清晰的 HUD 覆盖层应置于被模糊采样的子树之外。Draft 草稿模式下的单帧近似绝不代表最终导出的 Final 真实画面。
+- **有序滤镜、调色与光学效果。** `Filter` 是封闭的数据枚举（`Blur`、`DropShadow`、`Glow`、多尺度金字塔 `Bloom`、`Cdl`、`Lut`、`Optics`、`ColorAdjust` 与 `Custom(Vec<FilterOperation>)`），而非各后端私有的任意像素回调。子级效果始终先于父级完成：源子树绘制完成后依次经过滤镜、裁剪或遮罩，最后以组级 `opacity` 与 `BlendMode` 合成。在 `Filter::Custom` 中，`CompositeWithSource` 始终引用该滤镜的原始输入，而非前一条原语的中间输出。`Optics` 封装有界空间光学效果（`LensFlare` 眩光鬼影、径向畸变/色散 `Lens`、`cos^4` 暗角 `LensVignette`、支持 `Disc` 或 `3..=16` 叶片 `Polygon` 光圈的 Vogel 螺旋 `Bokeh`、`RadialBlur`、水平 `Anamorphic` 变形拉丝，以及基于 `HeightFrom::Luma` 或 `Alpha` 的 Sobel/Lambert/Blinn-Phong `Relight` 重打光）。滤镜绝不改变布局或轴心包围盒；准备阶段单独推导保守的设备空间捕获光晕。
+- **裁剪、遮罩与混合空间。** 覆盖率裁剪将独立量化的覆盖率相乘；几何裁剪（`RectClip`、`ShapeClip`）在量化前执行多边形解析求交——同一 `Node` 上重复设置几何裁剪会替换前值，而父子嵌套则取交集。内容遮罩支持按 Alpha（`MaskMode::Alpha`）或 Rec.709 线性预乘亮度（`MaskMode::Luminance`）加权。`BlendSpace::LinearRgb` 为默认图层混合空间；`BlendSpace::Srgb` 构成显式的传递函数转换边界。
+- **时间快门采样。** 单个 `Node` 只是瞬时快照，无法在时间维度重新采样。全帧或子树 `MotionBlur`（`shutter_angle` 位于 `0..=360` 度，`1..=64` 次采样）与 `ShutterSampling`（`ShutterCurve::Box`、`Triangle` 或 `Cosine` 曝光权重、可选分层抖动种子 `jitter_seed` 以及基于端点位移估计 `8..=64` 样本数的 `adaptive` 自适应采样）会在精确整数 tick 偏移处重复调用场景构建闭包并累加线性预乘结果，空画面样本保留其归一化权重，且拒绝嵌套快门捕获。`RenderQuality::Draft` 将快门退化为单次采样并放宽滤镜与展平近似；正式导出始终使用 `RenderQuality::Final`。
 
 ## 源码实现对应
 
-- 时间模型：[Time](../../../crates/motion-core/src/time.rs)
-- 动画系统：[Animation](../../../crates/motion-core/src/animation.rs)（涵盖 `Signal`、`FiniteAnimation`、`Interval`）
-- 创作基础设施：[Authoring](../../../crates/motion-core/src/authoring.rs)
-- 矢量路径：[Paths](../../../crates/motion-core/src/path2d.rs)
-- 绘制体系：[Drawing](../../../crates/motion-core/src/drawing.rs)
-- 渲染与输出契约：[渲染设计](rendering.md)
-- 验证与失败处理：[系统可靠性](reliability.md)
+- 时间与帧率：[time.rs](../../../crates/motion-core/src/time.rs)（`Time`、`Duration`、`TimeOffset`、`FrameRate`）
+- 动画系统：[animation.rs](../../../crates/motion-core/src/animation.rs)（`Signal`、`FiniteAnimation`、`Interval`、`Keyframes`、`Spring`）
+- 创作、布局与时间轴：[authoring.rs](../../../crates/motion-core/src/authoring.rs)（`Scene`、`Node`、`Row`、`Column`、`Camera`、`DepthOfField`、`Timeline`）
+- 几何、透视与矢量路径：[geometry.rs](../../../crates/motion-core/src/geometry.rs)、[path2d.rs](../../../crates/motion-core/src/path2d.rs)（`Path2D`、`MorphPath`、`PathBooleanOp`）
+- 绘制、网格与氛围画刷：[drawing.rs](../../../crates/motion-core/src/drawing.rs)（`Canvas`、`Paint`、`MeshGradient`、`AtmospherePaint`）
+- 滤镜、光学与调色：[filter.rs](../../../crates/motion-core/src/filter.rs)、[optics.rs](../../../crates/motion-core/src/optics.rs)、[grading.rs](../../../crates/motion-core/src/grading.rs)
+- 校验、预算与实例协议：[validation.rs](../../../crates/motion-core/src/validation.rs)、[budget.rs](../../../crates/motion-core/src/budget.rs)、[instances.rs](../../../crates/motion-core/src/instances.rs)
+- 关联设计契约：[渲染与导出](rendering.md) · [系统可靠性](reliability.md)

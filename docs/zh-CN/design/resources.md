@@ -1,101 +1,113 @@
-# 资源与字体管理契约
+# 资源与字体
 
-本页面记录了资源字节的所有权归属、生命周期边界以及缓存复用条件。除非创作者明确在代码中请求，否则系统绝不会从磁盘读取任何文件、扫描操作系统字体或在显卡设备上解码数据。上手指南请参考[内容系统教程](../tutorial/06-content.md)；特定内容的设计决策见[内容系统契约](content.md)，准入限制见[可靠性规范](reliability.md)与[渲染设计](rendering.md#资源与内容)。
+本页记录资源字节的所有权归属、生命周期边界以及缓存复用条件。除非创作者在代码中显式请求，系统绝不会从磁盘读取文件、扫描宿主系统字体或在显卡设备上解码数据。使用引导见[内容系统教程](../tutorial/06-content.md)；内容层契约见[内容系统](content.md)，准入限制见[系统可靠性](reliability.md)，会话交接规则见[渲染与导出](rendering.md#资源与内容)。
 
 ## 所有权模型
 
+```mermaid
+flowchart TB
+    Options["Project / RenderOptions"] --> Assets["Assets<br/>LoadContext (root, FontEnvironment, namespace)"]
+    Options --> RenderCache["RenderCache<br/>7 个独立有界的 SceneCache 分区"]
+    Options --> Limits["RasterLimits -> 单帧 Budget<br/>pixels / live_bytes / work"]
+    Assets --> Store["ResourceStore<br/>逻辑字节计费 + Weak 弱引用索引"]
+    Assets --> Handle["Handle‹A›<br/>Unloaded -> Loading -> Ready / Failed"]
+    Assets --> Fonts["FontLibrary<br/>写时复制 snapshot_id"]
+    Gpu["GpuContext"] --> Residency["ResidentStore (binding 11)<br/>LRU 不可变 Mip 与粒子图集驻留"]
+```
+
 | 对象 | 拥有内容 | 生命周期 |
 | --- | --- | --- |
-| `Assets` | 带类型的条目表、`LoadContext`（绝对根路径、可选 `FontEnvironment`、命名空间） | 克隆实例共享已注册项；调用 `snapshot()` 会冻结已解析条目并隔离后续修改 |
-| `ResourceStore` | 逻辑字节计数器与弱引用条目索引 | 由克隆实例共享；新创建的 `Assets` 拥有自己的存储，除非使用 `with_store` |
-| `Handle<A>` | 单个共享条目：数据源、粘性结果、计费字节数 | 持有至最后一个 handle 或所有者 drop；drop 时从存储中释放计费 |
-| 解码后的 `Arc<A>` | 不可变的解码值 | 生命周期可超过所有者与句柄；此后不再计入存储统计 |
-| `FontLibrary` | 字体数据库、塑形引擎、字形/布局缓存、使用情况日志 | 克隆的字体库共享同一份冻结快照 |
-| `RenderCache` | 中间计算缓存：拥有 7 个独立有界的分区 | 由克隆实例、渲染会话与导出工作线程共享，直至显式 `clear` |
-| `GpuContext` | 显卡设备端不可变图像/Mipmap/Atlas 缓冲区与已编码对比数据 | 由上下文克隆实例共享；有界 LRU 驻留独立于单帧租约 |
-| `SceneCache` | 纯创作期计算的 LRU 缓存，以调用点位置、类型与键为索引 | 每个缓存独立拥有；条目遵循 LRU 逐出规则 |
+| `Assets` | 强类型条目表与 `LoadContext`（绝对根路径、可选 `FontEnvironment`、快照命名空间） | 克隆共享已注册项；`snapshot()` 冻结已解析条目并隔离后续修改 |
+| `ResourceStore` | 逻辑字节计数器与 `Weak` 弱引用条目索引 | 克隆共享；新创建的 `Assets` 默认拥有独立存储，除非通过 `with_store` 显式接入已有存储 |
+| `Handle<A>` | 单个共享条目：`Source`、粘性解码结果、计费字节数 | 存活至最后一个句柄或所有者被 Drop；Drop 时释放存储计费 |
+| 解码后的 `Arc<A>` | 不可变解码值 | 生命周期可超越所有所有者与句柄；句柄全部释放后不再计入存储配额 |
+| `FontLibrary` | 字体数据库、塑形引擎、字形/布局缓存、字体使用日志 | 写时复制；克隆实例共享同一份冻结的 `snapshot_id` |
+| `RenderCache` | 可重算计算缓存：`7` 个独立有界的 LRU 分区 | 由克隆实例、渲染会话与导出工作线程共享，直至显式调用 `clear` |
+| `GpuContext` | 设备端不可变图像/Mipmap/图集缓冲区与主机侧比对字 | 由上下文克隆实例共享；有界 LRU 驻留独立于在途帧租约 |
+| `SceneCache` | 纯创作期计算的 LRU 缓存，按调用点、类型与键索引 | 每个缓存实例独立持有；条目按 LRU 逐出且不破坏外部已持有的 `Arc` 值 |
 
-`ResourceStore` 仅持有 `Weak` 弱引用：它本身绝不保持解码数据常驻内存。`Assets::remove` 会注销一个数据源但不会使现存句柄失效，保留的快照或句柄在其 drop 之前持续计费。对应源码实现为 [`asset.rs`](../../../crates/motion-core/src/asset.rs)、[`handle.rs`](../../../crates/motion-core/src/asset/handle.rs) 与 [`store.rs`](../../../crates/motion-core/src/asset/store.rs)。
+`ResourceStore` 仅持有 `Weak` 弱引用，自身绝不强引用驻留解码载荷。`Assets::remove` 注销数据源但不会使已发出的句柄失效，保留的快照或句柄在其被 Drop 之前持续占用配额（[`asset.rs`](../../../crates/motion-core/src/asset.rs)、[`handle.rs`](../../../crates/motion-core/src/asset/handle.rs)、[`store.rs`](../../../crates/motion-core/src/asset/store.rs)）。
 
 ## 显式 I/O 策略
 
-- `Assets::new(root)` 捕获绝对根路径（`std::path::absolute`），不执行任何磁盘读取或解码。`Assets::default()` 根路径为空。
-- 在空根路径下使用相对路径 `Source::File` 会直接返回失败句柄（提示“require an explicit project root”）；空所有者绝不拥有隐式访问当前工作目录的权限。包含 `..` 的相对路径会被直接拒绝；绝对路径原样接受。
-- `Assets::load`、`AssetsExt::image`、`Image::open` 与 `Svg::open` 仅保留数据源路径。首次调用 `Handle::get`（或编译实际绘制该资源的场景时）才会真正读取并解码。
-- 文件读取要求文件必须为不超过 64 MiB 的常规文件（`Asset::decode` 仅接收原始字节切片，绝不接收文件路径）。`Source::Bytes` 的键必须为 1..=1024 字节且不含控制字符；字节内容本身参与缓存标识计算，因此用不同内容复用相同名称绝不会错误返回陈旧资产。
-- `FontLibrary::new()` 初始为空，绝不触碰文件系统。仅当显式调用 `load_system_fonts` 与 `load_system_family` 时系统字体才可用；它们先索引元数据并在首次使用时加载字体文件。追求确定性的项目应调用 `load_file`、`load_dir` 或 `load_data` 固化字体字节。
-- SVG 拒绝非 `data:` 协议的外部 `href` 链接、脚本、`foreignObject` 与动画元素；SVG 文本排版需要非空的 `FontLibrary`。
-- `FormulaCompiler::new` 与 `TypstCompiler::new` 仅使用内嵌字体，不执行系统字体探测，遇到 import 导入、外部文件与外部包时直接报错。
+- **显式项目根目录：** `Assets::new(root)` 仅捕获绝对根路径（`std::path::absolute`），不执行任何读取或解码。`Assets::default()` 的根路径为空：在空根路径下解析相对 `Source::File` 会直接得到失败句柄（`"require an explicit project root"`），空所有者绝不授予隐式读取当前工作目录的权限。包含 `..` 的相对路径直接拒绝；显式传入的绝对路径按原样接受。
+- **惰性注册：** `Assets::load`、`AssetsExt::image`、`Image::open` 与 `Svg::open` 仅保存 `Source` 与选项；首次调用 `Handle::get`（或编译绘制该资源的场景节点）时才真正读取并解码。
+- **有界编码输入：** 文件读取要求目标为不超过 `64 MiB` 的常规文件，`Asset::decode` 仅接收 `&[u8]` 与 `&LoadContext`，绝不接收文件路径。`Source::Bytes` 的键长须为 `1..=1,024` UTF-8 字节且不含控制字符；原始字节切片直接参与相等性与缓存身份判定，因此同名键绑定不同字节内容绝不会误命中旧资产。
+- **零隐式系统字体探测：** `FontLibrary::new()` 初始为空且不触碰文件系统。宿主字体仅在显式调用 `load_system_fonts` 或 `load_system_family`（`1..=1,024` UTF-8 字节）时可用——先行索引元数据，首次实际命中时再读取对应字体文件。追求跨机器确定性的工程应通过 `load_file`、`load_dir` 或 `load_data` 固化精确字体字节。
+- **封闭的 SVG 与 Typst 沙箱：** SVG 解析拒绝 DTD、非 `data:` 外部 `href` 引用、脚本、`foreignObject` 与动画元素，且包含 `<text>` 节点时要求非空 `FontLibrary`。`FormulaCompiler::new` 与 `TypstCompiler::new` 仅使用内嵌字体，零系统字体探测，并拒绝外部导入、外部文件与外部包。
 
 ## 字体库管理
 
-`FontLibrary` 遵循写时复制语义：任何修改操作（`load_*`、`default_family`）均会产生新的 `snapshot_id`，并重置文字塑形引擎、排版缓存与使用日志。克隆实例共享上一份快照。`load_data` 对每个字体库最多准入 4096 个字体字面（Face）与 256 MiB 源字节，且操作具备原子性：损坏的负载不会产生任何部分修改。`load_dir` 对条目进行确定性排序，不追踪符号链接目录，最多遍历 4096 个条目。`load_file` 接受最大 256 MiB 的常规文件，而延迟加载的 `FontFace` 资产（`AssetsExt::font`）受限于 `MAX_FONT_FACE_BYTES`（32 MiB）。系统字体元数据索引上限为 65,536 个 Face。首个加载成功的字体自动成为默认的 sans-serif、serif 与 monospace 字体家族。
+`FontLibrary` 采用写时复制语义：每一次修改（`load_*`、`default_family`）都会铸造全新的 `snapshot_id`，并重置塑形引擎、段落布局缓存、字形缓存与使用日志，而既有克隆实例继续共享上一份不可变快照。
 
-Core 核心包绝不初始化字体引擎。它仅传递一个不透明的 `FontEnvironment`（`Arc<dyn Any + Send + Sync>` 附带 `snapshot_id`）；仅有 `motion-content` 可以将其向下转型。`Assets::with_fonts` 会派生出拥有空条目表的新视图，确保此前解析的 SVG 不会被错误地复用于另一套字体环境中。通过 `Text::fonts` 显式绑定的 `Text` 会覆盖 `DrawContext` 中的环境；文本排版必须具备其中之一。参见 [`font.rs`](../../../crates/motion-content/src/font.rs)。
+- **原子注册与上限约束：** `load_data` 对单个字体库原子准入最多 `4,096` 个字面（Face）与累计 `256 MiB` 源字节——损坏或空载荷不会留下任何半成品状态。`load_file` 接受不超过 `256 MiB` 的常规文件，而惰性 `FontFace` 资产句柄（`AssetsExt::font`）单文件上限为 `MAX_FONT_FACE_BYTES`（`32 MiB`）。`load_dir` 按排序路径最多遍历 `4,096` 个目录项（不追踪符号链接目录），原子加载其中的 `.ttf`、`.otf`、`.ttc` 与 `.otc` 文件。系统字体元数据索引（`load_system_fonts` / `load_system_family`）上限为 `65,536` 个字面。首个成功注册的字面会自动设为默认的 sans-serif、serif 与 monospace 字体家族别名。
+- **不透明核心桥接：** `motion-core` 从不链接字体引擎，仅传递不透明的 `FontEnvironment`（`Arc<dyn Any + Send + Sync>` 加 `snapshot_id`），唯有 `motion-content` 可将其向下转型（[`font.rs`](../../../crates/motion-content/src/font.rs)）。`Assets::with_fonts` 会派生出带空条目表的新 `Assets` 视图，防止在不同字体快照间误复用已解析的 SVG。通过 `Text::fonts` 显式绑定的 `Text` 节点优先覆盖 `DrawContext` 中的环境字体；文本塑形要求至少具备其一。
 
 ## 缓存身份识别规则
 
-| 缓存类型 | 缓存键（Key）包含的要素 |
+| 缓存层级 | 缓存键（Key）组成要素 |
 | --- | --- |
-| `Assets` 资产条目 | 资产类型、绝对根路径、字体 `snapshot_id`、快照命名空间、`Source`（含完整字节） |
-| 段落排版布局 | 文本内容、排版样式、排版宽度，加上字体 `snapshot_id` |
-| 字形矢量轮廓 | 字体 `snapshot_id`、Face ID、字重 Weight、Glyph ID |
-| 数学公式 | 源码、字号、字体家族、填充画刷、调用方 `revision`、`FORMULA_BACKEND_VERSION`、编译器 `environment` |
-| `SceneCache` | 调用点位置源码信息、键类型、哈希后的键全等性校验 |
-| GPU 不可变资源 | 编码后的 Mipmap/Atlas 元数据及每个纹素精确的 `f32` 内存比特；哈希匹配后要求逐字节完全相等 |
+| `Assets` 条目 | 资产 `TypeId`、规范化根路径、字体 `snapshot_id`、快照命名空间、`Source`（含完整 `Bytes` 载荷） |
+| 段落布局（`Paragraph`） | 文本片段、段落/局部样式、折行宽度、字体 `snapshot_id` |
+| 字形轮廓（`Glyph`） | 字体 `snapshot_id`、Face ID、`FontWeight`、Glyph ID |
+| 渐变查找表（`Gradient`） | 色标序列、插值色彩空间、延展模式 |
+| 覆盖率（`Coverage`） | 几何路径/形状、设备空间变换、光栅公差 |
+| 水墨预览图集（`Ink`） | 笔刷/水墨材质参数、几何轨迹、设备像素密度 |
+| 数学公式（`Formula` / `FormulaCompiler`） | Typst 数学源码、字号、字体家族、填充画刷、调用方 `revision`、`FORMULA_BACKEND_VERSION`、编译器 `environment` |
+| 声明式文档（`declarative::CompileCache`） | 规范化文档路径、`(len, modified)` 元数据戳、解析后的参数覆盖集 |
+| `SceneCache`（`Scene`） | 调用点源码位置、键 `TypeId`、`Hash` + 完整 `Eq` 相等性 |
+| GPU 不可变资源（`ResidentStore`） | `WeakPatternImage` 生产者身份快速通道；否则计算 64 位 FNV-1a 哈希并对全部 Mip/图集字执行逐位 `f32::to_bits()` 全等校验 |
 
-任何可能改变解码或排版结果的因素都必须纳入缓存键中。纯场景计算值应在创作键中包含资源版本修订号。`SceneCache` 构建闭包可能会被执行多次（并发未命中、缓存逐出、`clear`、禁用缓存等），因此闭包必须保持为纯函数。共享同一个 `ResourceStore` 绝不会让拥有不同根路径、不同数据源或不同字体快照的所有者错误复用彼此的条目。
-
-GPU 显存驻留不包含逐次绘制的变换矩阵、覆盖率或实例记录。完全相同的不可变数据字可在不同帧以及不同解码源之间跨帧复用，无需绑定特定资产指针。针对完全相同哈希的资源最多保留 4 个；后续冲突会直接绕过驻留，而非错误混淆内容或引发无界的逐字节比对。命中缓存、缓存逐出、清空缓存与禁用驻留机制绝不改变资源语义或渲染像素。
+- **零跨上下文串扰：** 凡会影响解码或排版结果的因素一律纳入缓存键。即便多个 `Assets` 所有者共享同一个 `ResourceStore`，只要根路径、命名空间或字体 `snapshot_id` 不同，也绝不会互相复用条目。`SceneCache` 构建闭包在缓存锁外部运行，且可能因并发未命中、LRU 逐出、`clear` 或零容量配置而多次求值，因此必须保持纯函数语义。
+- **GPU 驻留身份快速通道与碰撞封顶：** 单次绘制的变换矩阵、覆盖率与实例头不包含在 GPU 驻留键中，使常驻 Mip 链与粒子精灵图集（binding `11`）可跨帧直接复用。若某张 `PatternImage` 与某个驻留条目的 `WeakPatternImage` 指向同一份共享像素源，则直接按身份命中，无需物化 Mip 字、计算哈希或逐纹素比对；其余或首次出现的资源则计算哈希并执行逐位 `f32` 全等校验，命中后挂载 `WeakPatternImage` 供后续帧走快速通道。同哈希桶最多保留 `4` 个条目（`MAX_HASH_MATCHES`）；超出的哈希碰撞直接绕过驻留（计入 `bypasses`），绝不混淆像素或触发无界比对。缓存命中、未命中、逐出或禁用驻留生成的像素完全一致。
 
 ## 预算配额与内存计量
 
-所有字节限制均为**逻辑有效负载**估算，而非系统进程的物理 RSS 内存：内存分配器元数据、解析器暂存空间以及外部 `Arc` 强引用均被排除在外。
+所有字节配额均追踪**逻辑有效载荷**估算值，而非操作系统进程的物理 RSS：内存分配器开销、解析器临时缓冲、显卡驱动内部分配以及外部持有的 `Arc` 引用均不包含在内。
 
-| 作用范围 | 默认配额 | 说明与约束 |
+| 作用范围 | 默认配额 | 契约说明 |
 | --- | --- | --- |
-| 编码后资产文件输入 | 64 MiB | 在文件元数据、原始字节及读取完毕后分别校验 |
-| `ResourceStore` 存储 | 256 MiB, 4096 条目 | `with_limits(ResourceLimits { max_bytes, max_entries })` 要求正字节数与 1..=4096 条目；独立于中间计算缓存的 `CacheLimits`；至少计入编码长度 |
-| 静态图像解码 | 单边最大 16384 px, 16,777,216 像素 | 仅限静态 PNG/JPEG/WebP；解码后存储为带 Mipmap 的线性预乘 RGBA16F |
-| SVG 源码文件 | 8 MiB, XML 深度 64, 100,000 节点 | 严禁 DTD 实体扩展 |
-| `RenderCache` 各分区 | 覆盖率 2048/16 MiB, 段落 256/8 MiB, 字形 2048/16 MiB, 渐变 64/8 MiB, 公式 32/32 MiB, 墨迹 64/32 MiB, 场景 256/8 MiB | `RenderCache::with_limits` 一键应用统一定额；`fork_partition` 可隔离单个分区 |
-| GPU 不可变显存驻留 | 64 条目, 64 MiB | 涵盖编码后的主机端比对数据、所有者/条目记录以及设备端有效负载；`GpuContext::set_residency_limits` 接受 `CacheLimits`，条目最多 4096；设置为 0 彻底禁用驻留 |
-| `SceneCache::new` | 仅限制条目数 | 字节计量需要 `with_limits` 配合 `cache_with_cost`；超额数据直接返回而不被保留 |
-| `FormulaCompiler` | 32 条目, 64 MiB | 单个源码最长 8192 字节 |
-| `RasterLimits::authoring()` | 16,777,216 px, 256 MiB 活跃字节, 无工作量上限 | `sandbox()` 模式下追加 2 亿工作量单位上限 |
+| 编码资产输入 | `64 MiB` | 在文件元数据、原始切片长度及有界 `Read::take` 三处同时校验 |
+| `ResourceStore` | `256 MiB`、`4,096` 条目 | `with_limits(ResourceLimits)` 要求 `max_bytes > 0` 且条目在 `1..=4,096` 内；按 `max(retained_bytes, encoded_len)` 计费 |
+| 静态 / 动态图像解码 | 单边 `16,384 px`、`16,777,216` 像素 | 静态 PNG/JPEG/WebP 存为带 Mipmap 的线性预乘 `RGBA16F`；动态 GIF/APNG/WebP 上限 `4,096` 帧与 `256 MiB` 解码载荷 |
+| SVG 源码 | `8 MiB`、XML 深度 `64`、`100,000` 节点 | 拒绝 DTD、脚本与外部 URL |
+| `RenderCache`（`7` 个分区） | `Coverage`：`2,048` / `16 MiB`<br/>`Paragraph`：`256` / `8 MiB`<br/>`Glyph`：`2,048` / `16 MiB`<br/>`Gradient`：`64` / `8 MiB`<br/>`Formula`：`32` / `32 MiB`<br/>`Ink`：`64` / `32 MiB`<br/>`Scene`：`256` / `8 MiB` | `RenderCache::with_limits` 对全部 `7` 个分区统一施加 `CacheLimits`；`fork_partition` 隔离指定 `CachePartition` 并共享其余 `6` 个分区 |
+| GPU 不可变显存驻留 | `64` 条目、`64 MiB` | 同时计入主机比对字、设备载荷与条目管理开销（`2 × payload + overhead`）；`GpuContext::set_residency_limits` 限制 `max_entries <= 4,096`，设为 `0` 禁用驻留 |
+| `SceneCache::new` | 仅限制条目数 | 字节计量需调用 `SceneCache::with_limits` 配合 `cache_with_cost`；单条超限值直接返回而不驻留 |
+| `FormulaCompiler` | `32` 条目、`64 MiB` | 单个 Typst 数学源码 `<= 8,192 B` |
+| `declarative::CompileCache` | `16` 条目、`64 MiB` | 超额按 LRU 逐出，且任一受监视依赖文件变更时自动失效重编译 |
+| `RasterLimits::authoring()` | `16,777,216` 像素、`256 MiB` 活跃字节、无工作量上限 | `RasterLimits::sandbox()` 额外施加 `max_work = 200,000,000` 工作量上限 |
 
-`Budget` 负责统计单次操作准入的光栅像素、活跃字节（含峰值记录）以及计算工作量；调用方在使用完毕后释放瞬态字节，但已消耗的工作量绝不退还。这些限制约束的是准备阶段，而非 Rust 原生回调或 Typst 内部求值耗时。详见 [`budget.rs`](../../../crates/motion-core/src/budget.rs) 与 [`cache.rs`](../../../crates/motion-core/src/authoring/context/cache.rs)。
-
-每一帧即使在显卡缓存已经完全预热的情况下，依然会保守地为不可变资源预留一次未命中的预算（包括上传暂存和有界哈希查找/碰撞检测工作量）。因此，当前显存缓存的占用情况绝不会改变新帧的准入判定。缓存的驻留配额独立于 `RasterLimits`：如果单帧预算充足，即使某个超大资源无法被驻留缓存保留，它依然能够正常被渲染。正在排队等待绘制的帧会在可变工作缓冲区池之外锁定其常驻资源，因此发生缓存逐出或调小配额绝不会错误回收仍在使用的显存。这些在途锁定的资源由其归属帧的预算支撑，而非计入空闲驻留配额。
-
-`GpuContext::residency_stats` 实时报告累计命中数、未命中数、上传设备字节数、逐出数与绕过数，同时展示当前保留的条目数与逻辑字节数。清空资源会释放缓存所有权，但绝不重置累计计数器，也不会使在途任务失效。显存驻留是绑定在单个 GPU 上下文上的，绝非全局共享缓存，更不是探测或解码外部资源的隐式通道。
+- **单帧 `Budget` 与驻留配额正交分离：** [`Budget`](../../../crates/motion-core/src/budget.rs) 统计单次操作的准入光栅像素、瞬态 `live_bytes`（含 `peak_bytes`）与单调递增的 `work`；调用方释放瞬态字节，而已消耗的 `work` 绝不退还。即便 `GpuContext` 显存缓存已预热，每一帧 GPU 规划仍按最坏情况下的未命中上传字节与哈希查找/比对工作量保守准入，确保缓存冷热绝不改变单帧准入判定。反之，只要单帧 `Budget` 放行，超出 `ResidentStore` 驻留上限的大资源依然能正常渲染，仅跳过缓存保留。
+- **在途 GPU 租约与观测统计：** 排队中的 GPU 帧在可变工作缓冲池之外直接持有 `wgpu::Buffer` 克隆句柄，因此 LRU 逐出、`clear_resources` 或调低驻留配额绝不会提前回收在途提交仍在引用的显存缓冲。`GpuContext::residency_stats` 返回 `GpuResidencyStats`（`hits`、`misses`、`upload_bytes`、`evictions`、`bypasses`、当前 `entries` 与 `retained_bytes`）；清空缓存释放保留条目，但不重置累计观测计数（[`residency.rs`](../../../crates/motion-render/src/gpu/residency.rs)）。
 
 ## 延迟加载与即时加载
 
-| 延迟模式 Deferred (仅保留路径/选项) | 即时模式 Eager (立即执行耗时工作) |
+| 延迟模式 Deferred（保留 `Source` / 选项） | 即时模式 Eager（立即求值） |
 | --- | --- |
-| `Assets::load`, `Image::open`, `Svg::open`, `Svg::new(handle)` | `ImageAsset::from_bytes`, `SvgAsset::from_bytes_with_fonts`, `Assets::preload` |
-| `Formula::typst` | `Formula::asset`, `FormulaCompiler::compile` |
-| 编译阶段对 `Text` 执行排版塑形 | `Text::layout(&fonts)` 用于提前测量自检 |
+| `Assets::load`、`Image::open`、`Svg::open`、`Svg::new(handle)` | `ImageAsset::from_bytes`、`SvgAsset::from_bytes_with_fonts`、`Assets::preload` |
+| `Formula::typst` | `Formula::asset`、`FormulaCompiler::compile` |
+| 帧编译阶段对 `Text` 执行排版塑形 | `Text::layout(&fonts)` 提前测量排版布局 |
 
-`Handle::state()` 在不触发加载的前提下返回当前的 `AssetState`；其状态迁移为：`Unloaded` → `Loading` → `Ready(Arc<A>)` 或 `Failed(Arc<Error>)`。失败状态具有粘性（Sticky），系统绝不隐式重试。多个并发调用方会汇合至同一个解码任务中；在解码器中触发的 panic 会直接固化为粘性资产错误。递归加载解析或嵌套超过 64 层直接报错。未显式指定编译器的 `Formula` 默认使用进程级内嵌字体的 `FormulaCompiler`，因此它不会感知通过 `Assets::with_fonts` 注册的外部字体；若需使用自定义数学字体，请调用 `FormulaCompiler::with_fonts`。
+`Handle::state()` 在不触发 I/O 的前提下查看当前 `AssetState`（`Unloaded` → `Loading` → `Ready(Arc<A>)` 或 `Failed(Arc<Error>)`）。失败状态具有粘性（Sticky），绝不隐式重试；并发调用方自动汇合到同一次解码，解码器若发生 panic 会转化为粘性资产错误。递归资产解析或嵌套深度超过 `64` 层会确定性报错。未显式传入编译器的 `Formula::typst` 使用进程级内嵌字体 `FormulaCompiler`，不会读取 `Assets::with_fonts` 注册的字体；自定义数学字体须通过 `FormulaCompiler::with_fonts` 注入。
 
 ## 线程模型与锁中毒处理
 
-`Asset`、`FontEnvironment`、`Assets`、`Handle` 与 `RenderCache` 均实现 `Send + Sync`（或要求其包装的内容满足），可在多个工作线程间自由传递共享。不同对象的锁中毒处理策略如下：
+`Asset`、`FontEnvironment`、`Assets`、`Handle`、`RenderCache` 与 `GpuContext` 均满足 `Send + Sync`，支持多线程 CPU/GPU 工作槽位零拷贝共享：
 
-- `Assets`、`ResourceStore`、`RequestDiagnostics`、`FontUsage` 以及字体使用日志在遇到锁中毒时**自动恢复**并继续执行纯数据操作。
-- `SceneCache` 视锁中毒为严重 Bug 并直接触发 panic。
-- 字体排版引擎遭遇锁中毒时返回 `ValidationError`（“Font engine is poisoned”）；公式编译器遭遇锁中毒时返回 `FormulaCompileError`；音频声明锁遭遇锁中毒时返回校验错误。
-- 重计算操作一律在持有缓存锁的临界区之外执行，因此某个耗时较长的构建闭包绝不会阻塞其他不相干条目的并发访问。
+- **锁中毒恢复：** `Assets`、`ResourceStore`、`RequestDiagnostics`、`FontUsage`、`ResidentStore` 以及 `FontLibrary` 使用日志在互斥锁中毒时通过 `lock_unpoisoned` 恢复并继续维护有效状态。
+- **类型化中毒错误与内部不变量：** `cosmic_text` 塑形引擎锁中毒返回 `ValidationError`（`"Font engine is poisoned"`）；公式缓存锁中毒返回 `FormulaCompileError`；音频片段锁中毒返回 `ValidationError`；`SceneCache` 将锁中毒视为内部不变量破坏并直接 panic。
+- **锁外重计算：** 资产解码、文本塑形、公式编译与 `SceneCache` 构建闭包一律在缓存互斥锁外部运行，慢速未命中绝不阻塞无关条目的并发查询。
 
 ## 故障处理与诊断
 
-资源加载失败会明确携带资产类型与数据源名称。`Handle::get_with` 将错误写入显式的 `RequestDiagnostics`（基于 `Arc` 身份自动去重），该结构支持在线程间安全传递；不存在隐式的单帧全局上下文。常规生产级渲染默认将首个发生的资源诊断作为带帧号标记的错误直接返回，除非在配置中显式开启 `RenderOptions::allow_missing_assets(true)`（Studio 预览模式默认开启此项）；此时 `Image` 会绘制洋红色占位图并记录诊断信息。`RenderOptions::mark_invalid_geometry(true)` 针对几何异常提供了对称策略：校验失败的叶子几何图形会在其局部原点绘制一个洋红色方块，而非直接导致整帧渲染崩溃。Studio 预览模式默认启用该特性；静帧导出、视频导出与 CLI 命令行始终保持严格报错的默认行为。`ExportReport.fonts` 依序列出实际被使用的字体，并附带非密码学源哈希值，其展示顺序独立于后台工作线程的完成次序。
+- **显式 `RequestDiagnostics`：** 加载错误同时携带 `Asset::KIND` 与数据源标识。`Handle::get_with` 将失败写入显式传递的 `RequestDiagnostics` 收集器（资源加载错误 `loads` 与场景创作错误 `scene_errors` 分离存储，均按 `Arc::ptr_eq` 指针身份去重），不存在隐式帧级线程局部状态。
+- **严格生产导出与容错 Studio 预览：** 静帧渲染、CLI 命令与生产级导出默认遇到首个资源或几何异常即返回带帧号（`Error::at_frame`）的错误。Studio 预览则显式启用 `RenderOptions::allow_missing_assets(true)`（缺失 `Image` 绘制洋红色占位图并保留诊断记录）与 `RenderOptions::mark_invalid_geometry(true)`（非法叶子几何在其局部原点绘制洋红色方块而非中断整帧）。
+- **确定性字体溯源：** `RenderOptions::font_usage`（`FontUsage`）记录塑形期间实际选中的每个字面及其非密码学源字节哈希，`ExportReport::fonts` 以独立于并发线程完成次序的确定性顺序返回去重列表。
 
-## 在 Studio 与 CLI 中配置资源
+## 在 Studio 与 CLI 中注入资源
 
-Studio 与 CLI 两大入口均消费注册在 `Project` 上的 `RenderOptions`（`Project::render_options`），其中携带了 `resources: Option<Assets>`、`RenderCache` 以及 `RasterLimits`。CLI 命令行本身不提供指定资产根路径或字体文件的通用 flag（参见 [`cli.rs`](../../../crates/motion/src/project/cli.rs) 中的 `--help`），而 `studio` 启动时直接基于这些选项构建其 Composition，因此项目应当直接在 Rust 代码中配置根路径与字体：
+Studio 与 CLI 统一消费 `Project::render_options` 上注册的 `RenderOptions`（内含 `resources: Option<Assets>`、`RenderCache` 与 `RasterLimits`）。由于 CLI 不设全局 `--assets-root` 或 `--font` 命令行参数（[`cli.rs`](../../../crates/motion/src/project/cli.rs)），工程应在代码中显式绑定资产根目录与字体快照：
 
 ```rust,no_run
 use motion::prelude::*;
@@ -109,11 +121,12 @@ fn main() -> motion::Result {
 }
 ```
 
-基于这些选项克隆出的各个 Composition 共享同一个 `Assets` 所有者（及其背后的资源存储）；不同渲染会话则独立维护各自的输出目标与局部缓存。
+由该配置克隆出的各个 `Composition` 共享同一个 `Assets` 所有者与底层 `ResourceStore`，而各 `RenderSession` 独立持有各自的渲染目标。
 
-## 相关参考
+## 归属源码 (Owning sources)
 
-- [内容系统教程](../tutorial/06-content.md)
-- [内容系统契约](content.md)、[系统可靠性](reliability.md)、[渲染与导出设计](rendering.md#资源与内容)
-- 源码实现：[`asset.rs`](../../../crates/motion-core/src/asset.rs)、[`context.rs`](../../../crates/motion-core/src/authoring/context.rs)、[`partition.rs`](../../../crates/motion-core/src/authoring/context/partition.rs)
-- 字体与公式：[`font.rs`](../../../crates/motion-content/src/font.rs)、[`options.rs`](../../../crates/motion-render/src/options.rs)、[`compiler.rs`](../../../crates/motion-formula/src/compiler.rs)
+- [`crates/motion-core/src/asset.rs`](../../../crates/motion-core/src/asset.rs)、[`asset/handle.rs`](../../../crates/motion-core/src/asset/handle.rs)、[`asset/store.rs`](../../../crates/motion-core/src/asset/store.rs)、[`asset/environment.rs`](../../../crates/motion-core/src/asset/environment.rs) — `Asset`、`Assets`、`Source`、`Handle`、`ResourceStore`、`RequestDiagnostics` 与 `FontEnvironment`。
+- [`crates/motion-core/src/budget.rs`](../../../crates/motion-core/src/budget.rs)、[`authoring/context/cache.rs`](../../../crates/motion-core/src/authoring/context/cache.rs)、[`authoring/context/partition.rs`](../../../crates/motion-core/src/authoring/context/partition.rs) — `RasterLimits`、`Budget`、`SceneCache`、`CacheLimits`、`RenderCache` 与 `7` 个 `CachePartition` 缓存域。
+- [`crates/motion-content/src/font.rs`](../../../crates/motion-content/src/font.rs)、[`asset.rs`](../../../crates/motion-content/src/asset.rs) — `FontLibrary`、写时复制 `snapshot_id`、`ImageAsset`、`AnimatedImage` 与 `SvgAsset`。
+- [`crates/motion-render/src/gpu/residency.rs`](../../../crates/motion-render/src/gpu/residency.rs)、[`options.rs`](../../../crates/motion-render/src/options.rs) — `GpuContext` 不可变 `ResidentStore`、`GpuResidencyStats`、`RenderOptions` 与 `FontUsage`。
+- [`crates/motion-formula/src/compiler.rs`](../../../crates/motion-formula/src/compiler.rs)、[`crates/motion-scene/src/cache.rs`](../../../crates/motion-scene/src/cache.rs) — `FormulaCompiler` 与声明式文档 `CompileCache`。

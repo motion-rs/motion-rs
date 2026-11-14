@@ -69,10 +69,10 @@ FFmpeg 导出依赖本地系统安装带 libx264 与 AAC 支持的 C 开发头�
 ## 文档指南
 
 - [教程指南](docs/zh-CN/tutorial/README.md)：第一帧静帧、动画制作、场景时间轴、内容、音频与导出
-- [文档导航索引](docs/README.md)：学习、设计与维护指南中英文索引
+- [文档导航索引](docs/zh-CN/README.md)：学习、设计与维护指南目录
 - [设计契约](docs/zh-CN/design/README.md)：系统架构、渲染、导出、音频、资源、GPU 所有权与可靠性
 - [命令行 CLI](docs/zh-CN/cli.md)：`list`、`still`、`export`、`studio` 与 `schema` 子命令与参数手册
-- [Studio 用户指南](docs/zh-CN/studio.md)：视口预览、实时回放与导出工作台
+- [Studio 用户指南](docs/zh-CN/design/studio.md)：视口预览、实时回放与导出工作台
 - [Gallery 展厅](gallery/README.md)：完整的示范短片作品
 
 精确的公开 API 契约与可运行示例位于 [Rustdoc 源码](crates/motion/src/lib.rs) 中。
@@ -85,4 +85,4 @@ FFmpeg 导出依赖本地系统安装带 libx264 与 AAC 支持的 C 开发头�
 运行文档测试套件：`cargo test --workspace --all-features --doc`。
 依赖特定字体、物理 GPU 或 FFmpeg 测试固件的用例需单独指定执行；被忽略的测试不能证明在未经测试的物理机上具备运行时支持。
 
-更多细节参见[开发与维护检查](docs/zh-CN/development.md)（了解特性/固件验证流程）、[系统可靠性](docs/zh-CN/design/reliability.md)（了解验收边界）以及[开发规划](docs/zh-CN/plan.md)（了解后续工程规划与待办事项）。
+更多细节参见[开发与维护检查](docs/zh-CN/development.md)（了解特性/固件验证流程）以及[系统可靠性](docs/zh-CN/design/reliability.md)（了解验收边界）。
