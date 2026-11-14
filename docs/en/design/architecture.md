@@ -277,7 +277,7 @@ flowchart BT
 | [`motion-rs`](../../../crates/motion/src/lib.rs) | Public facade (`motion`), five import namespaces, `Project` CLI grammar and `VisualCheckPolicy` | Feature-selected workspace crates |
 | [`motion-ffmpeg`](../../../crates/motion-ffmpeg/src/lib.rs) | Native `libav*` bindings (`bindgen`) and thread-confined codec, muxer and audio contexts | None |
 | [`motion-cli`](../../../crates/motion-cli/src/main.rs) | Thin `motion` binary delegating declarative JSON workflows to `motion::Project` | `motion-rs` |
-| [`motion-bench`](../../../crates/motion-bench/Cargo.toml) | Unpublished Criterion, stage, breadth and film benchmarks plus provenance `build.rs` | `motion-rs`, `motion-gallery`; optional `motion-core` |
+| [`motion-bench`](../../../crates/motion-bench/Cargo.toml) | Unpublished Criterion, stage, performance and film benchmarks plus provenance `build.rs` | `motion-rs`, `motion-gallery`; optional `motion-core` |
 | [`motion-gallery`](../../../gallery/Cargo.toml) | Unpublished showcase films and golden/JSON demos | `motion-rs`; optional `motion-ffmpeg` |
 
 ### Facade namespaces

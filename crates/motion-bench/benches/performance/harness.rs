@@ -1,11 +1,15 @@
-//! Breadth benchmark harness: render contexts and compositions, raster limits, environment
-//! flags and size lists, resource loading, checksums and replay verification.
+//! Performance benchmark harness: compositions and raster limits, environment parsing,
+//! resource loading, checksums, reference images and replay verification.
 
-use super::scenes::artwork;
-use super::{MAX_NODES, invalid, support};
+use super::{MAX_NODES, invalid, replay, scene, support};
 use motion::prelude::*;
 use motion::render::BackendKind;
-use motion::render::{Composition, RasterLimits, RenderContext, ValidationLimits};
+use motion::render::{
+    Composition, FrameBuffer, FrameRenderer, RasterLimits, RenderContext, ValidationLimits,
+};
+
+/// Frame indices rendered, replayed after an unrelated seek and stored as reference images.
+pub(super) const REFERENCE_FRAMES: [u32; 4] = [0, 45, 17, 89];
 
 pub(super) fn checksum(pixels: &[u32]) -> u64 {
     pixels.iter().fold(0, |state, pixel| {
@@ -13,7 +17,7 @@ pub(super) fn checksum(pixels: &[u32]) -> u64 {
     })
 }
 
-pub(super) fn ppm(snapshot: &motion::render::FrameBuffer) -> Vec<u8> {
+pub(super) fn ppm(snapshot: &FrameBuffer) -> Vec<u8> {
     let size = snapshot.size();
     let mut bytes = format!("P6\n{} {}\n255\n", size.width, size.height).into_bytes();
     snapshot
@@ -59,6 +63,37 @@ pub(super) fn composition(
     )
 }
 
+/// Returns the composition a case is measured with; `display-transform` adds tone mapping
+/// and seeded grain to the shared composition.
+pub(super) fn case_composition(base: &Composition, case: &str) -> Composition {
+    if case != "display-transform" {
+        return base.clone();
+    }
+    base.clone().configure(|options| {
+        options.display(DisplayTransform {
+            tone_map: ToneMap::AgX,
+            grain: Some(FilmGrain {
+                seed: 9,
+                amount: 0.01,
+                size: 1.4,
+                luma_response: 1.0,
+                chroma: 0.1,
+            }),
+            ..DisplayTransform::default()
+        })
+    })
+}
+
+pub(super) fn parse_count(value: &str, maximum: usize) -> motion::Result<usize> {
+    let count = value
+        .parse::<usize>()
+        .map_err(|_| invalid("Expected a positive benchmark count"))?;
+    if !(1..=maximum).contains(&count) {
+        return Err(invalid(format!("Benchmark count must be in 1..={maximum}")));
+    }
+    Ok(count)
+}
+
 pub(super) fn parse_sizes(value: &str) -> motion::Result<Vec<PixelSize>> {
     value
         .split(',')
@@ -96,27 +131,31 @@ pub(super) fn load_resources() -> motion::Result<(Assets, String)> {
     Ok((Assets::new(".")?.with_fonts(fonts), fingerprint))
 }
 
-/// Replays two frames and a seek to prove determinism before anything is timed.
-pub(super) fn verify_replay(
-    session: &mut motion::render::FrameRenderer,
+/// Renders every reference frame, replays it after an unrelated seek and requires the replay
+/// to match under the backend's acceptance rule. Returns the first render of each frame.
+pub(super) fn replay_frames(
+    session: &mut FrameRenderer,
+    renderer: BackendKind,
     name: &str,
     case: &str,
-) -> motion::Result {
-    for index in [0, 45, 89] {
-        let first = session.render_frame(index, |context| artwork(case, context))?;
-        session.render_frame((index + 31) % 90, |context| artwork(case, context))?;
-        let replay = session.render_frame(index, |context| artwork(case, context))?;
-        if first != replay {
-            return Err(invalid(format!("Seek replay differs: {name}/{index}")));
+    particle_count: usize,
+) -> motion::Result<Vec<(u32, FrameBuffer)>> {
+    let mut frames = Vec::new();
+    for index in REFERENCE_FRAMES {
+        let first = session.render_frame(index, |context| scene(case, context, particle_count))?;
+        session.render_frame((index + 31) % 90, |context| {
+            scene(case, context, particle_count)
+        })?;
+        let replay = session.render_frame(index, |context| scene(case, context, particle_count))?;
+        replay::verify(&first, &replay, renderer)
+            .map_err(|error| invalid(format!("Seek replay differs: {name}/{index}: {error}")))?;
+        if index == 45 && case != "empty" {
+            let pixels = first.packed_rgb();
+            if pixels.iter().all(|pixel| *pixel == pixels[0]) {
+                return Err(invalid(format!("Case renders a flat image: {name}")));
+            }
         }
-        if first
-            .packed_rgb()
-            .iter()
-            .all(|pixel| *pixel == first.packed_rgb()[0])
-            && index == 45
-        {
-            return Err(invalid(format!("Case renders a flat image: {name}")));
-        }
+        frames.push((index, first));
     }
-    Ok(())
+    Ok(frames)
 }

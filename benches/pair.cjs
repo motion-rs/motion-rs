@@ -46,6 +46,10 @@ function main() {
       .map((value) => (value === "Gpu" ? "gpu" : "cpu"))
       .join(","),
     MOTION_BENCH_COLD: configuration.cold ? "1" : "0",
+    MOTION_BENCH_SCALING: configuration.scaling ? "1" : "0",
+    MOTION_BENCH_SIZES: (configuration.sizes || [])
+      .map((size) => size.join("x"))
+      .join(",") || "1280x720,1920x1080",
     MOTION_BENCH_STAGES: configuration.stages ? "1" : "0",
     MOTION_BENCH_MICRO: configuration.micro ? "1" : "0",
     MOTION_BENCH_VIDEO: configuration.video ? "1" : "0",
@@ -57,13 +61,7 @@ function main() {
   if (configuration.sequence_frames)
     env.MOTION_BENCH_SEQUENCE_FRAMES = String(configuration.sequence_frames);
   else delete env.MOTION_BENCH_SEQUENCE_FRAMES;
-  const result = {
-    label: options.get("--label"),
-    change: "REQUIRED: describe the focused change",
-    verification: "REQUIRED: supply exact verification commands/results",
-    notes: "REQUIRED: document control and negative outcomes",
-    pairs: [],
-  };
+  const result = { label: options.get("--label"), pairs: [] };
   for (let index = 0; index < count; index++) {
     const pair = { order: index % 2 ? "candidate-first" : "control-first" };
     for (const role of index % 2
@@ -110,7 +108,10 @@ function main() {
     );
   }
   console.log(
-    "Verified paired run descriptor: " + path.join(directory, "step.json"),
+    "Verified paired run descriptor: " +
+    path.join(directory, "step.json") +
+    "\nCompare with: node benches/report.cjs --pairs " +
+    path.relative(ROOT, directory),
   );
 }
 

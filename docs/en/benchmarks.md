@@ -1,28 +1,23 @@
 # Benchmarks
 
-`motion-bench` owns four targets. They answer different questions, so their results are never
+`motion-bench` owns three targets. They answer different questions, so their results are never
 merged into one number.
 
-| Target | Question | Harness | Frozen baseline |
-| --- | --- | --- | --- |
-| `performance` | Did a focused optimization change the 29 reference cohorts at 640x360 or 1080p? | custom | yes, see [Current Measurements](#current-measurements) |
-| `films` | How long do real Gallery films take to render? | custom | no |
-| `criterion_frames` | Quick statistical check of a handful of CPU frames. | criterion | no |
-| `breadth` | What does the engine cost across content types, sizes, pipeline stages and primitives? | custom | no |
+| Target | Question | Harness |
+| --- | --- | --- |
+| `performance` | What does the engine cost across the 60 core and breadth cases, sizes, pipeline stages and primitives, and did a change move them? | custom |
+| `films` | How long do real Gallery films take to render? | custom |
+| `criterion_frames` | Quick statistical check of a handful of CPU frames. | criterion |
 
-`breadth` exists so that coverage can grow without disturbing the frozen `performance`
-workload: that target fingerprints its own source, so editing it invalidates registered runs.
-Adding a case to `performance` changes its `workload_fingerprint`, which makes every
-registered series incomparable; put new coverage in `breadth` unless a new series is
-being started on purpose.
+No baseline is frozen or registered in the repository. Raw run directories are local,
+git-ignored artifacts; a before/after claim comes from a paired comparison run on one machine
+(see [Comparing Two Builds](#comparing-two-builds)).
 
 ## Cinematic Coverage
 
-The breadth target now includes `filter-bloom`, `filter-lens`, `filter-lut`, and
-`display-transform` (AgX plus seeded encoded grain). These cases do not alter the
-frozen performance cohorts. This implementation adds coverage only: no performance
-benchmark was executed or compared. Functional/native parity and P6 image-quality
-measurement are described in [the quality report](quality-report.md).
+The breadth cases include `filter-bloom`, `filter-lens`, `filter-lut`, and
+`display-transform` (AgX plus seeded encoded grain). Functional/native parity and P6
+image-quality measurement are described in [the quality report](quality-report.md).
 
 ## Opt-In Film Benchmarks
 
@@ -67,85 +62,117 @@ RSS evidence. Criterion currently uses ten samples, one-second warmup and
 three-second measurement time per case; its batches estimate iteration cost,
 not individual-frame tail latency. `--test` is only a functional smoke check.
 
-## Running `breadth`
+## Running `performance`
 
 ```sh
-cargo bench -p motion-bench --bench breadth                      # CPU
-cargo bench -p motion-bench --bench breadth --features gpu       # CPU and GPU
+cargo bench -p motion-bench --bench performance                  # CPU
+cargo bench -p motion-bench --bench performance --features gpu   # CPU and GPU
 ```
 
-Results go to `target/performance/breadth-<timestamp>/` (override with `MOTION_BENCH_OUTPUT`)
-using the same `report.json`, TSV and reference-image layout as the other targets, so
-`MOTION_BENCH_COMPARE` works unchanged. The usual `MOTION_BENCH_SAMPLES`, `MOTION_BENCH_WARMUPS`
-and `MOTION_BENCH_ITERATIONS` apply; use `MOTION_BENCH_SAMPLES=5` for a smoke run.
+Results go to `target/performance/performance-<timestamp>/` (override with
+`MOTION_BENCH_OUTPUT`) as `report.json`, TSV and reference images. The target needs the
+`image`, `text`, `svg`, `particles`, `audio` and `diagram` features, all default. Custom
+targets default to two warmups, 101 samples and one iteration per sample; record every
+override. Use `MOTION_BENCH_SAMPLES=5` for a smoke run.
 
 | Variable | Default | Effect |
 | --- | --- | --- |
-| `MOTION_BENCH_CASES` | all | Comma-separated render cases. |
+| `MOTION_BENCH_CASES` | all 60 | Comma-separated cases from the core and breadth groups. |
 | `MOTION_BENCH_BACKENDS` | `cpu` (`cpu,gpu` with the feature) | Backends to measure. |
 | `MOTION_BENCH_SIZE` | `640x360` | Pixel size of the render cases; the design size stays 640x360. |
-| `MOTION_BENCH_SCALING` | `1` | Repeat `SCALING_CASES` at every size in `MOTION_BENCH_SIZES`. |
+| `MOTION_BENCH_SCALING` | `0` | Repeat `SCALING_CASES` at every size in `MOTION_BENCH_SIZES`. |
 | `MOTION_BENCH_SIZES` | `1280x720,1920x1080` | Sizes for the scaling group, up to 4096 per side. |
-| `MOTION_BENCH_STAGES` | `1` | Time CPU pipeline stages for `STAGE_CASES`. |
+| `MOTION_BENCH_STAGES` | `0` | Time CPU pipeline stages for every selected case. |
 | `MOTION_BENCH_SEQUENCES` | `1` | Record sequential playback and random seeks. |
-| `MOTION_BENCH_MICRO` | `1` | Record primitive microbenchmarks. |
+| `MOTION_BENCH_COLD` | `0` | Record cold-session frames. |
+| `MOTION_BENCH_MICRO` | `1` | Record microbenchmarks. |
+| `MOTION_BENCH_VIDEO` | `0` | Record video export runs (feature `ffmpeg`); `MOTION_BENCH_VIDEO_FRAMES` sets the length. |
+| `MOTION_BENCH_PARTICLES` | `72` | Particle count of the core particle cases. |
 | `MOTION_BENCH_FONT` | repository Noto Sans fixture | Font for the text cases. |
 
 ### What it measures
 
-- **Render cases (24).** Gradients (linear, radial, sweep), twelve blend modes, path, nested and
+- **Core cases (29).** Shapes, fills, strokes, ink, isolation, blur, shadow, images, masks,
+  transitions, bloom, grading, motion blur, particles, text, SVG, path sampling and morphing,
+  rendered at 640x360.
+- **Breadth cases (31).** Gradients (linear, radial, sweep), twelve blend modes, path, nested and
   shape clips, dashed, wide and hairline strokes, a self-intersecting even-odd path, nested and
   wide isolated layers, 1k/10k/50k-node scenes, an 800-leaf Row/Column layout, a large blur,
-  chromatic aberration, a three-filter chain, a long paragraph, 200 labels, 20k ballistic and
-  6k simulated particles and three blurred siblings. Each case records `warm-frame`, `sequential-playback` and `random-seek`
-  per backend. Before anything is timed, three frames are replayed after an unrelated seek and
-  must match pixel for pixel, and the frame must not be flat.
-- **Memory output.** `filter-siblings` also records `memory-frame`, the straight RGBA8
-  `render_output_at` path that uses adaptive bands, and checks it against `render_frame`
-  (exactly on the CPU, within the GPU tolerance otherwise).
+  chromatic aberration, a three-filter chain, bloom, lens and LUT filters, a display transform, a
+  long paragraph, 200 labels, ballistic, simulated, sub-emitter, collision and parallel particle
+  systems and three blurred siblings.
+- **Per case.** `warm-frame`, `sequential-playback` and `random-seek` per backend. Before
+  anything is timed, four frames are replayed after an unrelated seek and must match (exactly on
+  the CPU, within the visual tolerance on the GPU); the frame must not be flat.
+- **Memory output.** `filter-siblings` and `display-transform` also record `memory-frame`, the
+  straight RGBA8 `render_output_at` path that uses adaptive bands, checked against `render_frame`.
 - **Scaling.** `nodes-10k`, `gradient-linear`, `blend-modes` and `blur-large` at each configured
   size, recorded as `<backend>/<case>@WxH/warm-frame`.
-- **Stages.** For nine CPU cases: `build`, `compile-fresh-node`, `compile`, `prepare`, `linear`
-  and `output`. `prepare` runs without the coverage cache, so it shows the cold cost that a
+- **Stages.** `build`, `compile-fresh-node`, `compile`, `prepare`, `linear` and `output` for CPU
+  cases. `prepare` runs without the coverage cache, so it shows the cold cost that a
   `warm-frame` hides.
 - **Microbenchmarks.** sRGB round trips, Oklab interpolation, transform composition, SVG path
-  parsing, stroke outlines (uncached and cache hit), the deterministic random generator, noise,
-  Row/Column measurement, a four-clip audio mix with 44.1 to 48 kHz resampling, RGBA8 conversion
-  and PNG encoding at 1080p, and label layout.
+  parsing, stroke outlines, the deterministic random generator, noise, Row/Column measurement, a
+  four-clip audio mix with resampling, RGBA8 conversion and PNG encoding at 1080p, and label
+  layout.
 - **Rejections.** An engine admission limit (`StructuralLimit`) is recorded in `rejected.txt`
   instead of aborting the run, because "this scene does not fit the budget" is a result.
 
+These measurements do not establish Studio FPS, process RSS or full-film acceptance.
+
 ### Functional checks
 
-`cargo test -p motion-bench --test breadth_cases` renders every light case at 160x90 and checks
-determinism and non-flat output without timing. Cases that take seconds in an unoptimized build
-are in the ignored test:
+`cargo test -p motion-bench --test performance_cases` renders every light breadth case at 160x90
+and checks determinism and non-flat output without timing. Cases that take seconds in an
+unoptimized build are in the ignored test:
 
 ```sh
-cargo test --release -p motion-bench --test breadth_cases -- --include-ignored
+cargo test --release -p motion-bench --test performance_cases -- --include-ignored
 ```
 
-## Non-Film Rerun
+## One-Command Comparison
 
-Use this scope for current-source measurements after the benchmark refactor. Keep
-`films` disabled and explicitly select `performance`, `breadth` and
-`criterion_frames`; `--all-features` enables the film gate and is not needed here.
-If obsolete history must be cleared, use the separate [history reset](#benchmark-history-reset)
-before starting, not between these runs.
+`benches/run.cjs` builds and runs the `performance` target for a control and for the working
+tree, runs the alternating pairs and writes a report and a chart:
 
 ```sh
-cargo bench --locked --offline -p motion-bench --features gpu,ffmpeg --bench performance --bench breadth --bench criterion_frames --no-run
-MOTION_BENCH_FONT=tests/fixtures/fonts/NotoSans-Regular.ttf cargo bench --locked --offline -p motion-bench --features gpu,ffmpeg --bench performance
-cargo bench --locked --offline -p motion-bench --features gpu,ffmpeg --bench breadth
-cargo bench --locked --offline -p motion-bench --features gpu,ffmpeg --bench criterion_frames
+node benches/run.cjs --control-ref HEAD --pairs 6 --features gpu
+MOTION_BENCH_CASES=shapes,blur,text node benches/run.cjs --control-ref main --label blur-opt
 ```
 
-Custom targets default to two warmups, 101 samples and one iteration per sample;
-record every override. Sequences use their configured per-frame schedule, not the
-warm-frame sample count. Criterion uses its own sample/warmup/measurement settings.
-Keep target results separate, retain budget rejections, and register only healthy
-validated reports. These measurements do not establish Studio FPS, process RSS
-or full-film acceptance. Comparison rules are in [Interpretation](#interpretation).
+The control is built from `--control-ref` (default `HEAD`) in a temporary git worktree, or taken
+from an existing run directory with `--control <run-dir>`. Any `MOTION_BENCH_*` variable is
+passed through. Output goes to `target/performance/compare-<timestamp>/` (override with
+`--output`): `compare.md` is the table and `compare.svg` is a bar chart of the paired P50 change
+per case with its bootstrap interval (`--phase` selects the phase, default `warm-frame`; green is
+improved, red regressed, grey uncertain). `node benches/chart.cjs --pairs <dir> --output <file>`
+redraws a chart from an existing pair directory. The run executes the full benchmark
+`2 x pairs + 2` times, so narrow it with `MOTION_BENCH_CASES` and `MOTION_BENCH_SAMPLES`.
+
+## Comparing Two Builds
+
+Keep the control executable and compare it with the candidate on the same machine. Each of
+`--control` and `--candidate` is a completed run directory containing `report.json` and the
+frozen `benchmark-executable`.
+
+```sh
+node benches/pair.cjs --control <control-run> --candidate <candidate-run> --output target/performance/pairs --label <name> --pairs 6
+node benches/report.cjs --pairs target/performance/pairs --output target/performance/compare.md
+```
+
+`pair.cjs` runs the two executables in alternating A/B then B/A order with the configuration
+of the control report, and refuses runs whose configuration, environment or executable
+provenance differ. `report.cjs` prints, per case and phase, the paired P50 change with a
+deterministic bootstrap interval, an assessment, the P95 change and the MAD.
+
+- Time improvement = `(control - candidate) / control * 100%`. Positive is faster.
+- The interval needs at least five pairs; smaller sets are exploratory, and an interval
+  crossing zero is uncertain.
+- P95 requires at least 100 individual frame or operation samples in every run.
+- Cases, size, quality, budgets, fonts, features, sampling, machine, compiler and adapter must match.
+- Checksums and exact reference pixels are validated. Logical peak bytes and work are not process RSS.
+- No cross-case average speedup is presented. Cold sessions, warm frames, seeks, I/O and encode
+  timings stay separate.
 
 ## Optional Focused Control Matrix
 
@@ -153,101 +180,12 @@ or full-film acceptance. Comparison rules are in [Interpretation](#interpretatio
 shapes, SVG, text, 10000 orbit particles, long ink strokes and 60-frame H.264 export.
 Each healthy cohort requires three independent executions of its frozen program.
 Frame/operation phases use 101 samples; full-export phases use five and cannot
-establish P95. The existing 1 GiB/20-billion-work benchmark policy is unchanged.
-Failures retain logs and are reported without increasing limits or dropping cases.
+establish P95. Failures retain logs and are reported without increasing limits or dropping cases.
 
 ```sh
 cargo bench --locked --offline -p motion-bench --bench performance --features gpu,ffmpeg --no-run
 node benches/baseline.cjs --phase probes --state target/performance/baseline.json --program <performance-executable>
 node benches/baseline.cjs --phase repeats --state target/performance/baseline.json
-node benches/baseline.cjs --phase register --state target/performance/baseline.json
 ```
 
-This optional matrix is not the complete non-film rerun and is not implicitly
-executed by it. It uses the `performance` target, not `films`, but includes video
-export; run it only when that export measurement is intended. After registration,
-use the [report update procedure](#update-procedure).
-
-## Benchmark History Reset
-
-Reset only when a source/workload refactor invalidates the active baseline, before
-creating fresh measurements. Do not reset during a measurement or for routine
-control/candidate comparisons; it deletes the preserved raw evidence.
-
-```sh
-node benches/baseline.cjs --phase reset
-```
-
-`reset` deletes the two ignored result roots (`target/performance` and
-`crates/motion/target/performance`) and resets [performance-runs.json](../performance-runs.json).
-It does not delete build caches, sources, fonts or ordinary test logs. Removed
-tracked history remains recoverable from Git; deleted ignored raw artifacts do not.
-
-## Current Measurements
-
-Historical smoke timings were removed after the benchmark refactor; they are not
-a baseline for the current source or workload. The generated report below
-records validated current runs, sampling, provenance and any rejected cases.
-This refresh records only `performance`; `breadth` and `criterion_frames` are
-deferred, and `films` is deliberately excluded. Do not infer film-export or Studio FPS from
-these frame, stage and microbenchmark measurements.
-
-The report markers delimit the section maintained by `node benches/report.cjs`;
-the running guide above remains handwritten.
-
-<!-- performance-report:start -->
-
-These are current-source non-film benchmark observations, not an optimization against deleted historical measurements.
-Registered measurements, verification notes and raw-run paths are in [performance-runs.json](../performance-runs.json). Raw runs retain JSON/TSV, samples and reference images.
-
-### Interpretation
-
-- Time improvement = `(reference - current) / reference * 100%`. Positive is faster; negative is a regression.
-- "Previous" compares with the immediately preceding step in the same series. "Initial" always compares with step 00.
-- Values are medians across independent runs; MAD% reports run-to-run dispersion. Batch P95 is never called frame-tail latency.
-- Previous-step improvement uses fresh paired controls with alternating A/B then B/A order. Historical baseline comparison is descriptive, not a causal estimate.
-- Paired P50 changes have a deterministic bootstrap interval after at least five pairs. Smaller cohorts are exploratory; an interval crossing zero is uncertain.
-- P95 requires at least 100 individual frame/single-operation samples in every run; otherwise it is explicitly insufficient.
-- Cases, resolution, quality, budgets, fonts, features, sampling settings, machine/compiler and adapter must match within a series.
-- Checksums, exact reference pixels and raw sample summaries are validated. Logical peak bytes/work are not process RSS or wall-clock time.
-- No cross-case average speedup is presented. Cold sessions, warm frames, seeks, I/O and encode timings stay separate.
-
-### Current Measurement
-
-Source commit: 9cb8a9b1e5e3c4f72e817cbd259a5aaf47ef070c.
-
-Targets: performance. Excluded: breadth, criterion_frames, films.
-
-The full-suite initial baseline has one invocation, with CPU and GPU in the same process: two warmups, 101 warm-frame samples and one iteration per sample; playback and seek each use 90 frames. Warm-frame P95 is eligible, sequences and five batch-mean microbenchmarks are not. Separately, R3-8 has six fresh alternating AB/BA pairs for Empty/Shapes/Blur/Shadow/Bloom at 640x360, both backends, with CPU stages enabled and sequences/micro/video/cold disabled. A separate six-pair small-kernel follow-up compares the new candidate against the same original pre-R3-8 control; the two cohorts are not pooled. These focused pairs provide per-case uncertainty estimates, not a full-suite speedup claim.
-
-Apple M3 (Metal GPU), macOS, aarch64, release, 640x360 Final, bundled Noto Sans, 72 particles, 1 GiB/20-billion-work benchmark policy. All 29 cases, both backends, playback/seek and five microbenchmarks were measured; cold sessions, stages and video export were disabled. GPU and FFmpeg were enabled in the frozen build, but films was not. Runtime/workload sources match the captured revision; post-build changes are reporting/archival-only edits to benches/report.cjs and benches/baseline.cjs, plus the scheduling-only films gate in crates/motion-bench/Cargo.toml. Breadth has incomplete artifacts and is deferred with Criterion; neither is registered. This is not Studio FPS, process RSS, full-film acceptance, cross-device evidence or improvement over deleted history. Verification details: target/performance/non-films-1793845901725/source-verification.json.
-
-Historical series removed: 14.
-
-### Conclusions
-
-One row per series, using its latest step. Outcomes count case/phase comparisons, not a cross-case average. Representative deltas show up to two largest absolute P50 changes; every other result and negative control remains available in the detailed report.
-
-| Series / Latest Step | Runs | Cases | P50 Outcomes | P95 Eligible Cases | Representative Timing / P50 Change |
-| --- | ---: | ---: | --- | ---: | --- |
-| [Engine / 640x360 / Apple M3](../performance-runs.json) / 00 current baseline | 1 | 179 | baseline (no speedup claim): 179 | 58/179 | Cpu/empty/warm-frame: P50 1.255 ms; P95 1.914 ms<br>Cpu/shapes/warm-frame: P50 2.729 ms; P95 3.448 ms |
-| [R3-8 focused / 640x360 / Apple M3](../performance-runs.json) / 01 R3-8 rolling blur | 6 | 50 | uncertain: 43; regressed: 4; improved: 3 | 50/50 | Software/blur/stage-linear: -122.76% [-132.61%, -114.39%]; -35.59%<br>Cpu/blur/warm-frame: -106.70% [-116.20%, -100.56%]; -43.82% |
-| [R3-8 small kernels / 640x360 / Apple M3](../performance-runs.json) / 01 R3-8 small-kernel direct taps | 6 | 50 | uncertain: 36; improved: 13; regressed: 1 | 50/50 | Software/blur/stage-linear: +66.26% [+66.18%, +66.44%]; +79.45%<br>Software/shadow/stage-linear: +59.40% [+59.27%, +59.68%]; +66.64% |
-
-### Raw Data And Detailed Tables
-
-The active manifest preserves registered runs, change, verification and regression notes. Run directories contain validated samples, configuration, executable provenance and reference images; they are local artifacts, not bundled benchmark promises. Removed tracked history remains recoverable from Git, not active measurement rows.
-
-Generate full per-case tables, MAD, incremental and initial deltas, P95 eligibility and step notes without expanding this page:
-
-```sh
-node benches/report.cjs --details --output target/performance/details.md
-```
-
-### Update Procedure
-
-1. Keep the initial run directories and frozen executable. Run the same cohort before and after each focused optimization.
-2. Register raw directories and change/verification/negative-result notes in [performance-runs.json](../performance-runs.json). Use a new series for different workloads or hosts.
-3. Run `node benches/report.cjs`. This validates every registered run and rebuilds the concise conclusions table; use --details with a separate --output for full tables.
-
-<!-- performance-report:end -->
+It includes video export; run it only when that measurement is intended.

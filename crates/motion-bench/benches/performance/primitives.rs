@@ -1,4 +1,4 @@
-//! Primitive microbenchmarks for the breadth target: colour conversion, geometry, random
+//! Primitive microbenchmarks for the performance target: colour conversion, geometry, random
 //! and noise sampling, and bitmap conversion hot paths.
 
 use super::harness::{composition, limits};
@@ -10,7 +10,7 @@ use motion::render::BackendKind;
 use motion::render::{ValidationLimits, linear_to_srgb, srgb_to_linear};
 use std::hint::black_box;
 
-pub(super) fn microbenchmarks(
+pub(super) fn primitive_microbenchmarks(
     report: &mut support::Report,
     settings: &support::Settings,
     resources: &Assets,
@@ -252,7 +252,7 @@ pub(super) fn microbenchmarks(
         },
         limits(),
     )?;
-    let png = report.directory.join("breadth-1080p.png");
+    let png = report.directory.join("micro-1080p.png");
     let measured = support::measure(
         || {
             bitmap.save_png_with_overwrite(&png, true)?;

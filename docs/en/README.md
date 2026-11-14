@@ -20,7 +20,6 @@ for integration and contribution, not prerequisites for the tutorial.
 - [Development checks](development.md): feature matrices, tests, fixtures and CI.
 - [Source style](style.md): file layout, field order, comments and lint conventions.
 - [Benchmarks](benchmarks.md): workloads, procedures and current measured results.
-- [Measurement manifest](../performance-runs.json): recorded runs and provenance.
 - [Quality report](quality-report.md): image-quality measurements, with provenance.
 
 ## Conventions

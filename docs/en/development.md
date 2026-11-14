@@ -124,7 +124,7 @@ planned.
 
 ## Frame timing diagnostics
 
-The breadth and performance benchmarks accept `MOTION_BENCH_TIMINGS=1` to collect per-frame host
+The performance benchmark accepts `MOTION_BENCH_TIMINGS=1` to collect per-frame host
 stage observations and available GPU timestamps. This is separate from
 `MOTION_BENCH_STAGES`, which measures selected CPU pipeline stages. Timing
 diagnostics require `MOTION_BENCH_ITERATIONS=1`, exclude warmups from the recorded

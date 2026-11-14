@@ -2,7 +2,8 @@
 //! reference.
 
 use super::artwork::artwork;
-use super::{ppm, support};
+use super::harness::ppm;
+use super::support;
 use motion::prelude::*;
 use motion::render::Composition;
 use std::hint::black_box;

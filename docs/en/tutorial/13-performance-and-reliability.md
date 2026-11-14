@@ -61,16 +61,15 @@ One fps number cannot answer all five questions. GPU submission time is not GPU 
 
 | Target | Question |
 | --- | --- |
-| `performance` | Causal before/after comparisons of frozen reference cohorts |
+| `performance` | Costs across content types, dimensions, stages and primitives, and paired before/after comparisons |
 | `films` | Rendering costs of real Gallery films |
 | `criterion_frames` | Statistical observations of a few warm CPU full-frame workloads |
-| `breadth` | Costs across content types, dimensions, stages and primitives |
 
 Run these in the repository when needed:
 
 ```sh
 cargo bench --locked --offline -p motion-bench --no-default-features --features text,particles --bench criterion_frames
-cargo bench --locked --offline -p motion-bench --bench breadth
+cargo bench --locked --offline -p motion-bench --bench performance
 cargo bench --locked --offline -p motion-bench --bench films --features films,gpu
 ```
 
@@ -82,7 +81,7 @@ Fresh controls and candidates for one workload must fix fonts, features, machine
 
 Report each case's P50, P95 with sufficient samples, run-to-run dispersion and uncertainty intervals. Batch P95 is not single-frame tail latency; old reports do not represent current sources or revised default budgets.
 
-[Benchmark measurements](../benchmarks.md#current-measurements) include source identity and raw data. They are not real-time guarantees for all current content, nor values to average across workloads into an overall speedup factor.
+[Benchmark measurements](../benchmarks.md#running-performance) include source identity and raw data. They are not real-time guarantees for all current content, nor values to average across workloads into an overall speedup factor.
 
 ## Errors and Determinism
 

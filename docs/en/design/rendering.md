@@ -768,8 +768,7 @@ f32 word for initialization and one for transfer). Metadata or padding admission
 device alignment limits or oversized payloads leave that batch on per-draw buffers
 without partial charges. Mapped staging zeroes the gaps and encodes one copy per shared
 batch. Layout metadata stays admitted even when every run is short. This policy is
-experimental: it is not an accepted general optimization, and measurements are kept in
-[the performance history](../../performance-runs.json).
+experimental: it is not an accepted general optimization.
 
 ### Stage observations
 
@@ -845,7 +844,7 @@ ordered three-frame completion, shared vertex and uniform buffers, all four mask
 Plus and Hue boundaries, and the compute-only path. Font and hardware inputs are
 explicit; compilation does not establish adapter availability or cross-platform pixel
 parity, and none of these checks is an FPS, RSS or cross-device performance result.
-Measurements are in the [benchmark report](../benchmarks.md#current-measurements).
+Measurement procedures are in the [benchmark guide](../benchmarks.md#running-performance).
 
 See [core authoring](core.md#layers-and-sampling), [export and FFmpeg](export.md), [resources](resources.md),
 [particles](particles.md), [Studio](studio.md) and [reliability](reliability.md) for sibling contracts.

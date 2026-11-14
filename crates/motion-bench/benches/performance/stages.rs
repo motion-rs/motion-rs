@@ -1,12 +1,18 @@
 //! Per-stage CPU timings for the performance target: scene build, compile, prepare,
 //! linear render and sRGB output, each measured separately.
 
-use super::artwork::artwork_with_particles;
-use super::support;
+use super::{DESIGN, MAX_NODES, scene, support};
 use motion::extend::RenderPrepare;
 use motion::prelude::*;
 use motion::render::{RasterLimits, SceneCache, ValidationLimits};
 use std::hint::black_box;
+
+fn validation() -> ValidationLimits {
+    ValidationLimits {
+        max_nodes: MAX_NODES,
+        ..ValidationLimits::default()
+    }
+}
 
 pub(super) fn cpu_stages(
     report: &mut support::Report,
@@ -22,12 +28,12 @@ pub(super) fn cpu_stages(
     let context = SceneContext::new(
         Time::from_frame(45, motion::fps!(30)),
         motion::fps!(30),
-        Size::new(640.0, 360.0),
+        DESIGN,
         &cache,
     )
     .with_assets(resources);
     let measured = support::measure_output(
-        || Ok(artwork_with_particles(case, &context, particle_count)),
+        || Ok(scene(case, &context, particle_count)),
         |node| {
             black_box(node);
             45
@@ -44,13 +50,13 @@ pub(super) fn cpu_stages(
         let list = node.compile_with_fonts(
             context.size(),
             size,
-            ValidationLimits::default(),
+            validation(),
             resources.fonts().expect("benchmark font environment"),
         )?;
         Ok::<_, Error>(list.with_background(Some(Color::WHITE)))
     };
     let fresh = support::measure_prepared(
-        || Ok(artwork_with_particles(case, &context, particle_count)),
+        || Ok(scene(case, &context, particle_count)),
         compile_node,
         |list| {
             black_box(list);
@@ -63,7 +69,7 @@ pub(super) fn cpu_stages(
         fresh,
         json!({"includes_first_drawable_preparation":true,"build_outside_timer":true}),
     )?;
-    let node = artwork_with_particles(case, &context, particle_count);
+    let node = scene(case, &context, particle_count);
     let measured = support::measure_output(
         || compile_node(&node),
         |list| {
@@ -80,7 +86,7 @@ pub(super) fn cpu_stages(
     )?;
     let list = compile_node(&node)?;
     let measured = support::measure_output(
-        || Ok(list.prepare(ValidationLimits::default(), limits)?),
+        || Ok(list.prepare(validation(), limits)?),
         |prepared| {
             black_box(prepared);
             45
@@ -88,7 +94,7 @@ pub(super) fn cpu_stages(
         settings,
         settings.iterations,
     )?;
-    let prepared = list.prepare(ValidationLimits::default(), limits)?;
+    let prepared = list.prepare(validation(), limits)?;
     report.record(
         format!("Software/{case}/stage-prepare"),
         measured,

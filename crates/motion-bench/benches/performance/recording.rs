@@ -1,21 +1,19 @@
-//! Breadth benchmark recorders for warm frames, memory-tracked frames, sequential and
-//! random-seek playback, and per-stage CPU pipeline timings. MOTION_BENCH_TIMINGS=1
-//! adds diagnostic host/device observations to warm frames, with one iteration per sample.
+//! Performance recorders for warm frames, memory-tracked frames, sequential and random-seek
+//! playback, and cold sessions. MOTION_BENCH_TIMINGS=1 adds diagnostic host/device
+//! observations to warm frames, with one iteration per sample.
 
-use super::harness::{checksum, limits};
-use super::scenes::artwork;
-use super::{DESIGN, MAX_NODES, invalid, support};
-use motion::extend::RenderPrepare;
+use super::harness::checksum;
+use super::{DESIGN, invalid, scene, support};
 use motion::prelude::*;
 use motion::render::BackendKind;
-use motion::render::{Composition, SceneCache, ValidationLimits};
-use std::hint::black_box;
+use motion::render::Composition;
 
 pub(super) fn record_frame(
     report: &mut support::Report,
     session: &mut motion::render::FrameRenderer,
     name: String,
     case: &str,
+    particle_count: usize,
     settings: &support::Settings,
 ) -> motion::Result {
     use serde_json::json;
@@ -29,7 +27,8 @@ pub(super) fn record_frame(
     let mut observations = Vec::new();
     let measured = support::measure_output(
         || {
-            let snapshot = session.render_frame(45, |context| artwork(case, context))?;
+            let snapshot =
+                session.render_frame(45, |context| scene(case, context, particle_count))?;
             Ok((snapshot, session.timings()))
         },
         |(snapshot, timings)| {
@@ -46,8 +45,10 @@ pub(super) fn record_frame(
         "adapter": format!("{:?}", session.gpu_info()),
         "peak_bytes": stats.peak_bytes(), "work": stats.work(),
         "prepare_retained_bytes": stats.preparation.retained_bytes,
+        "prepare_peak_bytes": stats.preparation.peak_bytes,
         "prepare_work": stats.preparation.work,
         "linear_peak_bytes": stats.linear.peak_bytes, "linear_work": stats.linear.work,
+        "output_peak_bytes": stats.output.peak_bytes, "output_work": stats.output.work,
     });
     if observe {
         if observations.len() != settings.warmups + settings.samples {
@@ -62,6 +63,7 @@ pub(super) fn record_frame(
                 .collect::<Vec<_>>(),
         });
     }
+    session.enable_timings(false);
     report.record(format!("{name}/warm-frame"), measured, metrics)
 }
 
@@ -73,6 +75,7 @@ pub(super) fn record_memory_frame(
     renderer: BackendKind,
     name: &str,
     case: &str,
+    particle_count: usize,
     settings: &support::Settings,
 ) -> motion::Result {
     use serde_json::json;
@@ -83,11 +86,11 @@ pub(super) fn record_memory_frame(
     let time = Time::from_frame(45, motion::fps!(30));
     let render = |session: &mut motion::render::FrameRenderer| {
         session.render_output_at(time, Some(Color::WHITE), format, |context| {
-            artwork(case, context)
+            scene(case, context, particle_count)
         })
     };
     let reference = render(&mut session)?;
-    let snapshot = session.render_frame(45, |context| artwork(case, context))?;
+    let snapshot = session.render_frame(45, |context| scene(case, context, particle_count))?;
     let mut maximum = 0_u8;
     let mut over_one = 0_usize;
     for (pixel, expected) in reference.planes()[0]
@@ -113,7 +116,7 @@ pub(super) fn record_memory_frame(
             "Memory output differs from snapshot: {name}, max={maximum}, over_one={over_one}"
         )));
     }
-    session.render_frame(76, |context| artwork(case, context))?;
+    session.render_frame(76, |context| scene(case, context, particle_count))?;
     if render(&mut session)? != reference {
         return Err(invalid(format!("Memory seek replay differs: {name}")));
     }
@@ -151,6 +154,7 @@ pub(super) fn record_sequences(
     composition: &Composition,
     name: &str,
     case: &str,
+    particle_count: usize,
     frames: u32,
     settings: &support::Settings,
 ) -> motion::Result {
@@ -160,7 +164,7 @@ pub(super) fn record_sequences(
         let mut playback = composition.frame_renderer(DESIGN)?;
         let measured = support::measure_frames(
             &order,
-            |frame| playback.render_frame(frame, |context| artwork(case, context)),
+            |frame| playback.render_frame(frame, |context| scene(case, context, particle_count)),
             |snapshot| checksum(&snapshot.packed_rgb()),
             settings,
         )?;
@@ -180,122 +184,33 @@ pub(super) fn record_sequences(
     Ok(())
 }
 
-pub(super) fn cpu_stages(
+/// Measures one frame on a fresh session, including GPU device creation on the GPU backend.
+pub(super) fn record_cold(
     report: &mut support::Report,
+    composition: &Composition,
+    renderer: BackendKind,
+    name: &str,
     case: &str,
-    size: PixelSize,
-    resources: &Assets,
-    settings: &support::Settings,
+    particle_count: usize,
 ) -> motion::Result {
     use serde_json::json;
-    let cache = SceneCache::default();
-    let rate = motion::fps!(30);
-    let context =
-        SceneContext::new(Time::from_frame(45, rate), rate, DESIGN, &cache).with_assets(resources);
-    let validation = ValidationLimits {
-        max_nodes: MAX_NODES,
-        ..ValidationLimits::default()
-    };
-    let fonts = resources.fonts().expect("benchmark font environment");
-    let label = |stage: &str| format!("Software/{case}/stage-{stage}");
-
-    let built = support::measure_output(
-        || Ok(artwork(case, &context)),
-        |node| {
-            black_box(node);
-            45
-        },
-        settings,
-        settings.iterations,
-    )?;
-    report.record(
-        label("build"),
-        built,
-        json!({"immutable_caches_warm": true}),
-    )?;
-
-    let compile_node = |node: &Node| -> motion::Result<motion::render::ValidatedDisplayList> {
-        Ok(node
-            .compile_with_fonts(DESIGN, size, validation, fonts)?
-            .with_background(Some(Color::WHITE)))
-    };
-    let fresh = support::measure_prepared(
-        || Ok(artwork(case, &context)),
-        compile_node,
-        |list| {
-            black_box(list);
-            45
-        },
-        settings,
-    )?;
-    report.record(
-        label("compile-fresh-node"),
-        fresh,
-        json!({"includes_first_drawable_preparation": true, "build_outside_timer": true}),
-    )?;
-    let node = artwork(case, &context);
-    let compiled = support::measure_output(
-        || compile_node(&node),
-        |list| {
-            black_box(list);
-            45
-        },
-        settings,
-        settings.iterations,
-    )?;
-    report.record(label("compile"), compiled, json!({"input_reused": true}))?;
-
-    let list = compile_node(&node)?;
-    let prepared_timing = support::measure_output(
-        || Ok(list.prepare(validation, limits())?),
-        |prepared| {
-            black_box(prepared);
-            45
-        },
-        settings,
-        settings.iterations,
-    )?;
-    let prepared = list.prepare(validation, limits())?;
-    report.record(
-        label("prepare"),
-        prepared_timing,
-        json!({"peak_bytes": prepared.stats().peak_bytes, "work": prepared.stats().work,
-               "retained_bytes": prepared.stats().retained_bytes}),
-    )?;
-
-    let linear_timing = support::measure_output(
-        || Ok(prepared.render_linear(limits())?),
-        |linear| {
-            linear.linear_pixels().step_by(64).fold(0, |state, pixel| {
-                support::fold_checksum(state, u64::from(pixel[3].to_bits()))
-            })
-        },
-        settings,
-        settings.iterations,
-    )?;
-    let linear = prepared.render_linear(limits())?;
-    report.record(
-        label("linear"),
-        linear_timing,
-        json!({"peak_bytes": linear.byte_len(), "work": linear.linear_pixels().len()}),
-    )?;
-
-    let output_timing = support::measure_output(
+    let settings = support::Settings::from_env()?;
+    let mut adapter = String::new();
+    let measured = support::measure_output(
         || {
-            Ok(linear.to_format(
-                motion::render::PixelFormat::SrgbRgba8 {
-                    premultiplied: false,
-                },
-                limits(),
-            )?)
+            let mut fresh = composition.frame_renderer(DESIGN)?;
+            let snapshot =
+                fresh.render_frame(45, |context| scene(case, context, particle_count))?;
+            adapter = format!("{:?}", fresh.gpu_info());
+            Ok((fresh, snapshot))
         },
-        |output| {
-            output.bytes().iter().step_by(256).fold(0, |state, value| {
-                support::fold_checksum(state, u64::from(*value))
-            })
-        },
-        settings,
-        settings.iterations,
+        |(_, snapshot)| checksum(&snapshot.packed_rgb()),
+        &settings,
+        1,
     )?;
-    report.record(label("output"), output_timing, json!({}))
+    report.record(
+        format!("{name}/cold-session"),
+        measured,
+        json!({"adapter": adapter, "includes_gpu_device_creation": renderer == BackendKind::Gpu}),
+    )
 }

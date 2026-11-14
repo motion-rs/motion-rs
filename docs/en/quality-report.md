@@ -70,7 +70,7 @@ The final all-feature workspace functional run (excluding `motion-bench`) passed
 767 tests; 113 remained ignored under their existing native/slow-test policies.
 All 71 public API doctests passed. Explicit native cinematic GPU parity, native
 Main10 precision/metadata and public CPU/GPU Main10 export checks also passed.
-The breadth light-case functional test passed without invoking its timing paths.
+The performance light-case functional test passed without invoking its timing paths.
 LUT generation passed four-style, red-fast identity, finite-entry, invalid-input
 and no-overwrite checks. Clean/film stills were generated through the example and
 visually inspected: [clean](../assets/cinematic-clean.png),

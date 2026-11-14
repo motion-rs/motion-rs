@@ -61,16 +61,15 @@ fn main() -> motion::Result {
 
 | 测试目标 | 核心回答的技术问题 |
 | --- | --- |
-| `performance` | 对已固化的参考测试组，严密验证某项针对性优化是否具有因果层面的加速收益 |
+| `performance` | 详尽剖析跨内容类型、分辨率、流水线阶段与图元的开销特征，并支持配对的前后对比 |
 | `films` | 评估实际的 Gallery 完整示范短片的真实渲染耗时与吞吐量 |
 | `criterion_frames` | 针对少数热身状态下的 CPU 全帧工作负载进行快速的统计学观测 |
-| `breadth` | 详尽剖析跨内容类型、分辨率、流水线阶段与图元的微观开销特征 |
 
 在需要时可在仓库中执行以下命令：
 
 ```sh
 cargo bench --locked --offline -p motion-bench --no-default-features --features text,particles --bench criterion_frames
-cargo bench --locked --offline -p motion-bench --bench breadth
+cargo bench --locked --offline -p motion-bench --bench performance
 cargo bench --locked --offline -p motion-bench --bench films --features films,gpu
 ```
 
@@ -82,7 +81,7 @@ cargo bench --locked --offline -p motion-bench --bench films --features films,gp
 
 报告必须详细记录每个用例的 P50 中位数、在充足样本下的 P95 分位数、各次运行间的离散度（MAD）以及统计不确定性置信区间。批次测试的 P95 绝不能直接叫作单帧长尾时延；过期的历史报告不能代表当前源码或修订后的默认预算基线。
 
-[当前实测数据](../benchmarks.md#当前实测数据)完整包含了源码 Git 版本信息与原始数据。它们绝不代表对所有业务内容的实时帧率承诺，也严禁将不同工作负载的加速比简单平均化为一个虚浮的整体倍率。
+[基准测量](../benchmarks.md#运行-performance)完整包含了源码 Git 版本信息与原始数据。它们绝不代表对所有业务内容的实时帧率承诺，也严禁将不同工作负载的加速比简单平均化为一个虚浮的整体倍率。
 
 ## 错误分类与确定性重放
 
