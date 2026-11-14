@@ -12,6 +12,7 @@ impl StudioApp {
         let mut panel = StatsPanel {
             ui,
             text: copy.then(String::new),
+            section_started: false,
         };
         let rate =
             f64::from(self.clock.rate.numerator()) / f64::from(self.clock.rate.denominator());
@@ -139,10 +140,15 @@ impl StudioApp {
 struct StatsPanel<'a> {
     ui: &'a mut egui::Ui,
     text: Option<String>,
+    section_started: bool,
 }
 
 impl StatsPanel<'_> {
     fn section(&mut self, title: &str) {
+        if self.section_started {
+            self.ui.separator();
+        }
+        self.section_started = true;
         theme::section(self.ui, title);
         if let Some(text) = &mut self.text {
             if !text.is_empty() {

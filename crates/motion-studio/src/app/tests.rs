@@ -80,6 +80,19 @@ fn stats_copy_button_exports_current_sections_and_values() -> motion_core::Resul
         render(Vec::new());
         let output = render(Vec::new());
         assert!(output.platform_output.commands.is_empty());
+        let separators = output
+            .shapes
+            .iter()
+            .filter(|shape| matches!(&shape.shape, egui::Shape::LineSegment { .. }))
+            .count();
+        assert_eq!(
+            separators,
+            if populated {
+                3 + usize::from(cfg!(feature = "gpu"))
+            } else {
+                2
+            }
+        );
         let copy_button = output
             .shapes
             .iter()
